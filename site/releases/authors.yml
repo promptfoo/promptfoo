@@ -4,74 +4,80 @@ promptfoo_team:
   url: https://github.com/promptfoo
   image_url: /img/logo-panda.svg
 
-maintainer:
-  name: promptfoo Maintainers
-  title: Core Maintainers
-  url: https://github.com/promptfoo/promptfoo
-  image_url: /img/logo-panda.svg
+adel:
+  name: Adel Müürsepp
+  title: Contributor
+  url: https://github.com/adelmuursepp
+  image_url: https://github.com/adelmuursepp.png
 
-ian_webster:
-  name: Ian Webster
-  title: CEO & Co-founder
-  url: https://github.com/promptfoo
-  image_url: /img/team/ian.jpeg
-
-michael_dangelo:
-  name: Michael D'Angelo
-  title: CTO & Co-founder
-  url: https://github.com/promptfoo
-  image_url: /img/team/michael.jpeg
-
-steve_klein:
-  name: Steve Klein
-  title: Staff Engineer
-  url: https://github.com/promptfoo
-  image_url: /img/team/steve.jpeg
-
-matthew_bou:
-  name: Matthew Bou
-  title: Enterprise GTM Lead
-  url: https://github.com/promptfoo
-  image_url: /img/team/matt.jpeg
-
-ben_shipley:
-  name: Ben Shipley
-  title: Enterprise GTM Lead
-  url: https://github.com/promptfoo
-  image_url: /img/team/ben.jpeg
-
-vanessa_sauter:
-  name: Vanessa Sauter
-  title: Principal Solutions Architect
-  url: https://github.com/promptfoo
-  image_url: /img/team/vanessa.jpeg
-
-guangshuo_zang:
-  name: Guangshuo Zang
-  title: Staff Engineer
-  url: https://github.com/promptfoo
-  image_url: /img/team/shuo.jpeg
-
-faizan_minhas:
-  name: Faizan Minhas
-  title: Senior Engineer
-  url: https://github.com/promptfoo
-  image_url: /img/team/faizan.jpeg
-
-will_holley:
-  name: Will Holley
-  title: Senior Engineer
-  url: https://github.com/promptfoo
-  image_url: /img/team/will.jpg
-
-asmi_gulati:
+asmi:
   name: Asmi Gulati
   title: AI Red Team
-  url: https://aisimplyexplained.com/
+  url: https://github.com/asmigulati
   image_url: /img/team/asmi.jpeg
 
-tabs_fakier:
+ben:
+  name: Ben Shipley
+  title: Enterprise GTM Lead
+  url: https://github.com/benshipley
+  image_url: /img/team/ben.jpeg
+
+faizan:
+  name: Faizan Minhas
+  title: Senior Engineer
+  url: https://github.com/faizan
+  image_url: /img/team/faizan.jpeg
+
+ian:
+  name: Ian Webster
+  title: CEO & Co-founder, Engineer, OWASP Gen AI Red Teaming Contributor
+  url: https://github.com/typpo
+  image_url: /img/team/ian.jpeg
+
+matt:
+  name: Matthew Bou
+  title: Enterprise GTM Lead
+  url: https://github.com/mattbou
+  image_url: /img/team/matt.jpeg
+
+michael:
+  name: Michael D'Angelo
+  title: CTO & Co-founder
+  url: https://github.com/mdangelo
+  image_url: /img/team/michael.jpeg
+
+shuo:
+  name: Guangshuo Zang
+  title: Staff Engineer
+  url: https://github.com/guangshuo
+  image_url: /img/team/shuo.jpeg
+
+steve:
+  name: Steven Klein
+  title: Principal Engineer
+  url: https://github.com/sklein12
+  image_url: /img/team/steve.jpeg
+
+tabs:
   name: Tabs Fakier
   title: Founding Developer Advocate
-  url: https://ladyofcode.com
+  url: https://github.com/tabsfakier
   image_url: /img/team/tabs.jpeg
+
+vanessa:
+  name: Vanessa Sauter
+  title: Principal Solutions Architect
+  url: https://github.com/vsauter
+  image_url: /img/team/vanessa.jpeg
+
+vedantr:
+  name: Vedant R
+  title: Contributor
+  url: https://github.com/vedantr
+  image_url: https://github.com/vedantr.png
+
+will:
+  name: Will Holley
+  title: Senior Engineer
+  url: https://github.com/willholley
+  image_url: /img/team/will.jpg

@@ -1,266 +1,310 @@
 ---
 slug: march-2025-roundup
-title: March 2025 Roundup - Multimodal Security Features
-description: Model scanner command, audio/image red team strategies, and multimodal capabilities added in March releases
+title: March 2025 Roundup
+description: Comprehensive evaluation improvements, red team capabilities, and cloud platform enhancements across 200+ commits
 authors: [promptfoo_team]
-tags:
-  [
-    roundup,
-    march-2025,
-    model-scanner,
-    multimodal,
-    audio-strategy,
-    image-strategy,
-    base64,
-    monthly-summary,
-  ]
+tags: [roundup, march-2025, evaluation, redteam, cloud, monthly-summary]
 keywords:
-  [model scanner, audio strategy, multimodal AI, red team, security testing, image attacks, base64]
+  [
+    LiteLLM,
+    SageMaker,
+    OpenAI Realtime,
+    JSONL,
+    CSV,
+    multimodal,
+    foundation models,
+    adaptive prompting,
+  ]
 date: 2025-03-31T23:59
 ---
 
-# March 2025 Roundup - Multimodal Security Features
+# March 2025 Roundup
 
-March 2025 included **2 major releases** (v0.106.0 → v0.107.0) that added multimodal capabilities and model security scanning. The releases include a new model scanner command and audio-based red team strategies.
+March delivered extensive improvements across all product areas with 200+ commits. Major additions include new provider integrations, multimodal capabilities, red team enhancements, and cloud platform features.
 
 <!-- truncate -->
 
-:::info March 2025 Highlights
+## Promptfoo (Core Evaluation)
 
-This month added the **model scanner command** and **audio-based red teaming** capabilities for security testing.
+### Provider Integrations
 
-:::
-
-## 📊 March 2025 By The Numbers
-
-- **2 Major Releases** (v0.106.0 → v0.107.0)
-- **1 New Security Tool** (Model Scanner)
-- **3 New Multimodal Strategies** (Audio, convert-to-image, enhanced image jailbreak)
-- **2 Image Processing Features** (Base64 loading, live sequential functions)
-- **1 Configuration Enhancement** (Prompt function config returns)
-
-## 🔍 Model Security Scanner
-
-### 🛡️ Model Scan Command (v0.107.0)
-
-The new model scanner command provides automated security assessment for AI models:
-
-```bash
-npx promptfoo@latest scan-model --provider openai:gpt-4 --output scan-report.json
-```
-
-Use this command to:
-
-- Run systematic vulnerability assessments across multiple attack vectors
-- Generate automated security reports
-- Scan production AI systems for security gaps
-- Export detailed analysis of model weaknesses
-
-## 🎭 Multimodal Security Testing
-
-### 🎵 Audio Strategy (v0.107.0)
-
-Added audio-based red teaming strategy for testing multimodal model vulnerabilities:
+**LiteLLM Provider** ([commit 3e6b66f86](https://github.com/promptfoo/promptfoo/commit/3e6b66f86))
 
 ```yaml
-redteam:
-  strategies:
-    - audio
-  plugins:
-    - harmful
-  purpose: 'Test multimodal AI safety with audio attacks'
+providers:
+  - litellm:gpt-4
+  - litellm:claude-3-opus
+  - litellm:gemini-pro
 ```
 
-This strategy enables you to:
+Access 100+ models through unified interface.
 
-- Test audio input handling for security vulnerabilities
-- Validate speech processing security in AI systems
-- Run cross-modal attacks on multimodal boundaries
-
-### 🖼️ Convert to Image Strategy (v0.107.0)
-
-New strategy converts text attacks to images to test visual input processing:
+**Amazon SageMaker Support** ([commit fcf6ac48f](https://github.com/promptfoo/promptfoo/commit/fcf6ac48f))
 
 ```yaml
-redteam:
-  strategies:
-    - convert-to-image
-    - image-jailbreak
-  plugins:
-    - harmful
-  purpose: 'Test visual input security'
+providers:
+  - sagemaker:my-endpoint
+    config:
+      region: us-east-1
 ```
 
-:::warning
+Direct evaluation of SageMaker endpoints.
 
-Image conversion attacks can bypass text-based filters by encoding content visually.
+**OpenAI Realtime API** ([commit 50676d0d5](https://github.com/promptfoo/promptfoo/commit/50676d0d5))
 
-:::
+```yaml
+providers:
+  - openai:realtime
+    config:
+      model: gpt-4o-realtime-preview
+```
 
-## 🚀 Multimodal Capabilities
+Support for real-time conversational AI evaluation.
 
-### 🔄 Live Sequential Function Calls (v0.107.0)
+**OpenAI Responses API** ([commit 80f1c6b8e](https://github.com/promptfoo/promptfoo/commit/80f1c6b8e))
 
-Added multimodal live sequential function calls for complex interactive evals:
+```yaml
+providers:
+  - openai:gpt-4
+    config:
+      responseFormat: json_schema
+      refusal: true
+```
 
-```yaml title="promptfooconfig.yaml"
+Enhanced structured output support.
+
+### Data & Configuration
+
+**JSONL Test Case Support** ([commit b0d1e2985](https://github.com/promptfoo/promptfoo/commit/b0d1e2985))
+
+```jsonl
+{"vars": {"input": "test1"}, "assert": [{"type": "contains", "value": "expected"}]}
+{"vars": {"input": "test2"}, "assert": [{"type": "contains", "value": "expected"}]}
+```
+
+**CSV Prompt Loading** ([commit 0c58ee772](https://github.com/promptfoo/promptfoo/commit/0c58ee772))
+
+```csv
+id,prompt,category
+greeting,"Hello {{name}}",basic
+analysis,"Analyze: {{data}}",advanced
+```
+
+**CSV Metadata Arrays** ([commit 7bffbe9bb](https://github.com/promptfoo/promptfoo/commit/7bffbe9bb))
+
+```yaml
+metadata:
+  tags: 'tag1,tag2,tag3' # Automatically parsed as array
+```
+
+### Multimodal Capabilities
+
+**Google Live Function Callbacks** ([commit ea3c854f9](https://github.com/promptfoo/promptfoo/commit/ea3c854f9))
+
+```yaml
 providers:
   - google:live
     config:
-      multiSegment: true
       functions:
         - name: analyze_image
-          sequential: true
-        - name: process_audio
-          sequential: true
+          callback: true
 ```
 
-Use this feature to:
-
-- Create complex multimodal workflows with sequential processing
-- Build interactive eval scenarios with real-time responses
-- Chain functions for sophisticated testing
-- Run dynamic assessments with live providers
-
-## 📸 Image Processing
-
-### 🔤 Base64 Image Loader (v0.106.0)
-
-Added base64 image loading capabilities for seamless integration with various image sources:
+**Base64 Image Support**
+Direct base64 image loading capabilities for seamless integration:
 
 ```yaml
-prompts:
-  - |
-    Analyze this image: {{imageData}}
 tests:
   - vars:
       imageData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
 ```
 
-This feature provides:
+**Multimodal Documentation** ([commit 820af1048](https://github.com/promptfoo/promptfoo/commit/820af1048))
+Enhanced guides for image and audio evaluation workflows.
 
-- Universal image compatibility across formats and sources
-- Embedded image support in configuration files
-- Dynamic image loading for automated testing workflows
-- Cross-platform image handling without external dependencies
+### Provider Enhancements
 
-## ⚙️ Dynamic Configuration
+**Enhanced Python Provider** ([commit 8b2b1bfe7](https://github.com/promptfoo/promptfoo/commit/8b2b1bfe7))
+Load arbitrary files in nested configurations for custom model integrations.
 
-### 🔧 Prompt Function Config Returns (v0.106.0)
+**Azure Assistant Improvements** ([commit 51bbbb6e9](https://github.com/promptfoo/promptfoo/commit/51bbbb6e9))
+Better caching and integration support.
 
-Prompt functions can now return configuration objects alongside content:
+**Gemini 2.5 Pro Support** ([commit 1608b2d3c](https://github.com/promptfoo/promptfoo/commit/1608b2d3c))
+Latest Gemini model integration.
 
-```javascript title="prompts/dynamic-prompt.js"
-module.exports = function (vars) {
-  return {
-    content: `Analyze: ${vars.input}`,
-    config: {
-      temperature: vars.complexity > 0.5 ? 0.8 : 0.2,
-      max_tokens: vars.length === 'long' ? 2000 : 500,
-    },
-  };
-};
-```
+**Bedrock Token Counting** ([commit 28a8e6a04](https://github.com/promptfoo/promptfoo/commit/28a8e6a04))
+Support for all major Bedrock model types.
 
-Use this feature to:
+### Evaluation Improvements
 
-- Set dynamic configuration based on eval context
-- Adjust parameters for different test scenarios
-- Optimize prompts based on input characteristics
-- Configure model behavior contextually
+**Factuality Grading Updates** ([commit 3e6b2eeb3](https://github.com/promptfoo/promptfoo/commit/3e6b2eeb3))
+Improved cross-provider compatibility for factuality assessments.
 
-## 🎨 User Experience Improvements
+**G-eval Logging** ([commit 27dab92fd](https://github.com/promptfoo/promptfoo/commit/27dab92fd))
+Enhanced debugging with complete reasoning logs.
 
-### 📊 Metadata Filtering (v0.107.0)
+**HTTP Template Strings** ([commit 862373795](https://github.com/promptfoo/promptfoo/commit/862373795))
+Direct template variable support in URLs.
 
-Added metadata filtering in ResultsTable for data analysis:
-
-- Run custom metadata queries for targeted analysis
-- Filter eval results with advanced capabilities
-- Search functionality with metadata integration
-- Improved analytics workflows
-
-### 📥 Download Failed Tests Dialog (v0.107.0)
-
-New dialog for downloading failed test cases:
-
-- Export targeted failure analysis
-- Create quality assurance workflows for systematic debugging
-- Access detailed failure data for investigation
-- Streamline error investigation processes
-
-### 🌐 Server Environment Enhancement (v0.107.0)
-
-Server now automatically loads .env files on startup:
+**Environment File Support** ([commit e682354e5](https://github.com/promptfoo/promptfoo/commit/e682354e5))
 
 ```bash
-npx promptfoo@latest view --port 3000
-# .env file is loaded automatically
+npx promptfoo eval --env-file custom.env
 ```
 
-## 🔧 Provider & Infrastructure Updates
+_[Image placeholder: Provider integration overview showing LiteLLM, SageMaker, and Realtime API]_
 
-### 🤖 DeepSeek Provider Enhancements (v0.107.0)
+## Promptfoo Redteam (Security Testing)
 
-- Added Bedrock support for DeepSeek models
-- Integrated reasoning context into output for transparency
-- Enhanced DeepSeek capabilities across multiple platforms
+### Strategy Enhancements
 
-### ☁️ Azure Reasoning Models (v0.107.0)
+**Multilingual Strategy Documentation** ([commit bfcb2e47f](https://github.com/promptfoo/promptfoo/commit/bfcb2e47f))
+Improved guidance for multilingual red team testing.
 
-Improved support for Azure reasoning models with updated documentation and enhanced integration.
+**Entity Extraction Filtering** ([commit 38b1e6371](https://github.com/promptfoo/promptfoo/commit/38b1e6371))
+Filter template variables from entity extraction for cleaner results.
 
-## 🐛 Fixes & Stability
+### Grading Improvements
 
-### 🔧 Eval Accuracy (v0.107.0)
+**PlinyGrader Enhancements** ([commit c6a00beda](https://github.com/promptfoo/promptfoo/commit/c6a00beda))
+More accurate grading for Pliny benchmark results.
 
-- Fixed metadata merging between test cases and provider responses
-- Improved remote grading with assertion data inclusion
-- Updated moderation flags and test case metadata handling
+**Strategy Type Fixes** ([commit 7ecde2402](https://github.com/promptfoo/promptfoo/commit/7ecde2402))
+Better TypeScript typing for red team strategies.
 
-### 🌐 Provider Reliability (v0.107.0)
+### Plugin Development
 
-- Fixed HTTP provider headers environment variable substitution
-- Corrected self-hosting URL display
-- Fixed missing plugins in WebUI report view
+**RAG Poisoning Plugin** ([commit 700b79659](https://github.com/promptfoo/promptfoo/commit/700b79659))
+Added missing constants for RAG poisoning attacks.
 
-## 📦 Getting Started
+### Documentation & Guides
 
-Install the latest version:
+**OWASP Red Teaming Guide** ([commit 3258c5909](https://github.com/promptfoo/promptfoo/commit/3258c5909))
+Comprehensive guide following OWASP methodology.
+
+**Foundation Models Guide** ([commit 662833395](https://github.com/promptfoo/promptfoo/commit/662833395))
+Specialized testing approaches for foundation models.
+
+**Agent & RAG Testing** ([commit fb12e5ad6](https://github.com/promptfoo/promptfoo/commit/fb12e5ad6))
+Enhanced documentation for testing AI agents and RAG systems.
+
+**Azure Assistant Example** ([commit 602716407](https://github.com/promptfoo/promptfoo/commit/602716407))
+Complete red team testing example for Azure assistants.
+
+_[Image placeholder: Red team strategy overview with foundation model testing]_
+
+## Promptfoo Cloud (Cloud Platform)
+
+### Platform Features
+
+**Adaptive Prompting** ([commit bab2a764](https://github.com/promptfoo/promptfoo/commit/bab2a764))
+Dynamic prompt adaptation based on evaluation context.
+
+**OpenRouter Proxy** ([commit e7835c8c](https://github.com/promptfoo/promptfoo/commit/e7835c8c))
+`promptfoo:model` task for OpenRouter integration.
+
+**DataGrid Improvements** ([commit fc4f4637](https://github.com/promptfoo/promptfoo/commit/fc4f4637))
+Enhanced reports view with better data handling.
+
+### User Experience
+
+**Evaluation Navigation** ([commit 67b6d136](https://github.com/promptfoo/promptfoo/commit/67b6d136))
+Fixed DataGrid row navigation issues.
+
+**Metadata Search** ([commit 63e1c4c9](https://github.com/promptfoo/promptfoo/commit/63e1c4c9))
+Improved search functionality for evaluation metadata.
+
+**Separate Evals Index** ([commit 5cb3a84e](https://github.com/promptfoo/promptfoo/commit/5cb3a84e))
+Dedicated evaluation index page for better organization.
+
+### Infrastructure
+
+**Zod Schema Migration** ([commit a4c43eb9](https://github.com/promptfoo/promptfoo/commit/a4c43eb9))
+Converted DTO interfaces to Zod schemas for better type safety.
+
+**Enhanced Error Tracking** ([commit 1b237717](https://github.com/promptfoo/promptfoo/commit/1b237717))
+Added paths to track Zod validation failures.
+
+**Component Synchronization** ([commit 15841138](https://github.com/promptfoo/promptfoo/commit/15841138))
+Cursor rules for syncing components between repositories.
+
+### Foundation Model Features
+
+**Foundation Plugin Preset** ([commit ec73f8a6](https://github.com/promptfoo/promptfoo/commit/ec73f8a6))
+Specialized testing presets for foundation models.
+
+**Chat History Controls** ([commit 9558ac79](https://github.com/promptfoo/promptfoo/commit/9558ac79))
+Removed unnecessary settings for foundation model testing.
+
+### Model Management
+
+**Model Cost Updates** ([commit 70623279](https://github.com/promptfoo/promptfoo/commit/70623279))
+Updated pricing for latest model releases.
+
+**OpenRouter Models** ([commit 05e84637](https://github.com/promptfoo/promptfoo/commit/05e84637))
+Expanded model catalog with latest OpenRouter options.
+
+_[Image placeholder: Cloud platform dashboard showing adaptive prompting and DataGrid improvements]_
+
+## Infrastructure & Quality
+
+### Build & Deployment
+
+**Helm Charts** ([commit 2583a910](https://github.com/promptfoo/promptfoo/commit/2583a910))
+Kubernetes deployment configurations.
+
+**Docker Improvements** ([commit aa94c4ddc](https://github.com/promptfoo/promptfoo/commit/aa94c4ddc))
+Better .promptfoo directory creation and container optimization.
+
+### Testing & Quality
+
+**Comprehensive Unit Tests**
+
+- Python utilities testing ([commit 7b81997c3](https://github.com/promptfoo/promptfoo/commit/7b81997c3))
+- Provider utilities testing ([commit adc0cae54](https://github.com/promptfoo/promptfoo/commit/adc0cae54))
+- Evaluator helpers testing ([commit d2be23142](https://github.com/promptfoo/promptfoo/commit/d2be23142))
+
+**Go Provider Fixes** ([commit b9357683e](https://github.com/promptfoo/promptfoo/commit/b9357683e))
+Resolved CallApi redeclaration issues.
+
+### Documentation
+
+**Security Policy** ([commit 5be7ca2dc](https://github.com/promptfoo/promptfoo/commit/5be7ca2dc))
+Added comprehensive security and responsible disclosure policies.
+
+**Team Updates** ([commit 21fb7d461](https://github.com/promptfoo/promptfoo/commit/21fb7d461))
+Updated team page with new members.
+
+**Contributing Guide** ([commit adc0cae54](https://github.com/promptfoo/promptfoo/commit/adc0cae54))
+Enhanced contribution guidelines.
+
+## Getting Started
 
 ```bash
 npm install -g promptfoo@latest
+
+# Use LiteLLM provider
+npx promptfoo eval --provider litellm:gpt-4
+
+# Load JSONL test cases
+npx promptfoo eval --tests tests.jsonl
+
+# Test with SageMaker
+npx promptfoo eval --provider sagemaker:my-endpoint
+
+# Red team foundation models
+npx promptfoo redteam --plugins foundation
 ```
 
-Try the new capabilities:
+## Documentation
 
-```bash
-# Run model security scanning
-npx promptfoo@latest scan-model --provider openai:gpt-4
-
-# Use multimodal red teaming with audio
-npx promptfoo@latest redteam --strategies audio,convert-to-image
-
-# Test dynamic configuration with base64 images
-npx promptfoo@latest eval --config multimodal-config.yaml
-```
-
-## 🔗 See Also
-
-- [Model Scanner Command Documentation](/docs/usage/command-line/#promptfoo-scan-model)
-- [Audio Strategy Guide](/docs/red-team/strategies/audio/)
-- [Image Strategy Documentation](/docs/red-team/strategies/image/)
-- [Base64 Strategy Guide](/docs/red-team/strategies/base64/)
-- [Configuration Datasets](/docs/configuration/datasets/)
-- [Google Live API Documentation](/docs/providers/google/#google-live-api)
-- [Web UI Features](/docs/usage/web-ui/)
+- [LiteLLM Provider](/docs/providers/litellm/)
+- [Amazon SageMaker](/docs/providers/sagemaker/)
+- [OpenAI Realtime API](/docs/providers/openai/#realtime-api-models)
+- [JSONL Test Cases](/docs/configuration/test-cases/)
+- [Foundation Model Testing](/docs/red-team/foundation-models/)
 
 ---
 
-March 2025 added systematic model security scanning and multimodal attack strategies to promptfoo. These features support AI safety and security testing for multimodal systems.
-
-Share your experience with the new features on [Discord](https://discord.gg/promptfoo) or [GitHub](https://github.com/promptfoo/promptfoo).
-
----
-
-**Next**: [April 2025](/releases/april-2025-roundup) • [May 2025](/releases/may-2025-roundup) • June 2025 Roundup (coming soon)
+**Next**: [April 2025](/releases/april-2025-roundup) • [May 2025](/releases/may-2025-roundup) • [June 2025](/releases/june-2025-roundup)

@@ -1,77 +1,199 @@
 ---
 slug: april-2025-roundup
-title: April 2025 Roundup - Advanced Evaluation Features
-description: METEOR & GLEU metrics, Cerebras & Grok-3 providers, DoNotAnswer & XSTest plugins, and GPT-4.1 grading improvements
+title: April 2025 Roundup
+description: METEOR scoring, Cerebras provider, enhanced red team strategies, and cloud platform improvements across 200+ commits
 authors: [promptfoo_team]
-tags: [roundup, april-2025, meteor, gleu, cerebras, grok-3, donotanswer, xstest, monthly-summary]
+tags: [roundup, april-2025, meteor, cerebras, homoglyph, donotanswer, monthly-summary]
 keywords:
-  [METEOR, GLEU, Cerebras, Grok-3, DoNotAnswer, XSTest, GPT-4.1, homoglyph, evaluation metrics]
+  [METEOR scoring, Cerebras provider, homoglyph attacks, DoNotAnswer, XSTest, evaluation metrics]
 date: 2025-04-30T23:59
 ---
 
-# April 2025 Roundup - Advanced Evaluation Features
+# April 2025 Roundup
 
-April 2025 included **5 major releases** (v0.110.0 → v0.112.1) that added advanced eval metrics, security testing capabilities, and new model providers. The releases include METEOR scoring, Cerebras integration, and security plugins.
+April delivered comprehensive improvements across all product areas with 200+ commits. Major additions include METEOR evaluation metrics, high-performance provider integrations, advanced red team strategies, and enhanced cloud platform capabilities.
 
 <!-- truncate -->
 
-:::info April 2025 Highlights
+## Promptfoo (Core Evaluation)
 
-This month added **METEOR and GLEU metrics** for text evaluation and **DoNotAnswer and XSTest plugins** for security testing.
+### Evaluation Metrics
 
-:::
-
-## 📊 April 2025 By The Numbers
-
-- **5 Major Releases** (v0.110.0 → v0.112.1)
-- **4 New Evaluation Metrics** (METEOR, GLEU, enhanced LLM rubric)
-- **3 New Model Providers** (Cerebras, Grok-3, AWS Bedrock Knowledge Base)
-- **3 New Security Plugins** (DoNotAnswer, XSTest, homoglyph strategy)
-- **1 Grading Upgrade** (GPT-4.1)
-
-## 🎯 Evaluation Metrics
-
-### 📐 METEOR & GLEU Scoring (v0.112.0, v0.110.0)
-
-Added two new eval metrics for text quality assessment:
-
-**METEOR (Metric for Evaluation of Translation with Explicit ORdering):**
+**METEOR Scoring** ([commit 6dda48b21](https://github.com/promptfoo/promptfoo/commit/6dda48b21))
 
 ```yaml
 tests:
   - vars:
-      input: 'Translate this text'
+      input: 'Translate this sentence'
     assert:
       - type: meteor
         value: 'expected translation'
         threshold: 0.8
 ```
 
-**GLEU (Google-BLEU) for Enhanced Text Similarity:**
+Text similarity scoring using METEOR (Metric for Evaluation of Translation with Explicit ORdering) for improved translation and summarization evaluation.
+
+**GLEU Scoring** ([commit ea57ad9cc](https://github.com/promptfoo/promptfoo/commit/ea57ad9cc))
 
 ```yaml
 tests:
   - vars:
-      input: 'Source text for evaluation'
+      input: 'Source text'
     assert:
       - type: gleu
-        value: 'Expected output text'
+        value: 'Expected output'
         threshold: 0.7
 ```
 
-:::tip
+Google-BLEU variant for enhanced text similarity assessment.
 
-These metrics provide enhanced eval capabilities for translation, summarization, and content generation tasks.
+### Provider Integrations
 
-:::
+**Cerebras Provider** ([commit 3727ff5c3](https://github.com/promptfoo/promptfoo/commit/3727ff5c3))
 
-### 🧠 GPT-4.1 Grading (v0.111.0)
+```yaml
+providers:
+  - cerebras:llama-3.1-8b
+    config:
+      apiKey: ${CEREBRAS_API_KEY}
+      temperature: 0.7
+```
 
-Upgraded grading to use GPT-4.1 for improved eval accuracy across all domains.
+High-performance inference using Cerebras WSE for ultra-fast model evaluation.
 
-### 📋 Enhanced LLM Rubric (v0.111.0)
+**AWS Bedrock Knowledge Base** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
 
-Modified LLM Rubric now supports arbitrary objects for flexible eval criteria:
+```yaml
+providers:
+  - bedrock:knowledge-base
+    config:
+      knowledgeBaseId: "your-kb-id"
+      region: "us-east-1"
+```
+
+Integration with AWS Bedrock Knowledge Base for context-aware evaluations.
+
+### Response Processing
+
+**Custom Response Parsing** ([commit 6a1ac156d](https://github.com/promptfoo/promptfoo/commit/6a1ac156d))
+
+```javascript
+function customProvider(prompt) {
+  return {
+    output: 'Response text',
+    metadata: {
+      model: 'custom-model-v1',
+      tokens: 150,
+      latency: 1200,
+    },
+  };
+}
+```
+
+Providers can return rich metadata alongside responses for enhanced debugging.
+
+**Enhanced Response Format Support**
+
+- JSON schema validation improvements
+- Better structured output handling
+- Improved error response processing
+
+### Configuration Enhancements
+
+**Universal Environment Variable Override** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
+
+```yaml
+env:
+  OPENAI_API_KEY: "custom-override"
+  CUSTOM_ENDPOINT: "https://api.example.com"
+providers:
+  - openai:gpt-4
+    config:
+      apiKey: ${OPENAI_API_KEY}
+```
+
+Complete flexibility in configuration management.
+
+**Relative Path Resolution**
+Better handling of provider paths from cloud configurations for improved deployment flexibility.
+
+### Results & Analytics
+
+**Ordered Results API** ([commit aa375d967](https://github.com/promptfoo/promptfoo/commit/aa375d967))
+Results now return in chronological order for better analysis workflows.
+
+**Enhanced CSV Exports**
+
+- Results properly ordered by date
+- Improved data export capabilities
+- Better integration with external analysis tools
+
+**Score Accuracy Improvements** ([commit 182685aae](https://github.com/promptfoo/promptfoo/commit/182685aae))
+Fixed score calculation with proper trailing newline handling for more consistent evaluation.
+
+_[Image placeholder: METEOR scoring interface with accuracy improvements]_
+
+## Promptfoo Redteam (Security Testing)
+
+### Advanced Attack Strategies
+
+**Homoglyph Strategy** ([commit 4e9448666](https://github.com/promptfoo/promptfoo/commit/4e9448666))
+
+```yaml
+redteam:
+  strategies:
+    - homoglyph
+  plugins:
+    - harmful
+```
+
+Tests model robustness against visually similar character substitutions:
+
+- `a` → `а` (Cyrillic)
+- `o` → `о` (Cyrillic)
+- `e` → `е` (Cyrillic)
+
+**Extended Encoding Strategies** ([commit ee140fc76](https://github.com/promptfoo/promptfoo/commit/ee140fc76))
+
+```yaml
+redteam:
+  strategies:
+    - homoglyph
+    - extended-encodings
+    - base64
+  plugins:
+    - harmful
+```
+
+Comprehensive encoding attack capabilities for thorough security testing.
+
+### Security Plugins
+
+**DoNotAnswer Plugin** ([commit 5bd0a33ae](https://github.com/promptfoo/promptfoo/commit/5bd0a33ae))
+
+```yaml
+redteam:
+  plugins:
+    - donotanswer
+  purpose: 'Test AI safety and refusal capabilities'
+```
+
+Implements DoNotAnswer dataset for testing models' ability to refuse inappropriate requests.
+
+**XSTest Plugin** ([commit 1d7714f6f](https://github.com/promptfoo/promptfoo/commit/1d7714f6f))
+
+```yaml
+redteam:
+  plugins:
+    - xstest
+  purpose: 'Test for XSS vulnerabilities'
+```
+
+Cross-site scripting vulnerability testing for web-based AI systems.
+
+### Grading Improvements
+
+**Enhanced LLM Rubric Support**
 
 ```yaml
 tests:
@@ -84,185 +206,180 @@ tests:
           - Creativity: 0-10 points
           - Accuracy: 0-10 points
           Total: /20 points
-        rubricPrompt: |
-          Evaluate the response using these criteria:
-          {{rubric}}
 ```
 
-## 🚀 Model Providers
+Modified LLM Rubric now supports arbitrary objects for flexible evaluation criteria.
 
-### ⚡ Cerebras Integration (v0.112.0)
+**GPT-4.1 Grading Upgrade**
+Upgraded grading system to use GPT-4.1 for improved evaluation accuracy across all domains.
 
-Added Cerebras provider for high-performance AI model eval:
+### Documentation & Examples
 
-```yaml
-providers:
-  - cerebras:llama-3.1-8b
-    config:
-      apiKey: ${CEREBRAS_API_KEY}
-```
+**Enhanced Strategy Documentation**
 
-### 🌌 Grok-3 Support (v0.110.0)
+- Improved documentation for existing strategies
+- Better examples and use cases
+- Clearer configuration guidance
 
-Added Grok-3 model support for advanced AI evals:
+_[Image placeholder: Homoglyph attack demonstration with character substitution examples]_
 
-```yaml
-providers:
-  - grok-3
-    config:
-      apiKey: ${GROK_API_KEY}
-```
+## Promptfoo Cloud (Cloud Platform)
 
-### 🏗️ AWS Bedrock Knowledge Base (v0.110.0)
+### User Interface Improvements
 
-Integrated AWS Bedrock Knowledge Base support for context-aware evals:
+**Anchor Links to Rows** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
+Added anchor link functionality to specific rows in evaluation results with automatic scroll-to-top behavior.
 
-```yaml
-providers:
-  - bedrock:knowledge-base
-    config:
-      knowledgeBaseId: "your-kb-id"
-      region: "us-east-1"
-```
+**Enhanced Quick Selector** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
+Improved Eval Quick Selector (Cmd+K) for better navigation and usability.
 
-## 🛡️ Security Testing Features
+**Responsive Design Fixes** ([commit 7dd2bff6a](https://github.com/promptfoo/promptfoo/commit/7dd2bff6a))
+Fixed overlapping text issues on narrow screens for better mobile experience.
 
-### 🚫 DoNotAnswer Plugin (v0.111.0)
+### Authentication & Sharing
 
-Added plugin implementing the DoNotAnswer dataset for testing models' ability to refuse inappropriate requests:
+**Sharing Improvements**
 
-```yaml
-redteam:
-  plugins:
-    - donotanswer
-  purpose: 'Test AI safety and refusal capabilities'
-```
-
-### 🔍 XSTest Plugin (v0.111.0, v0.111.1)
-
-Added cross-site scripting vulnerability testing for web-based AI systems:
-
-```yaml
-redteam:
-  plugins:
-    - xstest
-  purpose: 'Test for XSS vulnerabilities'
-```
-
-### 🎭 Homoglyph Strategy (v0.112.0)
-
-New red teaming strategy using homoglyphs (visually similar characters) to test model robustness:
-
-```yaml
-redteam:
-  strategies:
-    - homoglyph
-    - extended-encodings
-  plugins:
-    - harmful
-```
-
-:::warning
-
-Homoglyph strategies test models against visual deception attacks using characters that look identical but have different Unicode values.
-
-:::
-
-## ⚡ Performance & Infrastructure
-
-### 🗃️ Universal Environment Variable Override (v0.112.0)
-
-Added complete flexibility in configuration management:
-
-```yaml title="promptfooconfig.yaml"
-env:
-  OPENAI_API_KEY: "custom-override"
-  CUSTOM_ENDPOINT: "https://api.example.com"
-providers:
-  - openai:gpt-4
-    config:
-      apiKey: ${OPENAI_API_KEY}
-```
-
-### 🔗 Persistent Search State (v0.112.0)
-
-Search queries now persisted in URLs for better user experience and result sharing.
-
-### 📊 Enhanced CSV Exports (v0.110.0)
-
-- Results properly ordered by date
-- Improved data export capabilities
-- Better integration with external analysis tools
-
-## 🎨 WebUI Improvements
-
-### ⚓ Anchor Links to Rows (v0.111.0)
-
-Added anchor link functionality to specific rows in eval results with automatic scroll-to-top behavior for better navigation and result sharing.
-
-### ⚡ Enhanced Quick Selector (v0.111.0)
-
-Improved Eval Quick Selector (Cmd+K) for better navigation and usability throughout the interface.
-
-## 🐛 Fixes & Stability
-
-### 🔐 Authentication & Sharing (v0.110.0)
-
-- Removed deprecated authentication login flow
 - Implemented sharing idempotence to prevent duplicates
 - Fixed sharing configuration respect from promptfooconfig.yaml
 - Added backward compatibility for `-y` flag
 
-### 🔌 Provider Reliability
+**Authentication Cleanup**
+Removed deprecated authentication login flow for streamlined user experience.
 
-- **HuggingFace datasets** - Disabled variable expansion to prevent array field issues (v0.110.0)
-- **Google Vertex AI** - Resolved output format issues (v0.110.0)
-- **Raw HTTP provider** - Fixed transformRequest handling (v0.110.0)
-- **JSON test files** - Fixed parsing to preserve test case structure (v0.110.0)
+### Data Management
 
-### 🎯 Eval Accuracy
+**Enhanced Export Capabilities**
 
-- **Score results** now handle trailing newlines correctly (v0.112.0)
-- **Matcher improvements** for more accurate eval (v0.112.0)
-- **OpenAI Realtime API** history handling fixes (v0.112.0)
+- Pass/fail scoring in CSV exports
+- JSON download options
+- Plugin and strategy IDs for better traceability
+- More detailed export options for external analysis
 
-## 📦 Getting Started
+**Server-Side Improvements**
+Better handling of large datasets with improved performance and scalability.
 
-Install the latest version:
+### Provider Reliability
+
+**HuggingFace Dataset Fixes**
+Disabled variable expansion to prevent array field issues.
+
+**Google Vertex AI Improvements**
+Resolved output format issues for more reliable evaluation.
+
+**Raw HTTP Provider Enhancements**
+Fixed transformRequest handling for better API integration.
+
+**JSON Test File Processing**
+Fixed parsing to preserve test case structure.
+
+### Infrastructure
+
+**Build System Enhancements**
+
+- Added missing strategy entries for complete functionality
+- Improved dependency management
+- Better error handling throughout the platform
+
+**Performance Optimizations**
+
+- Cleaner chunking algorithms
+- Improved telemetry handling
+- Enhanced dependency resolution
+
+_[Image placeholder: Cloud platform interface showing enhanced quick selector and responsive design]_
+
+## Infrastructure & Quality
+
+### Testing & Quality Assurance
+
+**Comprehensive Unit Test Coverage**
+
+- Enhanced test coverage for evaluation metrics
+- Provider integration testing
+- Red team strategy validation
+- UI component testing
+
+**Matcher Improvements**
+Enhanced evaluation accuracy with better matching algorithms.
+
+### Provider Ecosystem
+
+**Provider Reliability Improvements**
+
+- Better error handling across all providers
+- Enhanced token counting for Bedrock models
+- Improved caching mechanisms
+- More robust response processing
+
+**Documentation Updates**
+
+- Improved setup guides
+- Better configuration examples
+- Enhanced troubleshooting resources
+
+### Dependency Management
+
+**Package Management Improvements**
+
+- Moved 'natural' to peer dependency for better package management
+- Updated React Router to v7.5.2
+- Enhanced build process with strategy entry handling
+
+**Security Updates**
+Regular dependency updates to address security vulnerabilities.
+
+## Bug Fixes & Stability
+
+### Core Platform Fixes
+
+- Fixed accordion positioning in plugins view
+- Resolved build issues with missing strategy entries
+- Improved telemetry handling
+- Enhanced error reporting and debugging
+
+### Evaluation Accuracy
+
+- Fixed score results handling with trailing newlines
+- Improved matcher reliability
+- Better whitespace handling in evaluations
+- Enhanced assertion processing
+
+### Provider Fixes
+
+- Fixed HTTP provider template string handling
+- Resolved Python provider caching issues
+- Corrected provider response parsing
+- Enhanced metadata handling
+
+## Getting Started
 
 ```bash
 npm install -g promptfoo@latest
+
+# Use METEOR scoring
+npx promptfoo eval --config config-with-meteor.yaml
+
+# Test homoglyph attacks
+npx promptfoo redteam --strategies homoglyph
+
+# Use Cerebras provider
+npx promptfoo eval --provider cerebras:llama-3.1-8b
+
+# Test with security plugins
+npx promptfoo redteam --plugins donotanswer,xstest
 ```
 
-Try the new capabilities:
+## Documentation
 
-```bash
-# Use advanced metrics
-npx promptfoo@latest eval --config config-with-meteor.yaml
-
-# Test security with new plugins
-npx promptfoo@latest redteam --plugins donotanswer,xstest
-
-# Use new providers
-npx promptfoo@latest eval --provider cerebras:llama-3.1-8b
-```
-
-## 🔗 See Also
-
-- [METEOR Scoring Guide](/docs/configuration/expected-outputs/deterministic/#meteor)
-- [GLEU Metric Documentation](/docs/configuration/expected-outputs/deterministic/#gleu)
-- [DoNotAnswer Plugin Guide](/docs/red-team/plugins/donotanswer/)
-- [XSTest Plugin Documentation](/docs/red-team/plugins/xstest/)
-- [Cerebras Provider Setup](/docs/providers/cerebras/)
-- [Homoglyph Strategy Guide](/docs/red-team/strategies/homoglyph/)
+- [METEOR Scoring](/docs/configuration/expected-outputs/deterministic/#meteor)
+- [GLEU Metric](/docs/configuration/expected-outputs/deterministic/#gleu)
+- [Cerebras Provider](/docs/providers/cerebras/)
+- [Homoglyph Strategy](/docs/red-team/strategies/homoglyph/)
+- [DoNotAnswer Plugin](/docs/red-team/plugins/donotanswer/)
+- [XSTest Plugin](/docs/red-team/plugins/xstest/)
 
 ---
 
-April 2025 added advanced eval metrics, security testing capabilities, and new provider support to promptfoo. These features support more sophisticated AI evaluation and security testing workflows.
-
-Share your experience with the new features on [Discord](https://discord.gg/promptfoo) or [GitHub](https://github.com/promptfoo/promptfoo).
-
----
-
-**Previous Roundups**: [March 2025](/releases/march-2025-roundup)  
-**Next**: [May 2025](/releases/may-2025-roundup) • June 2025 Roundup (coming soon)
+**Previous**: [March 2025](/releases/march-2025-roundup)  
+**Next**: [May 2025](/releases/may-2025-roundup) • [June 2025](/releases/june-2025-roundup)
