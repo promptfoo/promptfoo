@@ -15,9 +15,11 @@ describe('evalRouter', () => {
   let mockResponse: Partial<Response>;
   let mockNext: NextFunction;
   let mockJson: jest.Mock;
+  let mockStatus: jest.Mock;
 
   beforeEach(() => {
     mockJson = jest.fn();
+    mockStatus = jest.fn().mockReturnThis();
     mockRequest = {
       body: {},
       params: {},
@@ -25,7 +27,7 @@ describe('evalRouter', () => {
     };
     mockResponse = {
       json: mockJson,
-      status: jest.fn().mockReturnThis(),
+      status: mockStatus,
     };
     mockNext = jest.fn();
     evalJobs.clear();
@@ -33,40 +35,6 @@ describe('evalRouter', () => {
   });
 
   describe('POST /job/:id/cancel', () => {
-    it('should cancel a running job successfully', async () => {
-      // Set up a mock running job
-      const jobId = 'test-job-id';
-
-      // Mock the private runningEvalJobs map by accessing the route handler
-      const cancelHandler = evalRouter.stack.find(
-        (layer: any) => layer.route?.path === '/job/:id/cancel' && layer.route?.methods?.post,
-      )?.route?.stack[0]?.handle;
-
-      // Create a job in the evalJobs map
-      evalJobs.set(jobId, {
-        evalId: null,
-        status: 'in-progress',
-        progress: 50,
-        total: 100,
-        result: null,
-        logs: ['Job started'],
-      });
-
-      mockRequest.params = { id: jobId };
-
-      if (cancelHandler) {
-        // Since we can't directly access the private runningEvalJobs map,
-        // we'll test that the endpoint returns the correct response for a non-existent job
-        await cancelHandler(mockRequest as Request, mockResponse as Response, mockNext);
-      }
-
-      // Should return 404 for job not found since we can't mock the private map
-      expect(mockResponse.status).toHaveBeenCalledWith(404);
-      expect(mockJson).toHaveBeenCalledWith({
-        error: 'Job not found or already completed',
-      });
-    });
-
     it('should return 404 for non-existent job', async () => {
       const cancelHandler = evalRouter.stack.find(
         (layer: any) => layer.route?.path === '/job/:id/cancel' && layer.route?.methods?.post,
@@ -78,10 +46,49 @@ describe('evalRouter', () => {
         await cancelHandler(mockRequest as Request, mockResponse as Response, mockNext);
       }
 
-      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(mockStatus).toHaveBeenCalledWith(404);
       expect(mockJson).toHaveBeenCalledWith({
         error: 'Job not found or already completed',
       });
+    });
+
+    it('should return 404 for completed job', async () => {
+      const jobId = 'completed-job-id';
+
+      // Create a completed job in evalJobs but not in runningEvalJobs
+      evalJobs.set(jobId, {
+        evalId: 'eval-123',
+        status: 'complete',
+        progress: 100,
+        total: 100,
+        result: null,
+        logs: ['Job completed'],
+      });
+
+      const cancelHandler = evalRouter.stack.find(
+        (layer: any) => layer.route?.path === '/job/:id/cancel' && layer.route?.methods?.post,
+      )?.route?.stack[0]?.handle;
+
+      mockRequest.params = { id: jobId };
+
+      if (cancelHandler) {
+        await cancelHandler(mockRequest as Request, mockResponse as Response, mockNext);
+      }
+
+      expect(mockStatus).toHaveBeenCalledWith(404);
+      expect(mockJson).toHaveBeenCalledWith({
+        error: 'Job not found or already completed',
+      });
+    });
+
+    it('should handle cancellation API endpoint structure', () => {
+      // Verify the cancel endpoint exists in the router
+      const cancelRoute = evalRouter.stack.find(
+        (layer: any) => layer.route?.path === '/job/:id/cancel',
+      );
+
+      expect(cancelRoute).toBeDefined();
+      expect(cancelRoute?.route?.path).toBe('/job/:id/cancel');
     });
   });
 
@@ -124,6 +131,75 @@ describe('evalRouter', () => {
           progressCallback: expect.any(Function),
         }),
       );
+    });
+
+    it('should handle evaluation errors with cancellation detection', async () => {
+      // Mock evaluate to reject with AbortError-like error
+      const abortError = new Error('Operation cancelled');
+      mockEvaluate.mockRejectedValue(abortError);
+
+      mockRequest.body = {
+        prompts: ['test prompt'],
+        providers: ['openai:gpt-3.5-turbo'],
+        tests: [{ vars: { input: 'test' } }],
+        evaluateOptions: {},
+      };
+
+      const jobHandler = evalRouter.stack.find(
+        (layer: any) => layer.route?.path === '/job' && layer.route?.methods?.post,
+      )?.route?.stack[0]?.handle;
+
+      if (jobHandler) {
+        await jobHandler(mockRequest as Request, mockResponse as Response, mockNext);
+      }
+
+      expect(mockJson).toHaveBeenCalledWith({ id: expect.any(String) });
+
+      // Let the async evaluation complete
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Check that a job was created and eventually failed
+      const jobId = mockJson.mock.calls[0][0].id;
+      const job = evalJobs.get(jobId);
+
+      expect(job).toBeDefined();
+      expect(job?.status).toBe('error');
+    });
+
+    it('should create jobs with unique IDs', async () => {
+      const mockResult = {
+        id: 'eval-123',
+        toEvaluateSummary: jest.fn().mockResolvedValue({ summary: 'test' }),
+      } as any;
+      mockEvaluate.mockResolvedValue(mockResult);
+
+      mockRequest.body = {
+        prompts: ['test prompt'],
+        providers: ['openai:gpt-3.5-turbo'],
+        tests: [{ vars: { input: 'test' } }],
+        evaluateOptions: {},
+      };
+
+      const jobHandler = evalRouter.stack.find(
+        (layer: any) => layer.route?.path === '/job' && layer.route?.methods?.post,
+      )?.route?.stack[0]?.handle;
+
+      // Create first job
+      if (jobHandler) {
+        await jobHandler(mockRequest as Request, mockResponse as Response, mockNext);
+      }
+      const firstJobId = mockJson.mock.calls[0][0].id;
+
+      // Reset mock and create second job
+      mockJson.mockClear();
+      if (jobHandler) {
+        await jobHandler(mockRequest as Request, mockResponse as Response, mockNext);
+      }
+      const secondJobId = mockJson.mock.calls[0][0].id;
+
+      expect(firstJobId).not.toBe(secondJobId);
+      expect(evalJobs.has(firstJobId)).toBe(true);
+      expect(evalJobs.has(secondJobId)).toBe(true);
     });
   });
 });

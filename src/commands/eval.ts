@@ -13,7 +13,6 @@ import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
-import { getGlobalAbortController, clearGlobalAbortController } from '../main';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
@@ -33,6 +32,7 @@ import { CommandLineOptionsSchema } from '../types';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { getGlobalAbortController, clearGlobalAbortController } from '../util/abortController';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -304,10 +304,10 @@ export async function doEval(
         // Re-throw non-cancellation errors
         throw error;
       }
+    } finally {
+      // Clear the global abort controller since evaluation is complete (or failed)
+      clearGlobalAbortController();
     }
-
-    // Clear the global abort controller since evaluation is complete
-    clearGlobalAbortController();
 
     logger.debug(
       `Evaluation finished. Aborted: ${evaluationAborted}, Results count: ${ret?.results?.length || 0}`,
