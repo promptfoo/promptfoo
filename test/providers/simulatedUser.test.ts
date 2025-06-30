@@ -152,7 +152,7 @@ describe('SimulatedUser', () => {
 
       expect(result.output).toBeDefined();
       expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
+        expect.stringContaining('[{"role":"user","content":"user response"}'),
         expect.objectContaining({
           vars: expect.objectContaining({
             workflow_id: '123-workflow',
