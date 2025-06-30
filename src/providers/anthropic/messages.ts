@@ -132,10 +132,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+          const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
           return {
             output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
-            finishReason: normalizeFinishReason(parsedCachedResponse.stop_reason),
+            ...(finishReason && { finishReason }),
             cost: calculateAnthropicCost(
               this.modelName,
               this.config,
@@ -173,12 +174,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           output: 'Streaming response not supported in this context',
           error: 'Streaming should be disabled for this use case',
         };
-      }
+            }
 
+      const finishReason = normalizeFinishReason(response.stop_reason);
       return {
         output: outputFromMessage(response, this.config.showThinking ?? true),
         tokenUsage: getTokenUsage(response, false),
-        finishReason: normalizeFinishReason(response.stop_reason),
+        ...(finishReason && { finishReason }),
         cost: calculateAnthropicCost(
           this.modelName,
           this.config,

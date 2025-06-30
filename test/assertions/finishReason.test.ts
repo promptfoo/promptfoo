@@ -36,4 +36,76 @@ describe('finishReason assertion', () => {
     expect(result.score).toBe(0);
     expect(result.reason).toContain('did not supply');
   });
+
+  it('should handle renderedValue override', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'finish-reason', value: 'stop' },
+      renderedValue: 'length',
+      providerResponse: { finishReason: 'length' },
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('should prioritize renderedValue over assertion.value', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'finish-reason', value: 'stop' },
+      renderedValue: 'length',
+      providerResponse: { finishReason: 'stop' },
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('Expected finish reason "length" but got "stop"');
+  });
+
+  it('should throw for non-string assertion value', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'finish-reason', value: 123 },
+      providerResponse: { finishReason: 'stop' },
+    };
+
+    expect(() => handleFinishReason(params as AssertionParams)).toThrow(
+      '"finish-reason" assertion type must have a string value'
+    );
+  });
+
+  it('should throw for non-string renderedValue', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'finish-reason', value: 'stop' },
+      renderedValue: 123,
+      providerResponse: { finishReason: 'stop' },
+    };
+
+    expect(() => handleFinishReason(params as AssertionParams)).toThrow(
+      '"finish-reason" assertion type must have a string value'
+    );
+  });
+
+  it('should handle undefined finishReason gracefully', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'finish-reason', value: 'stop' },
+      providerResponse: { finishReason: undefined },
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('did not supply');
+  });
+
+  it('should perform exact string matching', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'finish-reason', value: 'stop' },
+      providerResponse: { finishReason: 'STOP' }, // Different case
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('Expected finish reason "stop" but got "STOP"');
+  });
 });

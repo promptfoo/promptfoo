@@ -1689,7 +1689,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           choices: [
             {
               message: { content: 'done' },
-              finish_reason: 'length',
+              finish_reason: 'function_call', // This should be normalized to 'tool_calls'
             },
           ],
           usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
@@ -1703,7 +1703,53 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       const result = await provider.callApi('hi');
 
-      expect(result.finishReason).toBe('length'); // confirms adapter ran the normaliser
+      expect(result.finishReason).toBe('tool_calls'); // confirms adapter ran the normaliser
+    });
+
+    it('should handle case normalization in finishReason', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: { content: 'done' },
+              finish_reason: 'LENGTH', // Uppercase should be normalized to lowercase
+            },
+          ],
+          usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('hi');
+
+      expect(result.finishReason).toBe('length'); // normalized to lowercase
+    });
+
+    it('should exclude finishReason when normalization returns undefined', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: { content: 'done' },
+              finish_reason: '', // Empty string should be excluded
+            },
+          ],
+          usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('hi');
+
+      expect(result.finishReason).toBeUndefined(); // Should be excluded when empty
     });
 
     it('should use generic error message with fallback when apiKeyEnvar is undefined', async () => {
