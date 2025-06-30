@@ -6,7 +6,7 @@ displayed_sidebar: null
 
 import { Redirect } from '@docusaurus/router';
 
-<Redirect to="/docs/configuration/datasets/google-sheets" />
+<Redirect to="/docs/configuration/tests/google-sheets" />
 
 # Google Sheets Integration
 

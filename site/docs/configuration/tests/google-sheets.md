@@ -30,8 +30,8 @@ prompts:
   - prompt1.txt
   - prompt2.txt
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - openai:chat:gpt-4o
+  - anthropic:messages:claude-3-7-sonnet-20250219
+  - openai:o3-mini
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
 
@@ -110,8 +110,8 @@ prompts:
   - prompt1.txt
   - prompt2.txt
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - openai:chat:gpt-4-mini
+  - anthropic:messages:claude-3-7-sonnet-20250219
+  - openai:o3-mini
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 defaultTest:
   options:

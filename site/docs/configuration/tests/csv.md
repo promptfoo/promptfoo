@@ -128,7 +128,7 @@ prompts:
     Make it approximately {{length}} words long.
 
 providers:
-  - openai:gpt-4
+  - openai:o3-mini
 
 tests: file://marketing_tests.csv
 ```

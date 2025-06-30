@@ -9,6 +9,8 @@ Evaluating your LLMs against established benchmarks has never been easier. With 
 ## Quick Start
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
 # Test against MMLU benchmark
 tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
 
@@ -54,7 +56,8 @@ If you encounter "401 Unauthorized" errors, check your authentication setup and 
 
 [MMLU](https://huggingface.co/datasets/cais/mmlu) tests knowledge across 57 subjects, from mathematics to law. Example usage:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |
     You are an expert test taker. Please solve the following multiple choice question step by step.
@@ -264,42 +267,7 @@ tests:
   - huggingface://datasets/bigbench?config=logical_deduction
 ```
 
-### AgentBench
 
-[AgentBench](https://huggingface.co/datasets/THUDM/AgentBench) tests LLM capabilities in realistic scenarios. Example usage:
-
-```yaml
-prompts:
-  - |
-    Task: {{task_description}}
-    Context: {{context}}
-
-    Respond with a solution that addresses the task requirements.
-
-tests:
-  - huggingface://datasets/THUDM/AgentBench?split=test
-```
-
-### MT-Bench
-
-[MT-Bench](https://huggingface.co/datasets/lmsys/mt_bench) evaluates multi-turn conversations. Example usage:
-
-```yaml
-prompts:
-  - |
-    System: You are a helpful AI assistant.
-    User: {{turn_1}}
-    Assistant: Let me help you with that.
-    User: {{turn_2}}
-
-tests:
-  - huggingface://datasets/lmsys/mt_bench
-
-defaultTest:
-  assert:
-    - type: model-graded/answer-relevance
-      value: 0.7
-```
 
 ### ChatGPT Prompts
 
@@ -313,6 +281,10 @@ prompts:
 tests:
   - huggingface://datasets/fka/awesome-chatgpt-prompts
 ```
+
+:::tip
+Looking for more datasets? HuggingFace hosts thousands of evaluation datasets including specialized ones for medical reasoning, code generation, multimodal tasks, and domain-specific evaluations. Search [HuggingFace Datasets](https://huggingface.co/datasets) to find datasets for your specific use case.
+:::
 
 ### Math Evaluation
 
@@ -339,97 +311,9 @@ defaultTest:
       value: Solution must show clear mathematical reasoning
 ```
 
-#### NuminaMath-CoT
 
-[NuminaMath-CoT](https://huggingface.co/datasets/AI-MO/NuminaMath-CoT) provides chain-of-thought examples for math problem solving. Example usage:
 
-```yaml
-prompts:
-  - |
-    Question: {{question}}
 
-    Think through this step by step, then provide your final answer.
-
-tests:
-  - huggingface://datasets/AI-MO/NuminaMath-CoT?limit=100
-
-defaultTest:
-  assert:
-    - type: contains
-      value: '{{answer}}'
-```
-
-#### AceMath
-
-[AceMath](https://huggingface.co/datasets/nvidia/AceMath-Instruct-Training-Data) from NVIDIA offers a large collection of math instruction examples. Example usage:
-
-```yaml
-prompts:
-  - |
-    {{instruction}}
-
-    Provide a detailed solution showing your work.
-
-tests:
-  - huggingface://datasets/nvidia/AceMath-Instruct-Training-Data?limit=50
-```
-
-### Specialized Evaluation
-
-#### MMVU (Multimodal Video Understanding)
-
-[MMVU](https://huggingface.co/datasets/yale-nlp/MMVU) tests understanding of video content. Example usage:
-
-```yaml
-prompts:
-  - |
-    Watch this video and answer:
-    {{question}}
-
-tests:
-  - huggingface://datasets/yale-nlp/MMVU?split=test
-```
-
-#### Medical Reasoning
-
-[medical-o1-reasoning-SFT](https://huggingface.co/datasets/FreedomIntelligence/medical-o1-reasoning-SFT) tests medical knowledge and reasoning. Example usage:
-
-```yaml
-prompts:
-  - |
-    Medical Question: {{question}}
-
-    Provide a detailed medical explanation and answer.
-
-tests:
-  - huggingface://datasets/FreedomIntelligence/medical-o1-reasoning-SFT?limit=100
-
-defaultTest:
-  assert:
-    - type: llm-rubric
-      value: Response must demonstrate medical knowledge and reasoning
-```
-
-#### Code Instructions
-
-[react-code-instructions](https://huggingface.co/datasets/cfahlgren1/react-code-instructions) tests ability to understand and generate React code. Example usage:
-
-```yaml
-prompts:
-  - |
-    Create a React component that:
-    {{instruction}}
-
-    Provide the complete code with explanations.
-
-tests:
-  - huggingface://datasets/cfahlgren1/react-code-instructions?limit=50
-
-defaultTest:
-  assert:
-    - type: llm-rubric
-      value: Code must be valid React and follow best practices
-```
 
 ## Configuration Options
 
