@@ -325,12 +325,10 @@ npx promptfoo eval -c examples/openai-realtime/promptfooconfig.yaml
 If you encounter a "WebSocket error: Unexpected server response: 403" error, this typically indicates one of these issues:
 
 1. **Network/Firewall Restrictions**: WebSocket connections may be blocked by your network or firewall.
-
    - Try running the example from a different network (e.g., mobile hotspot)
    - Check if your company network blocks WebSocket connections
 
 2. **API Access**: Your OpenAI API key may not have access to the Realtime API beta.
-
    - Verify that you have been granted access to the Realtime API beta
    - Check your OpenAI dashboard for any access restrictions
 

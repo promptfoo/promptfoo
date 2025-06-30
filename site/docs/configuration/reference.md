@@ -1,5 +1,19 @@
 ---
 sidebar_position: 2
+sidebar_label: Reference
+title: Configuration Reference - Complete API Documentation
+description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
+keywords:
+  [
+    promptfoo reference,
+    configuration API,
+    evaluation options,
+    provider settings,
+    test configuration,
+    assertion types,
+  ]
+pagination_prev: configuration/guide
+pagination_next: configuration/parameters
 ---
 
 # Reference

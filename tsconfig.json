@@ -18,6 +18,6 @@
   "ts-node": {
     "swc": true
   },
-  "include": ["src/", "typings/**/*", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
+  "include": ["src/", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]
 }

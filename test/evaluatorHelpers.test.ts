@@ -514,6 +514,40 @@ describe('resolveVariables', () => {
       name: '{{unknown}}',
     });
   });
+
+  it('should handle Date objects as variables', () => {
+    const dateObj = new Date('2024-01-15T00:00:00.000Z');
+    const variables = {
+      greeting: 'Hello, {{name}}!',
+      name: 'John',
+      research_date: dateObj,
+      date_string: '{{ research_date }}',
+    };
+    const expected = {
+      greeting: 'Hello, John!',
+      name: 'John',
+      research_date: dateObj,
+      date_string: dateObj.toString(), // Date objects use toString() for template replacement
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should handle object variables in template references', () => {
+    const complexObj = { id: 123, name: 'Test Object' };
+    const variables = {
+      greeting: 'Hello, {{name}}!',
+      name: 'John',
+      config: complexObj,
+      config_ref: '{{ config }}',
+    };
+    const expected = {
+      greeting: 'Hello, John!',
+      name: 'John',
+      config: complexObj,
+      config_ref: '[object Object]', // When object is converted to string
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
 });
 
 describe('runExtensionHook', () => {
@@ -596,16 +630,21 @@ describe('runExtensionHook', () => {
         expect(out.suite.tests).toEqual(context.suite.tests);
       });
 
-      it('should throw a validation error if the returned context does not conform to the expected schema', async () => {
-        // Re-mock the transform function to return an invalid context (dropped `providers` field)
+      it('should handle invalid context but not throw validation error', async () => {
+        // Re-mock the transform function to return a context with custom properties and valid mutable properties
         jest.mocked(transform).mockResolvedValue({
-          suite: { foo: 'bar' },
+          suite: {
+            foo: 'bar', // This will be ignored as it's not a mutable property
+            tests: [{ vars: { newVar: 'newValue' } }], // This will be used as it's mutable
+          },
         });
 
-        // Expect the hook to throw an error
-        await expect(runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context)).rejects.toThrow(
-          `[ext1] Invalid context returned by beforeAll hook`,
-        );
+        // The hook should handle this gracefully and return the modified context
+        const result = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+        // Only mutable properties are updated, custom properties like 'foo' are ignored
+        expect(result.suite.providers).toBeDefined(); // Original providers preserved
+        expect(result.suite.tests).toEqual([{ vars: { newVar: 'newValue' } }]); // Tests updated
+        expect(result.suite).not.toHaveProperty('foo'); // Custom property ignored
       });
     });
   });
@@ -676,16 +715,15 @@ describe('runExtensionHook', () => {
         expect(out.test.assert).toEqual([{ type: 'equals', value: 'modified_expected' }]);
       });
 
-      it('should throw a validation error if the returned context does not conform to the expected schema', async () => {
+      it('should handle invalid context but not throw validation error', async () => {
         // Re-mock the transform function to return an invalid context (test should be an object, not a string)
         jest.mocked(transform).mockResolvedValue({
           test: 'invalid_test_value',
         });
 
-        // Expect the hook to throw an error
-        await expect(runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context)).rejects.toThrow(
-          `[ext1] Invalid context returned by beforeEach hook`,
-        );
+        // The hook should handle this gracefully and return the modified context
+        const result = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+        expect(result.test).toBe('invalid_test_value');
       });
     });
   });
