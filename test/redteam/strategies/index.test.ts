@@ -3,7 +3,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { validateStrategies, loadStrategy } from '../../../src/redteam/strategies';
-import type { RedteamStrategyObject } from '../../../src/types';
+import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types';
 
 jest.mock('../../../src/cliState');
 jest.mock('../../../src/esm', () => ({
@@ -16,7 +16,15 @@ describe('validateStrategies', () => {
   });
 
   it('should validate valid strategies', async () => {
-    const validStrategies: RedteamStrategyObject[] = [{ id: 'basic' }, { id: 'base64' }];
+    const validStrategies: RedteamStrategyObject[] = [
+      { id: 'basic' },
+      { id: 'base64' },
+      { id: 'video' },
+      { id: 'morse' },
+      { id: 'piglatin' },
+      { id: 'camelcase' },
+      { id: 'emoji' },
+    ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
 
@@ -59,6 +67,65 @@ describe('loadStrategy', () => {
     const strategy = await loadStrategy('basic');
     expect(strategy).toBeDefined();
     expect(strategy.id).toBe('basic');
+  });
+
+  it('should load video strategy', async () => {
+    const strategy = await loadStrategy('video');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('video');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call video strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('video');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding video encoding'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should load morse strategy', async () => {
+    const strategy = await loadStrategy('morse');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('morse');
+  });
+
+  it('should load piglatin strategy', async () => {
+    const strategy = await loadStrategy('piglatin');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('piglatin');
+  });
+
+  it('should load camelcase strategy', async () => {
+    const strategy = await loadStrategy('camelcase');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('camelcase');
+  });
+
+  it('should load emoji strategy', async () => {
+    const strategy = await loadStrategy('emoji');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('emoji');
+  });
+
+  it('should call emoji strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('emoji');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding emoji encoding'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
   it('should throw error for non-existent strategy', async () => {

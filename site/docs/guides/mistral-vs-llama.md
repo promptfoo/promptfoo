@@ -60,13 +60,13 @@ Let's create some simple chat prompts that wrap the expected chat formats. We'll
 
 First, we'll put the Mistral chat prompt in `prompts/mistral_prompt.txt` using the special `<s>` and `[INST]` tokens that the model was fine-tuned on:
 
-```title=prompts/mistral_prompt.txt
+```title="prompts/mistral_prompt.txt"
 <s>[INST] {{message}} [/INST]
 ```
 
 Next, we'll put the slightly different Llama chat prompt in `prompts/llama_prompt.txt`:
 
-```title=prompts/llama_prompt.txt
+```title="prompts/llama_prompt.txt"
 <|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
 {{message}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
@@ -76,13 +76,13 @@ Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name the
 
 ````yaml title="promptfooconfig.yaml"
 prompts:
-  prompts/mistral_prompt.txt: mistral_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/mistral_prompt.txt: mistral_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  prompts/mistral_prompt.txt: mistral_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/mistral_prompt.txt: mistral_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
   - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1

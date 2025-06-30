@@ -347,11 +347,10 @@ table.results-table,
   display: inline-flex;
   align-self: flex-start; /* prevents it from stretching to fill width */
   align-items: center;
-  padding: 0.25rem 0.5rem;
+  padding: 0.5rem 0.5rem;
   border-radius: 4px;
   font-size: 0.9em;
   height: 24px;
-  line-height: 1;
 }
 
 .results-table .status .provider.pill {
@@ -386,6 +385,7 @@ table.results-table,
 }
 
 .results-table .fail .pill {
+  white-space: nowrap;
   background-color: var(--fail-background-color);
 }
 
@@ -602,4 +602,19 @@ thead.collapsed .header-dismiss {
   font-size: 0.9em;
   height: 24px;
   line-height: 1;
+}
+
+.audio-output {
+  margin: 1rem 0;
+}
+
+.audio-output audio {
+  margin-bottom: 0.5rem;
+}
+
+.audio-output .transcript {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.4;
+  white-space: pre-wrap;
 }

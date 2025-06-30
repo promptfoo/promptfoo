@@ -1,4 +1,4 @@
-import { ContractPlugin, ContractsGrader } from '../../../src/redteam/plugins/contracts';
+import { ContractPlugin, ContractsGrader, PLUGIN_ID } from '../../../src/redteam/plugins/contracts';
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/fetch');
@@ -15,6 +15,11 @@ describe('ContractPlugin', () => {
     };
   });
 
+  it('should have canGenerateRemote set to true', () => {
+    const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
+    expect(plugin.canGenerateRemote).toBe(true);
+  });
+
   it('should generate test cases', async () => {
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(2);
@@ -23,14 +28,30 @@ describe('ContractPlugin', () => {
       expect.arrayContaining([
         {
           vars: { test_var: 'Another test prompt' },
-          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+          assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
+          metadata: {
+            pluginId: 'contracts',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
         {
           vars: { test_var: 'Test prompt' },
-          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+          assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
+          metadata: {
+            pluginId: 'contracts',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
       ]),
     );
+  });
+
+  it('should ensure test cases have the correct plugin ID in assertions', async () => {
+    const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
+    const tests = await plugin.generateTests(1);
+
+    expect(tests[0].assert).toEqual([{ type: PLUGIN_ID, metric: 'ContractualCommitment' }]);
+    expect(tests[0].assert?.[0].type).toBe('promptfoo:redteam:contracts');
   });
 
   it('should handle empty response from provider', async () => {
@@ -83,6 +104,7 @@ describe('ContractsGrader', () => {
   });
 
   it('should have correct plugin ID', () => {
+    expect(grader.id).toBe(PLUGIN_ID);
     expect(grader.id).toBe('promptfoo:redteam:contracts');
   });
 });

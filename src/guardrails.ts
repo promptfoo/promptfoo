@@ -1,8 +1,8 @@
 import { fetchWithCache } from './cache';
-import { SHARE_API_BASE_URL } from './constants';
+import { getShareApiBaseUrl } from './constants';
 import logger from './logger';
 
-const API_BASE_URL = `${SHARE_API_BASE_URL}/v1`;
+const API_BASE_URL = `${getShareApiBaseUrl()}/v1`;
 
 export interface GuardResult {
   model: string;
@@ -18,6 +18,22 @@ export interface GuardResult {
         pii: string;
       }>;
     };
+  }>;
+}
+
+export interface AdaptiveRequest {
+  prompt: string;
+  policies?: string[];
+}
+
+export interface AdaptiveResult {
+  model: string;
+  adaptedPrompt: string;
+  modifications: Array<{
+    type: string;
+    reason: string;
+    original: string;
+    modified: string;
   }>;
 }
 
@@ -47,6 +63,35 @@ async function makeRequest(endpoint: string, input: string): Promise<GuardResult
   }
 }
 
+async function makeAdaptiveRequest(request: AdaptiveRequest): Promise<AdaptiveResult> {
+  try {
+    const response = await fetchWithCache(
+      `${API_BASE_URL}/adaptive`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: request.prompt,
+          policies: request.policies || [],
+        }),
+      },
+      undefined,
+      'json',
+    );
+
+    if (!response.data) {
+      throw new Error('No data returned from API');
+    }
+
+    return response.data as AdaptiveResult;
+  } catch (error) {
+    logger.error(`Guardrails API error: ${error}`);
+    throw error;
+  }
+}
+
 const guardrails = {
   async guard(input: string): Promise<GuardResult> {
     return makeRequest('/guard', input);
@@ -58,6 +103,10 @@ const guardrails = {
 
   async harm(input: string): Promise<GuardResult> {
     return makeRequest('/harm', input);
+  },
+
+  async adaptive(request: AdaptiveRequest): Promise<AdaptiveResult> {
+    return makeAdaptiveRequest(request);
   },
 };
 

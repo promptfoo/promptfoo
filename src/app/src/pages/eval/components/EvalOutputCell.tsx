@@ -1,5 +1,4 @@
-import * as React from 'react';
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
@@ -11,7 +10,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { useStore as useResultsViewStore } from './store';
+import { useResultsViewSettingsStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -32,6 +31,8 @@ export interface EvalOutputCellProps {
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  evaluationId?: string;
+  testCaseId?: string;
 }
 
 function EvalOutputCell({
@@ -44,13 +45,16 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  evaluationId,
+  testCaseId,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
   searchText: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewStore();
+    useResultsViewSettingsStore();
+
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
@@ -112,7 +116,7 @@ function EvalOutputCell({
   let failReasons: string[] = [];
 
   // Handle failure messages by splitting the text at '---'
-  if (!output.pass && text.includes('---')) {
+  if (!output.pass && text && text.includes('---')) {
     failReasons = (output.gradingResult?.componentResults || [])
       .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason);
@@ -176,16 +180,16 @@ function EvalOutputCell({
         <>
           {matches.length > 0 ? (
             <>
-              <span key="text-before">{text.substring(0, matches[0].start)}</span>
+              <span key="text-before">{text?.substring(0, matches[0].start)}</span>
               {matches.map((range, index) => (
                 <>
                   <span className="search-highlight" key={'match-' + index}>
-                    {text.substring(range.start, range.end)}
+                    {text?.substring(range.start, range.end)}
                   </span>
                   <span key={'text-after-' + index}>
-                    {text.substring(
+                    {text?.substring(
                       range.end,
-                      matches[index + 1] ? matches[index + 1].start : text.length,
+                      matches[index + 1] ? matches[index + 1].start : text?.length,
                     )}
                   </span>
                 </>
@@ -200,7 +204,7 @@ function EvalOutputCell({
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (
-    text.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
   ) {
     node = (
       <img
@@ -209,6 +213,23 @@ function EvalOutputCell({
         style={{ width: '100%' }}
         onClick={() => toggleLightbox(text)}
       />
+    );
+  } else if (output.audio) {
+    node = (
+      <div className="audio-output">
+        <audio controls style={{ width: '100%' }} data-testid="audio-player">
+          <source
+            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'wav'}`}
+          />
+          Your browser does not support the audio element.
+        </audio>
+        {output.audio.transcript && (
+          <div className="transcript">
+            <strong>Transcript:</strong> {output.audio.transcript}
+          </div>
+        )}
+      </div>
     );
   } else if (renderMarkdown && !showDiffs) {
     node = (
@@ -256,6 +277,22 @@ function EvalOutputCell({
       }
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
+
+  const [linked, setLinked] = React.useState(false);
+  const handleRowShareLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('rowId', String(rowIndex + 1));
+
+    navigator.clipboard
+      .writeText(url.toString())
+      .then(() => {
+        setLinked(true);
+        setTimeout(() => setLinked(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy link to clipboard:', error);
+      });
+  }, [rowIndex]);
 
   const [copied, setCopied] = React.useState(false);
   const handleCopy = React.useCallback(() => {
@@ -339,109 +376,12 @@ function EvalOutputCell({
     }
   }
 
-  const comment =
-    output.gradingResult?.comment && output.gradingResult.comment !== '!highlight' ? (
-      <div className="comment" onClick={handleCommentOpen}>
-        {output.gradingResult.comment}
-      </div>
-    ) : null;
-
-  const detail = showStats ? (
-    <div className="cell-detail">
-      {tokenUsageDisplay && (
-        <div className="stat-item">
-          <strong>Tokens:</strong> {tokenUsageDisplay}
-        </div>
-      )}
-      {latencyDisplay && (
-        <div className="stat-item">
-          <strong>Latency:</strong> {latencyDisplay}
-        </div>
-      )}
-      {tokPerSecDisplay && (
-        <div className="stat-item">
-          <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
-        </div>
-      )}
-      {costDisplay && (
-        <div className="stat-item">
-          <strong>Cost:</strong> {costDisplay}
-        </div>
-      )}
-    </div>
-  ) : null;
-
-  const shiftKeyPressed = useShiftKey();
-  const actions = (
-    <div className="cell-actions">
-      {shiftKeyPressed && (
-        <>
-          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
-            <Tooltip title="Copy output to clipboard">
-              <span>{copied ? '✅' : '📋'}</span>
-            </Tooltip>
-          </span>
-          <span
-            className="action"
-            onClick={handleToggleHighlight}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <Tooltip title="Toggle test highlight">
-              <span>🌟</span>
-            </Tooltip>
-          </span>
-        </>
-      )}
-      {output.prompt && (
-        <>
-          <span className="action" onClick={handlePromptOpen}>
-            <Tooltip title="View output and test details">
-              <span>🔎</span>
-            </Tooltip>
-          </span>
-          <EvalOutputPromptDialog
-            open={openPrompt}
-            onClose={handlePromptClose}
-            prompt={output.prompt}
-            provider={output.provider}
-            gradingResults={output.gradingResult?.componentResults}
-            output={text}
-            metadata={output.metadata}
-          />
-        </>
-      )}
-      <span
-        className={`action ${activeRating === true ? 'active' : ''}`}
-        onClick={() => handleRating(true)}
-      >
-        <Tooltip title="Mark test passed (score 1.0)">
-          <span>👍</span>
-        </Tooltip>
-      </span>
-      <span
-        className={`action ${activeRating === false ? 'active' : ''}`}
-        onClick={() => handleRating(false)}
-      >
-        <Tooltip title="Mark test failed (score 0.0)">
-          <span>👎</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleSetScore}>
-        <Tooltip title="Set test score">
-          <span>🔢</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleCommentOpen}>
-        <Tooltip title="Edit comment">
-          <span>✏️</span>
-        </Tooltip>
-      </span>
-    </div>
-  );
-
   const cellStyle = useMemo(() => {
-    const base =
-      output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
+    const base = output.gradingResult?.comment?.startsWith('!highlight')
+      ? {
+          backgroundColor: 'var(--cell-highlight-color)',
+        }
+      : {};
 
     return {
       ...base,
@@ -449,6 +389,13 @@ function EvalOutputCell({
       '--max-image-height': `${maxImageHeight}px`,
     } as CSSPropertiesWithCustomVars;
   }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
+
+  // Style for main content area when highlighted
+  const contentStyle = useMemo(() => {
+    return output.gradingResult?.comment?.startsWith('!highlight')
+      ? { color: 'var(--cell-highlight-text-color)' }
+      : {};
+  }, [output.gradingResult?.comment]);
 
   // Pass/fail badge creation
   let passCount = 0;
@@ -556,6 +503,122 @@ function EvalOutputCell({
     return null;
   }, [output]);
 
+  const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
+    ? output.gradingResult.comment.slice('!highlight'.length).trim()
+    : output.gradingResult?.comment;
+
+  const comment = commentTextToDisplay ? (
+    <div className="comment" onClick={handleCommentOpen} style={contentStyle}>
+      {commentTextToDisplay}
+    </div>
+  ) : null;
+
+  const detail = showStats ? (
+    <div className="cell-detail">
+      {tokenUsageDisplay && (
+        <div className="stat-item">
+          <strong>Tokens:</strong> {tokenUsageDisplay}
+        </div>
+      )}
+      {latencyDisplay && (
+        <div className="stat-item">
+          <strong>Latency:</strong> {latencyDisplay}
+        </div>
+      )}
+      {tokPerSecDisplay && (
+        <div className="stat-item">
+          <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
+        </div>
+      )}
+      {costDisplay && (
+        <div className="stat-item">
+          <strong>Cost:</strong> {costDisplay}
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const shiftKeyPressed = useShiftKey();
+  const actions = (
+    <div className="cell-actions">
+      {shiftKeyPressed && (
+        <>
+          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
+            <Tooltip title="Copy output to clipboard">
+              <span>{copied ? '✅' : '📋'}</span>
+            </Tooltip>
+          </span>
+          <span
+            className="action"
+            onClick={handleToggleHighlight}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Toggle test highlight">
+              <span>🌟</span>
+            </Tooltip>
+          </span>
+          <span
+            className="action"
+            onClick={handleRowShareLink}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Share output">
+              <span>{linked ? '✅' : '🔗'}</span>
+            </Tooltip>
+          </span>
+        </>
+      )}
+      {output.prompt && (
+        <>
+          <span className="action" onClick={handlePromptOpen}>
+            <Tooltip title="View output and test details">
+              <span>🔎</span>
+            </Tooltip>
+          </span>
+          {openPrompt && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+              evaluationId={evaluationId}
+              testCaseId={testCaseId || output.id}
+            />
+          )}
+        </>
+      )}
+      <span
+        className={`action ${activeRating === true ? 'active' : ''}`}
+        onClick={() => handleRating(true)}
+      >
+        <Tooltip title="Mark test passed (score 1.0)">
+          <span>👍</span>
+        </Tooltip>
+      </span>
+      <span
+        className={`action ${activeRating === false ? 'active' : ''}`}
+        onClick={() => handleRating(false)}
+      >
+        <Tooltip title="Mark test failed (score 0.0)">
+          <span>👎</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={handleSetScore}>
+        <Tooltip title="Set test score">
+          <span>🔢</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={handleCommentOpen}>
+        <Tooltip title="Edit comment">
+          <span>✏️</span>
+        </Tooltip>
+      </span>
+    </div>
+  );
+
   return (
     <div className="cell" style={cellStyle}>
       {showPassFail && (
@@ -581,7 +644,9 @@ function EvalOutputCell({
           {output.prompt}
         </div>
       )}
-      <TruncatedText text={node || text} maxLength={maxTextLength} />
+      <div style={contentStyle}>
+        <TruncatedText text={node || text} maxLength={maxTextLength} />
+      </div>
       {comment}
       {detail}
       {actions}
@@ -590,14 +655,16 @@ function EvalOutputCell({
           <img src={lightboxImage} alt="Lightbox" />
         </div>
       )}
-      <CommentDialog
-        open={commentDialogOpen}
-        contextText={getCombinedContextText()}
-        commentText={commentText}
-        onClose={handleCommentClose}
-        onSave={handleCommentSave}
-        onChange={setCommentText}
-      />
+      {commentDialogOpen && (
+        <CommentDialog
+          open={commentDialogOpen}
+          contextText={getCombinedContextText()}
+          commentText={commentText}
+          onClose={handleCommentClose}
+          onSave={handleCommentSave}
+          onChange={setCommentText}
+        />
+      )}
     </div>
   );
 }

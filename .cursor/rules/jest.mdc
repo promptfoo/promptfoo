@@ -1,0 +1,94 @@
+---
+description: Guidelines for writing Jest tests for core functionality
+globs: 'test/**/*.test.ts,test/**/*.spec.ts'
+alwaysApply: false
+---
+
+# Jest Testing Guidelines
+
+Files: "test/**/\*.test.ts,test/**/\*.spec.ts"
+
+This rule provides guidance for writing and running Jest tests in the promptfoo project, which are different from the Vitest tests in the `src/app` directory.
+
+## Jest Setup
+
+- Always run `nvm use` first to ensure you're using the correct Node.js version
+- Run Jest tests with coverage and randomize options:
+  ```
+  npm test -- --coverage --randomize
+  ```
+- For targeted tests, use the specific pattern:
+  ```
+  npx jest providers/openai --coverage --randomize
+  ```
+- Do NOT use watch mode for CI or shared development environments
+- Always run tests in a single pass to ensure consistent results
+
+## Testing Best Practices
+
+- Mock as few functions as possible to keep tests realistic
+- Never increase the function timeout - fix the test instead
+- Organize tests in descriptive `describe` and `it` blocks:
+
+  ```typescript
+  describe('OpenAI Provider', () => {
+    describe('chat completion', () => {
+      it('should handle normal input correctly', () => {
+        // test code
+      });
+
+      it('should handle edge cases', () => {
+        // test code
+      });
+    });
+  });
+  ```
+
+- When writing expectations, prefer assertions on entire objects rather than individual keys:
+
+  ```typescript
+  // Preferred:
+  expect(result).toEqual({ id: 1, name: 'test' });
+
+  // Avoid:
+  expect(result.id).toEqual(1);
+  expect(result.name).toEqual('test');
+  ```
+
+- Clean up after tests to prevent side effects:
+  ```typescript
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+  ```
+- Run tests with `--randomize` flag to ensure your mocks setup and teardown don't affect other tests
+
+## Mocking
+
+- Use Jest's mocking utilities rather than complex custom mocks:
+  ```typescript
+  jest.mock('axios');
+  const axiosMock = axios as jest.Mocked<typeof axios>;
+  axiosMock.post.mockResolvedValue({ data: { result: 'success' } });
+  ```
+- Prefer shallow mocking over deep mocking
+- Mock external dependencies but not the code being tested
+- Reset mocks between tests to prevent test pollution
+- For database tests, use in-memory instances or proper test fixtures
+
+## Provider Testing
+
+- Test both success and error cases for each provider
+- Mock API responses to avoid external dependencies in tests
+- Validate that provider options are properly passed to the underlying service
+- Test error handling and edge cases (rate limits, timeouts, etc.)
+- Ensure provider caching behaves as expected
+
+## Test Execution Requirements
+
+- Always include both `--coverage` and `--randomize` flags when running tests
+- Run tests in a single pass (no watch mode for CI)
+- Ensure all tests are independent and can run in any order
+- Clean up any test data or mocks after each test
+- Run the full test suite before committing changes
+- Test failures should be deterministic and not depend on external state

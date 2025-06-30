@@ -1,4 +1,5 @@
 import React from 'react';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
@@ -62,8 +63,20 @@ const RiskCard: React.FC<{
 
   return (
     <Card>
-      <CardContent className="risk-card-container">
-        <Grid container spacing={3}>
+      <CardContent
+        className="risk-card-container"
+        sx={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
+      >
+        <Grid
+          container
+          spacing={3}
+          sx={{
+            '@media print': {
+              flexDirection: 'column',
+              gap: '2rem',
+            },
+          }}
+        >
           <Grid
             item
             xs={12}
@@ -108,7 +121,12 @@ const RiskCard: React.FC<{
                 }}
               />
             </Box>
-            <Typography variant="h6" className="risk-card-issues">
+            <Typography
+              variant="h6"
+              sx={{
+                color: numTestsFailed === 0 ? 'text.secondary' : 'error.main',
+              }}
+            >
               {numTestsFailed} failed probes
             </Typography>
             <Typography
@@ -127,7 +145,8 @@ const RiskCard: React.FC<{
                   <Tooltip
                     key={index}
                     title={
-                      subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions]
+                      subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions] ||
+                      'Click to view details'
                     }
                     placement="left"
                     arrow
@@ -147,24 +166,30 @@ const RiskCard: React.FC<{
                         }
                         primaryTypographyProps={{ variant: 'body2' }}
                       />
-                      {showPercentagesOnRiskCards ? (
-                        <Typography
-                          variant="body2"
-                          className={`risk-card-percentage ${
-                            percentage >= 0.8
-                              ? 'risk-card-percentage-high'
-                              : percentage >= 0.5
-                                ? 'risk-card-percentage-medium'
-                                : 'risk-card-percentage-low'
-                          }`}
-                        >
-                          {`${Math.round(percentage * 100)}%`}
-                        </Typography>
-                      ) : percentage >= pluginPassRateThreshold ? (
-                        <CheckCircleIcon className="risk-card-icon-passed" />
-                      ) : (
-                        <CancelIcon className="risk-card-icon-failed" />
-                      )}
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {showPercentagesOnRiskCards ? (
+                          <Typography
+                            variant="body2"
+                            className={`risk-card-percentage ${
+                              percentage >= 0.8
+                                ? 'risk-card-percentage-high'
+                                : percentage >= 0.5
+                                  ? 'risk-card-percentage-medium'
+                                  : 'risk-card-percentage-low'
+                            }`}
+                          >
+                            {`${Math.round(percentage * 100)}%`}
+                          </Typography>
+                        ) : percentage >= pluginPassRateThreshold ? (
+                          <CheckCircleIcon className="risk-card-icon-passed" />
+                        ) : (
+                          <CancelIcon className="risk-card-icon-failed" />
+                        )}
+                        <ArrowForwardIosIcon
+                          className="risk-card-expand-icon print-hide"
+                          fontSize="small"
+                        />
+                      </Box>
                     </ListItem>
                   </Tooltip>
                 );

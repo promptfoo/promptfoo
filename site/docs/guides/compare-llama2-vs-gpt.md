@@ -30,8 +30,8 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4o
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1
+  - openai:gpt-4.1-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
 
@@ -45,7 +45,7 @@ Next, we'll add some prompts.
 
 First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
 
-```json title=prompts/chat_prompt.json
+```json title="prompts/chat_prompt.json"
 [
   {
     "role": "user",
@@ -63,8 +63,8 @@ prompts:
 // highlight-end
 
 providers:
-  - openai:gpt-4o
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1
+  - openai:gpt-4.1-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
 
@@ -75,7 +75,7 @@ For advanced usage, you may prefer to control the underlying Llama prompt format
 
 First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
 
-```json title=prompts/chat_prompt.json
+```json title="prompts/chat_prompt.json"
 [
   {
     "role": "user",
@@ -86,7 +86,7 @@ First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
 
 Put the Llama chat prompt in `prompts/llama_prompt.txt`:
 
-```title=prompts/llama_prompt.txt
+```title="prompts/llama_prompt.txt"
 <|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
 You are a helpful assistant<|eot_id|><|start_header_id|>user<|end_header_id|>
@@ -98,14 +98,14 @@ Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name the
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  prompts/chat_prompt.json: chat_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/chat_prompt.json: chat_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     label: GPT 4o
     prompts: chat_prompt
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: GPT 4o-mini
     prompts: chat_prompt
   - id: replicate:meta/meta-llama-3.1-405b-instruct
@@ -199,13 +199,13 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     // highlight-start
     config:
       temperature: 0

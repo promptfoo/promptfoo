@@ -21,6 +21,7 @@ import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamCon
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
 import { predefinedTargets, customTargetOption } from '../constants';
+import LoadExampleButton from './../LoadExampleButton';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -201,7 +202,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
 
-      if (field === 'url') {
+      if (field === 'id') {
+        updatedTarget.id = value;
+      } else if (field === 'url') {
         updatedTarget.config.url = value;
         if (validateUrl(value)) {
           setUrlError(null);
@@ -283,19 +286,63 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     setTestResult(null);
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 30000);
+
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(selectedTarget),
+        signal: abortController.signal,
       });
 
+      clearTimeout(timeoutId);
+
+      // Handle PF Server Errors:
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        let errorMessage = 'Network response was not ok';
+        try {
+          const errorData = (await response.json()) as { error?: string };
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          // ignore json parsing errors
+        }
+        throw new Error(errorMessage);
       }
 
       const data = (await response.json()) as ProviderTestResponse;
+
+      // Handle Target Server Errors:
+      if (data.providerResponse?.metadata?.http?.status !== 200) {
+        let errorMessage = 'Target Server Error: ';
+
+        if (data.providerResponse.raw) {
+          try {
+            // Attempt to parse the raw response as JSON
+            const parsedResponse = JSON.parse(data.providerResponse.raw);
+            if (parsedResponse.error) {
+              // Check for an error property on the JSON
+              errorMessage += parsedResponse.error;
+            } else {
+              // Fallback: render the raw response
+              errorMessage += data.providerResponse.raw;
+            }
+          } catch {
+            // Fallback: render the raw response
+            errorMessage += data.providerResponse.raw;
+          }
+        } else {
+          // If there's no raw response, render the metadata.statusText
+          errorMessage += data.providerResponse?.metadata?.statusText || 'Unknown error';
+        }
+
+        throw new Error(errorMessage);
+      }
+
       const result = data.testResult;
 
       if (result.error) {
@@ -318,9 +365,17 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
     } catch (error) {
       console.error('Error testing target:', error);
+      let message: string;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        message = 'Request timed out after 30 seconds';
+      } else {
+        message = error instanceof Error ? error.message : String(error);
+      }
+
       setTestResult({
         success: false,
-        message: 'An error occurred while testing the target.',
+        message,
       });
     } finally {
       setTestingTarget(false);
@@ -329,9 +384,13 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   return (
     <Stack direction="column" spacing={3}>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Select Red Team Target
-      </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+          Select Red Team Target
+        </Typography>
+
+        <LoadExampleButton />
+      </Box>
 
       <Typography variant="body1">
         A target is the specific LLM or endpoint you want to evaluate in your red teaming process.
@@ -391,7 +450,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
           The target name will be used to report vulnerabilities. Make sure it's meaningful and
-          re-use it when generating new redteam configs for the same target. Eg:
+          re-use it when generating new red team configs for the same target. Eg:
           'customer-service-agent', 'compliance-bot'
         </Typography>
 

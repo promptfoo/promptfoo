@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: XSTest homonym evaluation
+
+prompts:
+  - 'Respond to the following query or question: {{query}}'
+
+redteam:
+  numTests: 5
+  plugins:
+    - xstest
+
+targets:
+  - openai:gpt-4.1-mini

@@ -9,6 +9,10 @@ import type { HarmfulCategory } from './constants';
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
   private harmCategory: keyof typeof HARM_PLUGINS;
 
+  get id(): string {
+    return `promptfoo:redteam:${this.harmCategory}`;
+  }
+
   constructor(
     provider: ApiProvider,
     purpose: string,

@@ -11,7 +11,7 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 
 ## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-4o-mini and Gemini 2.0 Flash, substituting `language` and `input` variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-4.1 and Gemini, substituting `language` and `input` variables:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -20,7 +20,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -50,7 +50,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -70,13 +70,12 @@ We can create additional tests. Let's add a couple other **[types of assertions]
 In this example, the `javascript` assertion runs Javascript against the LLM output. The `similar` assertion checks for semantic similarity using embeddings:
 
 ```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Language translation'
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -116,7 +115,7 @@ providers:
 Where the provider file looks like this:
 
 ```yaml
-id: openai:gpt-4o-mini
+id: openai:gpt-4.1-mini
 label: Foo bar
 config:
   temperature: 0.9
@@ -129,7 +128,7 @@ The `tests` config property takes a list of paths to files or directories. For e
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://prompts.txt
-providers: openai:gpt-4o-mini
+providers: openai:gpt-4.1-mini
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -161,7 +160,7 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML, JSON, JSONL, JavaScript, TypeScript, [CSV](/docs/configuration/tests/csv), and [Google Sheets](/docs/configuration/tests/google-sheets). Additionally, promptfoo supports [HuggingFace datasets](/docs/configuration/tests/huggingface).
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-cases#csv-format), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
@@ -274,12 +273,11 @@ Use `defaultTest` to set properties for all tests.
 In this example, we use a `llm-rubric` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
 
 ```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
@@ -309,7 +307,7 @@ You can also use `defaultTest` to override the model used for each test. This ca
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4o-mini-0613
+    provider: openai:gpt-4.1-mini-0613
 ```
 
 ### Default variables
@@ -342,7 +340,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -382,7 +380,7 @@ For example:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4
 tests:
   - vars:
@@ -550,7 +548,33 @@ tests:
 
 ## Tools and Functions
 
-promptfoo supports tool use and function calling with OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
+promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#function-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
+
+## Thinking Output
+
+Some models, like Anthropic's Claude and DeepSeek, support thinking/reasoning capabilities that allow the model to show its reasoning process before providing a final answer.
+
+This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
+
+### Controlling Thinking Output
+
+By default, thinking content is included in the response. You can hide it by setting `showThinking` to `false`.
+
+For example, for Claude:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000
+      showThinking: false # Exclude thinking content from output
+```
+
+This is useful when you want better reasoning but don't want to expose the thinking process to your assertions.
+
+For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
 
 ## Transforming outputs
 
@@ -796,6 +820,7 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading Tests
 
+<<<<<<< HEAD
 promptfoo supports multiple ways to load test cases:
 
 ### From Files and Directories
@@ -841,6 +866,18 @@ CSV files and Google Sheets provide an easy way to collaborate on test cases wit
 
 ```yaml
 # Load from a local CSV file
+=======
+YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format).
+
+```yaml
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4.1-mini
+  - vertex:gemini-2.0-flash-exp
+// highlight-next-line
+>>>>>>> main
 tests: file://tests.csv
 
 # Or directly from Google Sheets
@@ -854,11 +891,22 @@ See the [CSV tests guide](/docs/configuration/tests/csv) for detailed examples a
 promptfoo integrates with HuggingFace datasets, making it easy to evaluate your models against popular benchmarks:
 
 ```yaml
+<<<<<<< HEAD
 # Test against MMLU benchmark
 tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
 
 # Or use the ChatGPT prompts dataset
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts
+=======
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4.1-mini
+  - vertex:gemini-2.0-flash-exp
+// highlight-next-line
+tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
+>>>>>>> main
 ```
 
 See the [HuggingFace tests guide](/docs/configuration/tests/huggingface) for more examples and configuration options.

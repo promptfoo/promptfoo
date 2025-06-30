@@ -1,42 +1,77 @@
 import compression from 'compression';
 import cors from 'cors';
+import 'dotenv/config';
 import type { Request, Response } from 'express';
 import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { DEFAULT_PORT, VERSION } from '../constants';
+import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
+import { cloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval from '../models/eval';
+import Eval, { getEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
+import type { EvalSummary } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
-  getLatestEval,
   getPrompts,
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
-  listPreviousResults,
   readResult,
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
+import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
+
+// JavaScript file extensions that need proper MIME type
+const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+
+/**
+ * Middleware to set proper MIME types for JavaScript files.
+ * This is necessary because some browsers (especially Arc) enforce strict MIME type checking
+ * and will refuse to execute scripts with incorrect MIME types for security reasons.
+ */
+export function setJavaScriptMimeType(
+  req: Request,
+  res: Response,
+  next: express.NextFunction,
+): void {
+  const ext = path.extname(req.path);
+  if (JS_EXTENSIONS.has(ext)) {
+    res.setHeader('Content-Type', 'application/javascript');
+  }
+  next();
+}
+
+/**
+ * Handles server startup errors with proper logging and graceful shutdown.
+ */
+export function handleServerError(error: NodeJS.ErrnoException, port: number): void {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`Port ${port} is already in use. Do you have another Promptfoo instance running?`);
+  } else {
+    logger.error(`Failed to start server: ${error.message}`);
+  }
+  process.exit(1);
+}
 
 export function createApp() {
   const app = express();
@@ -66,22 +101,20 @@ export function createApp() {
     res.json(result);
   });
 
-  app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
-    const datasetId = req.query.datasetId as string | undefined;
-    const previousResults = await listPreviousResults(
-      undefined /* limit */,
-      undefined /* offset */,
-      datasetId,
-    );
-    res.json({
-      data: previousResults.map((meta) => {
-        return {
-          ...meta,
-          label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
-        };
-      }),
-    });
-  });
+  /**
+   * Fetches summaries of all evals, optionally for a given dataset.
+   */
+  app.get(
+    '/api/results',
+    async (
+      // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+      req: Request<{}, {}, {}, { datasetId?: string }>,
+      res: Response<{ data: EvalSummary[] }>,
+    ): Promise<void> => {
+      const previousResults = await getEvalSummaries(req.query.datasetId);
+      res.json({ data: previousResults });
+    },
+  );
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
@@ -138,7 +171,8 @@ export function createApp() {
     }
 
     const { domain } = determineShareDomain(eval_);
-    res.json({ domain });
+    const isCloudEnabled = cloudConfig.isEnabled();
+    res.json({ domain, isCloudEnabled });
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
@@ -179,6 +213,8 @@ export function createApp() {
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
   app.use('/api/configs', configsRouter);
+  app.use('/api/model-audit', modelAuditRouter);
+  app.use('/api/traces', tracesRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -201,19 +237,22 @@ export function createApp() {
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
-  app.use(express.static(staticDir));
+
+  // Configure proper MIME types for JavaScript files
+  app.use(setJavaScriptMimeType);
+
+  app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
   // Handle client routing, return all requests to the app
-  app.get('*', (req: Request, res: Response): void => {
-    res.sendFile(path.join(staticDir, 'index.html'));
+  app.get('/*splat', (req: Request, res: Response): void => {
+    res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
   return app;
 }
 
 export async function startServer(
-  port = DEFAULT_PORT,
-  browserBehavior = BrowserBehavior.ASK,
-  filterDescription?: string,
+  port = getDefaultPort(),
+  browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
 ) {
   const app = createApp();
 
@@ -227,8 +266,10 @@ export async function startServer(
   await runDbMigrations();
 
   setupSignalWatcher(async () => {
-    const latestEval = await getLatestEval(filterDescription);
-    if ((latestEval?.results.results.length || 0) > 0) {
+    const latestEval = await Eval.latest();
+    const results = await latestEval?.getResultsCount();
+
+    if (results && results > 0) {
       logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
       io.emit('update', latestEval);
       allPrompts = null;
@@ -236,7 +277,7 @@ export async function startServer(
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await getLatestEval(filterDescription));
+    socket.emit('init', await Eval.latest());
   });
 
   httpServer
@@ -248,14 +289,6 @@ export async function startServer(
       });
     })
     .on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        logger.error(
-          `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
-        );
-        process.exit(1);
-      } else {
-        logger.error(`Failed to start server: ${error.message}`);
-        process.exit(1);
-      }
+      handleServerError(error, port);
     });
 }

@@ -6,8 +6,6 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import type { ResultsFile } from '@promptfoo/types';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { convertEvalDataToCsv } from '../utils/csvExport';
 
 interface ReportDownloadButtonProps {
@@ -40,26 +38,6 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
       : `report.${extension}`;
   };
 
-  const handlePdfDownload = async () => {
-    setIsDownloading(true);
-    handleClose();
-
-    setTimeout(async () => {
-      const element = document.documentElement;
-      const canvas = await html2canvas(element, {
-        height: Math.max(element.scrollHeight, element.offsetHeight),
-        windowHeight: document.documentElement.scrollHeight,
-      });
-      const data = canvas.toDataURL('image/png');
-
-      const pdf = new jsPDF('p', 'pt', [canvas.width, canvas.height]);
-      pdf.addImage(data, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save(getFilename('pdf'));
-
-      setIsDownloading(false);
-    }, 100);
-  };
-
   const handleCsvDownload = () => {
     setIsDownloading(true);
     handleClose();
@@ -81,6 +59,33 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
     } finally {
       setIsDownloading(false);
     }
+  };
+
+  const handleJsonDownload = () => {
+    setIsDownloading(true);
+    handleClose();
+
+    try {
+      const jsonData = JSON.stringify(evalData, null, 2);
+      const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
+      const link = document.createElement('a');
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', getFilename('json'));
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error('Error generating JSON:', error);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+  const handlePdfDownload = () => {
+    handleClose();
+    window.print();
   };
 
   return (
@@ -110,8 +115,9 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handlePdfDownload}>Download as PDF</MenuItem>
-        <MenuItem onClick={handleCsvDownload}>Download as CSV</MenuItem>
+        <MenuItem onClick={handlePdfDownload}>PDF</MenuItem>
+        <MenuItem onClick={handleCsvDownload}>CSV</MenuItem>
+        <MenuItem onClick={handleJsonDownload}>JSON</MenuItem>
       </Menu>
     </>
   );

@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI factuality evaluation with ground truth comparison
+
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 prompts:
   - file://prompts/name_capitals_concise.txt
   - file://prompts/name_capitals_verbose.txt

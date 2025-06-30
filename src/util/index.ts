@@ -1,4 +1,3 @@
-import { parse as csvParse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -6,11 +5,9 @@ import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import nunjucks from 'nunjucks';
 import * as path from 'path';
-import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -21,7 +18,6 @@ import {
   type EvaluateResult,
   type EvaluateTableOutput,
   type NunjucksFilterMap,
-  type ResultsFile,
   type TestCase,
   type OutputFile,
   type CompletedPrompt,
@@ -32,10 +28,10 @@ import {
   ResultFailureReason,
 } from '../types';
 import invariant from '../util/invariant';
-import { getConfigDirectoryPath } from './config/manage';
-import { sha256 } from './createHash';
-import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
-import { isJavascriptFile } from './file';
+import { convertTestResultsToTableRow } from './exportToFile';
+import { getHeaderForTable } from './exportToFile/getHeaderForTable';
+import { maybeLoadFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -200,108 +196,6 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
   }
 }
 
-/**
- * TODO(ian): Remove this
- * @deprecated Use readLatestResults directly instead.
- */
-export function getLatestResultsPath(): string {
-  return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
-}
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function listPreviousResultFilenames_fileSystem(): string[] {
-  const directory = path.join(getConfigDirectoryPath(), 'output');
-  if (!fs.existsSync(directory)) {
-    return [];
-  }
-  const files = fs.readdirSync(directory);
-  const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
-  return resultsFiles.sort((a, b) => {
-    const statA = fs.statSync(path.join(directory, a));
-    const statB = fs.statSync(path.join(directory, b));
-    return statA.birthtime.getTime() - statB.birthtime.getTime(); // sort in ascending order
-  });
-}
-
-const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function listPreviousResults_fileSystem(): { fileName: string; description?: string }[] {
-  const directory = path.join(getConfigDirectoryPath(), 'output');
-  if (!fs.existsSync(directory)) {
-    return [];
-  }
-  const sortedFiles = listPreviousResultFilenames_fileSystem();
-  return sortedFiles.map((fileName) => {
-    if (!resultsCache[fileName]) {
-      try {
-        const fileContents = fs.readFileSync(path.join(directory, fileName), 'utf8');
-        const data = yaml.load(fileContents) as ResultsFile;
-        resultsCache[fileName] = data;
-      } catch (error) {
-        logger.warn(`Failed to read results from ${fileName}:\n${error}`);
-      }
-    }
-    return {
-      fileName,
-      description: resultsCache[fileName]?.config.description,
-    };
-  });
-}
-
-export function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date;
-  /*
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-  */
-}
-
-export function dateToFilename(date: Date) {
-  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
-}
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function readResult_fileSystem(
-  name: string,
-): { id: string; result: ResultsFile; createdAt: Date } | undefined {
-  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const resultsPath = path.join(resultsDirectory, name);
-  try {
-    const result = JSON.parse(
-      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
-    ) as ResultsFile;
-    const createdAt = filenameToDate(name);
-    return {
-      id: sha256(JSON.stringify(result.config)),
-      result,
-      createdAt,
-    };
-  } catch (err) {
-    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
-  }
-}
-
 export async function readFilters(
   filters: Record<string, string>,
   basePath: string = '',
@@ -328,7 +222,7 @@ export function printBorder() {
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
     logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath });
+    dotenv.config({ path: envPath, override: true });
   } else {
     dotenv.config();
   }
@@ -341,7 +235,7 @@ export type StandaloneEval = CompletedPrompt & {
   promptId: string | null;
   isRedteam: boolean;
   createdAt: number;
-
+  uuid: string;
   pluginFailCount: Record<string, number>;
   pluginPassCount: Record<string, number>;
 };
@@ -375,7 +269,8 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return obj;
   }
   if (typeof obj === 'string') {
-    return nunjucks.renderString(obj, vars) as unknown as T;
+    const nunjucksEngine = getNunjucksEngine();
+    return nunjucksEngine.renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {
     return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
@@ -451,63 +346,29 @@ export function parsePathOrGlob(
   };
 }
 
-/**
- * Loads content from an external file if the input is a file path, otherwise
- * returns the input as-is. Supports Nunjucks templating for file paths.
- *
- * @param filePath - The input to process. Can be a file path string starting with "file://",
- * an array of file paths, or any other type of data.
- * @returns The loaded content if the input was a file path, otherwise the original input.
- * For JSON and YAML files, the content is parsed into an object.
- * For other file types, the raw file content is returned as a string.
- *
- * @throws {Error} If the specified file does not exist.
- */
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
-  if (Array.isArray(filePath)) {
-    return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path);
-      return content;
-    });
-  }
+export function isRunningUnderNpx(): boolean {
+  const npmExecPath = getEnvString('npm_execpath');
+  const npmLifecycleScript = getEnvString('npm_lifecycle_script');
 
-  if (typeof filePath !== 'string') {
-    return filePath;
-  }
-  if (!filePath.startsWith('file://')) {
-    return filePath;
-  }
-
-  // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngine().renderString(filePath, {});
-
-  const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
-  if (!fs.existsSync(finalPath)) {
-    throw new Error(`File does not exist: ${finalPath}`);
-  }
-
-  const contents = fs.readFileSync(finalPath, 'utf8');
-  if (finalPath.endsWith('.json')) {
-    return JSON.parse(contents);
-  }
-  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
-    return yaml.load(contents);
-  }
-  if (finalPath.endsWith('.csv')) {
-    const records = csvParse(contents, { columns: true });
-    // If single column, return array of values
-    if (records.length > 0 && Object.keys(records[0]).length === 1) {
-      return records.map((record: Record<string, string>) => Object.values(record)[0]);
-    }
-    return records;
-  }
-  return contents;
+  return Boolean(
+    (npmExecPath && npmExecPath.includes('npx')) ||
+      process.execPath.includes('npx') ||
+      (npmLifecycleScript && npmLifecycleScript.includes('npx')),
+  );
 }
 
-export function isRunningUnderNpx(): boolean {
-  return Boolean(
-    process.env.npm_execpath?.includes('npx') ||
-      process.execPath.includes('npx') ||
-      process.env.npm_lifecycle_script?.includes('npx'),
-  );
+/**
+ * Renders variables in a tools object and loads from external file if applicable.
+ * This function combines renderVarsInObject and maybeLoadFromExternalFile into a single step
+ * specifically for handling tools configurations.
+ *
+ * @param tools - The tools configuration object or array to process.
+ * @param vars - Variables to use for rendering.
+ * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
+ */
+export function maybeLoadToolsFromExternalFile(
+  tools: any,
+  vars?: Record<string, string | object>,
+): any {
+  return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }

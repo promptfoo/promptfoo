@@ -13,7 +13,21 @@ To use the Echo Provider, set the provider ID to `echo` in your configuration fi
 ```yaml
 providers:
   - echo
+  # or
+  - id: echo
+    label: pass through provider
 ```
+
+## Response Format
+
+The Echo Provider returns a complete `ProviderResponse` object with the following fields:
+
+- `output`: The original input string
+- `cost`: Always 0
+- `cached`: Always false
+- `tokenUsage`: Set to `{ total: 0, prompt: 0, completion: 0 }`
+- `isRefusal`: Always false
+- `metadata`: Any additional metadata provided in the context
 
 ## Usage
 
@@ -24,7 +38,7 @@ The Echo Provider requires no additional configuration and returns the input aft
 ```yaml
 providers:
   - echo
-  - openai:chat:gpt-4o-mini
+  - openai:chat:gpt-4.1-mini
 
 prompts:
   - 'Summarize this: {{text}}'
@@ -49,3 +63,7 @@ The Echo Provider is useful for:
 - **Debugging and Testing Prompts**: Ensure prompts and variable substitutions work correctly before using complex providers.
 
 - **Assertion and Pre-generated Output Evaluation**: Test assertion logic on known inputs and validate pre-generated outputs without new API calls.
+
+- **Testing Transformations**: Test how transformations affect the output without the variability of an LLM response.
+
+- **Mocking in Test Environments**: Use as a drop-in replacement for other providers in test environments when you don't want to make actual API calls.

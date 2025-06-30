@@ -13,7 +13,7 @@ import {
   readStandaloneTestsFile,
   readTest,
   readTests,
-  readVarsFiles,
+  readTestFiles,
 } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
@@ -117,16 +117,54 @@ describe('readStandaloneTestsFile', () => {
   it('should read JSON file and return test cases', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify([
-        { var1: 'value1', var2: 'value2' },
-        { var1: 'value3', var2: 'value4' },
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+          assert: [{ type: 'equals', value: 'expected1' }],
+          description: 'Test #1',
+        },
+        {
+          vars: { var1: 'value3', var2: 'value4' },
+          assert: [{ type: 'contains', value: 'expected2' }],
+          description: 'Test #2',
+        },
       ]),
     );
     const result = await readStandaloneTestsFile('test.json');
 
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf-8');
     expect(result).toEqual([
-      { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
-      { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Test #1',
+      },
+      {
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [{ type: 'contains', value: 'expected2' }],
+        description: 'Test #2',
+      },
+    ]);
+  });
+
+  it('should read JSONL file and return test cases', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"var1":"value1","var2":"value2"},"assert":[{"type":"equals","value":"Hello World"}]}
+        {"vars":{"var1":"value3","var2":"value4"},"assert":[{"type":"equals","value":"Hello World"}]}`,
+    );
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.jsonl'), 'utf-8');
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'Hello World' }],
+        description: 'Row #1',
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ type: 'equals', value: 'Hello World' }],
+        description: 'Row #2',
+        vars: { var1: 'value3', var2: 'value4' },
+      },
     ]);
   });
 
@@ -192,6 +230,32 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it('should pass config to JS test generator function', async () => {
+    const mockFn = jest.fn().mockResolvedValue([{ vars: { a: 1 } }]);
+    jest.mock('../../test_gen.js', () => mockFn, { virtual: true });
+
+    const config = { foo: 'bar' };
+    const result = await readStandaloneTestsFile('test_gen.js', '', config);
+
+    expect(mockFn).toHaveBeenCalledWith(config);
+    expect(result).toEqual([{ vars: { a: 1 } }]);
+  });
+
+  it('should load file references in config for JS generator', async () => {
+    const mockResult = [{ vars: { a: 1 } }];
+    const mockFn = jest.fn().mockResolvedValue(mockResult);
+    jest.mock('../../test_config_gen.js', () => mockFn, { virtual: true });
+
+    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');
+
+    const config = { data: 'file://config.json' };
+    const result = await readStandaloneTestsFile('test_config_gen.js', '', config);
+
+    expect(mockFn).toHaveBeenCalledWith({ data: { foo: 'bar' } });
+    expect(result).toEqual(mockResult);
   });
 
   it('should handle file:// prefix in file path', async () => {
@@ -292,8 +356,42 @@ describe('readStandaloneTestsFile', () => {
     expect(result).toEqual(pythonResult);
   });
 
+  it('should pass config to Python generate_tests function', async () => {
+    const pythonResult = [{ vars: { a: 1 }, assert: [] }];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    const config = { dataset: 'demo' };
+    const result = await readStandaloneTestsFile('test.py', '', config);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [config],
+    );
+    expect(result).toEqual(pythonResult);
+  });
+
+  it('should load file references in config for Python generator', async () => {
+    const pythonResult = [{ vars: { a: 1 }, assert: [] }];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');
+    const config = { data: 'file://config.json' };
+    await readStandaloneTestsFile('test.py', '', config);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [{ data: { foo: 'bar' } }],
+    );
+  });
+
   it('should throw error when Python file returns non-array', async () => {
     const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
     mockRunPython.mockResolvedValueOnce({ not: 'an array' });
 
     await expect(readStandaloneTestsFile('test.py')).rejects.toThrow(
@@ -305,6 +403,26 @@ describe('readStandaloneTestsFile', () => {
     await expect(readStandaloneTestsFile('test.py:invalid:extra')).rejects.toThrow(
       'Too many colons. Invalid test file script path: test.py:invalid:extra',
     );
+  });
+
+  it('should read JSON file with a single test case object', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Single Test',
+      }),
+    );
+    const result = await readStandaloneTestsFile('test.json');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf-8');
+    expect(result).toEqual([
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Single Test',
+      },
+    ]);
   });
 });
 
@@ -786,6 +904,31 @@ describe('readTests', () => {
     expect(result).toEqual(pythonTests);
   });
 
+  it('should pass config to Python generator in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test 1',
+        vars: { a: '1' },
+        assert: [],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    const config = { foo: 'bar' };
+    const result = await readTests([{ path: 'test.py', config }]);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [config],
+    );
+    expect(result).toEqual(pythonTests);
+  });
+
   it('should handle Python files with invalid function name in readTests', async () => {
     await expect(readTests(['test.py:invalid:extra'])).rejects.toThrow(
       'Too many colons. Invalid test file script path: test.py:invalid:extra',
@@ -938,7 +1081,7 @@ describe('readVarsFiles', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
     jest.mocked(globSync).mockReturnValue(['vars.yaml']);
 
-    const result = await readVarsFiles('vars.yaml');
+    const result = await readTestFiles('vars.yaml');
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
@@ -952,7 +1095,7 @@ describe('readVarsFiles', () => {
       .mockReturnValueOnce(yamlContent2);
     jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
 
-    const result = await readVarsFiles(['vars1.yaml', 'vars2.yaml']);
+    const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });

@@ -48,6 +48,9 @@ jest.mock('../../src/prompts/utils', () => {
 });
 
 describe('readPrompts', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
     jest.mocked(fs.readFileSync).mockReset();
@@ -345,6 +348,27 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith('test.md', 'utf8');
   });
 
+  it('should read a Jinja2 file', async () => {
+    const jinjaContent =
+      'You are a helpful assistant.\nPlease answer the following question about {{ topic }}: {{ question }}';
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(jinjaContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+
+    const result = await readPrompts('template.j2');
+
+    // Check that we get a result with the right content
+    expect(result).toHaveLength(1);
+    expect(result[0].raw).toEqual(jinjaContent);
+    expect(result[0].config).toBeUndefined();
+
+    // Check that the label contains the expected text but don't test exact truncation
+    expect(result[0].label).toContain('template.j2: You are a helpful assistant.');
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith('template.j2', 'utf8');
+  });
+
   it('should read a .py prompt object array', async () => {
     const prompts = [
       { id: 'prompts.py:prompt1', label: 'First prompt' },
@@ -515,6 +539,85 @@ describe('readPrompts', () => {
     ]);
     expect(promptWithFunction.function).not.toHaveBeenCalled();
   });
+  it('should read a single-column CSV file with header', async () => {
+    const csvContent = dedent`
+      prompt
+      Tell me about {{topic}}
+      Explain {{topic}} in simple terms
+      Write a poem about {{topic}}
+    `;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await readPrompts(['test.csv']);
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({
+      raw: 'Tell me about {{topic}}',
+      label: 'Prompt 1 - Tell me about {{topic}}',
+    });
+    expect(result[1]).toEqual({
+      raw: 'Explain {{topic}} in simple terms',
+      label: 'Prompt 2 - Explain {{topic}} in simple terms',
+    });
+    expect(result[2]).toEqual({
+      raw: 'Write a poem about {{topic}}',
+      label: 'Prompt 3 - Write a poem about {{topic}}',
+    });
+  });
+
+  it('should read a single-column CSV file without header', async () => {
+    const csvContent = dedent`
+      Tell me about {{topic}}
+      Explain {{topic}} in simple terms
+      Write a poem about {{topic}}
+    `;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await readPrompts(['test.csv']);
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({
+      raw: 'Tell me about {{topic}}',
+      label: 'Prompt 1 - Tell me about {{topic}}',
+    });
+    expect(result[1]).toEqual({
+      raw: 'Explain {{topic}} in simple terms',
+      label: 'Prompt 2 - Explain {{topic}} in simple terms',
+    });
+    expect(result[2]).toEqual({
+      raw: 'Write a poem about {{topic}}',
+      label: 'Prompt 3 - Write a poem about {{topic}}',
+    });
+  });
+
+  it('should read a two-column CSV file with prompt and label', async () => {
+    const csvContent = dedent`
+      prompt,label
+      Tell me about {{topic}},Basic Query
+      Explain {{topic}} in simple terms,Simple Explanation
+      Write a poem about {{topic}},Poetry Generator
+    `;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await readPrompts(['test.csv']);
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({
+      raw: 'Tell me about {{topic}}',
+      label: 'Basic Query',
+    });
+    expect(result[1]).toEqual({
+      raw: 'Explain {{topic}} in simple terms',
+      label: 'Simple Explanation',
+    });
+    expect(result[2]).toEqual({
+      raw: 'Write a poem about {{topic}}',
+      label: 'Poetry Generator',
+    });
+  });
 });
 
 describe('readProviderPromptMap', () => {
@@ -522,6 +625,7 @@ describe('readProviderPromptMap', () => {
   let parsedPrompts: Prompt[];
 
   beforeEach(() => {
+    jest.clearAllMocks();
     parsedPrompts = [
       { label: 'prompt1', raw: 'prompt1' },
       { label: 'prompt2', raw: 'prompt2' },
@@ -719,6 +823,27 @@ describe('processPrompts', () => {
     ]);
   });
 
+  it('should process Jinja2 files', async () => {
+    const jinjaContent =
+      'You are a helpful assistant for {{ user }}.\nPlease provide information about {{ topic }}.';
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(jinjaContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+
+    const result = await processPrompts(['template.j2']);
+
+    // Check that we get a result with the right content
+    expect(result).toHaveLength(1);
+    expect(result[0].raw).toEqual(jinjaContent);
+    expect(result[0].config).toBeUndefined();
+
+    // Check that the label contains the expected text but don't test exact truncation
+    expect(result[0].label).toContain('template.j2: You are a helpful assistant for {{ user }}.');
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith('template.j2', 'utf8');
+  });
+
   it('should process valid prompt schema objects', async () => {
     const validPrompt = {
       raw: 'test prompt',
@@ -772,6 +897,27 @@ describe('processPrompts', () => {
         label: 'test.txt: file prompt',
       },
       validPrompt,
+    ]);
+  });
+
+  it('should process CSV files', async () => {
+    const csvContent = `prompt,label
+Tell me about {{topic}},Basic Query
+Explain {{topic}} in simple terms,Simple Explanation`;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await processPrompts(['test.csv']);
+
+    expect(result).toEqual([
+      {
+        raw: 'Tell me about {{topic}}',
+        label: 'Basic Query',
+      },
+      {
+        raw: 'Explain {{topic}} in simple terms',
+        label: 'Simple Explanation',
+      },
     ]);
   });
 

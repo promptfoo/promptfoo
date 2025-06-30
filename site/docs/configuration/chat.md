@@ -1,11 +1,14 @@
 ---
 sidebar_label: Chat threads
 sidebar_position: 10
+title: Chat Conversations and Multi-Turn Threads
+description: Learn how to create and manage chat conversations, multi-turn threads, and conversation history in promptfoo
+keywords: [chat, conversations, threads, multi-turn, history, messages, _conversation]
 ---
 
 # Chat conversations / threads
 
-The [prompt file](/docs/configuration/parameters#prompts-from-file) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
+The [prompt file](/docs/configuration/prompts#file-based-prompts) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
 
 ```json
 [
@@ -30,12 +33,11 @@ Most providers support full "multishot" chat conversations, including multiple a
 One way to do this, if you are using the OpenAI format, is by creating a list of `{role, content}` objects. Here's an example:
 
 ```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - vars:
@@ -89,7 +91,7 @@ This simplifies the config, but we need to work some magic in the prompt templat
 
 Using nunjucks templates, we can combine multiple chat messages. Here's an example in which the previous conversation is a fixture for _all_ tests. Each case tests a different follow-up message:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # Set up the conversation history
 defaultTest:
   vars:
@@ -173,7 +175,7 @@ Use `completion.input` as a shortcut to get the last user message. In a chat-for
 
 Here's an example test config. Note how each question assumes context from the previous output:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       question: Who founded Facebook?
@@ -185,7 +187,7 @@ tests:
 
 Here is the corresponding prompt:
 
-```json
+```json title="prompt.json"
 [
   // highlight-start
   {% for completion in _conversation %}
@@ -220,8 +222,7 @@ When the `_conversation` variable is present, the eval will run single-threaded 
 
 When running multiple test files or test sequences, you may want to maintain separate conversation histories in the same eval run. This can be achieved by adding a `conversationId` to the test metadata:
 
-```yaml
-# test1.yaml
+```yaml title="test1.yaml"
 - vars:
     question: 'Who founded Facebook?'
   metadata:
@@ -232,8 +233,7 @@ When running multiple test files or test sequences, you may want to maintain sep
     conversationId: 'conversation1'
 ```
 
-```yaml
-# test2.yaml
+```yaml title="test2.yaml"
 - vars:
     question: 'Where is Yosemite National Park?'
   metadata:
@@ -252,7 +252,7 @@ In some cases, you may want to send JSON _within_ the OpenAI `content` field. In
 
 Here's an example that prompts OpenAI with a JSON object of the structure `{query: string, history: {reply: string}[]}`. It first constructs this JSON object as the `input` variable. Then, it includes `input` in the prompt with proper JSON escaping:
 
-```json
+```json title="prompt.json"
 {% set input %}
 {
     "query": "{{ query }}",
@@ -272,11 +272,11 @@ Here's an example that prompts OpenAI with a JSON object of the structure `{quer
 
 Here's the associated config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - file://prompt.json
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 tests:
   - vars:
       query: how you doing
@@ -301,12 +301,12 @@ The `storeOutputAs` option makes it possible to reference previous outputs in mu
 
 Here's an example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the user: {{message}}'
 
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4.1
 
 tests:
   - vars:
@@ -327,7 +327,7 @@ This creates `favoriteFruit` and `reason` vars on-the-go, as the chatbot answers
 
 Outputs can be modified before storage using the `transform` property:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       message: "What's your favorite fruit? You must pick one. Output the name of a fruit only"
@@ -345,3 +345,11 @@ tests:
 ```
 
 Transforms can be Javascript snippets or they can be entire separate Python or Javascript files. See [docs on transform](/docs/configuration/guide/#transforming-outputs).
+
+## See Also
+
+- [Prompt Parameters](/docs/configuration/parameters) - Learn about different ways to define prompts
+- [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations
+- [Transformer Functions](/docs/configuration/guide/#transforming-outputs) - How to transform outputs between test cases
+- [Nunjucks Templates](https://mozilla.github.io/nunjucks/templating.html) - Documentation for the template language used in prompt files
+- [Multi-turn Conversation Example](https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-turn-conversation) - Complete example of multi-turn conversations

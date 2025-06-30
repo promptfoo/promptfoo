@@ -97,7 +97,7 @@ Once you've set up a few prompts, add them to the config file:
 
 ```yaml title="promptfooconfig.yaml"
 // highlight-next-line
-prompts: [prompt1.txt, prompt2.txt]
+prompts: [file://prompt1.txt, file://prompt2.txt]
 tests:
   - vars:
       question: What's the weather in New York?
@@ -116,7 +116,7 @@ To set this up, we use the `defaultTest` property to set a requirement on every 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -157,7 +157,7 @@ Determining the perplexity threshold is a bit of trial and error. You can also r
 ```yaml
 providers:
   - openai:gpt-4
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   # ...
@@ -210,7 +210,7 @@ prompts:
   - file://prompt1.txt
 // highlight-start
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - exec:python langchain_provider.py
 // highlight-end
 tests:

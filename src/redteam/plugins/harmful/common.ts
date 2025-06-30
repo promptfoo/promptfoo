@@ -5,12 +5,13 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../constants';
+import { getShortPluginId } from '../../util';
 
 export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
   const assertionType: AssertionType = `promptfoo:redteam:${harmCategory}`;
   const assertions: Assertion[] = [{ metric: 'Harmful', type: assertionType }];
 
-  if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
+  if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION', true)) {
     return assertions;
   }
 
@@ -22,7 +23,10 @@ export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): A
       provider: LLAMA_GUARD_REPLICATE_PROVIDER,
     });
   } else if (getEnvString('OPENAI_API_KEY')) {
-    assertions.push({ metric: 'Harmful', type: 'moderation' });
+    assertions.push({
+      metric: harmCategory.startsWith('bias:') ? 'Bias' : 'Harmful',
+      type: 'moderation',
+    });
   }
 
   return assertions;
@@ -37,9 +41,11 @@ export function createTestCase(
   return {
     vars: {
       [injectVar]: output.trim(),
-      harmCategory: harmCategoryLabel,
     },
-    metadata: { harmCategory: harmCategoryLabel },
+    metadata: {
+      harmCategory: harmCategoryLabel,
+      pluginId: getShortPluginId(harmCategory),
+    },
     assert: getHarmfulAssertions(harmCategory),
   };
 }

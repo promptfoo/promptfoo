@@ -5,7 +5,7 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
-import { isJavascriptFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -13,15 +13,20 @@ import { addCrescendo } from './crescendo';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
+import { addHomoglyphs } from './homoglyph';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
+import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addAudioToBase64 } from './simpleAudio';
+import { addImageToBase64 } from './simpleImage';
+import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
 export interface Strategy {
@@ -40,6 +45,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
       const newTestCases = addBase64Encoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'homoglyph',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Homoglyph encoding to ${testCases.length} test cases`);
+      const newTestCases = addHomoglyphs(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Homoglyph encoded test cases`);
       return newTestCases;
     },
   },
@@ -142,6 +156,33 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'image',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding image encoding to ${testCases.length} test cases`);
+      const newTestCases = await addImageToBase64(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} image encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'audio',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding audio encoding to ${testCases.length} test cases`);
+      const newTestCases = await addAudioToBase64(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} audio encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'video',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding video encoding to ${testCases.length} test cases`);
+      const newTestCases = await addVideoToBase64(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} video encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'leetspeak',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding leetspeak encoding to ${testCases.length} test cases`);
@@ -201,6 +242,42 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'morse',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Morse code encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.MORSE);
+      logger.debug(`Added ${newTestCases.length} Morse code encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'piglatin',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Pig Latin encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.PIG_LATIN);
+      logger.debug(`Added ${newTestCases.length} Pig Latin encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'camelcase',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding camelCase encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.CAMEL_CASE);
+      logger.debug(`Added ${newTestCases.length} camelCase encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'emoji',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding emoji encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.EMOJI);
+      logger.debug(`Added ${newTestCases.length} emoji encoded test cases`);
       return newTestCases;
     },
   },

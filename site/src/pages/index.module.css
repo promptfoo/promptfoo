@@ -30,12 +30,57 @@
 .heroBanner h1 {
   font-size: 3.5rem;
   margin-bottom: 2rem;
+  font-weight: bold;
+  letter-spacing: -0.02em;
+  color: var(--ifm-font-color-base);
 }
 
 .heroBanner p {
   font-size: 1.25rem;
   font-weight: normal;
   margin-bottom: 2rem;
+}
+
+.heroMainText {
+  background: linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  display: inline-block;
+}
+
+.heroHighlight {
+  position: relative;
+  color: var(--ifm-color-primary);
+  font-weight: 800;
+}
+
+.heroHighlight::after {
+  content: '';
+  position: absolute;
+  bottom: 0.1em;
+  left: 0;
+  width: 100%;
+  height: 0.2em;
+  background-color: rgba(59, 130, 246, 0.3);
+  z-index: -1;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .heroMainText {
+  background: linear-gradient(90deg, #60a5fa, #93c5fd, #bfdbfe);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='dark'] .heroHighlight {
+  color: #93c5fd;
+}
+
+[data-theme='dark'] .heroHighlight::after {
+  background-color: rgba(96, 165, 250, 0.3);
 }
 
 @media screen and (max-width: 996px) {
@@ -72,7 +117,7 @@
 }
 
 .walkthroughTab {
-  padding: 1rem 1rem;
+  padding: 1rem 1rem calc(1rem - 2px) 1rem;
   border: none;
   background: none;
   font-size: 1.25rem;
@@ -80,10 +125,11 @@
   transition: all 0.3s ease;
   white-space: normal;
   text-align: center;
+  border-bottom: 2px solid transparent;
 }
 
 .walkthroughTabActive {
-  border-bottom: 2px solid #1890ff;
+  border-color: #1890ff;
   color: #1890ff;
 }
 
@@ -229,14 +275,22 @@
 
   .walkthroughTabs {
     width: 100%;
-    padding: 0 0.5rem;
-    gap: 0.5rem;
+    padding: 0;
+    gap: 0;
+    display: flex;
+    justify-content: space-between;
   }
 
   .walkthroughTab {
-    padding: 0.75rem 0.5rem;
-    font-size: 1rem;
+    padding: 0.75rem 0.25rem;
+    font-size: 0.9rem;
     flex: 1;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    word-break: keep-all;
+    white-space: nowrap;
   }
 }
 
@@ -305,6 +359,17 @@
 
 .ctaSection h2 {
   font-size: 2rem;
+  margin-bottom: 2rem;
+}
+
+.productSection {
+  padding: 4rem 0;
+  background-color: var(--ifm-background-surface-color);
+}
+
+.sectionTitle {
+  text-align: center;
+  font-size: 2.5rem;
   margin-bottom: 2rem;
 }
 

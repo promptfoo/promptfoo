@@ -20,7 +20,6 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import telemetry from '../telemetry';
 import type {
   AssertionParams,
   AssertionValueFunctionContext,
@@ -35,7 +34,7 @@ import {
   type AtomicTestCase,
   type GradingResult,
 } from '../types';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
@@ -57,7 +56,9 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
+import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -66,8 +67,9 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
-import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
+import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
@@ -121,10 +123,6 @@ export async function runAssertion({
   const baseType = inverse
     ? (assertion.type.slice(4) as AssertionType)
     : (assertion.type as AssertionType);
-
-  telemetry.record('assertion_used', {
-    type: baseType,
-  });
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -247,6 +245,7 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    gleu: handleGleuScore,
     guardrails: handleGuardrails,
     'g-eval': handleGEval,
     icontains: handleIContains,
@@ -255,13 +254,31 @@ export async function runAssertion({
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
-    'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
+    'is-valid-function-call': handleIsValidFunctionCall,
+    'is-valid-openai-function-call': handleIsValidFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
     'is-xml': handleIsXml,
     javascript: handleJavascript,
     latency: handleLatency,
     levenshtein: handleLevenshtein,
     'llm-rubric': handleLlmRubric,
+    meteor: async (params: AssertionParams) => {
+      try {
+        const { handleMeteorAssertion } = await import('./meteor');
+        return handleMeteorAssertion(params);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Cannot find module')) {
+          return {
+            pass: false,
+            score: 0,
+            reason:
+              'METEOR assertion requires the natural package. Please install it using: npm install natural',
+            assertion: params.assertion,
+          };
+        }
+        throw error;
+      }
+    },
     'model-graded-closedqa': handleModelGradedClosedQa,
     'model-graded-factuality': handleFactuality,
     moderation: handleModeration,
@@ -273,6 +290,7 @@ export async function runAssertion({
     similar: handleSimilar,
     'starts-with': handleStartsWith,
     webhook: handleWebhook,
+    pi: handlePiScorer,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];

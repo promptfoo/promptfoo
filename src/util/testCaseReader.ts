@@ -22,9 +22,10 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
-import { isJavascriptFile } from './file';
+import { maybeLoadConfigFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
 
-export async function readVarsFiles(
+export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
 ): Promise<Record<string, string | string[] | object>> {
@@ -70,7 +71,9 @@ export async function readVarsFiles(
 export async function readStandaloneTestsFile(
   varsPath: string,
   basePath: string = '',
+  config?: Record<string, any>,
 ): Promise<TestCase[]> {
+  const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
   // Split on the last colon to handle Windows drive letters correctly
   const colonCount = resolvedVarsPath.split(':').length - 1;
@@ -101,13 +104,18 @@ export async function readStandaloneTestsFile(
       feature: 'js tests file',
     });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    return typeof mod === 'function' ? await mod() : mod;
+    return typeof mod === 'function' ? await mod(finalConfig) : mod;
   }
   if (fileExtension === 'py') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'python tests file',
     });
-    const result = await runPython(pathWithoutFunction, maybeFunctionName ?? 'generate_tests', []);
+    const args = finalConfig === undefined ? [] : [finalConfig];
+    const result = await runPython(
+      pathWithoutFunction,
+      maybeFunctionName ?? 'generate_tests',
+      args,
+    );
     if (!Array.isArray(result)) {
       throw new Error(
         `Python test function must return a list of test cases, got ${typeof result}`,
@@ -171,13 +179,39 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
     });
-    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const jsonData = yaml.load(fileContent) as any;
+    const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+    return testCases.map((item, idx) => ({
+      ...item,
+      description: item.description || `Row #${idx + 1}`,
+    }));
+  }
+  // Handle .jsonl files
+  else if (fileExtension === 'jsonl') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'jsonl tests file',
+    });
+
+    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+
+    return fileContent
+      .split('\n')
+      .filter((line) => line.trim())
+      .map((line, idx) => {
+        const row = JSON.parse(line);
+        return {
+          ...row,
+          description: `Row #${idx + 1}`,
+        };
+      });
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
+
   return rows.map((row, idx) => {
     const test = testCaseFromCsvRow(row);
     test.description ||= `Row #${idx + 1}`;
@@ -191,7 +225,7 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readVarsFiles(testCase.vars, testBasePath);
+    ret.vars = await readTestFiles(testCase.vars, testBasePath);
   } else {
     ret.vars = testCase.vars;
   }
@@ -350,6 +384,13 @@ export async function readTests(
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
+  } else if (
+    typeof tests === 'object' &&
+    !Array.isArray(tests) &&
+    'path' in tests &&
+    typeof tests.path === 'string'
+  ) {
+    return readStandaloneTestsFile(tests.path, basePath, tests.config);
   }
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
@@ -366,9 +407,11 @@ export async function readTests(
           // Resolve globs for other file types
           ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
         }
+      } else if ('path' in globOrTest) {
+        ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest, basePath));
+        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
       }
     }
   } else if (tests !== undefined && tests !== null) {

@@ -1,18 +1,25 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Bedrock Llama Eval'
 prompts:
-  - 'Convert this English to {{language}}: {{input}}'
   - 'Translate to {{language}}: {{input}}'
 
 providers:
-  - id: bedrock:us.meta.llama3-2-90b-instruct-v1:0
-    label: llama3.2 90b
-    config:
-      max_gen_len: 100
-  - id: bedrock:us.meta.llama3-3-70b-instruct-v1:0
+  - id: bedrock:us.meta.llama3-2-3b-instruct-v1:0
     label: llama3.3 70b
     config:
+      region: us-west-2
+
+  - id: bedrock:us.meta.llama4-scout-17b-instruct-v1:0
+    label: Llama 4 Scout 17B
+    config:
+      region: us-west-2
+
+  - id: bedrock:us.meta.llama4-maverick-17b-instruct-v1:0
+    label: Llama 4 Maverick 17B
+    config:
       max_gen_len: 100
+      temperature: 0.7
+      region: us-west-2
 
 tests:
   - vars:

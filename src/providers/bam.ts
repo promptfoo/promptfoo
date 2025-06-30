@@ -4,6 +4,7 @@ import type {
   TextGenerationCreateOutput,
 } from '@ibm-generative-ai/node-sdk';
 import { getCache, isCacheEnabled } from '../cache';
+import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
@@ -43,30 +44,30 @@ interface BAMGenerationParameters {
 }
 
 interface BAMModerations {
-  hap?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
-  stigma?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
-  implicit_hate?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
+  hap?: {
+    input?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+    output?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+  };
+  social_bias?: {
+    input?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+    output?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+  };
 }
 
 export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
@@ -130,7 +131,7 @@ export class BAMProvider implements ApiProvider {
     return (
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.BAM_API_KEY ||

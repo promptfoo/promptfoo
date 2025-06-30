@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -77,9 +78,9 @@ export default function Features(): JSX.Element {
                     </React.Fragment>
                   ))}
                 </p>
-                <a href={feature.infoLink} className={styles.featureInfoLink}>
+                <Link to={feature.infoLink} className={styles.featureInfoLink}>
                   {feature.infoLinkText}
-                </a>
+                </Link>
               </div>
               <div className={styles.featureImageWrapper}>
                 <img src={feature.image} alt={feature.title} className={styles.featureImage} />
