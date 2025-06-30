@@ -124,6 +124,23 @@ promptfoo scan-model models:/MyModel/Latest --registry-uri https://mlflow.compan
 
 Configure ModelAudit's behavior using command-line options for different scanning scenarios.
 
+### Complete Options Reference
+
+| Option              | Description                                                | Default   |
+| ------------------- | ---------------------------------------------------------- | --------- |
+| `--blacklist`, `-b` | Additional blacklist patterns to check against model names | -         |
+| `--format`, `-f`    | Output format (`text` or `json`)                           | `text`    |
+| `--output`, `-o`    | Output file path (prints to stdout if not specified)       | stdout    |
+| `--timeout`, `-t`   | Scan timeout in seconds                                    | `300`     |
+| `--verbose`, `-v`   | Enable verbose output                                      | `false`   |
+| `--max-file-size`   | Maximum file size to scan in bytes                         | unlimited |
+| `--max-total-size`  | Maximum total bytes to scan before stopping                | unlimited |
+| `--sbom`            | Generate Software Bill of Materials (SBOM) file            | -         |
+| `--registry-uri`    | MLflow registry URI for models:// scanning                 | -         |
+| `--jfrog-api-token` | JFrog Artifactory API token                                | -         |
+
+### Usage Examples
+
 **Output Control:**
 
 ```bash
@@ -485,4 +502,134 @@ promptfoo scan-model model.pkl --max-file-size 3221225472  # 3GB limit
 
 ```bash
 promptfoo scan-model model.pkl --timeout 600  # 10 minute timeout
+```
+
+## Configuration Files
+
+For complex scanning requirements, create a YAML configuration file to customize scanner behavior.
+
+### Basic Configuration
+
+```yaml
+# modelaudit-config.yaml
+blacklist_patterns:
+  - 'unsafe_model'
+  - 'malicious_net'
+  - 'backdoor.*'
+
+max_file_size: 1073741824 # 1GB
+timeout: 600 # 10 minutes
+```
+
+### Advanced Scanner Configuration
+
+```yaml
+scanners:
+  pickle:
+    max_opcodes: 2000000
+    suspicious_globals:
+      - 'os.*'
+      - 'subprocess.*'
+      - 'builtins.eval'
+      - 'importlib.*'
+
+  tensorflow:
+    suspicious_ops:
+      - 'ReadFile'
+      - 'WriteFile'
+      - 'PyFunc'
+      - 'ShellExecute'
+
+  keras:
+    suspicious_layer_types:
+      - 'Lambda'
+      - 'TFOpLambda'
+      - 'PyFunc'
+
+  zip:
+    max_zip_depth: 5
+    max_zip_entries: 10000
+    max_entry_size: 10485760 # 10MB
+
+  weight_distribution:
+    z_score_threshold: 3.0
+    cosine_similarity_threshold: 0.7
+    weight_magnitude_threshold: 3.0
+
+  numpy:
+    max_array_bytes: 1073741824 # 1GB
+    max_dimensions: 32
+    max_itemsize: 1024
+```
+
+### Using Configuration Files
+
+```bash
+# With standalone ModelAudit
+modelaudit scan --config modelaudit-config.yaml path/to/models/
+
+# Note: Configuration files are not yet supported with promptfoo CLI wrapper
+# Use CLI options instead:
+promptfoo scan-model --blacklist "unsafe_model" --timeout 600 path/to/models/
+```
+
+## Programmatic Usage (Python API)
+
+Use ModelAudit programmatically in your Python applications for custom integrations.
+
+### Basic Usage
+
+```python
+from modelaudit.core import scan_model_directory_or_file
+
+# Scan a single model
+results = scan_model_directory_or_file("path/to/model.pkl")
+
+# Check for issues
+if results["issues"]:
+    print(f"Found {len(results['issues'])} issues:")
+    for issue in results["issues"]:
+        print(f"- {issue['severity'].upper()}: {issue['message']}")
+else:
+    print("No issues found!")
+```
+
+### Advanced Usage
+
+```python
+# Scan HuggingFace models
+results = scan_model_directory_or_file("https://huggingface.co/bert-base-uncased")
+
+# Custom configuration
+config = {
+    "blacklist_patterns": ["unsafe_model", "malicious_net"],
+    "max_file_size": 1073741824,  # 1GB
+    "timeout": 600  # 10 minutes
+}
+results = scan_model_directory_or_file("path/to/models/", **config)
+
+# Scan multiple sources
+sources = [
+    "local_model.pkl",
+    "https://hf.co/gpt2",
+    "hf://microsoft/resnet-50",
+    "./models/"
+]
+
+for source in sources:
+    results = scan_model_directory_or_file(source)
+    print(f"Scanning {source}: {len(results['issues'])} issues found")
+```
+
+### Processing Results
+
+```python
+# Extract specific severity issues
+critical_issues = [i for i in results["issues"] if i["severity"] == "critical"]
+warnings = [i for i in results["issues"] if i["severity"] == "warning"]
+
+# Export results
+import json
+with open("scan-results.json", "w") as f:
+    json.dump(results, f, indent=2)
 ```

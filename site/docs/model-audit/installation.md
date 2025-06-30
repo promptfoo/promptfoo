@@ -37,6 +37,16 @@ pip install modelaudit
 pip install modelaudit
 ```
 
+**Option 3: Homebrew (macOS/Linux)**
+
+```bash
+# Install Promptfoo via Homebrew
+brew install promptfoo
+
+# Install ModelAudit
+pip install modelaudit
+```
+
 ### Your First Scan
 
 **Local models:**
@@ -147,6 +157,24 @@ docker pull ghcr.io/promptfoo/modelaudit:latest-tensorflow  # TensorFlow only
 ## Dependencies by Model Format
 
 ModelAudit uses a modular dependency system, installing only the packages needed for your specific model formats. This reduces installation size and potential conflicts.
+
+### Quick Reference
+
+| Model Format          | Required Package              | Install Command                       |
+| --------------------- | ----------------------------- | ------------------------------------- |
+| Pickle files          | Built-in                      | (included)                            |
+| TensorFlow SavedModel | `tensorflow`                  | `pip install modelaudit[tensorflow]`  |
+| TensorFlow Lite       | `tensorflow`                  | `pip install modelaudit[tensorflow]`  |
+| Keras H5              | `h5py`, `tensorflow`          | `pip install modelaudit[h5]`          |
+| PyTorch               | `torch` (for weight analysis) | `pip install modelaudit[pytorch]`     |
+| ONNX                  | `onnx`                        | `pip install modelaudit[onnx]`        |
+| SafeTensors           | `safetensors`                 | `pip install modelaudit[safetensors]` |
+| GGUF/GGML             | Built-in                      | (included)                            |
+| Flax/JAX              | `msgpack`                     | `pip install modelaudit[flax]`        |
+| Joblib                | `joblib`                      | `pip install modelaudit[joblib]`      |
+| NumPy arrays          | Built-in                      | (included)                            |
+| YAML manifests        | `pyyaml`                      | `pip install modelaudit[yaml]`        |
+| HuggingFace URLs      | `huggingface-hub`             | `pip install modelaudit[huggingface]` |
 
 ### Core Dependencies (Always Installed)
 
