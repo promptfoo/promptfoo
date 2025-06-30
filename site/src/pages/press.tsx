@@ -8,7 +8,7 @@ import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
-import LogoPanda from '../../static/img/logo-panda.svg';
+import LogoPanda from '../../static/img/logo.svg';
 import styles from './press.module.css';
 
 const PressContent = () => {
@@ -428,7 +428,7 @@ const PressContent = () => {
                 <Typography variant="subtitle1" mt={2}>
                   Promptfoo Logo (SVG)
                 </Typography>
-                <a href="/img/logo-panda.svg" download>
+                <a href="/img/logo.svg" download>
                   Download
                 </a>
               </Box>
