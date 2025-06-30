@@ -71,10 +71,13 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
   };
 
   // Get all variable columns
-  const variableColumns = columnData.filter((col) => col.value.startsWith('Variable')).map((col) => col.value);
-  
+  const variableColumns = columnData
+    .filter((col) => col.value.startsWith('Variable'))
+    .map((col) => col.value);
+
   // Check if all variables are currently visible
-  const variablesVisible = variableColumns.length > 0 && variableColumns.every((col) => selectedColumns.includes(col));
+  const variablesVisible =
+    variableColumns.length > 0 && variableColumns.every((col) => selectedColumns.includes(col));
 
   const handleClearAllVariables = () => {
     if (variablesVisible) {
