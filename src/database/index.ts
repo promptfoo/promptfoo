@@ -43,14 +43,14 @@ export function getDb() {
           journal_mode: string;
         };
 
-        if (result.journal_mode.toLowerCase() !== 'wal') {
+        if (result.journal_mode.toLowerCase() === 'wal') {
+          logger.debug('Successfully enabled SQLite WAL mode');
+        } else {
           logger.warn(
             `Failed to enable WAL mode (got '${result.journal_mode}'). ` +
               'Database performance may be reduced. This can happen on network filesystems. ' +
               'Set PROMPTFOO_DISABLE_WAL_MODE=true to suppress this warning.',
           );
-        } else {
-          logger.debug('Successfully enabled SQLite WAL mode');
         }
 
         // Additional WAL configuration for optimal performance
