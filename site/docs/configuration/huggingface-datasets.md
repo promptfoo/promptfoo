@@ -54,6 +54,7 @@ tests: huggingface://datasets/rajpurkar/squad
 | --------- | --------------------------------------------- | ----------- |
 | `split`   | Dataset split to load (train/test/validation) | `test`      |
 | `config`  | Dataset configuration name                    | `default`   |
+| `subset`  | Dataset subset (for multi-subset datasets)    | `none`      |
 | `limit`   | Maximum number of test cases to load          | `unlimited` |
 
 The loader accepts any parameter supported by the [HuggingFace Datasets API](https://huggingface.co/docs/datasets-server/api_reference#get-apirows). Additional parameters beyond these common ones are passed directly to the API.
@@ -62,6 +63,12 @@ To limit the number of test cases:
 
 ```yaml
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&limit=50
+```
+
+To load a specific subset (common with MMLU datasets):
+
+```yaml
+tests: huggingface://datasets/cais/mmlu?split=test&subset=physics&limit=10
 ```
 
 ## Authentication
