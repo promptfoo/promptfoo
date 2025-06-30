@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
 import WebSocket from 'ws';
@@ -17,6 +16,28 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 import { geminiFormatAndSystemInstructions, loadFile } from './util';
+
+// Types for axios (optional dependency)
+interface AxiosInstance {
+  get: (url: string, config?: unknown) => Promise<{ data: unknown }>;
+  post: (url: string, data?: unknown, config?: unknown) => Promise<{ data: unknown }>;
+}
+
+// Dynamic import for axios (optional dependency)
+let axiosInstance: AxiosInstance | null = null;
+
+async function getAxios(): Promise<AxiosInstance> {
+  if (!axiosInstance) {
+    try {
+      const getModuleName = () => 'axios';
+      const axiosModule = await import(getModuleName());
+      axiosInstance = axiosModule.default as AxiosInstance;
+    } catch {
+      throw new Error('axios is not installed. Please install it first');
+    }
+  }
+  return axiosInstance;
+}
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -200,7 +221,8 @@ export class GoogleLiveProvider implements ApiProvider {
         if (this.config.functionToolStatefulApi) {
           try {
             const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
-            const apiResponse = await axios.get(url);
+            const axiosInstance = await getAxios();
+            const apiResponse = await axiosInstance.get(url);
             statefulApiState = apiResponse.data;
             logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
           } catch (err) {
@@ -475,14 +497,18 @@ export class GoogleLiveProvider implements ApiProvider {
                     const url = new URL(functionName, this.config.functionToolStatefulApi.url).href;
                     try {
                       // Try GET first, then fall back to POST
+                      const axiosInstance = await getAxios();
                       try {
-                        const axiosResponse = await axios.get(url, {
+                        const axiosResponse = await axiosInstance.get(url, {
                           params: functionCall.args || null,
                         });
-                        callbackResponse = axiosResponse.data;
+                        callbackResponse = axiosResponse.data as Record<string, unknown>;
                       } catch {
-                        const axiosResponse = await axios.post(url, functionCall.args || null);
-                        callbackResponse = axiosResponse.data;
+                        const axiosResponse = await axiosInstance.post(
+                          url,
+                          functionCall.args || null,
+                        );
+                        callbackResponse = axiosResponse.data as Record<string, unknown>;
                       }
                       logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
                     } catch (err) {

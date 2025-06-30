@@ -1,4 +1,3 @@
-import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -10,6 +9,19 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+
+// Types for Playwright (optional dependency)
+interface Page {
+  [key: string]: any;
+}
+
+interface ElementHandle {
+  [key: string]: any;
+}
+
+interface BrowserContext {
+  [key: string]: any;
+}
 
 const nunjucks = getNunjucksEngine();
 
@@ -90,8 +102,12 @@ export class BrowserProvider implements ApiProvider {
 
     let chromium, stealth;
     try {
-      ({ chromium } = await import('playwright-extra'));
-      ({ default: stealth } = await import('puppeteer-extra-plugin-stealth'));
+      const getPlaywrightModuleName = () => 'playwright-extra';
+      const playwrightModule = await import(getPlaywrightModuleName());
+      chromium = playwrightModule.chromium;
+      const getStealthModuleName = () => 'puppeteer-extra-plugin-stealth';
+      const stealthModule = await import(getStealthModuleName());
+      stealth = stealthModule.default;
     } catch (error) {
       return {
         error: `Failed to import required modules. Please ensure the following packages are installed:\n\tplaywright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -288,11 +304,17 @@ export class BrowserProvider implements ApiProvider {
 
     const initialChildCount = await page.$$eval(
       `${parentSelector} > *`,
-      (elements) => elements.length,
+      (elements: any[]) => elements.length,
     );
 
     await page.waitForFunction(
-      ({ parentSelector, initialChildCount }) => {
+      ({
+        parentSelector,
+        initialChildCount,
+      }: {
+        parentSelector: string;
+        initialChildCount: number;
+      }) => {
         const currentCount = document.querySelectorAll(`${parentSelector} > *`).length;
         return currentCount > initialChildCount;
       },

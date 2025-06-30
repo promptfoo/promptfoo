@@ -1,7 +1,3 @@
-import type {
-  BedrockAgentRuntimeClient,
-  RetrieveAndGenerateCommandInput,
-} from '@aws-sdk/client-bedrock-agent-runtime';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString, getEnvInt } from '../../envars';
@@ -10,6 +6,15 @@ import telemetry from '../../telemetry';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
 import { AwsBedrockGenericProvider } from './index';
+
+// Types for AWS Bedrock Agent Runtime (optional dependency)
+interface BedrockAgentRuntimeClient {
+  [key: string]: any;
+}
+
+interface RetrieveAndGenerateCommandInput {
+  [key: string]: any;
+}
 
 export interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
@@ -118,7 +123,9 @@ export class AwsBedrockKnowledgeBaseProvider
       }
 
       try {
-        const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
+        const getModuleName = () => '@aws-sdk/client-bedrock-agent-runtime';
+        const bedrockModule = await import(getModuleName());
+        const BedrockAgentRuntimeClient = bedrockModule.BedrockAgentRuntimeClient;
         const credentials = await this.getCredentials();
         const client = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
@@ -192,9 +199,14 @@ export class AwsBedrockKnowledgeBaseProvider
     }
 
     try {
-      const { RetrieveAndGenerateCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
+      const getModuleName = () => '@aws-sdk/client-bedrock-agent-runtime';
+      const bedrockModule = await import(getModuleName());
+      const RetrieveAndGenerateCommand = bedrockModule.RetrieveAndGenerateCommand;
       const command = new RetrieveAndGenerateCommand(params);
 
+      if (!client) {
+        throw new Error('Failed to initialize Bedrock client');
+      }
       const response = await client.send(command);
 
       logger.debug(`Amazon Bedrock Knowledge Base API response: ${JSON.stringify(response)}`);

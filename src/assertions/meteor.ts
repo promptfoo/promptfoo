@@ -1,8 +1,24 @@
-import type { DataRecord } from 'natural';
-import type { Stemmer } from 'natural';
-import { PorterStemmer, WordNet } from 'natural';
 import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+// Types for natural module (optional dependency)
+interface DataRecord {
+  [key: string]: any;
+}
+
+interface _Stemmer {
+  stem(token: string): string;
+}
+
+interface PorterStemmerStatic {
+  stem(token: string): string;
+}
+
+interface WordNetStatic {
+  new (): {
+    lookup(word: string, callback: (results: any[]) => void): void;
+  };
+}
 
 type WordPair = [number, string];
 type MatchPair = [number, number];
@@ -63,20 +79,27 @@ function matchExactEnums(
   return [wordMatch, candidateCopy, referenceCopy];
 }
 
-function matchStemEnums(
+async function matchStemEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  stemmer: Stemmer = PorterStemmer,
-): [MatchPair[], WordPair[], WordPair[]] {
+): Promise<[MatchPair[], WordPair[], WordPair[]]> {
+  let PorterStemmer: PorterStemmerStatic;
+  try {
+    const getModuleName = () => 'natural';
+    const natural = await import(getModuleName());
+    PorterStemmer = natural.PorterStemmer;
+  } catch {
+    throw new Error('natural is not installed. Please install it first');
+  }
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
 
   // Create stemmed versions of words
   const candidateStems = candidateCopy.map(
-    ([idx, word]) => [idx, stemmer.stem(word)] as [number, string],
+    ([idx, word]) => [idx, PorterStemmer.stem(word)] as [number, string],
   );
   const referenceStems = referenceCopy.map(
-    ([idx, word]) => [idx, stemmer.stem(word)] as [number, string],
+    ([idx, word]) => [idx, PorterStemmer.stem(word)] as [number, string],
   );
 
   return matchExactEnums(
@@ -88,8 +111,16 @@ function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet: WordNet = new WordNet(),
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
+  let WordNet: WordNetStatic;
+  try {
+    const getModuleName = () => 'natural';
+    const natural = await import(getModuleName());
+    WordNet = natural.WordNet;
+  } catch {
+    throw new Error('natural is not installed. Please install it first');
+  }
+  const wordnet = new WordNet();
   const wordMatch: MatchPair[] = [];
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
@@ -99,14 +130,16 @@ async function matchSynonymEnums(
 
     // Get all synsets and their synonyms
     const candidateSynsets = await new Promise<DataRecord[]>((resolve) => {
-      wordnet.lookup(candidateWord, (results) => resolve(results));
+      wordnet.lookup(candidateWord, (results: DataRecord[]) => resolve(results));
     });
 
     // Create set of synonyms, filtering out ones with underscores
     // and including the original word
     const candidateSynonymSet = new Set([
       candidateWord,
-      ...candidateSynsets.flatMap((synset) => synset.synonyms.filter((syn) => !syn.includes('_'))),
+      ...candidateSynsets.flatMap((synset: DataRecord) =>
+        synset.synonyms.filter((syn: string) => !syn.includes('_')),
+      ),
     ]);
 
     for (let j = referenceCopy.length - 1; j >= 0; j--) {
@@ -154,10 +187,8 @@ async function calculateSingleMeteorScore(
   );
 
   // Stage 2: Stem matches
-  const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] = matchStemEnums(
-    remainingCandidate,
-    remainingReference,
-  );
+  const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] =
+    await matchStemEnums(remainingCandidate, remainingReference);
 
   // Stage 3: Synonym matches
   const [synonymMatches, ,] = await matchSynonymEnums(

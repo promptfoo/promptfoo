@@ -1,6 +1,11 @@
-import { type Option as sqlParserOption } from 'node-sql-parser';
 import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
+
+// Type for sql parser option
+interface SqlParserOption {
+  database?: string;
+  type?: string;
+}
 
 export const handleIsSql = async ({
   assertion,
@@ -28,13 +33,14 @@ export const handleIsSql = async ({
     throw new Error('is-sql assertion must have a object value.');
   }
 
-  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
+  const getModuleName = () => 'node-sql-parser';
+  const { Parser: SqlParser } = await import(getModuleName()).catch(() => {
     throw new Error('node-sql-parser is not installed. Please install it first');
   });
 
   const sqlParser = new SqlParser();
 
-  const opt: sqlParserOption = { database: databaseType };
+  const opt: SqlParserOption = { database: databaseType };
 
   const failureReasons: string[] = [];
 

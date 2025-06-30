@@ -1,10 +1,19 @@
-import { Gateway } from '@adaline/gateway';
 import { getCache } from '../../src/cache';
 import {
   AdalineGatewayCachePlugin,
   AdalineGatewayChatProvider,
   AdalineGatewayEmbeddingProvider,
 } from '../../src/providers/adaline.gateway';
+
+// Mock Gateway class
+class Gateway {
+  completeChat = jest.fn();
+  getEmbeddings = jest.fn();
+
+  constructor(config?: any) {
+    // Mock implementation
+  }
+}
 
 jest.mock('@adaline/gateway', () => ({
   Gateway: jest.fn().mockImplementation(() => ({
@@ -59,7 +68,7 @@ describe('AdalineGatewayEmbeddingProvider', () => {
   beforeEach(() => {
     mockGateway = new Gateway() as jest.Mocked<Gateway>;
     provider = new AdalineGatewayEmbeddingProvider('openai', 'text-embedding-ada-002');
-    provider.gateway = mockGateway;
+    (provider as any).gateway = mockGateway;
   });
 
   it('should call OpenAI embedding API successfully', async () => {
@@ -119,7 +128,7 @@ describe('AdalineGatewayChatProvider', () => {
   beforeEach(() => {
     mockGateway = new Gateway() as jest.Mocked<Gateway>;
     provider = new AdalineGatewayChatProvider('openai', 'gpt-4');
-    provider.gateway = mockGateway;
+    (provider as any).gateway = mockGateway;
   });
 
   it('should call chat API successfully with text response', async () => {

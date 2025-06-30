@@ -29,7 +29,9 @@ async function importSharp() {
 
   try {
     // Dynamic import of sharp
-    sharpCache = await import('sharp');
+    const getModuleName = () => 'sharp';
+    const sharpModule = await import(getModuleName());
+    sharpCache = sharpModule;
     return sharpCache;
   } catch (error) {
     logger.warn(`Sharp library not available: ${error}`);

@@ -17,8 +17,13 @@ export async function getPrompt(
   let prompt;
 
   if (!langfuse) {
-    const { Langfuse } = await import('langfuse');
-    langfuse = new Langfuse(langfuseParams);
+    try {
+      const getModuleName = () => 'langfuse';
+      const { Langfuse } = await import(getModuleName());
+      langfuse = new Langfuse(langfuseParams);
+    } catch {
+      throw new Error('langfuse is not installed. Please install it first');
+    }
   }
 
   if (type === 'text' || type === undefined) {
