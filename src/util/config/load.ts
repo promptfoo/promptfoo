@@ -449,6 +449,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
       return sharingConfig ? sharingConfig.sharing : true;
     })(),
+    tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
   return combinedConfig;
@@ -461,7 +462,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
-  type?: 'DatasetGeneration',
+  type?: 'DatasetGeneration' | 'AssertionGeneration',
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -528,6 +529,7 @@ export async function resolveConfigs(
     extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
+    tracing: fileConfig.tracing || defaultConfig.tracing,
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
@@ -550,7 +552,6 @@ export async function resolveConfigs(
     `);
     process.exit(1);
   }
-
   if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
     process.exit(1);
@@ -559,6 +560,7 @@ export async function resolveConfigs(
   if (
     // Dataset configs don't require providers
     type !== 'DatasetGeneration' &&
+    type !== 'AssertionGeneration' &&
     !hasProviders
   ) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
@@ -646,6 +648,7 @@ export async function resolveConfigs(
       basePath,
     ),
     extensions: config.extensions,
+    tracing: config.tracing,
   };
 
   if (testSuite.tests) {

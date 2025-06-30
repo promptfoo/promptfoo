@@ -109,4 +109,88 @@ describe('getUnifiedConfig', () => {
       { id: 'custom', config: { option: true } },
     ]);
   });
+
+  it('should handle maxConcurrency configuration', () => {
+    const configWithMaxConcurrency: SavedRedteamConfig = {
+      ...baseConfig,
+      maxConcurrency: 5,
+    };
+
+    const result = getUnifiedConfig(configWithMaxConcurrency);
+    // @ts-expect-error property may not exist in type
+    expect(result.redteam.maxConcurrency).toBe(5);
+
+    const configWithoutMaxConcurrency = getUnifiedConfig(baseConfig);
+    // @ts-expect-error property may not exist in type
+    expect(configWithoutMaxConcurrency.redteam.maxConcurrency).toBeUndefined();
+  });
+
+  it('should include testGenerationInstructions if provided', () => {
+    const configWithInstructions: SavedRedteamConfig = {
+      ...baseConfig,
+      testGenerationInstructions: 'Generate more tests',
+    };
+
+    const result = getUnifiedConfig(configWithInstructions);
+
+    expect(result.redteam.testGenerationInstructions).toBe('Generate more tests');
+  });
+
+  it('should omit plugin config if empty', () => {
+    const configWithEmptyPluginConfig: SavedRedteamConfig = {
+      ...baseConfig,
+      plugins: [{ id: 'plugin-empty', config: {} }],
+    };
+
+    const result = getUnifiedConfig(configWithEmptyPluginConfig);
+
+    expect(result.redteam.plugins).toEqual([{ id: 'plugin-empty' }]);
+  });
+
+  it('should omit strategy config if not needed', () => {
+    const configWithSimpleStrategy: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: [{ id: 'basic', config: {} }],
+    };
+
+    const result = getUnifiedConfig(configWithSimpleStrategy);
+
+    expect(result.redteam.strategies).toEqual([{ id: 'basic' }]);
+  });
+
+  it('should add stateful to multi-turn strategies if stateful is true', () => {
+    const configWithMultiTurn: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: ['goat'],
+      target: {
+        ...baseConfig.target,
+        config: {
+          ...baseConfig.target.config,
+          stateful: true,
+        },
+      },
+    };
+
+    const result = getUnifiedConfig(configWithMultiTurn);
+
+    expect(result.redteam.strategies).toEqual([{ id: 'goat', config: { stateful: true } }]);
+  });
+
+  it('should not add stateful config for multi-turn strategies if stateful is false', () => {
+    const configWithNonStateful: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: ['goat'],
+      target: {
+        ...baseConfig.target,
+        config: {
+          ...baseConfig.target.config,
+          stateful: false,
+        },
+      },
+    };
+
+    const result = getUnifiedConfig(configWithNonStateful);
+
+    expect(result.redteam.strategies).toEqual([{ id: 'goat' }]);
+  });
 });

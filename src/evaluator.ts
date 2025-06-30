@@ -7,7 +7,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
-import { fetchWithCache, getCache } from './cache';
+import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
@@ -17,9 +17,15 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { isPromptfooSampleTarget } from './providers/shared';
 import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import {
+  generateTraceContextIfNeeded,
+  startOtlpReceiverIfNeeded,
+  stopOtlpReceiverIfNeeded,
+} from './tracing/evaluatorTracing';
 import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
@@ -255,23 +261,39 @@ export async function runEval({
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
+      // Generate trace context if tracing is enabled
+      const traceContext = await generateTraceContextIfNeeded(
+        test,
+        evaluateOptions,
+        testIdx,
+        promptIdx,
+      );
+
+      const callApiContext: any = {
+        // Always included
+        vars,
+
+        // Part of these may be removed in python and script providers, but every Javascript provider gets them
+        prompt,
+        filters,
+        originalProvider: provider,
+        test,
+
+        // All of these are removed in python and script providers, but every Javascript provider gets them
+        logger: logger as unknown as winston.Logger,
+        getCache,
+      };
+
+      // Only add trace context properties if tracing is enabled
+      if (traceContext) {
+        callApiContext.traceparent = traceContext.traceparent;
+        callApiContext.evaluationId = traceContext.evaluationId;
+        callApiContext.testCaseId = traceContext.testCaseId;
+      }
+
       response = await activeProvider.callApi(
         renderedPrompt,
-        {
-          // Always included
-          vars,
-
-          // Part of these may be removed in python and script providers, but every Javascript provider gets them
-          prompt,
-          filters,
-          originalProvider: provider,
-          test,
-
-          // All of these are removed in python and script providers, but every Javascript provider gets them
-          logger: logger as unknown as winston.Logger,
-          fetchWithCache,
-          getCache,
-        },
+        callApiContext,
         abortSignal ? { abortSignal } : undefined,
       );
 
@@ -462,9 +484,44 @@ export function calculateThreadsPerBar(
   numProgressBars: number,
   barIndex: number,
 ): number {
-  const minThreadsPerBar = Math.floor(concurrency / numProgressBars);
+  const threadsPerBar = Math.floor(concurrency / numProgressBars);
   const extraThreads = concurrency % numProgressBars;
-  return barIndex < extraThreads ? minThreadsPerBar + 1 : minThreadsPerBar;
+  return barIndex < extraThreads ? threadsPerBar + 1 : threadsPerBar;
+}
+
+/**
+ * Safely formats variables for display in progress bars and logs.
+ * Handles extremely large variables that could cause RangeError crashes.
+ *
+ * @param vars - Variables to format
+ * @param maxLength - Maximum length of the final formatted string
+ * @returns Formatted variables string or fallback message
+ */
+export function formatVarsForDisplay(
+  vars: Record<string, any> | undefined,
+  maxLength: number,
+): string {
+  if (!vars || Object.keys(vars).length === 0) {
+    return '';
+  }
+
+  try {
+    // Simple approach: limit individual values, then truncate the whole result
+    const formatted = Object.entries(vars)
+      .map(([key, value]) => {
+        // Prevent memory issues by limiting individual values first
+        const valueStr = String(value).slice(0, 100);
+        return `${key}=${valueStr}`;
+      })
+      .join(' ')
+      .replace(/\n/g, ' ')
+      .slice(0, maxLength);
+
+    return formatted;
+  } catch {
+    // Any error - return safe fallback
+    return '[vars unavailable]';
+  }
 }
 
 export function generateVarCombinations(
@@ -516,6 +573,7 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
@@ -538,8 +596,10 @@ class Evaluator {
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
-  async evaluate(): Promise<Eval> {
-    const { testSuite, options } = this;
+  private async _runEvaluation(): Promise<Eval> {
+    const { options } = this;
+    let { testSuite } = this;
+
     const startTime = Date.now();
     const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
     let evalTimedOut = false;
@@ -557,12 +617,15 @@ class Evaluator {
         globalAbortController?.abort();
       }, maxEvalTimeMs);
     }
+
     const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
       }
     };
+
+    logger.info(`Starting evaluation ${this.evalRecord.id}`);
 
     // Add abort checks at key points
     checkAbort();
@@ -571,7 +634,10 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
+      suite: testSuite,
+    });
+    testSuite = beforeAllOut.suite;
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -653,6 +719,8 @@ class Evaluator {
         prompts.push(completedPrompt);
       }
     }
+
+    this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -812,7 +880,29 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
-                test: { ...testCase, vars, options: testCase.options },
+                test: (() => {
+                  const baseTest = {
+                    ...testCase,
+                    vars,
+                    options: testCase.options,
+                  };
+                  // Only add tracing metadata fields if tracing is actually enabled
+                  const tracingEnabled =
+                    testCase.metadata?.tracingEnabled === true ||
+                    testSuite.tracing?.enabled === true;
+
+                  if (tracingEnabled) {
+                    return {
+                      ...baseTest,
+                      metadata: {
+                        ...testCase.metadata,
+                        tracingEnabled: true,
+                        evaluationId: this.evalRecord.id,
+                      },
+                    };
+                  }
+                  return baseTest;
+                })(),
                 nunjucksFilters: testSuite.nunjucksFilters,
                 testIdx,
                 promptIdx,
@@ -820,7 +910,7 @@ class Evaluator {
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
-                isRedteam: this.testSuite.redteam != null,
+                isRedteam: testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
@@ -856,9 +946,10 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(testSuite.extensions, 'beforeEach', {
+      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+      evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
 
@@ -1159,11 +1250,7 @@ class Evaluator {
 
       if (isWebUI) {
         const provider = evalStep.provider.label || evalStep.provider.id();
-        const vars = Object.entries(evalStep.test.vars || {})
-          .map(([k, v]) => `${k}=${v}`)
-          .join(' ')
-          .slice(0, 50)
-          .replace(/\n/g, ' ');
+        const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (multibar && evalStep) {
         const numProgressBars = Math.min(concurrency, 20);
@@ -1179,14 +1266,11 @@ class Evaluator {
           progressBarIndex,
         );
 
+        const vars = formatVarsForDisplay(evalStep.test.vars, 10);
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-          vars: Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 10)
-            .replace(/\n/g, ' '),
+          vars,
           activeThreads: threadsForThisBar,
         });
       } else {
@@ -1262,15 +1346,11 @@ class Evaluator {
     try {
       if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations first
-        logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
         for (const evalStep of serialRunEvalOptions) {
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
-            const vars = Object.entries(evalStep.test.vars || {})
-              .map(([k, v]) => `${k}=${v}`)
-              .join(' ')
-              .slice(0, 50)
-              .replace(/\n/g, ' ');
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
               `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
@@ -1283,13 +1363,14 @@ class Evaluator {
 
       // Then run concurrent evaluations
       logger.info(
-        `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
+        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
       );
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
         const idx = runEvalOptions.indexOf(evalStep);
         await processEvalStepWithTimeout(evalStep, idx);
         processedIndices.add(idx);
+        await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
@@ -1493,14 +1574,39 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
-      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
-      // isRedteam: Boolean(testSuite.redteam),
+      numPasses: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testPassCount || 0),
+        0,
+      ),
+      numFails: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testFailCount || 0),
+        0,
+      ),
+      numErrors: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testErrorCount || 0),
+        0,
+      ),
+      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+      isRedteam: Boolean(options.isRedteam),
     });
 
     // Update database signal file after all results are written
     updateSignalFile();
 
     return this.evalRecord;
+  }
+
+  async evaluate(): Promise<Eval> {
+    // Start OTLP receiver if tracing is enabled
+    await startOtlpReceiverIfNeeded(this.testSuite);
+
+    // Wrap the rest of the evaluation in try-finally to ensure OTLP receiver cleanup
+    try {
+      return await this._runEvaluation();
+    } finally {
+      // Stop OTLP receiver if it was started
+      await stopOtlpReceiverIfNeeded();
+    }
   }
 }
 

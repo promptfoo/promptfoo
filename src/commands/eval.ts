@@ -269,6 +269,7 @@ export async function doEval(
       ...options,
       eventSource: 'cli',
       abortSignal: evaluateOptions.abortSignal,
+      isRedteam: Boolean(config.redteam),
     });
 
     // Clear results from memory to avoid memory issues
@@ -405,7 +406,7 @@ export async function doEval(
 
         logger.info(
           `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
-            'https://forms.gle/YFLgTe1dKJKNSCsU7',
+            'https://promptfoo.dev/feedback',
           )}`,
         );
       }
@@ -421,23 +422,13 @@ export async function doEval(
 
     const isRedteam = Boolean(config.redteam);
 
-    logger.info(chalk.green.bold(`Successes: ${successes}`));
-    logger.info(chalk.red.bold(`Failures: ${failures}`));
-    if (!Number.isNaN(errors)) {
-      logger.info(chalk.red.bold(`Errors: ${errors}`));
-    }
-    if (!Number.isNaN(passRate)) {
-      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
-    }
-    logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
-
     // Handle token usage display
     if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
       const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
       const evalTokens = {
         prompt: tokenUsage.prompt || 0,
         completion: tokenUsage.completion || 0,
-        total: combinedTotal,
+        total: tokenUsage.total || combinedTotal,
         cached: tokenUsage.cached || 0,
         completionDetails: tokenUsage.completionDetails || {
           reasoning: 0,
@@ -446,7 +437,6 @@ export async function doEval(
         },
       };
 
-      printBorder();
       logger.info(chalk.bold('Token Usage Summary:'));
 
       if (isRedteam) {
@@ -478,7 +468,7 @@ export async function doEval(
       // Provider breakdown
       const tracker = TokenUsageTracker.getInstance();
       const providerIds = tracker.getProviderIds();
-      if (providerIds.length > 0) {
+      if (providerIds.length > 1) {
         logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
 
         // Sort providers by total token usage (descending)
@@ -543,11 +533,23 @@ export async function doEval(
       }
 
       // Grand total
-      const grandTotal = evalTokens.total + tokenUsage.assertions.total;
+      const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
       logger.info(
         `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
       );
+      printBorder();
     }
+
+    logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+    logger.info(chalk.green.bold(`Successes: ${successes}`));
+    logger.info(chalk.red.bold(`Failures: ${failures}`));
+    if (!Number.isNaN(errors)) {
+      logger.info(chalk.red.bold(`Errors: ${errors}`));
+    }
+    if (!Number.isNaN(passRate)) {
+      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+    }
+    printBorder();
 
     telemetry.record('command_used', {
       name: 'eval',

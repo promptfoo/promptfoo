@@ -46,7 +46,7 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
-import { ToxicChatPlugin } from './toxicchat';
+import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
@@ -218,6 +218,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.purpose,
         params.injectVar,
         params.n,
+        params.config,
       );
       return testCases.map((testCase) => ({
         ...testCase,

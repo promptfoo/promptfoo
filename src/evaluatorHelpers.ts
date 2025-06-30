@@ -8,10 +8,19 @@ import { getPrompt as getHeliconePrompt } from './integrations/helicone';
 import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
 import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
+import type EvalResult from './models/evalResult';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
-import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
+import {
+  type ApiProvider,
+  type NunjucksFilterMap,
+  type Prompt,
+  type TestSuite,
+  type CompletedPrompt,
+  type EvaluateResult,
+  type TestCase,
+} from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
 import invariant from './util/invariant';
@@ -324,29 +333,106 @@ export async function renderPrompt(
   }
 }
 
+// ================================
+// Extension Hooks
+// ================================
+
+type BeforeAllExtensionHookContext = {
+  suite: TestSuite;
+};
+
+type BeforeEachExtensionHookContext = {
+  test: TestCase;
+};
+
+type AfterEachExtensionHookContext = {
+  test: TestCase;
+  result: EvaluateResult;
+};
+
+type AfterAllExtensionHookContext = {
+  suite: TestSuite;
+  results: EvalResult[];
+  prompts: CompletedPrompt[];
+};
+
+// Maps hook names to their context types.
+type HookContextMap = {
+  beforeAll: BeforeAllExtensionHookContext;
+  beforeEach: BeforeEachExtensionHookContext;
+  afterEach: AfterEachExtensionHookContext;
+  afterAll: AfterAllExtensionHookContext;
+};
+
+export type ExtensionHookContext =
+  | BeforeAllExtensionHookContext
+  | BeforeEachExtensionHookContext
+  | AfterEachExtensionHookContext
+  | AfterAllExtensionHookContext;
+
 /**
- * Runs extension hooks for the given hook name and context.
+ * Runs extension hooks for the given hook name and context. The hook will be called with the context object,
+ * and can update the context object to persist data into provider calls.
  * @param extensions - An array of extension paths, or null.
  * @param hookName - The name of the hook to run.
- * @param context - The context object to pass to the hook.
- * @returns A Promise that resolves when all hooks have been run.
+ * @param context - The context object to pass to the hook. T depends on the type of the hook.
+ * @returns A Promise that resolves with one of the following:
+ *  - The original context object, if no extensions are provided OR if the returned context is not valid.
+ *  - The updated context object, if the extension hook returns a valid context object. The updated context,
+ *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
-export async function runExtensionHook(
+export async function runExtensionHook<HookName extends keyof HookContextMap>(
   extensions: string[] | null | undefined,
-  hookName: string,
-  context: any,
-) {
+  hookName: HookName,
+  context: HookContextMap[HookName],
+): Promise<HookContextMap[HookName]> {
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
-    return;
+    return context;
   }
 
+  // TODO(Will): It would be nice if this logged the hooks used.
   telemetry.recordOnce('feature_used', {
     feature: 'extension_hook',
   });
 
+  let updatedContext: HookContextMap[HookName] = { ...context };
+
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-    await transform(extension, hookName, context, false);
+
+    const extensionReturnValue = await transform(extension, hookName, context, false);
+
+    // If the extension hook returns a value, update the context with the value's mutable fields.
+    // This also provides backwards compatibility for extension hooks that do not return a value.
+    if (extensionReturnValue) {
+      switch (hookName) {
+        case 'beforeAll': {
+          (updatedContext as BeforeAllExtensionHookContext) = {
+            suite: {
+              ...(context as BeforeAllExtensionHookContext).suite,
+              // Mutable properties:
+              prompts: extensionReturnValue.suite.prompts,
+              providerPromptMap: extensionReturnValue.suite.providerPromptMap,
+              tests: extensionReturnValue.suite.tests,
+              scenarios: extensionReturnValue.suite.scenarios,
+              defaultTest: extensionReturnValue.suite.defaultTest,
+              nunjucksFilters: extensionReturnValue.suite.nunjucksFilters,
+              derivedMetrics: extensionReturnValue.suite.derivedMetrics,
+              redteam: extensionReturnValue.suite.redteam,
+            },
+          };
+          break;
+        }
+        case 'beforeEach': {
+          (updatedContext as BeforeEachExtensionHookContext) = {
+            test: extensionReturnValue.test,
+          };
+          break;
+        }
+      }
+    }
   }
+
+  return updatedContext;
 }

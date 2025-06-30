@@ -64,7 +64,7 @@ import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
-import { ToxicChatGrader } from './plugins/toxicchat';
+import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
