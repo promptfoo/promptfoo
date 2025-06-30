@@ -1,0 +1,175 @@
+.container {
+  width: 100%;
+  padding: 0.5rem;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.header h3 {
+  margin: 0;
+  color: var(--ifm-heading-color);
+}
+
+.flowChart {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  margin: 0 auto;
+  max-width: 100%;
+}
+
+.flowStep {
+  flex: 1;
+  min-width: 0; /* Allows flex items to shrink below content size */
+  padding: 1rem;
+  background: var(--ifm-background-surface-color);
+  border: 2px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.flowStep:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.flowStep.active {
+  border-color: var(--ifm-color-primary);
+  background: var(--ifm-color-primary-lightest);
+}
+
+.stepIcon {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.flowStep h4 {
+  margin: 0 0 0.25rem;
+  color: var(--ifm-heading-color);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flowStep p {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.8rem;
+  line-height: 1.3;
+  /* Allow up to 2 lines of text */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.flowArrow {
+  color: var(--ifm-color-primary);
+  font-size: 1.25rem;
+  font-weight: bold;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem;
+}
+
+.details {
+  margin-top: 2rem;
+}
+
+.detailCard {
+  padding: 2rem;
+  background: var(--ifm-background-surface-color);
+  border: 2px solid var(--ifm-color-emphasis-200);
+  border-radius: 10px;
+}
+
+.detailCard h4 {
+  margin: 0 0 1rem;
+  color: var(--ifm-heading-color);
+}
+
+.detailCard p {
+  margin: 0 0 1.5rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.stepDetails {
+  background: var(--ifm-pre-background);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.codeExample {
+  display: block;
+  padding: 1rem;
+  margin: 0;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ifm-color-emphasis-900);
+  white-space: pre;
+}
+
+/* Dark mode adjustments */
+html[data-theme='dark'] .container {
+  background: var(--ifm-card-background-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme='dark'] .flowStep {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .flowStep.active {
+  background: var(--ifm-color-primary-darker);
+  border-color: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .detailCard {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .container {
+    padding: 0.25rem;
+  }
+
+  .flowChart {
+    gap: 0.5rem;
+  }
+
+  .flowStep {
+    padding: 0.75rem;
+  }
+
+  .stepIcon {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .flowStep h4 {
+    font-size: 0.8rem;
+  }
+
+  .flowStep p {
+    font-size: 0.7rem;
+  }
+
+  .flowArrow {
+    font-size: 1rem;
+    padding: 0 0.125rem;
+  }
+}

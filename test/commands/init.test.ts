@@ -29,10 +29,7 @@ jest.mock('../../src/commands/init', () => {
 });
 
 jest.mock('fs/promises');
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(),
-}));
+jest.mock('path');
 jest.mock('../../src/constants');
 jest.mock('../../src/onboarding');
 jest.mock('../../src/telemetry');
@@ -216,7 +213,7 @@ describe('init command', () => {
       expect(initCmd?.description()).toBe(
         'Initialize project with dummy files or download an example',
       );
-      expect(initCmd?.options).toHaveLength(3);
+      expect(initCmd?.options).toHaveLength(2);
     });
   });
 });

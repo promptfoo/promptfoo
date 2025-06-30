@@ -4,7 +4,8 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
-import logger, { setLogLevel } from '../../logger';
+import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
@@ -34,16 +35,17 @@ export function redteamRunCommand(program: Command) {
       'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
-    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
-      Number.parseInt(val, 10),
+    .option(
+      '-j, --max-concurrency <number>',
+      'Maximum number of concurrent API calls',
+      (val) => Number.parseInt(val, 10),
+      DEFAULT_MAX_CONCURRENCY,
     )
     .option('--delay <number>', 'Delay in milliseconds between API calls', (val) =>
       Number.parseInt(val, 10),
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug output', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(
       '--filter-providers, --filter-targets <providers>',
@@ -55,16 +57,14 @@ export function redteamRunCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
+      await telemetry.send();
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
         const configObj = await getConfigFromCloud(opts.config, opts.target);
+
         // backwards compatible for old cloud servers
         if (
           opts.target &&
@@ -77,6 +77,12 @@ export function redteamRunCommand(program: Command) {
         opts.config = undefined;
 
         opts.loadedFromCloud = true;
+      } else if (opts.target) {
+        logger.error(
+          `Target ID (-t) can only be used when -c is used. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}. `,
+        );
+        process.exitCode = 1;
+        return;
       }
 
       try {

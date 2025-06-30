@@ -1,4 +1,10 @@
-# PDF Variables
+# pdf-variables (PDF Variables)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example pdf-variables
+```
 
 First, download some PDFs from arxiv.org:
 

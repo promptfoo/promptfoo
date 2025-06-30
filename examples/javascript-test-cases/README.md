@@ -1,4 +1,10 @@
-# JavaScript/TypeScript Test Cases Example
+# javascript-test-cases (JavaScript/TypeScript Test Cases Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example javascript-test-cases
+```
 
 This example demonstrates different ways to generate test cases using JavaScript/TypeScript functions. It shows both static and dynamic test case generation with optional type checking.
 

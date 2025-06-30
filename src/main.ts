@@ -10,6 +10,7 @@ import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
+import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
@@ -17,9 +18,11 @@ import { listCommand } from './commands/list';
 import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
+import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
@@ -27,7 +30,44 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
+import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
+
+/**
+ * Adds verbose and env-file options to all commands recursively
+ */
+export function addCommonOptionsRecursively(command: Command) {
+  const hasVerboseOption = command.options.some(
+    (option) => option.short === '-v' || option.long === '--verbose',
+  );
+  if (!hasVerboseOption) {
+    command.option('-v, --verbose', 'Show debug logs', false);
+  }
+
+  const hasEnvFileOption = command.options.some(
+    (option) => option.long === '--env-file' || option.long === '--env-path',
+  );
+  if (!hasEnvFileOption) {
+    command.option('--env-file, --env-path <path>', 'Path to .env file');
+  }
+
+  command.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().verbose) {
+      setLogLevel('debug');
+      logger.debug('Verbose mode enabled via --verbose flag');
+    }
+
+    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    if (envPath) {
+      setupEnv(envPath);
+      logger.debug(`Loading environment from ${envPath}`);
+    }
+  });
+
+  command.commands.forEach((subCommand) => {
+    addCommonOptionsRecursively(subCommand);
+  });
+}
 
 async function main() {
   await checkForUpdates();
@@ -45,8 +85,6 @@ async function main() {
       program.help();
       process.exitCode = 1;
     });
-
-  program.option('-v, --verbose', 'Show debug logs', false);
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
@@ -67,9 +105,11 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
@@ -81,18 +121,17 @@ async function main() {
     redteamConfig ?? defaultConfig,
     redteamConfigPath ?? defaultConfigPath,
   );
+  redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
 
-  program.parse();
+  // Add common options to all commands recursively
+  addCommonOptionsRecursively(program);
 
-  const globalOpts = program.opts();
-  if (globalOpts.verbose) {
-    setLogLevel('debug');
-  }
+  program.parse();
 }
 
 if (require.main === module) {

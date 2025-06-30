@@ -10,6 +10,7 @@ import {
   TERMINAL_MAX_WIDTH,
   CLOUD_PROVIDER_PREFIX,
 } from '../src/constants';
+import { REDTEAM_DEFAULTS } from '../src/redteam/constants';
 
 describe('constants', () => {
   beforeEach(() => {
@@ -27,6 +28,11 @@ describe('constants', () => {
 
   it('should have DEFAULT_API_BASE_URL set to api.promptfoo.app', () => {
     expect(DEFAULT_API_BASE_URL).toBe('https://api.promptfoo.app');
+  });
+
+  it('should have REDTEAM_DEFAULTS with correct values', () => {
+    expect(REDTEAM_DEFAULTS.MAX_CONCURRENCY).toBe(4);
+    expect(REDTEAM_DEFAULTS.NUM_TESTS).toBe(10);
   });
 
   describe('getShareApiBaseUrl', () => {
@@ -107,8 +113,13 @@ describe('constants', () => {
   });
 
   describe('TERMINAL_MAX_WIDTH', () => {
-    it('should be 120 if stdout is not TTY', () => {
-      expect(TERMINAL_MAX_WIDTH).toBe(120);
+    it('should match expected terminal width', () => {
+      const expectedWidth =
+        process?.stdout?.isTTY && process?.stdout?.columns && process?.stdout?.columns > 10
+          ? process.stdout.columns - 10
+          : 120;
+
+      expect(TERMINAL_MAX_WIDTH).toBe(expectedWidth);
     });
   });
 

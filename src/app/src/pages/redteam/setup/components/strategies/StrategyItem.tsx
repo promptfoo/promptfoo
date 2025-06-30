@@ -13,7 +13,6 @@ const CONFIGURABLE_STRATEGIES = [
   'pandamonium',
   'jailbreak',
   'jailbreak:tree',
-  'tool-discovery:multi-turn',
   'gcg',
   'citation',
 ] as const;

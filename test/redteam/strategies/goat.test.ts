@@ -33,6 +33,7 @@ describe('GOAT Strategy', () => {
     expect(result[0].metadata).toEqual({
       pluginId: 'test-plugin',
       strategyId: 'goat',
+      originalText: 'test goal',
     });
   });
 
@@ -54,6 +55,7 @@ describe('GOAT Strategy', () => {
       pluginId: 'test-plugin',
       key: 'value',
       strategyId: 'goat',
+      originalText: 'test goal',
     });
   });
 });

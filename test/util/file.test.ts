@@ -1,7 +1,11 @@
 import * as fs from 'fs';
 import path from 'path';
 import cliState from '../../src/cliState';
-import { maybeLoadFromExternalFile, getResolvedRelativePath } from '../../src/util/file';
+import {
+  maybeLoadFromExternalFile,
+  getResolvedRelativePath,
+  maybeLoadConfigFromExternalFile,
+} from '../../src/util/file';
 import { safeResolve, safeJoin } from '../../src/util/file.node';
 import {
   isJavascriptFile,
@@ -209,6 +213,251 @@ describe('file utilities', () => {
 
       cliState.basePath = undefined;
     });
+
+    it('should recursively load file references in objects', () => {
+      jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": 1}').mockReturnValueOnce('bar');
+
+      const config = {
+        data: 'file://data.json',
+        nested: {
+          text: 'file://note.txt',
+        },
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ data: { foo: 1 }, nested: { text: 'bar' } });
+    });
+
+    it('should handle arrays and nested structures', () => {
+      jest.mocked(fs.readFileSync).mockReturnValueOnce('test content');
+
+      const config = {
+        items: ['file://test.txt', 'normal string'],
+        nullValue: null,
+        emptyArray: [],
+        nested: {
+          deep: {
+            value: 'file://test.txt',
+          },
+        },
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        items: ['test content', 'normal string'],
+        nullValue: null,
+        emptyArray: [],
+        nested: {
+          deep: {
+            value: 'test content',
+          },
+        },
+      });
+    });
+
+    it('should handle primitive values safely', () => {
+      expect(maybeLoadConfigFromExternalFile('normal string')).toBe('normal string');
+      expect(maybeLoadConfigFromExternalFile(42)).toBe(42);
+      expect(maybeLoadConfigFromExternalFile(true)).toBe(true);
+      expect(maybeLoadConfigFromExternalFile(null)).toBeNull();
+      expect(maybeLoadConfigFromExternalFile(undefined)).toBeUndefined();
+    });
+
+    it('should handle deeply nested objects with multiple file references', () => {
+      jest
+        .mocked(fs.readFileSync)
+        .mockReturnValueOnce('{"nested": {"value": 123}}')
+        .mockReturnValueOnce('["item1", "item2"]')
+        .mockReturnValueOnce('deeply nested content');
+
+      const config = {
+        level1: {
+          level2: {
+            level3: {
+              data: 'file://deep.json',
+              items: 'file://items.json',
+              level4: {
+                content: 'file://content.txt',
+                static: 'unchanged',
+              },
+            },
+          },
+        },
+        topLevel: 'unchanged',
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(3);
+      expect(result).toEqual({
+        level1: {
+          level2: {
+            level3: {
+              data: { nested: { value: 123 } },
+              items: ['item1', 'item2'],
+              level4: {
+                content: 'deeply nested content',
+                static: 'unchanged',
+              },
+            },
+          },
+        },
+        topLevel: 'unchanged',
+      });
+    });
+
+    it('should handle arrays with mixed content types including file references', () => {
+      jest
+        .mocked(fs.readFileSync)
+        .mockReturnValueOnce('{"config": "loaded"}')
+        .mockReturnValueOnce('text content')
+        .mockReturnValueOnce('{"config": "loaded"}');
+
+      const config = {
+        mixedArray: [
+          'string value',
+          42,
+          true,
+          { normal: 'object' },
+          'file://config.json',
+          ['nested', 'array', 'file://text.txt'],
+          null,
+          { nested: { file: 'file://config.json' } },
+        ],
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(result).toEqual({
+        mixedArray: [
+          'string value',
+          42,
+          true,
+          { normal: 'object' },
+          { config: 'loaded' },
+          ['nested', 'array', 'text content'],
+          null,
+          { nested: { file: { config: 'loaded' } } },
+        ],
+      });
+    });
+
+    it('should handle edge cases with empty objects and arrays', () => {
+      const config = {
+        emptyObject: {},
+        emptyArray: [],
+        arrayWithEmpties: [{}, [], null, undefined, ''],
+        nested: {
+          empty: {},
+          moreNested: {
+            stillEmpty: {},
+            emptyArray: [],
+          },
+        },
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(result).toEqual(config);
+    });
+
+    it('should preserve object keys that contain special characters', () => {
+      jest.mocked(fs.readFileSync).mockReturnValueOnce('special content');
+
+      const config = {
+        'key-with-dashes': 'file://special.txt',
+        'key.with.dots': 'normal value',
+        'key with spaces': { nested: 'value' },
+        'key@with#symbols': ['array', 'value'],
+        123: 'numeric key',
+        '': 'empty key',
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(result).toEqual({
+        'key-with-dashes': 'special content',
+        'key.with.dots': 'normal value',
+        'key with spaces': { nested: 'value' },
+        'key@with#symbols': ['array', 'value'],
+        123: 'numeric key',
+        '': 'empty key',
+      });
+    });
+
+    it('should handle objects with prototype pollution attempts safely', () => {
+      jest.mocked(fs.readFileSync).mockReturnValueOnce('malicious content');
+
+      const config = {
+        __proto__: 'file://malicious.txt',
+        constructor: { normal: 'value' },
+        prototype: ['safe', 'array'],
+        normal: 'safe value',
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(result).toEqual({
+        __proto__: 'malicious content',
+        constructor: { normal: 'value' },
+        prototype: ['safe', 'array'],
+        normal: 'safe value',
+      });
+    });
+
+    it('should handle very large nested structures efficiently', () => {
+      jest.mocked(fs.readFileSync).mockReturnValue('file content');
+
+      // Create a large nested structure
+      const createNestedConfig = (depth: number): any => {
+        if (depth === 0) {
+          return 'file://test.txt';
+        }
+        return {
+          [`level${depth}`]: createNestedConfig(depth - 1),
+          [`static${depth}`]: `value at depth ${depth}`,
+        };
+      };
+
+      const config = createNestedConfig(10);
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      // Should have loaded the file reference at the deepest level
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+
+      // Verify the structure is preserved
+      let current = result;
+      for (let i = 10; i > 0; i--) {
+        expect(current).toHaveProperty(`level${i}`);
+        expect(current).toHaveProperty(`static${i}`, `value at depth ${i}`);
+        current = current[`level${i}`];
+      }
+      expect(current).toBe('file content');
+    });
+
+    it('should handle functions and undefined values in objects gracefully', () => {
+      const testFunction = () => 'test';
+
+      const config = {
+        func: testFunction,
+        undef: undefined,
+        normal: 'value',
+        nested: {
+          func2: testFunction,
+          undef2: undefined,
+        },
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(result).toEqual(config);
+      expect(result.func).toBe(testFunction);
+      expect(result.nested.func2).toBe(testFunction);
+    });
   });
 
   describe('getResolvedRelativePath', () => {
@@ -224,23 +473,11 @@ describe('file utilities', () => {
 
     it('returns absolute path unchanged', () => {
       const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(getResolvedRelativePath(absolutePath, '/some/base/path')).toBe(absolutePath);
-    });
-
-    it('resolves relative path with contextBasePath', () => {
-      expect(getResolvedRelativePath('relative/file.txt', '/base/path')).toBe(
-        path.join('/base/path', 'relative/file.txt'),
-      );
+      expect(getResolvedRelativePath(absolutePath, false)).toBe(absolutePath);
     });
 
     it('uses process.cwd() when isCloudConfig is true', () => {
-      expect(getResolvedRelativePath('relative/file.txt', '/base/path', true)).toBe(
-        path.join('/mock/cwd', 'relative/file.txt'),
-      );
-    });
-
-    it('uses process.cwd() when contextBasePath is undefined', () => {
-      expect(getResolvedRelativePath('relative/file.txt')).toBe(
+      expect(getResolvedRelativePath('relative/file.txt', true)).toBe(
         path.join('/mock/cwd', 'relative/file.txt'),
       );
     });

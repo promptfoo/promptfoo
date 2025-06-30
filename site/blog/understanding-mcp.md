@@ -4,6 +4,7 @@ title: 'Inside MCP: A Protocol for AI Integration'
 description: 'A hands-on exploration of Model Context Protocol - the standard that connects AI systems with real-world tools and data'
 image: /img/blog/mcp/mcp.png
 date: 2025-05-06
+authors: [asmi]
 ---
 
 import MCPConnectionSimulator from './mcp/components/MCPConnectionSimulator';
@@ -15,6 +16,8 @@ import MCPMessageExplorer from './mcp/components/MCPMessageExplorer';
 Modern AI models are incredibly powerful at understanding and generating text, code, and ideas. But to be truly useful, they need to connect with the real world - to read your code, query your database, or send messages to your team. This is where Model Context Protocol (MCP) comes in.
 
 MCP is an open standard that creates a common language between AI systems and the tools they need to help you. It defines clear rules for how AI assistants can securely access and work with external resources, from local files to cloud services. Think of it as building bridges between AI models and the digital world around them.
+
+<!-- truncate -->
 
 :::tip Why MCP Matters
 
@@ -141,7 +144,6 @@ MCP defines three key message types that enable these integrations:
 But the real power of MCP comes from how these pieces work together. For example, when you're adding user authentication:
 
 1. The AI assistant can:
-
    - Create a new branch in GitHub
    - Add auth tables in Supabase
    - Generate API endpoints

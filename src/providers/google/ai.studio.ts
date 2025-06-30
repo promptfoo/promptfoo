@@ -6,6 +6,7 @@ import type {
   ProviderResponse,
   CallApiContextParams,
   GuardrailResponse,
+  ProviderEmbeddingResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
@@ -51,6 +52,11 @@ class AIStudioGenericProvider implements ApiProvider {
     return `[Google AI Studio Provider ${this.modelName}]`;
   }
 
+  getApiUrlDefault(): string {
+    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
+    return `https://${renderedHost}`;
+  }
+
   getApiHost(): string | undefined {
     const apiHost =
       this.config.apiHost ||
@@ -59,10 +65,29 @@ class AIStudioGenericProvider implements ApiProvider {
       getEnvString('GOOGLE_API_HOST') ||
       getEnvString('PALM_API_HOST') ||
       DEFAULT_API_HOST;
+    return getNunjucksEngine().renderString(apiHost, {});
+  }
+
+  getApiUrl(): string {
+    // Check for apiHost first (most specific override)
+    const apiHost =
+      this.config.apiHost ||
+      this.env?.GOOGLE_API_HOST ||
+      this.env?.PALM_API_HOST ||
+      getEnvString('GOOGLE_API_HOST') ||
+      getEnvString('PALM_API_HOST');
     if (apiHost) {
-      return getNunjucksEngine().renderString(apiHost, {});
+      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
+      return `https://${renderedHost}`;
     }
-    return undefined;
+
+    // Check for apiBaseUrl (less specific override)
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.GOOGLE_API_BASE_URL ||
+      getEnvString('GOOGLE_API_BASE_URL') ||
+      this.getApiUrlDefault()
+    );
   }
 
   getApiKey(): string | undefined {
@@ -140,19 +165,20 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta3/models/${
+        `${this.getApiUrl()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be passed
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -256,13 +282,14 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/${apiVersion}/models/${
+        `${this.getApiUrl()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be set
           },
           body: JSON.stringify(body),
         },
@@ -340,8 +367,91 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
+    }
+  }
+}
+
+export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
+  constructor(
+    modelName: string,
+    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+  }
+
+  async callApi(): Promise<ProviderResponse> {
+    throw new Error('Embedding provider does not support callApi. Use callEmbeddingApi instead.');
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.getApiKey()) {
+      throw new Error('Google API key is not set for embedding');
+    }
+
+    // Format request body according to the API spec
+    const body = {
+      model: `models/${this.modelName}`,
+      content: {
+        parts: [
+          {
+            text,
+          },
+        ],
+      },
+    };
+
+    // Use embedContent endpoint
+    const endpoint = 'embedContent';
+    const url = `${this.getApiUrl()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
+
+    logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
+
+    let data,
+      _cached = false;
+    try {
+      ({ data, cached: _cached } = await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be set
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        false,
+      ));
+    } catch (err) {
+      logger.error(`Google Embedding API call error: ${err}`);
+      throw err;
+    }
+
+    logger.debug(`Google Embedding API response: ${JSON.stringify(data)}`);
+
+    try {
+      // The embedding is returned in data.embedding.values
+      const embedding = data.embedding?.values;
+      if (!embedding) {
+        throw new Error('No embedding values found in Google Embedding API response');
+      }
+
+      return {
+        embedding,
+        tokenUsage: {
+          prompt: 0,
+          completion: 0,
+          total: 0,
+          numRequests: 1,
+        },
+      };
+    } catch (err) {
+      logger.error(`Error processing Google Embedding API response: ${JSON.stringify(data)}`);
+      throw err;
     }
   }
 }

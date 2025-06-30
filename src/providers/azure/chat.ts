@@ -14,7 +14,6 @@ import { calculateAzureCost } from './util';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
-  protected initializationPromise: Promise<void> | null = null;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
@@ -30,6 +29,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }
@@ -160,10 +160,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       );
 
       cached = isCached;
@@ -255,6 +258,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       const flaggedOutput = Object.values(contentFilterResults || {}).some(
         (filter: any) => filter.filtered,
       );
+
+      if (flaggedOutput) {
+        logger.warn(
+          `Azure model ${this.deploymentName} output was flagged by content filter: ${JSON.stringify(
+            contentFilterResults,
+          )}`,
+        );
+      }
 
       return {
         output,

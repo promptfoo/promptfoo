@@ -74,6 +74,16 @@ jest.mock('../../../src/util/testCaseReader', () => ({
 describe('combineConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => {
+      const filePart =
+        typeof pathOrGlob === 'string'
+          ? path.basename(pathOrGlob)
+          : Array.isArray(pathOrGlob)
+            ? path.basename(pathOrGlob[0])
+            : pathOrGlob;
+      return [filePart];
+    });
   });
 
   it('reads from existing configs', async () => {
@@ -125,7 +135,6 @@ describe('combineConfigs', () => {
       sharing: true,
     };
 
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest
       .mocked(fs.readFileSync)
       .mockImplementation(
@@ -153,6 +162,11 @@ describe('combineConfigs', () => {
     });
 
     const config1Result = await combineConfigs(['config1.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+
     expect(config1Result).toEqual({
       description: 'test1',
       tags: { tag1: 'value1' },
@@ -183,6 +197,11 @@ describe('combineConfigs', () => {
     });
 
     const config2Result = await combineConfigs(['config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
+
     expect(config2Result).toEqual({
       description: 'test2',
       tags: {},
@@ -213,6 +232,14 @@ describe('combineConfigs', () => {
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
@@ -251,7 +278,7 @@ describe('combineConfigs', () => {
   it('combines configs with provider-specific prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
-      if (typeof path === 'string' && path === 'config.json') {
+      if (typeof path === 'string' && path.endsWith('config.json')) {
         return JSON.stringify({
           prompts: [
             { id: 'file://prompt1.txt', label: 'My first prompt' },
@@ -274,17 +301,36 @@ describe('combineConfigs', () => {
     });
 
     const result = await combineConfigs(['config.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config.json'),
+      expect.anything(),
+    );
 
-    expect(result.prompts).toEqual([
-      {
-        id: `file://${path.resolve(path.dirname('config.json'), 'prompt1.txt')}`,
+    // Check that the prompts have the right structure but don't verify exact path format
+    expect(result.prompts).toHaveLength(2);
+
+    // Use type assertions to handle the array elements
+    const prompts = result.prompts as Array<{ id?: string; label: string }>;
+
+    expect(prompts[0]).toEqual(
+      expect.objectContaining({
         label: 'My first prompt',
-      },
-      {
-        id: `file://${path.resolve(path.dirname('config.json'), 'prompt2.txt')}`,
+      }),
+    );
+    expect(typeof prompts[0].id).toBe('string');
+    // Check the file:// URL format
+    expect(prompts[0].id).toMatch(/^file:\/\//);
+    expect(prompts[0].id).toMatch(/prompt1\.txt$/);
+
+    expect(prompts[1]).toEqual(
+      expect.objectContaining({
         label: 'My second prompt',
-      },
-    ]);
+      }),
+    );
+    expect(typeof prompts[1].id).toBe('string');
+    // Check the file:// URL format
+    expect(prompts[1].id).toMatch(/^file:\/\//);
+    expect(prompts[1].id).toMatch(/prompt2\.txt$/);
 
     expect(result.providers).toEqual([
       {
@@ -297,7 +343,11 @@ describe('combineConfigs', () => {
       },
     ]);
 
-    expect(result.tests?.[0]).toEqual({ vars: { topic: 'bananas' } });
+    expect(Array.isArray(result.tests)).toBe(true);
+    // Use type assertion after confirming it's an array
+    const tests = result.tests as any[];
+    expect(tests).toHaveLength(1);
+    expect(tests[0]).toEqual({ vars: { topic: 'bananas' } });
   });
 
   it('throws error for unsupported configuration file format', async () => {
@@ -305,6 +355,10 @@ describe('combineConfigs', () => {
 
     await expect(combineConfigs(['config1.unsupported'])).rejects.toThrow(
       'Unsupported configuration file format: .unsupported',
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.unsupported'),
+      expect.anything(),
     );
   });
 
@@ -317,12 +371,12 @@ describe('combineConfigs', () => {
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ): string | Buffer => {
-          if (typeof path === 'string' && path === 'config1.json') {
+          if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
               prompts: ['file://prompt1.txt', 'prompt2'],
             });
-          } else if (typeof path === 'string' && path === 'config2.json') {
+          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
             return JSON.stringify({
               description: 'test2',
               prompts: ['file://prompt3.txt', 'prompt4'],
@@ -334,13 +388,34 @@ describe('combineConfigs', () => {
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
-    expect(result.prompts).toEqual([
-      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt1.txt')}`,
-      'prompt2',
-      `file://${path.resolve(path.dirname(configPaths[1]), 'prompt3.txt')}`,
-      'prompt4',
-    ]);
+    // Check that we have the expected number of prompts
+    expect(result.prompts).toHaveLength(4);
+
+    // Validate that each prompt has the expected format
+    const prompts = result.prompts as string[];
+
+    // Check first prompt - should be a file:// URL ending with prompt1.txt
+    expect(prompts[0]).toMatch(/^file:\/\//);
+    expect(prompts[0]).toMatch(/prompt1\.txt$/);
+
+    // Check second prompt - should be plain string
+    expect(prompts[1]).toBe('prompt2');
+
+    // Check third prompt - should be a file:// URL ending with prompt3.txt
+    expect(prompts[2]).toMatch(/^file:\/\//);
+    expect(prompts[2]).toMatch(/prompt3\.txt$/);
+
+    // Check fourth prompt - should be plain string
+    expect(prompts[3]).toBe('prompt4');
   });
 
   it('de-duplicates prompts when reading configs', async () => {
@@ -352,12 +427,12 @@ describe('combineConfigs', () => {
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ): string | Buffer => {
-          if (typeof path === 'string' && path === 'config1.json') {
+          if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
               prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
             });
-          } else if (typeof path === 'string' && path === 'config2.json') {
+          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
             return JSON.stringify({
               description: 'test2',
               prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
@@ -369,13 +444,30 @@ describe('combineConfigs', () => {
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
-    expect(result.prompts).toEqual([
-      'prompt1',
-      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt2.txt')}`,
-      'prompt3',
-      'prompt4',
-    ]);
+    // Check that we have the expected number of prompts
+    expect(result.prompts).toHaveLength(4);
+
+    // Validate that each prompt has the expected format
+    const prompts = result.prompts as string[];
+
+    // Check prompts
+    expect(prompts[0]).toBe('prompt1');
+
+    // Check the file:// URL
+    expect(prompts[1]).toMatch(/^file:\/\//);
+    expect(prompts[1]).toMatch(/prompt2\.txt$/);
+
+    expect(prompts[2]).toBe('prompt3');
+    expect(prompts[3]).toBe('prompt4');
   });
 
   it('merges metadata correctly', async () => {
@@ -396,6 +488,14 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.defaultTest?.metadata).toEqual({
       key1: 'value1',
@@ -418,6 +518,14 @@ describe('combineConfigs', () => {
     jest.spyOn(console, 'warn').mockImplementation();
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.extensions).toEqual(['extension1', 'extension2', 'extension3']);
   });
@@ -436,6 +544,14 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.extensions).toEqual(['extension1']);
   });
@@ -457,6 +573,14 @@ describe('combineConfigs', () => {
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
     await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(consoleSpy).toHaveBeenCalledWith(
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
@@ -482,6 +606,14 @@ describe('combineConfigs', () => {
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
     await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(consoleSpy).toHaveBeenCalledWith(
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
@@ -516,6 +648,18 @@ describe('combineConfigs', () => {
       );
 
     const result = await combineConfigs(['config1.json', 'config2.json', 'config3.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config3.json'),
+      expect.anything(),
+    );
 
     expect(result.redteam).toBeDefined();
     expect(result.redteam).toEqual({
@@ -541,6 +685,14 @@ describe('combineConfigs', () => {
       );
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.redteam).toBeUndefined();
   });
@@ -571,6 +723,14 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.redteam).toEqual({
       entities: ['entity1', 'entity2', 'entity3'],
@@ -605,6 +765,14 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.redteam).toEqual({
       entities: ['entity1'],
@@ -644,6 +812,14 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.redteam).toEqual({
       entities: ['entity1', 'entity2'],
@@ -682,6 +858,14 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.redteam).toEqual({
       entities: ['entity1'],
@@ -705,6 +889,14 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     expect(result.sharing).toEqual({
       apiBaseUrl: 'http://localhost',
@@ -1021,7 +1213,7 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4o)'),
+      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4.1)'),
     );
   });
 

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -90,7 +91,7 @@ export abstract class SageMakerGenericProvider {
     this.providerId = id; // Store custom ID if provided
 
     // Record telemetry for SageMaker usage
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'sagemaker',
     });
   }
@@ -107,7 +108,7 @@ export abstract class SageMakerGenericProvider {
   /**
    * Get AWS credentials from config or environment
    */
-  async getCredentials() {
+  async getCredentials(): Promise<any> {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       logger.debug('Using explicit credentials from config');
       return {
@@ -409,8 +410,14 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   formatPayload(prompt: string): string {
     const modelType = this.config.modelType || 'custom';
     const maxTokens = this.config.maxTokens || getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') || 1024;
-    const temperature = this.config.temperature || getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') || 0.7;
-    const topP = this.config.topP || getEnvFloat('AWS_SAGEMAKER_TOP_P') || 1.0;
+    const temperature =
+      typeof this.config.temperature === 'number'
+        ? this.config.temperature
+        : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7);
+    const topP =
+      typeof this.config.topP === 'number'
+        ? this.config.topP
+        : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0);
     const stopSequences = this.config.stopSequences || [];
 
     let payload: any;
@@ -482,15 +489,18 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         break;
 
       case 'llama':
+        // TODO(Will): Can these be consolidated?
         try {
           const messages = JSON.parse(prompt);
           if (Array.isArray(messages)) {
             payload = {
-              messages,
-              max_tokens: maxTokens,
-              temperature,
-              top_p: topP,
-              stop: stopSequences.length > 0 ? stopSequences : undefined,
+              inputs: messages,
+              parameters: {
+                max_new_tokens: maxTokens,
+                temperature,
+                top_p: topP,
+                stop: stopSequences.length > 0 ? stopSequences : undefined,
+              },
             };
           } else {
             throw new Error('Not valid messages format');
@@ -498,11 +508,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         } catch {
           // Simple text completion for Llama
           payload = {
-            prompt,
-            max_tokens: maxTokens,
-            temperature,
-            top_p: topP,
-            stop: stopSequences.length > 0 ? stopSequences : undefined,
+            inputs: prompt,
+            parameters: {
+              max_new_tokens: maxTokens,
+              temperature,
+              top_p: topP,
+              stop: stopSequences.length > 0 ? stopSequences : undefined,
+            },
           };
         }
         break;
@@ -653,28 +665,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     const configStr = JSON.stringify(configForKey);
 
-    // Use crypto to hash the prompt and config for a shorter, more efficient key
-    try {
-      // Use require for crypto to match our jsonpath approach
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const cryptoModule = require('crypto');
-      const promptHash = cryptoModule
-        .createHash('sha256')
-        .update(prompt)
-        .digest('hex')
-        .substring(0, 16);
-      const configHash = cryptoModule
-        .createHash('sha256')
-        .update(configStr)
-        .digest('hex')
-        .substring(0, 8);
+    // Generate shorter, more efficient hashed keys
+    const promptHash = crypto.createHash('sha256').update(prompt).digest('hex').substring(0, 16);
+    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
-      return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
-    } catch (_) {
-      // Fall back to the unoptimized version if crypto is not available
-      logger.debug(`Unable to create hash for cache key: ${_}`);
-      return `sagemaker:v1:${this.getEndpointName()}:${prompt.substring(0, 50)}:${configStr.substring(0, 50)}`;
-    }
+    return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
   }
 
   /**
@@ -704,7 +699,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // Check if we should use cache - use the transformed prompt for cache key
-    const bustCache = context?.debug === true; // If debug mode is on, bust the cache
+    const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cacheKey = this.getCacheKey(transformedPrompt);
       const cache = (await getCache)
@@ -865,28 +860,11 @@ export class SageMakerEmbeddingProvider
 
     const configStr = JSON.stringify(configForKey);
 
-    // Use crypto to hash the text and config for a shorter, more efficient key
-    try {
-      // Use require for crypto to match our jsonpath approach
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const cryptoModule = require('crypto');
-      const textHash = cryptoModule
-        .createHash('sha256')
-        .update(text)
-        .digest('hex')
-        .substring(0, 16);
-      const configHash = cryptoModule
-        .createHash('sha256')
-        .update(configStr)
-        .digest('hex')
-        .substring(0, 8);
+    // Generate shorter, more efficient hashed keys
+    const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
+    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
-      return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
-    } catch (_) {
-      // Fall back to the unoptimized version if crypto is not available
-      logger.debug(`Unable to create hash for embedding cache key: ${_}`);
-      return `sagemaker:embedding:v1:${this.getEndpointName()}:${text.substring(0, 50)}:${configStr.substring(0, 50)}`;
-    }
+    return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
   }
 
   /**

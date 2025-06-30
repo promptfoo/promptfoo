@@ -24,11 +24,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['18.x', '20.x', '22.x']
+        node: ['18.x', '20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         exclude:
           # Remove when https://github.com/nodejs/node/issues/51766 is resolved
           - node: '22.x'
+            os: windows-latest
+          - node: '24.x'
             os: windows-latest
 
     steps:
@@ -55,11 +57,11 @@ jobs:
 
   build:
     name: Build on Node ${{ matrix.node }}
-    timeout-minutes: 3
+    timeout-minutes: 4
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ['18.x', '20.x', '22.x']
+        node: ['18.x', '20.x', '22.x', '24.x']
 
     steps:
       - name: Checkout repo

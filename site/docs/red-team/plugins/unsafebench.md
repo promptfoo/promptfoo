@@ -1,5 +1,5 @@
 ---
-title: UnsafeBench Plugin
+title: UnsafeBench
 description: Test multi-modal models with unsafe imagery from the UnsafeBench dataset to evaluate content moderation capabilities
 keywords: [red team, multi-modal, image, safety, content moderation, unsafe content]
 ---
@@ -98,7 +98,7 @@ prompts:
   - file://image-prompt.json
 
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4.1
 
 redteam:
   plugins:

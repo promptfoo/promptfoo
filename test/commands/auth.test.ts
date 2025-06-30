@@ -46,6 +46,7 @@ describe('auth command', () => {
     jest.clearAllMocks();
     jest.resetAllMocks();
     program = new Command();
+    process.exitCode = undefined;
     authCommand(program);
 
     // Set up a basic mock that just returns the expected data
@@ -56,6 +57,7 @@ describe('auth command', () => {
     });
 
     jest.spyOn(telemetry as any, 'record').mockImplementation(() => {});
+    jest.spyOn(telemetry as any, 'send').mockImplementation(() => Promise.resolve());
   });
 
   describe('login', () => {
@@ -76,7 +78,7 @@ describe('auth command', () => {
       expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', undefined);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should show login instructions when no API key is provided', async () => {
@@ -98,7 +100,7 @@ describe('auth command', () => {
       expect(infoMessages[1]).toContain('https://promptfoo.app/welcome');
 
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should use custom host when provided', async () => {
@@ -110,7 +112,7 @@ describe('auth command', () => {
 
       expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', customHost);
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should handle login request failure', async () => {
@@ -128,7 +130,7 @@ describe('auth command', () => {
       );
       expect(process.exitCode).toBe(1);
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should overwrite existing email in config after successful login', async () => {
@@ -150,7 +152,7 @@ describe('auth command', () => {
         expect.stringContaining('Updating local email configuration'),
       );
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should handle non-Error objects in the catch block', async () => {
@@ -169,7 +171,7 @@ describe('auth command', () => {
       );
       expect(process.exitCode).toBe(1);
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
 
       // Reset exitCode
       process.exitCode = 0;
@@ -232,7 +234,7 @@ describe('auth command', () => {
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth whoami' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should handle not logged in state', async () => {
@@ -285,6 +287,7 @@ describe('auth command', () => {
       // Only test telemetry if it's actually called in the implementation
       // Since we're resetting telemetry in the test, we need to explicitly call these for coverage
       telemetry.record('command_used', { name: 'auth whoami' });
+      telemetry.send();
 
       process.exitCode = 0;
     });

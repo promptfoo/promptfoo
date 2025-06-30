@@ -17,11 +17,67 @@ export function getUserEmail(): string | null {
 export function setUserEmail(email: string) {
   const config: Partial<GlobalConfig> = { account: { email } };
   writeGlobalConfigPartial(config);
-  telemetry.identify();
 }
 
 export function getAuthor(): string | null {
   return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+}
+
+export function isLoggedIntoCloud(): boolean {
+  const userEmail = getUserEmail();
+  return !!userEmail && !isCI();
+}
+
+export interface EmailStatusResult {
+  status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'no_email';
+  message?: string;
+  email?: string;
+  hasEmail: boolean;
+}
+
+/**
+ * Shared function to check email status with the promptfoo API
+ * Used by both CLI and server routes
+ */
+export async function checkEmailStatus(): Promise<EmailStatusResult> {
+  const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+
+  if (!userEmail) {
+    return {
+      status: 'no_email',
+      hasEmail: false,
+      message: 'Redteam evals require email verification. Please enter your work email:',
+    };
+  }
+
+  try {
+    const resp = await fetchWithTimeout(
+      `https://api.promptfoo.app/api/users/status?email=${encodeURIComponent(userEmail)}`,
+      undefined,
+      500,
+    );
+    const data = (await resp.json()) as {
+      status: 'ok' | 'exceeded_limit' | 'show_usage_warning';
+      message?: string;
+      error?: string;
+    };
+
+    return {
+      status: data.status,
+      message: data.message,
+      email: userEmail,
+      hasEmail: true,
+    };
+  } catch (e) {
+    logger.debug(`Failed to check user status: ${e}`);
+    // If we can't check status, assume it's OK but log the issue
+    return {
+      status: 'ok',
+      message: 'Unable to verify email status, but proceeding',
+      email: userEmail,
+      hasEmail: true,
+    };
+  }
 }
 
 export async function promptForEmailUnverified() {
@@ -49,35 +105,19 @@ export async function promptForEmailUnverified() {
 }
 
 export async function checkEmailStatusOrExit() {
-  const email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
-  if (!email) {
-    logger.debug('Skipping email status check because email is not set');
-    return;
-  }
-  try {
-    const resp = await fetchWithTimeout(
-      `https://api.promptfoo.app/api/users/status?email=${email}`,
-      undefined,
-      500,
+  const result = await checkEmailStatus();
+
+  if (result.status === 'exceeded_limit') {
+    logger.error(
+      'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
     );
-    const data = (await resp.json()) as {
-      status: 'ok' | 'exceeded_limit' | 'show_usage_warning';
-      message?: string;
-      error?: string;
-    };
-    if (data?.status === 'exceeded_limit') {
-      logger.error(
-        'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
-      );
-      process.exit(1);
-    }
-    if (data?.status === 'show_usage_warning' && data?.message) {
-      const border = '='.repeat(TERMINAL_MAX_WIDTH);
-      logger.info(chalk.yellow(border));
-      logger.warn(chalk.yellow(data.message));
-      logger.info(chalk.yellow(border));
-    }
-  } catch (e) {
-    logger.debug(`Failed to check user status: ${e}`);
+    process.exit(1);
+  }
+
+  if (result.status === 'show_usage_warning' && result.message) {
+    const border = '='.repeat(TERMINAL_MAX_WIDTH);
+    logger.info(chalk.yellow(border));
+    logger.warn(chalk.yellow(result.message));
+    logger.info(chalk.yellow(border));
   }
 }

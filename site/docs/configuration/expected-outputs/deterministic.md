@@ -192,7 +192,7 @@ Example:
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4
 assert:
   # Pass if the LLM call costs less than $0.001
@@ -467,6 +467,33 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
 
+**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
+
+- Pass if MCP tool calls succeed (output contains "MCP Tool Result")
+- Fail if MCP tool calls fail (output contains "MCP Tool Error")
+- Continue to validate traditional function tools as before
+
+Example with MCP tools:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+
+tests:
+  - vars:
+      query: 'What is MCP?'
+    assert:
+      - type: is-valid-openai-tools-call # Validates MCP tool success
+      - type: contains
+        value: 'MCP Tool Result' # Alternative way to check for MCP success
+```
+
 ### Javascript
 
 See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
@@ -549,8 +576,8 @@ This makes it easier to include in an aggregate promptfoo score, as higher score
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 tests:
   - assert:
       - type: perplexity-score

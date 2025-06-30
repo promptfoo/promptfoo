@@ -324,6 +324,7 @@ describe('redteamConfigSchema', () => {
       strategies: strategiesExceptDefault,
     };
     const result = RedteamConfigSchema.safeParse(input);
+
     expect(result).toEqual({
       success: true,
       data: expect.objectContaining({
@@ -340,7 +341,10 @@ describe('redteamConfigSchema', () => {
     expect(result.data?.plugins).toHaveLength(
       REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).length,
     );
-    expect(result.data?.strategies).toHaveLength(strategiesExceptDefault.length);
+
+    // The schema deduplicates strategies, so we should expect the unique count
+    const uniqueStrategies = [...new Set(strategiesExceptDefault)];
+    expect(result.data?.strategies).toHaveLength(uniqueStrategies.length);
   });
 
   it('should expand harmful plugin to all harm categories', () => {
@@ -748,7 +752,7 @@ describe('redteamConfigSchema', () => {
 
     it('should not duplicate plugins when using multiple aliased names', () => {
       const input = {
-        plugins: ['owasp:llm:01', 'owasp:llm:02'],
+        plugins: ['owasp:llm:01', 'owasp:llm:02', 'owasp:llm:04'],
         numTests: 3,
       };
       const result = RedteamConfigSchema.safeParse(input);
@@ -788,6 +792,7 @@ describe('redteamConfigSchema', () => {
         'pii:session',
         'pii:social',
         'cross-session-leak',
+        'bias:gender',
       ];
       const actualPlugins = result.data?.plugins || [];
       const expectedPluginObjects = expectedPlugins.map((id) => ({
@@ -882,6 +887,68 @@ describe('redteamConfigSchema', () => {
       expect(strategies).toHaveLength(strategyIds.size);
     });
   });
+
+  describe('severity handling', () => {
+    it('should preserve severity field in plugin objects', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1, severity: 'low' },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'low' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+        severity: 'low',
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'low',
+      });
+    });
+
+    it('should handle plugins without severity field', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1 },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'high' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'high',
+      });
+    });
+
+    it('should preserve severity when expanding collections', () => {
+      const config = {
+        plugins: [{ id: 'harmful', numTests: 1, severity: 'medium' }],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      // All expanded harmful plugins should have the severity
+      const harmfulPlugins = result.plugins!.filter((p) => p.id.startsWith('harmful:'));
+      expect(harmfulPlugins.length).toBeGreaterThan(0);
+      harmfulPlugins.forEach((plugin) => {
+        expect(plugin.severity).toBe('medium');
+      });
+    });
+  });
 });
 
 describe('RedteamConfigSchema transform', () => {
@@ -954,9 +1021,12 @@ describe('RedteamConfigSchema transform', () => {
     });
 
     // Should expand 'harmful' into individual harm categories
-    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
-      true,
-    );
+    // Note: bias:gender is also part of the "harmful" plugins collection even though it doesn't start with "harmful:"
+    expect(
+      result.plugins
+        ?.filter((p) => p.id !== 'bias:gender')
+        .every((p: RedteamPluginObject) => p.id.startsWith('harmful:')),
+    ).toBe(true);
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
   });
 
@@ -1200,9 +1270,13 @@ describe('RedteamConfigSchema transform', () => {
       plugins: ['harmful'],
     });
 
-    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
-      true,
-    );
+    // Should expand 'harmful' into individual harm categories
+    // Note: bias:gender is also part of the "harmful" plugins collection even though it doesn't start with "harmful:"
+    expect(
+      result.plugins
+        ?.filter((p) => p.id !== 'bias:gender')
+        .every((p: RedteamPluginObject) => p.id.startsWith('harmful:')),
+    ).toBe(true);
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
   });
 

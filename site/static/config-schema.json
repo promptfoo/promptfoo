@@ -153,6 +153,9 @@
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
+                            "GOOGLE_API_BASE_URL": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_KEY": {
                               "type": "string"
                             },
@@ -166,6 +169,9 @@
                               "type": "string"
                             },
                             "HF_TOKEN": {
+                              "type": "string"
+                            },
+                            "HYPERBOLIC_API_KEY": {
                               "type": "string"
                             },
                             "HUGGING_FACE_HUB_TOKEN": {
@@ -772,9 +778,55 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "config": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean"
+                                ]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {}
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
+            },
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/2"
             }
           ]
         },
@@ -984,6 +1036,10 @@
               "type": "string",
               "description": "Purpose override string - describes the prompt templates"
             },
+            "testGenerationInstructions": {
+              "type": "string",
+              "description": "Additional instructions for test generation applied to each plugin"
+            },
             "provider": {
               "anyOf": [
                 {
@@ -1023,11 +1079,13 @@
                       {
                         "type": "string",
                         "enum": [
+                          "aegis",
                           "agentic:memory-poisoning",
                           "ascii-smuggling",
                           "beavertails",
                           "bfla",
                           "bias",
+                          "bias:gender",
                           "bola",
                           "cca",
                           "competitors",
@@ -1038,7 +1096,27 @@
                           "default",
                           "divergent-repetition",
                           "donotanswer",
+                          "eu:ai-act",
+                          "eu:ai-act:annex3:biometric-id",
+                          "eu:ai-act:annex3:critical-infrastructure",
+                          "eu:ai-act:annex3:education",
+                          "eu:ai-act:annex3:employment",
+                          "eu:ai-act:annex3:essential-services",
+                          "eu:ai-act:annex3:justice-democracy",
+                          "eu:ai-act:annex3:law-enforcement",
+                          "eu:ai-act:annex3:migration-border",
+                          "eu:ai-act:art5:biometric-categorisation",
+                          "eu:ai-act:art5:exploitation-of-vulnerabilities",
+                          "eu:ai-act:art5:remote-biometric-id-live",
+                          "eu:ai-act:art5:remote-biometric-id-post",
+                          "eu:ai-act:art5:social-scoring",
+                          "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "financial:calculation-error",
+                          "financial:compliance-violation",
+                          "financial:data-leakage",
+                          "financial:hallucination",
+                          "financial:sycophancy",
                           "foundation",
                           "hallucination",
                           "harmbench",
@@ -1074,6 +1152,12 @@
                           "imitation",
                           "indirect-prompt-injection",
                           "intent",
+                          "mcp",
+                          "medical:anchoring-bias",
+                          "medical:hallucination",
+                          "medical:incorrect-knowledge",
+                          "medical:prioritization-error",
+                          "medical:sycophancy",
                           "misinformation",
                           "mitre:atlas",
                           "mitre:atlas:exfiltration",
@@ -1105,6 +1189,7 @@
                           "nist:ai:measure:4.1",
                           "nist:ai:measure:4.2",
                           "nist:ai:measure:4.3",
+                          "off-topic",
                           "overreliance",
                           "owasp:agentic:t01",
                           "owasp:api",
@@ -1154,6 +1239,7 @@
                           "system-prompt-override",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
+                          "toxic-chat",
                           "toxicity",
                           "unsafebench",
                           "xstest"
@@ -1174,11 +1260,13 @@
                           {
                             "type": "string",
                             "enum": [
+                              "aegis",
                               "agentic:memory-poisoning",
                               "ascii-smuggling",
                               "beavertails",
                               "bfla",
                               "bias",
+                              "bias:gender",
                               "bola",
                               "cca",
                               "competitors",
@@ -1189,7 +1277,27 @@
                               "default",
                               "divergent-repetition",
                               "donotanswer",
+                              "eu:ai-act",
+                              "eu:ai-act:annex3:biometric-id",
+                              "eu:ai-act:annex3:critical-infrastructure",
+                              "eu:ai-act:annex3:education",
+                              "eu:ai-act:annex3:employment",
+                              "eu:ai-act:annex3:essential-services",
+                              "eu:ai-act:annex3:justice-democracy",
+                              "eu:ai-act:annex3:law-enforcement",
+                              "eu:ai-act:annex3:migration-border",
+                              "eu:ai-act:art5:biometric-categorisation",
+                              "eu:ai-act:art5:exploitation-of-vulnerabilities",
+                              "eu:ai-act:art5:remote-biometric-id-live",
+                              "eu:ai-act:art5:remote-biometric-id-post",
+                              "eu:ai-act:art5:social-scoring",
+                              "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "financial:calculation-error",
+                              "financial:compliance-violation",
+                              "financial:data-leakage",
+                              "financial:hallucination",
+                              "financial:sycophancy",
                               "foundation",
                               "hallucination",
                               "harmbench",
@@ -1225,6 +1333,12 @@
                               "imitation",
                               "indirect-prompt-injection",
                               "intent",
+                              "mcp",
+                              "medical:anchoring-bias",
+                              "medical:hallucination",
+                              "medical:incorrect-knowledge",
+                              "medical:prioritization-error",
+                              "medical:sycophancy",
                               "misinformation",
                               "mitre:atlas",
                               "mitre:atlas:exfiltration",
@@ -1256,6 +1370,7 @@
                               "nist:ai:measure:4.1",
                               "nist:ai:measure:4.2",
                               "nist:ai:measure:4.3",
+                              "off-topic",
                               "overreliance",
                               "owasp:agentic:t01",
                               "owasp:api",
@@ -1305,6 +1420,7 @@
                               "system-prompt-override",
                               "tool-discovery",
                               "tool-discovery:multi-turn",
+                              "toxic-chat",
                               "toxicity",
                               "unsafebench",
                               "xstest"
@@ -1327,6 +1443,16 @@
                         "type": "object",
                         "additionalProperties": {},
                         "description": "Plugin-specific configuration"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "critical",
+                          "high",
+                          "medium",
+                          "low"
+                        ],
+                        "description": "Severity level for this plugin"
                       }
                     },
                     "required": [
@@ -1354,9 +1480,11 @@
                           "base64",
                           "basic",
                           "best-of-n",
+                          "camelcase",
                           "citation",
                           "crescendo",
                           "default",
+                          "emoji",
                           "gcg",
                           "goat",
                           "hex",
@@ -1404,7 +1532,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
               "default": [
                 "default"
               ]
@@ -1428,6 +1556,106 @@
         },
         "writeLatestResults": {
           "type": "boolean"
+        },
+        "tracing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "otlp": {
+              "type": "object",
+              "properties": {
+                "http": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4318
+                    },
+                    "host": {
+                      "type": "string",
+                      "default": "0.0.0.0"
+                    },
+                    "acceptFormats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "protobuf",
+                          "json"
+                        ]
+                      },
+                      "default": [
+                        "json"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "grpc": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4317
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "sqlite"
+                  ],
+                  "default": "sqlite"
+                },
+                "retentionDays": {
+                  "type": "number",
+                  "default": 30
+                }
+              },
+              "additionalProperties": false
+            },
+            "forwarding": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "endpoint"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         },
         "evaluateOptions": {
           "type": "object",
@@ -1458,6 +1686,12 @@
             },
             "timeoutMs": {
               "type": "number"
+            },
+            "maxEvalTimeMs": {
+              "type": "number"
+            },
+            "isRedteam": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false

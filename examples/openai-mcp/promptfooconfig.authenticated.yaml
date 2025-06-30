@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Authenticated MCP server integration
+
+prompts:
+  - 'Please {{action}} for customer {{customer_id}} using the Stripe API.'
+  - 'Can you help me {{action}} for {{customer_id}}? Use the available tools to get the information.'
+  - 'I need to {{action}} for customer ID {{customer_id}}. Please use the Stripe integration to fetch this data.'
+
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: stripe
+          server_url: https://mcp.stripe.com
+          headers:
+            Authorization: 'Bearer ${STRIPE_API_KEY}'
+          require_approval: never
+          allowed_tools: ['create_payment_link', 'list_payment_methods']
+      max_output_tokens: 1000
+      temperature: 0.1
+      instructions: 'You are a payment processing assistant. Use the Stripe MCP tools to help with payment-related tasks. Always provide clear and accurate information about payment operations.'
+
+tests:
+  - vars:
+      customer_id: 'cus_test123'
+      action: 'retrieve customer information'
+    assert:
+      # Validate successful MCP tool execution with authentication
+      - type: is-valid-openai-tools-call
+        weight: 0.4
+      # Check for Stripe-specific content
+      - type: contains-any
+        value: ['customer', 'Stripe', 'payment', 'subscription']
+        weight: 0.3
+      # Ensure authentication worked (no auth errors)
+      - type: not-contains
+        value: 'authentication failed'
+        weight: 0.1
+      # Verify MCP tool was used successfully
+      - type: contains
+        value: 'MCP Tool Result'
+        weight: 0.1
+      # Quality validation
+      - type: llm-rubric
+        value: 'The response provides customer information or payment details'
+
+  - vars:
+      customer_id: 'cus_test456'
+      action: 'list payment methods'
+    assert:
+      # Comprehensive authentication and API validation
+      - type: is-valid-openai-tools-call
+        metric: stripe_api_success
+      # Check for payment-related content
+      - type: contains-any
+        value: ['payment', 'method', 'card', 'bank']
+      # Ensure no MCP errors (including auth errors)
+      - type: not-contains-any
+        value: ['MCP Tool Error', 'unauthorized', 'authentication failed']
+      # Validate API response quality
+      - type: llm-rubric
+        value: 'The response lists payment methods or explains payment options'
+
+  - vars:
+      customer_id: 'cus_test789'
+      action: 'check subscription status'
+    assert:
+      # Test authenticated MCP with subscription data
+      - type: is-valid-openai-tools-call
+      - type: contains-any
+        value: ['subscription', 'plan', 'billing', 'active', 'status']
+      # Verify successful API integration
+      - type: contains
+        value: 'MCP Tool Result'
+        metric: api_integration_success
+        weight: 0
+      - type: llm-rubric
+        value: 'The response provides subscription status or billing information'
+# Note: This example requires a valid STRIPE_API_KEY environment variable
+# For testing purposes, you may want to use a test API key from Stripe

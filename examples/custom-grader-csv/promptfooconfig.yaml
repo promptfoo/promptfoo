@@ -3,5 +3,5 @@ description: Custom grader in CSV
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 tests: file://tests.csv

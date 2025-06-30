@@ -1,4 +1,10 @@
-# LM Studio Example with Promptfoo
+# lm-studio (LM Studio Example with Promptfoo)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example lm-studio
+```
 
 This example demonstrates how to use Promptfoo with LM Studio for prompt evaluation. It showcases configuration for interacting with the LM Studio API using a locally hosted language model.
 
@@ -10,7 +16,6 @@ This example demonstrates how to use Promptfoo with LM Studio for prompt evaluat
 ## Setup
 
 1. **Start LM Studio Server**:
-
    - Open LM Studio and load the `bartowski/gemma-2-9b-it-GGUF` model.
    - Start a local server to host the model (usually at `http://localhost:1234`).
 
