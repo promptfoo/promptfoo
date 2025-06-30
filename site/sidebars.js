@@ -335,6 +335,14 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Red teaming',
+      link: {
+        type: 'generated-index',
+      },
+      items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
+    },
+    {
+      type: 'category',
       label: 'Model scanning',
       link: {
         type: 'doc',
@@ -348,14 +356,6 @@ const sidebars = {
         { type: 'doc', id: 'model-audit/usage' },
         { type: 'doc', id: 'model-audit/scanners' },
       ],
-    },
-    {
-      type: 'category',
-      label: 'Red teaming',
-      link: {
-        type: 'generated-index',
-      },
-      items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
     },
     {
       type: 'category',

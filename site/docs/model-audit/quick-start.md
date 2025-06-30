@@ -142,7 +142,7 @@ promptfoo view
 ### For Basic Usage
 
 - **[Installation Guide](./installation.md)** - Detailed setup for all model formats
-- **[Installation & Usage](./usage.md)** - Core scanning workflows and configuration
+- **[Usage Guide](./usage.md)** - Core scanning workflows and configuration
 
 ### Advanced Features
 

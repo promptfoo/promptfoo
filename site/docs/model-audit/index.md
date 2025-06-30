@@ -87,7 +87,7 @@ promptfoo scan-model models/ --sbom compliance-report.json
 - **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
   :::
 
-For complete CLI options and advanced usage, see **[Installation & Usage](./usage.md)**.
+For complete CLI options and advanced usage, see **[Usage Guide](./usage.md)**.
 
 ## Web Interface
 
@@ -197,4 +197,4 @@ In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but d
 
 ## Getting Started
 
-Ready to secure your models? Start with our **[Quick Start Guide](./quick-start.md)** for a 5-minute setup, or see **[Installation & Usage](./usage.md)** for detailed instructions and dependencies.
+Ready to secure your models? Start with our **[Quick Start Guide](./quick-start.md)** for a 5-minute setup, or see **[Usage Guide](./usage.md)** for detailed instructions and dependencies.

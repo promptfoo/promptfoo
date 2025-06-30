@@ -301,7 +301,7 @@ docker run --rm -v "${PWD}:/data" ghcr.io/promptfoo/modelaudit:latest scan /data
 ## Next Steps
 
 - **[Quick Start](./quick-start.md)** - Get scanning in 5 minutes
-- **[Installation & Usage](./usage.md)** - Detailed usage patterns and configuration
+- **[Usage Guide](./usage.md)** - Detailed usage patterns and configuration
 - **[Scanner Reference](./scanners.md)** - Understanding what each scanner does
 
 ## System Requirements
