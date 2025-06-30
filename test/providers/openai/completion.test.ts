@@ -11,7 +11,6 @@ describe('OpenAI Provider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     disableCache();
-    // Set a default API key for tests unless explicitly testing missing key
     process.env.OPENAI_API_KEY = 'test-api-key';
   });
 
@@ -37,18 +36,33 @@ describe('OpenAI Provider', () => {
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt');
 
-      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/completions',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-api-key',
+          }),
+          body: expect.any(String),
+        }),
+        expect.any(Number),
+        'json',
+        undefined,
+      );
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
 
     it('should handle API errors', async () => {
+      const mockDeleteFromCache = jest.fn();
       mockFetchWithCache.mockResolvedValue({
         data: {
           error: {
             message: 'Test error',
             type: 'test_error',
           },
+          deleteFromCache: mockDeleteFromCache,
         },
         cached: false,
         status: 400,
@@ -60,6 +74,29 @@ describe('OpenAI Provider', () => {
 
       expect(result.error).toBeDefined();
       expect(result.error).toContain('Test error');
+      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
+
+    it('should handle guardrail errors', async () => {
+      const mockDeleteFromCache = jest.fn();
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          error: {
+            message: 'Content policy violation',
+            code: 'content_policy_violation',
+          },
+          deleteFromCache: mockDeleteFromCache,
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.guardrails?.flagged).toBe(true);
+      expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
 
     it('should handle fetch errors', async () => {
@@ -73,7 +110,6 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle missing API key', async () => {
-      // Save the original env var and clear it for this test
       const originalApiKey = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
 
@@ -89,7 +125,6 @@ describe('OpenAI Provider', () => {
 
         await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
       } finally {
-        // Restore the original env var
         if (originalApiKey) {
           process.env.OPENAI_API_KEY = originalApiKey;
         }
@@ -143,7 +178,13 @@ describe('OpenAI Provider', () => {
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt');
 
-      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/completions',
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        undefined,
+      );
       expect(result.error).toContain('Cannot destructure property');
     });
 
@@ -194,7 +235,7 @@ describe('OpenAI Provider', () => {
 
     it('should handle response parsing errors', async () => {
       mockFetchWithCache.mockResolvedValue({
-        data: {}, // Missing choices array
+        data: {},
         cached: false,
         status: 200,
         statusText: 'OK',
