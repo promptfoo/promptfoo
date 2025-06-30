@@ -256,7 +256,7 @@ BEHAVIORAL CONSTRAINTS:
   - Never assist with tasks requiring elevated access.
   - Do not give medical or legal advice.
 
-User Query: { { input } }
+User Query: {{input}}
 ```
 
 Anything that reduces parsing ambiguity is helpful - even XML. Imagine telling someone in 2025 that you _actually_ use XML.
@@ -305,7 +305,7 @@ VERIFICATION LAYER:
   - Authority level monitoring.
   - Security protocol enforcement.
 
-USER MESSAGE: { { input } }
+USER MESSAGE: {{input}}
 ```
 
 This fixes the situation for all LLMs.
