@@ -1,43 +1,38 @@
 ---
-title: Google Sheets Integration
-sidebar_label: Google Sheets
-displayed_sidebar: null
+sidebar_position: 3
 ---
 
-import { Redirect } from '@docusaurus/router';
+# Google Sheets
 
-<Redirect to="/docs/configuration/tests/google-sheets" />
+promptfoo allows you to load test cases directly from Google Sheets, making it easy to collaborate on test cases with team members and maintain test data in a familiar spreadsheet format.
 
-# Google Sheets Integration
+## Quick Start
 
-promptfoo allows you to import eval test cases directly from Google Sheets. This can be done either unauthenticated (if the sheet is public) or authenticated using Google's Default Application Credentials, typically with a service account for programmatic access.
+```yaml
+# Load test cases from a public Google Sheet
+tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 
-## Importing Test Cases from Google Sheets
+# Or combine with other test sources
+tests:
+  - https://docs.google.com/spreadsheets/d/your-sheet-id/edit
+  - file://local-tests.csv
+  - huggingface://datasets/cais/mmlu
+```
+
+## Setting Up Access
 
 ### Public Sheets (Unauthenticated)
 
 For sheets that are accessible via "anyone with the link", simply specify the share URL in your configuration:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Public Google Sheet Example'
+```yaml
 prompts:
-  - 'Please translate the following text to {{language}}: {{input}}'
+  - prompt1.txt
+  - prompt2.txt
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - openai:chat:gpt-4.1
-// highlight-start
+  - anthropic:messages:claude-3-7-sonnet-20250219
+  - openai:o3-mini
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
-// highlight-end
-```
-
-The Google Sheet above is structured with columns that define the test cases. Here's a copy of the sheet:
-
-```csv title="Google Sheet"
-language,input,__expected
-French,Hello world,icontains: bonjour
-German,I'm hungry,llm-rubric: is german
-Swahili,Hello world,similar(0.8):hello world
 ```
 
 > 💡 See our [example sheet](https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=0) for the expected format. For details on sheet structure, refer to [loading assertions from CSV](/docs/configuration/expected-outputs/#load-assertions-from-csv).
@@ -71,7 +66,7 @@ For private sheets, you'll need to set up Google's Default Application Credentia
    ```
    The system will automatically use authenticated access when the sheet is not public.
 
-## Writing Evaluation Results to Google Sheets
+## Writing Results to Google Sheets
 
 The `outputPath` parameter (`--output` or `-o` on the command line) supports writing evaluation results directly to Google Sheets. This requires Default Application Credentials with write access configured.
 
@@ -84,9 +79,7 @@ providers:
   - ...
 tests:
   - ...
-// highlight-start
 outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
-// highlight-end
 ```
 
 ### Targeting Specific Sheets
@@ -115,11 +108,11 @@ like `llm-rubric` or `similar`. To do this, override the default LLM grader by a
 
 ```yaml
 prompts:
-  - file://prompt1.txt
-  - file://prompt2.txt
+  - prompt1.txt
+  - prompt2.txt
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - openai:chat:gpt-4.1-mini
+  - anthropic:messages:claude-3-7-sonnet-20250219
+  - openai:o3-mini
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 defaultTest:
   options:
@@ -131,3 +124,10 @@ defaultTest:
 ```
 
 For more details on customizing the LLM grader, see the [model-graded metrics documentation](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+
+## Related Resources
+
+- [CSV Tests](/docs/configuration/tests/csv)
+- [HuggingFace Tests](/docs/configuration/tests/huggingface)
+- [Configuration Guide](/docs/configuration/guide)
+- [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded)

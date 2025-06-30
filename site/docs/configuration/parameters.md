@@ -3,13 +3,16 @@ sidebar_position: 4
 sidebar_label: Overview - Prompts, tests, outputs
 ---
 
-# Prompts, tests, and outputs
+# Prompts and Outputs
+
+This guide covers how to configure prompts and outputs in promptfoo.
 
 Configure how promptfoo evaluates your LLM applications.
 
 ## Quick Start
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Define your prompts
 prompts:
   - 'Translate to {{language}}: {{text}}'
@@ -137,8 +140,8 @@ prompts:
   - file://prompts/generate_prompt.js
 
 providers:
-  - openai:gpt-4.1-mini
-  - anthropic:claude-3-haiku
+  - openai:o3-mini
+  - anthropic:claude-3-7-sonnet-20250219
 
 tests:
   # Inline test cases

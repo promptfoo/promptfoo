@@ -114,7 +114,7 @@ The example pictured above includes 150 examples of hallucination-prone question
 
 To set this up, we use the `defaultTest` property to set a requirement on every test:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4.1-mini
 prompts:

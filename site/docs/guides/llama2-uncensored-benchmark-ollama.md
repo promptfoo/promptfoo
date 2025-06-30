@@ -48,7 +48,7 @@ These [providers](/docs/providers) reference the built-in Ollama models.
 
 Llama and GPT 3.5 use different prompt formats.
 
-First, we'll put the OpenAI prompt template in `prompts/openai_prompt.json`:
+First, we'll put the OpenAI prompt template in a JSON file:
 
 ```json title="prompts/openai_prompt.json"
 [
@@ -59,7 +59,7 @@ First, we'll put the OpenAI prompt template in `prompts/openai_prompt.json`:
 ]
 ```
 
-The Llama prompt template goes in `prompts/llama_prompt.txt`:
+The Llama prompt template goes in a text file:
 
 ```title="prompts/llama_prompt.txt"
 User: {{message}}

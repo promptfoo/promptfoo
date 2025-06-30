@@ -32,7 +32,7 @@ You can also jump to the [full RAG example](https://github.com/promptfoo/promptf
 
 Document retrieval is the first step of a RAG. It is possible to eval the retrieval step in isolation, in order to ensure that you are fetching the best documents.
 
-Suppose we have a simple file `retrieve.py`, which takes a query and outputs a list of documents and their contents:
+Suppose we have a simple file which takes a query and outputs a list of documents and their contents:
 
 ```py title="retrieve.py"
 import vectorstore
@@ -119,7 +119,7 @@ In this step, we are focused on evaluating whether the LLM output is correct giv
 
 Instead of using an external script provider, we'll use the built-in functionality for calling LLM APIs. If your LLM output logic is complicated, you can use a [`python` provider](/docs/providers/python) as shown above.
 
-First, let's set up our prompt by creating a `prompt1.txt` file:
+First, let's set up our prompt by creating a prompt template:
 
 ```txt title="prompt1.txt"
 You are a corporate intranet chat assistant.  The user has asked the following:
@@ -140,8 +140,9 @@ Think carefully and respond to the user concisely and accurately.
 Now that we've constructed a prompt, let's set up some test cases. In this example, the eval will format each of these test cases using the prompt template and send it to the LLM API:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini]
+providers: [openai:o3-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -222,7 +223,7 @@ The `promptfoo eval` command will run the evaluation and check if your tests are
 
 ### Comparing prompts
 
-Suppose we're not happy with the performance of the prompt above and we want to compare it with another prompt. Maybe we want to require citations. Let's create `prompt2.txt`:
+Suppose we're not happy with the performance of the prompt above and we want to compare it with another prompt. Maybe we want to require citations. Let's create a new prompt template:
 
 ```txt title="prompt2.txt"
 You are a corporate intranet researcher.  The user has asked the following:
@@ -279,8 +280,9 @@ defaultTest:
 Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:llama3.1]
+providers: [openai:o3-mini, openai:gpt-4o, ollama:llama3.1]
 defaultTest:
   assert:
     - type: python

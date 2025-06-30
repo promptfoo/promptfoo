@@ -3,6 +3,8 @@ title: Getting Started
 description: Learn how to set up your first promptfoo config file, create prompts, configure providers, and run your first LLM evaluation.
 keywords: [getting started, setup, configuration, prompts, providers, evaluation, llm testing]
 sidebar_position: 5
+pagination_prev: intro
+pagination_next: configuration/guide
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -84,18 +86,19 @@ Next, we can review the example configuration file and make changes to it.
 
    ```yaml
    providers:
-     - openai:gpt-4.1
-     - openai:o4-mini
-     - anthropic:messages:claude-sonnet-4-20250514
-     - vertex:gemini-2.5-pro-exp-03-25
+     - openai:o3-mini
+     - openai:gpt-4o
+     - anthropic:messages:claude-3-7-sonnet-20250219
+     - vertex:gemini-2.0-flash-exp
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
-   - `openai:gpt-4.1` for GPT-4.1
-   - `openai:o4-mini` for OpenAI's o4-mini
-   - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
+
+   - `openai:o3-mini` for OpenAI's o3-mini
+   - `openai:gpt-4o` for OpenAI's GPT-4 Omni
+   - `anthropic:messages:claude-3-7-sonnet-20250219` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
    Most providers need authentication. For example, with OpenAI:
@@ -105,6 +108,7 @@ Next, we can review the example configuration file and make changes to it.
    ```
 
    You can use:
+
    - **Cloud APIs**: [OpenAI](/docs/providers/openai), [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), [Mistral](/docs/providers/mistral), and [many more](/docs/providers)
    - **Local Models**: [Ollama](/docs/providers/ollama), [llama.cpp](/docs/providers/llama.cpp), [LocalAI](/docs/providers/localai)
    - **Custom Code**: [Python](/docs/providers/python), [JavaScript](/docs/providers/custom-api), or any [executable](/docs/providers/custom-script)
@@ -194,7 +198,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4.1
+  - openai:o3-mini
 defaultTest:
   assert:
     - type: llm-rubric
@@ -273,7 +277,7 @@ prompts:
 
 # Set an LLM
 providers:
-  - openai:gpt-4.1
+  - openai:o3-mini
 
 # These test properties are applied to every test
 defaultTest:
@@ -352,7 +356,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT-4.1 and o4-mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between o3-mini and gpt-4o outputs for a given prompt:
 
 You can quickly set up this example by running:
 
@@ -381,8 +385,8 @@ prompts:
 
 # Set the LLMs we want to test
 providers:
-  - openai:o4-mini
-  - openai:gpt-4.1
+  - openai:o3-mini
+  - openai:gpt-4o
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
@@ -390,17 +394,17 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
+      npx promptfoo@latest eval -p prompts.txt -r openai:o3-mini openai:gpt-4o -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o3-mini openai:gpt-4o -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o3-mini openai:gpt-4o -o output.html
     </CodeBlock>
   </TabItem>
 </Tabs>

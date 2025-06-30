@@ -34,6 +34,8 @@ const sidebars = {
       label: 'Configuration',
       link: {
         type: 'generated-index',
+        description:
+          'Learn how to configure promptfoo for your LLM evaluation needs. This section covers everything from basic setup to advanced features like test cases, scenarios, and caching.',
       },
       items: [
         { type: 'doc', id: 'configuration/guide' },

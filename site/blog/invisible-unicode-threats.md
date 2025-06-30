@@ -115,6 +115,7 @@ Copy and paste any suspicious text, code, or configuration files above to check 
 ### Best Practices for Prevention
 
 1. **Input Validation**
+
    - Implement strict Unicode character filtering
    - Maintain a whitelist of allowed characters
    - Sanitize all text input before processing
