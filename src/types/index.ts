@@ -13,7 +13,7 @@ import { TokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
-import { RedteamConfigSchema } from '../validators/redteam';
+import { RedteamConfigSchema, RedteamConfigSchemaRelaxed } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
@@ -982,7 +982,7 @@ export const TestSuiteConfigSchema = z.object({
   metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: RedteamConfigSchema.optional(),
+  redteam: RedteamConfigSchemaRelaxed.optional(),
 
   // Write results to disk so they can be viewed in web viewer
   writeLatestResults: z.boolean().optional(),

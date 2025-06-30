@@ -43,8 +43,13 @@ export const RedteamPluginObjectSchema = z.object({
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or be one of the built-in plugins: ${pluginOptions.join(', ')}`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin'),
@@ -74,8 +79,13 @@ export const RedteamPluginSchema = z.union([
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or be one of the built-in plugins: ${pluginOptions.join(', ')}`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
@@ -158,6 +168,87 @@ export const RedteamGenerateOptionsSchema = z.object({
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
 });
+
+/**
+ * Relaxed schema for redteam plugins used during general config validation.
+ * This allows any string as a plugin ID and defers strict validation to when redteam is actually used.
+ */
+export const RedteamPluginSchemaRelaxed = z.union([
+  z.string().describe('Name of the plugin or path to custom plugin'),
+  z.object({
+    id: z.string().describe('Name of the plugin'),
+    numTests: z
+      .number()
+      .int()
+      .positive()
+      .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
+      .describe('Number of tests to generate for this plugin'),
+    config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
+    severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
+  }),
+]);
+
+/**
+ * Relaxed schema for `redteam` section used during general config validation.
+ * This defers strict plugin validation to when redteam is actually used.
+ */
+export const RedteamConfigSchemaRelaxed = z
+  .object({
+    injectVar: z
+      .string()
+      .optional()
+      .describe(
+        "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
+      ),
+    purpose: z
+      .string()
+      .optional()
+      .describe('Purpose override string - describes the prompt templates'),
+    testGenerationInstructions: z
+      .string()
+      .optional()
+      .describe('Additional instructions for test generation applied to each plugin'),
+    provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
+    numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
+    language: z.string().optional().describe('Language of tests ot generate for this plugin'),
+    entities: z
+      .array(z.string())
+      .optional()
+      .describe('Names of people, brands, or organizations related to your LLM application'),
+    plugins: z
+      .array(RedteamPluginSchemaRelaxed)
+      .describe('Plugins to use for redteam generation')
+      .default(['default'])
+      .optional(),
+    strategies: z
+      .array(RedteamStrategySchema)
+      .describe(
+        dedent`Strategies to use for redteam generation.
+
+        Defaults to ${DEFAULT_STRATEGIES.join(', ')}
+        Supports ${ALL_STRATEGIES.join(', ')}
+        `,
+      )
+      .optional()
+      .default(['default']),
+    maxConcurrency: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of concurrent API calls'),
+    delay: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe('Delay in milliseconds between plugin API calls'),
+    excludeTargetOutputFromAgenticAttackGeneration: z
+      .boolean()
+      .optional()
+      .describe('Whether to exclude target output from the agentific attack generation process'),
+  })
+  .optional();
 
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
