@@ -366,6 +366,24 @@ export function calculateOpenAICost(
   return totalCost || undefined;
 }
 
+/**
+ * Detects whether an OpenAI error corresponds to a guardrail-triggered refusal.
+ */
+export function isOpenAIGuardrailError(data: {
+  error?: { message?: string; type?: string; code?: string };
+}): boolean {
+  const code = data.error?.code?.toLowerCase() || '';
+  const message = data.error?.message?.toLowerCase() || '';
+  return (
+    code.includes('invalid_prompt') ||
+    code.includes('content_policy_violation') ||
+    code.includes('content_filter') ||
+    message.includes('invalid_prompt') ||
+    message.includes('content_policy_violation') ||
+    message.includes('content_filter')
+  );
+}
+
 export function failApiCall(err: any): ProviderResponse {
   if (err instanceof OpenAI.APIError) {
     if (
@@ -475,22 +493,4 @@ export function formatOpenAiError(data: {
   }
   errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
   return errorMessage;
-}
-
-/**
- * Detects whether an OpenAI error corresponds to a guardrail-triggered refusal.
- */
-export function isOpenAIGuardrailError(data: {
-  error?: { message?: string; type?: string; code?: string };
-}): boolean {
-  const code = data.error?.code?.toLowerCase() || '';
-  const message = data.error?.message?.toLowerCase() || '';
-  return (
-    code.includes('invalid_prompt') ||
-    code.includes('content_policy_violation') ||
-    code.includes('content_filter') ||
-    message.includes('invalid_prompt') ||
-    message.includes('content_policy_violation') ||
-    message.includes('content_filter')
-  );
 }
