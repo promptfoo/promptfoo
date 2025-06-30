@@ -27,4 +27,8 @@ export default class RedteamSimulatedUserProvider extends SimulatedUser {
   id() {
     return PROVIDER_ID;
   }
+
+  get taskId() {
+    return 'simulated-user-redteam';
+  }
 }

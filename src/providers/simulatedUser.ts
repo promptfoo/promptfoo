@@ -25,6 +25,10 @@ export type AgentProviderOptions = ProviderOptions & {
   };
 };
 
+/**
+ * TODO(Will): Ideally this class is an Abstract Base Class that's implemented by the
+ * Redteam and Non-Redteam SimulatedUser Providers. Address this in a follow-up PR.
+ */
 export class SimulatedUser implements ApiProvider {
   private readonly identifier: string;
   private readonly maxTurns: number;
@@ -42,6 +46,13 @@ export class SimulatedUser implements ApiProvider {
     return this.identifier;
   }
 
+  /**
+   * Non-Redteam SimulatedUserProvider uses the 'tau' task.
+   */
+  get taskId() {
+    return 'tau';
+  }
+
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
@@ -55,8 +66,6 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
-    // TODO(Will): Tau server-task may not comply! Fix this server-side.
-    // i.e. Respond "I'm sorry, but I can't help with that request."
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
     logger.debug(`User: ${response.output}`);
     return [...messages, { role: 'user', content: String(response.output || '') }];
@@ -98,9 +107,7 @@ export class SimulatedUser implements ApiProvider {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
-    const userProvider = new PromptfooSimulatedUserProvider({
-      instructions,
-    });
+    const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
     let messages: Message[] = [];
