@@ -316,7 +316,7 @@ export default function Home(): JSX.Element {
       wrapperClassName="homepage-wrapper"
     >
       <Head>
-        <meta property="og:image" content="/img/meta/homepage.png" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <HomepageHeader getStartedUrl={getStartedUrl} />
