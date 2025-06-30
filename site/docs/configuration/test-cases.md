@@ -1,6 +1,21 @@
 ---
-sidebar_position: 6
+sidebar_position: 12
 sidebar_label: Test Cases
+title: Test Case Configuration - Variables, Assertions, and Data
+description: Configure test cases for LLM evaluation with variables, assertions, CSV data, and dynamic generation. Learn inline tests, external files, and media support.
+keywords:
+  [
+    test cases,
+    LLM testing,
+    evaluation data,
+    assertions,
+    CSV tests,
+    variables,
+    dynamic testing,
+    test automation,
+  ]
+pagination_prev: configuration/prompts
+pagination_next: configuration/scenarios
 ---
 
 # Test Case Configuration

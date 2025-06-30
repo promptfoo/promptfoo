@@ -1,6 +1,19 @@
 ---
-sidebar_position: 26
+sidebar_position: 13
 sidebar_label: Scenarios
+title: Scenario Configuration - Grouping Tests and Data
+description: Configure scenarios to group test data with evaluation tests. Learn how to organize and run multiple test combinations efficiently in promptfoo.
+keywords:
+  [
+    test scenarios,
+    grouped testing,
+    test organization,
+    data combinations,
+    evaluation scenarios,
+    test management,
+  ]
+pagination_prev: configuration/test-cases
+pagination_next: configuration/datasets
 ---
 
 # Scenarios

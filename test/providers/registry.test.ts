@@ -306,29 +306,39 @@ describe('Provider Registry', () => {
       );
       expect(factory).toBeDefined();
 
+      // Cloudflare AI requires both accountId and apiKey
+      const cloudflareProviderOptions = {
+        ...mockProviderOptions,
+        config: {
+          ...mockProviderOptions.config,
+          accountId: 'test-account-id',
+          apiKey: 'test-api-key',
+        },
+      };
+
       const chatProvider = await factory!.create(
         'cloudflare-ai:chat:@cf/meta/llama-2-7b-chat-fp16',
-        mockProviderOptions,
+        cloudflareProviderOptions,
         mockContext,
       );
       expect(chatProvider).toBeDefined();
 
       const embeddingProvider = await factory!.create(
         'cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5',
-        mockProviderOptions,
+        cloudflareProviderOptions,
         mockContext,
       );
       expect(embeddingProvider).toBeDefined();
 
       const completionProvider = await factory!.create(
         'cloudflare-ai:completion:@cf/meta/llama-2-7b-chat-fp16',
-        mockProviderOptions,
+        cloudflareProviderOptions,
         mockContext,
       );
       expect(completionProvider).toBeDefined();
 
       await expect(
-        factory!.create('cloudflare-ai:invalid:model', mockProviderOptions, mockContext),
+        factory!.create('cloudflare-ai:invalid:model', cloudflareProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Cloudflare AI model type');
     });
 
