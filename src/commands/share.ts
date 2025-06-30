@@ -119,7 +119,12 @@ export function shareCommand(program: Command) {
           cloudConfig.isEnabled() &&
           (await hasEvalBeenShared(eval_))
         ) {
-          const url = await getShareableUrl(eval_, cmdObj.showAuth);
+          const url = await getShareableUrl(
+            eval_,
+            // `remoteEvalId` is always the Eval ID when sharing to Cloud.
+            eval_.id,
+            cmdObj.showAuth,
+          );
           const shouldContinue = await confirm({
             message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
           });

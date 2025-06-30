@@ -11,6 +11,8 @@ As LLM applications move into production, security teams face a critical challen
 
 Two open‑source tools have emerged as popular choices for LLM red teaming, each taking a fundamentally different approach to the problem.
 
+<!-- truncate -->
+
 ## Quick Comparison
 
 | Feature                | Promptfoo                                       | Garak                                      |
@@ -19,7 +21,7 @@ Two open‑source tools have emerged as popular choices for LLM red teaming, eac
 | **Best For**           | Custom applications, RAG systems, agents        | Vulnerability scanning                     |
 | **Attack Generation**  | AI‑powered, contextual                          | Static with "buff" perturbations           |
 | **CI/CD Integration**  | Native GitHub Actions & CLI                     | Audit‑style runs via CLI                   |
-| **RAG Testing**        | Specialised RAG security suite                  | General prompt‑injection checks            |
+| **RAG Testing**        | Specialized RAG security suite                  | General prompt‑injection checks            |
 | **Agent Security**     | RBAC, tool misuse, API fuzzing                  | Limited                                    |
 | **Compliance Mapping** | OWASP, NIST, MITRE, EU AI Act                   | AI Vulnerability Database                  |
 | **License**            | MIT                                             | Apache‑2.0                                 |
@@ -64,7 +66,7 @@ This approach effectively performs intelligent fuzzing of the prompt space and a
 
 ### Garak’s Curated Attack Library
 
-Garak maintains a library of static, research‑backed attack prompts organised into 20 categories. These include well‑documented exploits such as “DAN” jailbreaks, encoding tricks to bypass filters, and prompts designed to extract training data. “Buffs” provide basic perturbations via paraphrasing, encoding, or translation, and experimental modules attempt broader algorithmic jailbreaking.
+Garak maintains a library of static, research‑backed attack prompts organized into 20 categories. These include well‑documented exploits such as “DAN” jailbreaks, encoding tricks to bypass filters, and prompts designed to extract training data. “Buffs” provide basic perturbations via paraphrasing, encoding, or translation, and experimental modules attempt broader algorithmic jailbreaking.
 
 ## Security Coverage: Where Each Tool Excels
 
@@ -80,7 +82,7 @@ Retrieval‑Augmented Generation introduces new failure modes beyond simple prom
 - **Access control**: document leakage beyond user permissions
 - **Data poisoning**: corrupted knowledge‑base entries
 
-Garak checks model behaviour but does not dive into RAG‑specific issues.
+Garak checks model behavior but does not dive into RAG‑specific issues.
 
 ### Agent and Tool Security
 
@@ -100,7 +102,7 @@ promptfoo eval --config security-tests.yaml
 
 Teams often run a small subset on every pull request, then a full scan nightly.
 
-Garak works well as a periodic audit tool:
+Garak can be used for one-off audits:
 
 ```bash
 python -m garak --model my-api --probes all --report audit-$(date +%Y%m%d)
@@ -118,10 +120,29 @@ Promptfoo maps results to OWASP, NIST RMF, MITRE ATLAS, and the EU AI Act, pro
 
 Garak can optionally push findings to the AI Vulnerability Database and compare guardrail effectiveness via NeMo integrations.
 
+## Enterprise Readiness
+
+For organizations evaluating these tools at scale, enterprise features and support can be a key decision point. While both Garak and Promptfoo are open-source, Promptfoo has an Enterprise edition.
+
+Available in Promptfoo Enterprise:
+
+- On-premise deployment - Run entirely within your infrastructure
+- Professional support with SLAs
+- Team collaboration - Shared dashboards and test management
+- Advanced analytics - Track security metrics over time
+- SSO/SAML integration - Seamless authentication
+
+The enterprise version also includes a web-based dashboard where teams can:
+
+- Manage and version control test suites
+- Track vulnerability trends across releases
+- Generate executive-ready compliance reports
+- Set up automated alerts for failed security tests
+
 ## Making the Right Choice
 
 - **Promptfoo** excels at discovering application‑specific vulnerabilities through intelligent, context‑aware testing—especially for complex RAG and agent systems.
-- **Garak** provides broad coverage of known vulnerabilities through its extensive test library.
+- **Garak** provides coverage of known vulnerabilities through its test library.
 
 Choose **Promptfoo** when you need continuous CI/CD coverage, custom attack generation, and deep RAG/agent testing.
 

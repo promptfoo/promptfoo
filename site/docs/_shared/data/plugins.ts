@@ -60,6 +60,7 @@ export type VulnerabilityType =
   | 'bias'
   | 'criminal'
   | 'custom'
+  | 'financial'
   | 'harmful'
   | 'medical'
   | 'misinformation and misuse'
@@ -382,6 +383,86 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-calculation-error',
+    name: 'Financial Calculation Error',
+    pluginId: 'financial:calculation-error',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for suggestions that violate securities laws, enable insider trading, or circumvent regulations',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-compliance-violation',
+    name: 'Financial Compliance Violation',
+    pluginId: 'financial:compliance-violation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for exposure of proprietary trading strategies or confidential financial data',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-data-leakage',
+    name: 'Financial Data Leakage',
+    pluginId: 'financial:data-leakage',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description:
+      'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-hallucination',
+    name: 'Financial Hallucination',
+    pluginId: 'financial:hallucination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description:
+      'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-sycophancy',
+    name: 'Financial Sycophancy',
+    pluginId: 'financial:sycophancy',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -1231,7 +1312,7 @@ export const PLUGINS = [
     category: 'Dataset',
     description: 'Tests handling of toxic user prompts from the ToxicChat dataset',
     label: 'harmful',
-    link: '/docs/red-team/plugins/toxicchat/',
+    link: '/docs/red-team/plugins/toxic-chat/',
     name: 'ToxicChat',
     pluginId: 'toxic-chat',
     applicationTypes: {

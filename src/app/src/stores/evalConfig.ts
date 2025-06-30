@@ -1,4 +1,5 @@
 import type {
+  DerivedMetric,
   EnvOverrides,
   EvaluateOptions,
   EvaluateTestSuiteWithEvaluateOptions,
@@ -17,6 +18,7 @@ export interface State {
   providers: ProviderOptions[];
   prompts: any[];
   defaultTest: TestCase;
+  derivedMetrics: DerivedMetric[];
   evaluateOptions: EvaluateOptions;
   scenarios: Scenario[];
   extensions: string[];
@@ -26,6 +28,7 @@ export interface State {
   setProviders: (providers: ProviderOptions[]) => void;
   setPrompts: (prompts: any[]) => void;
   setDefaultTest: (testCase: TestCase) => void;
+  setDerivedMetrics: (derivedMetrics: DerivedMetric[]) => void;
   setEvaluateOptions: (options: EvaluateOptions) => void;
   setScenarios: (scenarios: Scenario[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
@@ -43,6 +46,7 @@ export const useStore = create<State>()(
       prompts: [],
       extensions: [],
       defaultTest: {},
+      derivedMetrics: [],
       evaluateOptions: {},
       scenarios: [],
       setEnv: (env) => set({ env }),
@@ -51,6 +55,7 @@ export const useStore = create<State>()(
       setProviders: (providers) => set({ providers }),
       setPrompts: (prompts) => set({ prompts }),
       setDefaultTest: (testCase) => set({ defaultTest: testCase }),
+      setDerivedMetrics: (derivedMetrics) => set({ derivedMetrics }),
       setEvaluateOptions: (options) => set({ evaluateOptions: options }),
       setScenarios: (scenarios) => set({ scenarios }),
       setExtensions: (extensions) => set({ extensions }),
@@ -77,6 +82,9 @@ export const useStore = create<State>()(
         if (config.defaultTest) {
           updates.defaultTest = config.defaultTest;
         }
+        if (config.derivedMetrics) {
+          updates.derivedMetrics = config.derivedMetrics;
+        }
         if (config.evaluateOptions) {
           updates.evaluateOptions = config.evaluateOptions;
         }
@@ -99,6 +107,7 @@ export const useStore = create<State>()(
           testCases,
           evaluateOptions,
           defaultTest,
+          derivedMetrics,
         } = get();
         return {
           description,
@@ -110,6 +119,7 @@ export const useStore = create<State>()(
           tests: testCases,
           evaluateOptions,
           defaultTest,
+          derivedMetrics,
         };
       },
     }),

@@ -87,6 +87,16 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for factually wrong medical information that could cause harm',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
+  'financial:calculation-error':
+    'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
+  'financial:compliance-violation':
+    'Tests for suggestions that violate securities laws, enable insider trading, or circumvent regulations',
+  'financial:data-leakage':
+    'Tests for exposure of proprietary trading strategies or confidential financial data',
+  'financial:hallucination':
+    'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
+  'financial:sycophancy':
+    'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
@@ -162,6 +172,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
+  'financial:calculation-error': 'Financial Calculation Error',
+  'financial:compliance-violation': 'Financial Compliance Violation',
+  'financial:data-leakage': 'Financial Data Leakage',
+  'financial:hallucination': 'Financial Hallucination',
+  'financial:sycophancy': 'Financial Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
@@ -270,6 +285,18 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   bfla: Severity.High,
   bola: Severity.High,
   cca: Severity.High,
+  mcp: Severity.High,
+  'medical:anchoring-bias': Severity.Medium,
+  'medical:hallucination': Severity.Medium,
+  'medical:incorrect-knowledge': Severity.Medium,
+  'medical:prioritization-error': Severity.Low,
+  'medical:sycophancy': Severity.Low,
+  'financial:calculation-error': Severity.Low,
+  'financial:compliance-violation': Severity.Medium,
+  'financial:data-leakage': Severity.Medium,
+  'financial:hallucination': Severity.Low,
+  'financial:sycophancy': Severity.Low,
+  'off-topic': Severity.Medium,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
@@ -381,6 +408,11 @@ export const riskCategories: Record<string, Plugin[]> = {
 
   'Compliance & Legal': [
     'contracts',
+    'financial:calculation-error',
+    'financial:compliance-violation',
+    'financial:data-leakage',
+    'financial:hallucination',
+    'financial:sycophancy',
     'harmful:chemical-biological-weapons',
     'harmful:copyright-violations',
     'harmful:cybercrime:malicious-code',
@@ -490,6 +522,11 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
+  'financial:calculation-error': 'FinancialCalculationError',
+  'financial:compliance-violation': 'FinancialComplianceViolation',
+  'financial:data-leakage': 'FinancialDataLeakage',
+  'financial:hallucination': 'FinancialHallucination',
+  'financial:sycophancy': 'FinancialSycophancy',
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
@@ -639,6 +676,16 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':
     'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
+  'financial:calculation-error':
+    'Tests for errors in option pricing, risk calculations, portfolio optimization, or other quantitative financial analysis that could lead to significant losses',
+  'financial:compliance-violation':
+    'Tests for suggestions that enable insider trading, market manipulation, money laundering, or other violations of securities laws and financial regulations',
+  'financial:data-leakage':
+    'Tests for exposure of proprietary trading algorithms, customer account information, M&A details, or other confidential financial data',
+  'financial:hallucination':
+    'Tests for fabricated market data, non-existent financial instruments, fictional company financials, or invented market events',
+  'financial:sycophancy':
+    'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes at the expense of sound financial guidance',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose by performing tasks completely outside their domain',
   'indirect-prompt-injection':
