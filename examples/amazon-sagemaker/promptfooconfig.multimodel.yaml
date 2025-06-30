@@ -7,11 +7,11 @@ prompts:
   - 'List 3 key benefits of {{topic}}'
 
 providers:
-  - id: sagemaker:openai:your-openai-endpoint
-    label: 'OpenAI-compatible model'
+  - id: sagemaker:huggingface:your-huggingface-endpoint
+    label: 'HuggingFace model'
     config:
       region: us-east-1
-      modelType: openai
+      modelType: huggingface
       temperature: 0.7
       maxTokens: 256
 
