@@ -335,7 +335,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Command Injection',
   'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
-  ssrf: 'SSRF Vulnerability',
+  ssrf: 'Server-Side Request Forgery',
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
