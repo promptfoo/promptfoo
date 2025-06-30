@@ -61,7 +61,7 @@ describe('constants', () => {
   });
 
   it('COLLECTIONS should contain expected values', () => {
-    expect(COLLECTIONS).toEqual(['default', 'foundation', 'harmful', 'pii']);
+    expect(COLLECTIONS).toEqual(['default', 'foundation', 'harmful', 'pii', 'bias']);
   });
 
   it('UNALIGNED_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {
