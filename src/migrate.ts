@@ -24,3 +24,5 @@ export async function runDbMigrations() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   runDbMigrations();
 }
+
+export { currentDir };
