@@ -52,7 +52,7 @@ describe('OpenAiImageProvider', () => {
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.png)',
         cached: false,
-        cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
+        cost: 0.04,
       });
     });
 
@@ -71,7 +71,7 @@ describe('OpenAiImageProvider', () => {
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image.png)',
         cached: true,
-        cost: 0, // Cost is 0 for cached responses
+        cost: 0,
       });
     });
 
@@ -95,26 +95,20 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should throw an error if API key is not set', async () => {
-      // Save original environment variable
       const originalEnv = process.env.OPENAI_API_KEY;
-      // Clear the environment variable so we can test the error
       delete process.env.OPENAI_API_KEY;
 
       try {
-        // Create provider with no API key in config or environment
         const provider = new OpenAiImageProvider('dall-e-3');
 
-        // Mock fetchWithCache to prevent it from being called
         jest.mocked(fetchWithCache).mockImplementation(() => {
           throw new Error('fetchWithCache should not be called');
         });
 
-        // Attempt to call the API should throw an error
         await expect(provider.callApi('Generate a cat')).rejects.toThrow(
           'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
         );
       } finally {
-        // Restore the original environment variable
         process.env.OPENAI_API_KEY = originalEnv;
       }
     });
@@ -232,7 +226,6 @@ describe('OpenAiImageProvider', () => {
       const mockDeleteFn = jest.fn();
       jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
-          // Invalid data structure that will cause parsing to fail
           deleteFromCache: mockDeleteFn,
         },
         cached: false,
@@ -242,6 +235,74 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
       expect(mockDeleteFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should fallback to regular error if not a guardrail error', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          error: {
+            message: 'Other error',
+            code: 'some_other_code',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Other error');
+    });
+
+    it('should fallback to error if code is not content_policy_violation', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          error: {
+            code: 'other_code',
+            message: 'Some other error',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Some other error');
+    });
+
+    it('should fallback to error if code is content_policy_violation but type is not invalid_request_error', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          error: {
+            code: 'content_policy_violation',
+            type: 'other_type',
+            message: 'Content policy violation',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Content policy violation');
     });
   });
 
@@ -260,10 +321,9 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
-        cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
+        cost: 0.04,
       });
 
-      // Verify the request included the response_format parameter
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -322,7 +382,6 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      // Check that the default size for DALL-E 3 is correctly set
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
