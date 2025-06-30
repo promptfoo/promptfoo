@@ -12,6 +12,7 @@ jest.mock('../../src/fetch', () => ({
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn().mockReturnValue(''),
 }));
+
 describe('huggingfaceDatasets', () => {
   beforeEach(() => {
     jest.mocked(fetchWithProxy).mockClear();
@@ -79,6 +80,7 @@ describe('huggingfaceDatasets', () => {
         headers: {},
       }),
     );
+
     expect(tests).toHaveLength(2);
     expect(tests[0].vars).toEqual({
       act: 'Linux Terminal',
@@ -133,15 +135,12 @@ describe('huggingfaceDatasets', () => {
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        num_rows_total: 2,
+        num_rows_total: 1,
         features: [
           { name: 'question', type: { dtype: 'string', _type: 'Value' } },
           { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
         ],
-        rows: [
-          { row: { question: 'What is 2+2?', answer: '4' } },
-          { row: { question: 'What is 3+3?', answer: '6' } },
-        ],
+        rows: [{ row: { question: 'What is 2+2?', answer: '4' } }],
       }),
     } as any);
 
