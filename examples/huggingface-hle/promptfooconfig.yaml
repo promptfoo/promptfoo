@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Humanity's Last Exam (HLE) Benchmark
+description: HLE benchmark evaluation
 
 prompts:
   - file://prompt.js
 
 providers:
-  - openai:o3-mini
+  - openai:o4-mini
   # - deepseek:deepseek-reasoner
 
 defaultTest:
@@ -31,5 +31,4 @@ defaultTest:
         confidence: The extracted confidence score between 0% and 100% from [response]. Put 100 if there is no confidence score available.
 
 tests:
-  # Load HLE dataset from Hugging Face with debug query
-  - huggingface://datasets/cais/hle?sql=SELECT category, answer_type, question, answer FROM dataset WHERE image IS NULL OR image = ''
+  - huggingface://datasets/cais/hle?split=test&limit=10

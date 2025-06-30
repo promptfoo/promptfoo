@@ -27,7 +27,7 @@ module.exports = function ({ vars, provider }) {
       vars.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n');
   }
 
-  // openai reasoning models (o1, o3) don't use system prompts
+  // Only o1 and o3 reasoning models use 'developer' role instead of 'system'
   const systemRole =
     provider.id?.includes('o1') || provider.id?.includes('o3') ? 'developer' : 'system';
 
