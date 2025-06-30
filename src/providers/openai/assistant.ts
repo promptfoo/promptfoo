@@ -143,7 +143,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string, threadId?: string): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    threadId?: string,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -190,7 +194,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       }
 
       // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${JSON.stringify(functionArguments)}`);
+      logger.debug(
+        `Executing function '${functionName}' with args: ${JSON.stringify(functionArguments)}`,
+      );
       const result = await callback(JSON.stringify(functionArguments));
 
       // Format the result
