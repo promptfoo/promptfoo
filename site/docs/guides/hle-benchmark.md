@@ -143,6 +143,7 @@ The rendered prompts look like this:
 ```
 
 The Python approach enables provider-specific adaptations:
+
 - **OpenAI models**: Uses `image_url` format for images, `developer` role for o1/o3 reasoning models
 - **Anthropic models**: Converts images to base64 `source` format for Claude compatibility
 - **Response structure**: Standardized format with explanation, answer, and confidence scoring
@@ -152,6 +153,7 @@ The Python approach enables provider-specific adaptations:
 Promptfoo uses LLM-as-a-judge for automated grading with the built-in `llm-rubric` assertion. This approach evaluates model responses against the expected answers without requiring exact string matches.
 
 The grading system:
+
 - Uses o3-mini as the judge model to verify answer correctness
 - Accounts for equivalent formats (decimals vs fractions, different notation styles)
 - Handles both multiple-choice and exact-match question types
@@ -161,12 +163,12 @@ This automated approach scales well for large evaluations while maintaining accu
 
 ## Customization Options
 
-**Configuration choices:**
+**Key settings:**
 
-- **3K thinking tokens**: Supports Claude's multi-step reasoning on complex proofs (chosen arbitrarily without systematic optimization)
-- **4K max tokens**: Prevents streaming warnings while allowing detailed explanations
-- **50 questions**: Provides meaningful sample size within reasonable time/cost constraints
-- **Custom prompts**: Structured prompts improve performance over raw questions, with provider-specific image formatting
+- **3K thinking tokens**: Tradeoff between cost and reasoning capability - more tokens may improve accuracy
+- **4K max tokens**: Allows detailed explanations without truncation
+- **50 questions**: Sample size chosen for this demonstration - scale up for production evals
+- **Custom prompts**: Can be further optimized for specific models and question types
 
 **Test more questions:**
 
@@ -195,13 +197,11 @@ providers:
       max_tokens: 12000
 ```
 
-
-
 ## Eval Limitations
 
 Keep in mind these results are preliminary - we only tested 50 questions per model in a single run. That's a pretty small sample from HLE's 14,000+ questions, and we didn't optimize our approach much (token budgets, prompts, etc. were chosen somewhat arbitrarily).
 
-The 42% success rate for o4-mini is surprising and would need validation with more rigorous testing across different question subsets and multiple runs. Real-world performance could vary significantly across subject areas and question types.
+o4-mini's 42% success rate stands out and requires validation through larger samples and multiple runs. Performance will likely vary considerably across different subjects and question formats.
 
 ## Implications for AI Development
 
