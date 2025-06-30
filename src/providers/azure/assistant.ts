@@ -8,6 +8,7 @@ import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } fro
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
+import type { CallbackContext } from '../openai/types';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
@@ -194,7 +195,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    context?: CallbackContext,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -223,9 +228,13 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      // Execute the callback with explicit context
+      logger.debug(
+        `Executing function '${functionName}' with args: ${args}${
+          context ? ` and context: ${JSON.stringify(context)}` : ''
+        }`,
+      );
+      const result = await callback(args, context);
 
       // Format the result
       if (result === undefined || result === null) {
@@ -713,6 +722,14 @@ export class AzureAssistantProvider extends AzureGenericProvider {
               }
             }
 
+            // Build context for function callbacks
+            const callbackContext: CallbackContext = {
+              threadId,
+              runId,
+              assistantId: this.deploymentName, // Azure uses deploymentName as the assistant ID
+              provider: 'azure',
+            };
+
             // Process tool calls that have matching callbacks
             const toolOutputs = await Promise.all(
               functionCallsWithCallbacks.map(async (toolCall) => {
@@ -722,10 +739,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                 try {
                   logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
 
-                  // Use our new executeFunctionCallback method
+                  // Use our new executeFunctionCallback method with context
                   const outputResult = await this.executeFunctionCallback(
                     functionName,
                     functionArgs,
+                    callbackContext,
                   );
 
                   logger.debug(`Function ${functionName} result: ${outputResult}`);
