@@ -1,9 +1,14 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
 
+// Modifiers are used to modify the behavior of the plugin.
+// They let the user specify additional instructions for the plugin,
+// and can be anything the user wants.
+export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
+export type Intent = string | string[];
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
-export type PluginConfig = RedteamObjectConfig & {
+export type PluginConfig = {
   examples?: string[];
   graderExamples?: {
     output: string;
@@ -12,6 +17,29 @@ export type PluginConfig = RedteamObjectConfig & {
     reason: string;
   }[];
   severity?: Severity;
+  language?: string;
+  prompt?: string;
+  purpose?: string;
+  modifiers?: Partial<Record<Modifier, unknown>>;
+  // BOLA
+  targetIdentifiers?: string[];
+  // BFLA
+  targetSystems?: string[];
+  // Competitor
+  mentions?: boolean;
+  // SSRF
+  targetUrls?: string[];
+  // PII
+  name?: string;
+  // CyberSecEval
+  multilingual?: boolean;
+
+  indirectInjectionVar?: string;
+  intent?: Intent | Intent[];
+  policy?: string;
+  systemPrompt?: string;
+  // Strategy exclusions - allows plugins to exclude incompatible strategies
+  excludeStrategies?: string[];
 };
 export type StrategyConfig = RedteamObjectConfig;
 
@@ -73,6 +101,7 @@ type CommonOptions = {
   remote?: boolean;
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  testGenerationInstructions?: string;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
@@ -154,6 +183,7 @@ export interface SavedRedteamConfig {
   purpose?: string;
   extensions?: string[];
   numTests?: number;
+  maxConcurrency?: number;
   applicationDefinition: {
     purpose?: string;
     features?: string;
@@ -174,7 +204,9 @@ export interface SavedRedteamConfig {
     accessToActions?: string;
     forbiddenActions?: string;
     connectedSystems?: string;
+    attackConstraints?: string;
   };
+  testGenerationInstructions?: string;
   entities: string[];
   defaultTest?: TestCase;
 }

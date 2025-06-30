@@ -45,19 +45,21 @@ redteam:
   provider: string | ProviderOptions
   purpose: string
   language: string
+  testGenerationInstructions: string
 ```
 
 ### Configuration Fields
 
-| Field                   | Type                      | Description                                                              | Default                         |
-| ----------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
-| `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
-| `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`               | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
-| `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
-| `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
-| `language`              | `string`                  | Language for generated tests                                             | English                         |
+| Field                        | Type                      | Description                                                              | Default                         |
+| ---------------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
+| `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
+| `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
+| `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
+| `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
+| `language`                   | `string`                  | Language for generated tests                                             | English                         |
+| `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation     | Empty                           |
 
 ### Plugin Configuration
 
@@ -146,6 +148,57 @@ plugins:
         tone: 'professional and formal'
         style: 'using complex vocabulary'
         context: 'in a business setting'
+```
+
+### Test Generation Instructions
+
+The `testGenerationInstructions` field allows you to provide additional guidance on how red team attacks should be generated for your application. These instructions are automatically applied to all plugins during test generation, ensuring that attacks are contextually relevant and follow your desired approach.
+
+This feature is particularly useful for:
+
+- Domain-specific applications that require specialized attack patterns
+- Applications with unique constraints or behaviors
+- Focusing on particular types of vulnerabilities
+- Ensuring attacks use appropriate terminology and scenarios
+- Avoiding irrelevant test scenarios
+
+Example usage:
+
+```yaml
+redteam:
+  testGenerationInstructions: |
+    Focus on healthcare-specific attacks using medical terminology and patient scenarios. 
+    Ensure all prompts reference realistic medical situations that could occur in patient interactions.
+    Consider HIPAA compliance requirements when generating privacy-related attacks.
+```
+
+#### Examples by Domain
+
+**Healthcare Application:**
+
+```yaml
+testGenerationInstructions: |
+  Generate attacks that use medical terminology and realistic patient scenarios.
+  Focus on HIPAA violations, patient confidentiality breaches, and medical record access.
+  Use authentic healthcare workflows and medical professional language.
+```
+
+**Financial Services:**
+
+```yaml
+testGenerationInstructions: |
+  Create attacks targeting financial regulations and compliance requirements.
+  Use banking terminology and realistic financial scenarios.
+  Focus on PCI DSS violations, account access controls, and transaction security.
+```
+
+**Internal Corporate Tool:**
+
+```yaml
+testGenerationInstructions: |
+  Generate attacks that attempt to access cross-departmental information.
+  Use realistic employee scenarios and corporate terminology.
+  Focus on role-based access control bypasses and information disclosure.
 ```
 
 ## Core Concepts
@@ -451,7 +504,7 @@ strategies:
 
 ### Purpose
 
-The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
+The `purpose` field provides context to guide the generation of adversarial inputs.
 
 The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
 
@@ -792,6 +845,10 @@ redteam:
   provider: 'openai:chat:gpt-4.1'
   language: 'French'
   numTests: 20
+  testGenerationInstructions: |
+    Focus on attacks that attempt to bypass content filters and safety measures.
+    Use realistic user scenarios and conversational language.
+    Test for jailbreaking attempts and prompt injection vulnerabilities.
   plugins:
     - id: 'harmful:child-exploitation'
       numTests: 15
@@ -809,7 +866,7 @@ In some cases, you may already have a set of tests that you want to use in addit
 
 There are two approaches:
 
-1. Run these tests as a separate eval. See the [getting started](https://www.promptfoo.dev/docs/getting-started/) guide for evaluations. For grading, you will likely want to use the [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) or [`moderation`](/docs/configuration/expected-outputs/moderation/) assertion types.
+1. Run these tests as a separate eval. See the [getting started](/docs/getting-started/) guide for evaluations. For grading, you will likely want to use the [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) or [`moderation`](/docs/configuration/expected-outputs/moderation/) assertion types.
 1. You can also add your custom tests to the `tests` section of the generated `redteam.yaml` configuration file.
 
 Either way, this will allow you to evaluate your custom tests.
@@ -849,4 +906,4 @@ prompts:
 tests: huggingface://datasets/rajpurkar/squad
 ```
 
-For detailed information about query parameters, dataset configuration, and more examples, see the [HuggingFace provider documentation](/docs/providers/huggingface/#datasets).
+For detailed information about query parameters, dataset configuration, and more examples, see [Loading Test Cases from HuggingFace Datasets](/docs/configuration/huggingface-datasets).

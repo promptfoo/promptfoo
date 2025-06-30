@@ -42,7 +42,6 @@ npx promptfoo@latest init --example redteam-multi-modal
 This example requires the following environment variables depending on which approach you're using:
 
 - For the Static Image and Image Strategy examples:
-
   - `AWS_ACCESS_KEY_ID` - Your AWS access key for Amazon Bedrock
   - `AWS_SECRET_ACCESS_KEY` - Your AWS secret key for Amazon Bedrock
   - `AWS_REGION` - Your AWS region (e.g., `us-east-1`)

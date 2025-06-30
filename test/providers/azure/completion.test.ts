@@ -76,6 +76,8 @@ describe('AzureCompletionProvider', () => {
         }),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -112,7 +114,6 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle missing API host', async () => {
-    // Simulate fetchWithCache throwing due to missing API host
     jest.mocked(fetchWithCache).mockImplementationOnce(() => {
       throw new Error('Azure API host must be set.');
     });
@@ -121,7 +122,6 @@ describe('AzureCompletionProvider', () => {
     (provider as any).initialized = true;
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    // The code now returns {error: ...}, not throws, so check for error property
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: Azure API host must be set.');
   });
@@ -179,7 +179,6 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle exception in response parsing gracefully', async () => {
-    // Simulate a malformed data object that will throw in try/catch block
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {},
       cached: false,
@@ -252,6 +251,8 @@ describe('AzureCompletionProvider', () => {
         }),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 });
