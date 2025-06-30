@@ -440,3 +440,7 @@ tests:
 ## Loading from Google Sheets
 
 See [Google Sheets integration](/docs/configuration/guide#loading-tests-from-csv) for details on loading test data directly from spreadsheets.
+
+## Loading from HuggingFace datasets
+
+See [HuggingFace Datasets](/docs/configuration/huggingface-datasets) for instructions on importing test cases from existing datasets.

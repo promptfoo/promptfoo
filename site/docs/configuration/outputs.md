@@ -13,7 +13,7 @@ keywords:
     CSV analysis,
     result visualization,
   ]
-pagination_prev: configuration/datasets
+pagination_prev: configuration/huggingface-datasets
 pagination_next: configuration/chat
 ---
 

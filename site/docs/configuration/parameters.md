@@ -99,6 +99,12 @@ tests:
 tests: file://test_cases.csv
 ```
 
+**HuggingFace datasets**
+
+```yaml
+tests: huggingface://datasets/rajpurkar/squad
+```
+
 **Dynamic generation**
 
 ```yaml
@@ -174,16 +180,17 @@ outputPath: evaluations/customer_service_results.html
 
 ### Supported File Formats
 
-| Format      | Prompts | Tests | Use Case                            |
-| ----------- | ------- | ----- | ----------------------------------- |
-| `.txt`      | ✅      | ❌    | Simple text prompts                 |
-| `.json`     | ✅      | ✅    | Chat conversations, structured data |
-| `.yaml`     | ✅      | ✅    | Complex configurations              |
-| `.csv`      | ✅      | ✅    | Bulk data, multiple variants        |
-| `.js`/`.ts` | ✅      | ✅    | Dynamic generation with logic       |
-| `.py`       | ✅      | ✅    | Python-based generation             |
-| `.md`       | ✅      | ❌    | Markdown-formatted prompts          |
-| `.j2`       | ✅      | ❌    | Jinja2 templates                    |
+| Format               | Prompts | Tests | Use Case                            |
+| -------------------- | ------- | ----- | ----------------------------------- |
+| `.txt`               | ✅      | ❌    | Simple text prompts                 |
+| `.json`              | ✅      | ✅    | Chat conversations, structured data |
+| `.yaml`              | ✅      | ✅    | Complex configurations              |
+| `.csv`               | ✅      | ✅    | Bulk data, multiple variants        |
+| `.js`/`.ts`          | ✅      | ✅    | Dynamic generation with logic       |
+| `.py`                | ✅      | ✅    | Python-based generation             |
+| `.md`                | ✅      | ❌    | Markdown-formatted prompts          |
+| `.j2`                | ✅      | ❌    | Jinja2 templates                    |
+| HuggingFace datasets | ❌      | ✅    | Import from existing datasets       |
 
 ### Variable Syntax
 
@@ -222,6 +229,7 @@ prompts:
 
 - **[Prompts](/docs/configuration/prompts)** - Deep dive into prompt configuration
 - **[Test Cases](/docs/configuration/test-cases)** - Learn about test scenarios and assertions
+- **[HuggingFace Datasets](/docs/configuration/huggingface-datasets)** - Import test cases from existing datasets
 - **[Output Formats](/docs/configuration/outputs)** - Understand evaluation results
 - **[Expected Outputs](/docs/configuration/expected-outputs)** - Configure assertions
 - **[Configuration Reference](/docs/configuration/reference)** - All configuration options

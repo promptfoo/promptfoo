@@ -14,7 +14,7 @@ keywords:
     synthetic data,
   ]
 pagination_prev: configuration/scenarios
-pagination_next: configuration/outputs
+pagination_next: configuration/huggingface-datasets
 ---
 
 # Dataset generation
