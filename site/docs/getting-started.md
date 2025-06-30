@@ -420,7 +420,7 @@ A similar approach can be used to run other model comparisons. For example, you 
 ## Additional Resources
 
 - [&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
-- [&raquo; Providers documentation](/docs/providers) for all supported AI models and services  
+- [&raquo; Providers documentation](/docs/providers) for all supported AI models and services
 - [&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically assessing outputs
 
 ## More Examples
