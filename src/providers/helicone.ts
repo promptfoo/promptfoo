@@ -1,5 +1,5 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
 import type { ProviderOptions } from '../types';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
@@ -19,12 +19,15 @@ export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
 export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
   private heliconeConfig: HeliconeGatewayOptions;
 
-  constructor(modelName: string, options: ProviderOptions & { config?: HeliconeGatewayOptions } = {}) {
+  constructor(
+    modelName: string,
+    options: ProviderOptions & { config?: HeliconeGatewayOptions } = {},
+  ) {
     const config = options.config || {};
-    
+
     // Default base URL to localhost Helicone AI Gateway
     const baseUrl = config.baseUrl || 'http://localhost:8080';
-    
+
     // Determine endpoint based on router configuration
     let apiBaseUrl: string;
     if (config.router) {
@@ -60,7 +63,8 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
   }
 
   toString(): string {
-    const baseUrl = this.config.apiBaseUrl || this.heliconeConfig.baseUrl || 'http://localhost:8080';
+    const baseUrl =
+      this.config.apiBaseUrl || this.heliconeConfig.baseUrl || 'http://localhost:8080';
     return `[Helicone AI Gateway ${baseUrl}]`;
   }
-} 
+}

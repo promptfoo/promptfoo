@@ -21,6 +21,7 @@ This example demonstrates how to use the Helicone AI Gateway provider in promptf
 ## Setup
 
 1. **Set Environment Variables**:
+
    ```bash
    # Set your provider API keys
    export OPENAI_API_KEY=your_openai_api_key_here
@@ -29,11 +30,12 @@ This example demonstrates how to use the Helicone AI Gateway provider in promptf
    ```
 
 2. **Start Helicone AI Gateway**:
+
    ```bash
    # In a separate terminal, start the gateway
    npx @helicone/ai-gateway@latest
    ```
-   
+
    The gateway will start on `http://localhost:8080` by default.
 
 3. **Install promptfoo** (if you haven't already):
@@ -50,6 +52,7 @@ promptfoo eval
 ```
 
 This will:
+
 - Send the same prompts to all three providers through the Helicone AI Gateway
 - Compare responses and performance across providers
 - Generate a detailed comparison report
@@ -77,10 +80,11 @@ The Helicone AI Gateway provides several powerful features:
 The example configuration includes:
 
 ### Provider Setup
+
 ```yaml
 providers:
   - id: helicone-openai
-    label: "OpenAI via Helicone Gateway"
+    label: 'OpenAI via Helicone Gateway'
     provider: helicone:openai/gpt-4o-mini
     config:
       temperature: 0.7
@@ -125,7 +129,7 @@ providers:
   - id: production-gateway
     helicone:openai/gpt-4o:
       router: production
-      
+
   - id: development-gateway
     helicone:openai/gpt-3.5-turbo:
       router: development
@@ -171,4 +175,4 @@ LOG_LEVEL=debug promptfoo eval
 1. **Explore the Dashboard**: Review the analytics in your Helicone dashboard
 2. **Set Up Alerts**: Configure cost and usage alerts in Helicone
 3. **Optimize Costs**: Use caching and rate limiting to reduce expenses
-4. **Scale Testing**: Add more providers and test cases for comprehensive evaluation 
+4. **Scale Testing**: Add more providers and test cases for comprehensive evaluation

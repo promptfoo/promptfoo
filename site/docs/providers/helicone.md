@@ -61,8 +61,8 @@ providers:
   - id: helicone-custom
     helicone:openai/gpt-4o:
       # Gateway configuration
-      baseUrl: http://localhost:8080  # Custom gateway URL
-      router: production              # Use specific router
+      baseUrl: http://localhost:8080 # Custom gateway URL
+      router: production # Use specific router
       # Standard OpenAI options
       temperature: 0.7
       max_tokens: 1500
@@ -79,7 +79,7 @@ providers:
   - id: helicone-production
     helicone:openai/gpt-4o:
       router: production
-  - id: helicone-development  
+  - id: helicone-development
     helicone:openai/gpt-3.5-turbo:
       router: development
 ```
@@ -91,8 +91,9 @@ providers:
 The Helicone provider uses the format: `helicone:provider/model`
 
 Examples:
+
 - `helicone:openai/gpt-4o`
-- `helicone:anthropic/claude-3-5-sonnet` 
+- `helicone:anthropic/claude-3-5-sonnet`
 - `helicone:groq/llama-3.1-8b-instant`
 
 ### Supported Models
@@ -143,10 +144,10 @@ prompts:
 
 tests:
   - vars:
-      text: "Hello world"
+      text: 'Hello world'
     assert:
       - type: contains
-        value: "Bonjour"
+        value: 'Bonjour'
 ```
 
 ### Multi-Provider Comparison with Observability
@@ -158,7 +159,7 @@ providers:
       tags: ['openai', 'gpt4']
       properties:
         model_family: 'gpt-4'
-        
+
   - id: helicone:anthropic:claude-3-5-sonnet-20241022
     config:
       tags: ['anthropic', 'claude']
@@ -166,11 +167,11 @@ providers:
         model_family: 'claude-3'
 
 prompts:
-  - "Write a creative story about {{topic}}"
+  - 'Write a creative story about {{topic}}'
 
 tests:
   - vars:
-      topic: "a robot learning to paint"
+      topic: 'a robot learning to paint'
 ```
 
 ### Custom Provider with Full Configuration
@@ -199,11 +200,11 @@ providers:
         Custom-Header: custom-value
 
 prompts:
-  - "Answer the following question: {{question}}"
+  - 'Answer the following question: {{question}}'
 
 tests:
   - vars:
-      question: "What is artificial intelligence?"
+      question: 'What is artificial intelligence?'
 ```
 
 ### Caching and Performance Optimization
@@ -218,14 +219,14 @@ providers:
         use_case: 'batch_processing'
 
 prompts:
-  - "Summarize: {{text}}"
+  - 'Summarize: {{text}}'
 
 tests:
   - vars:
-      text: "Large text content to summarize..."
+      text: 'Large text content to summarize...'
     assert:
       - type: latency
-        threshold: 2000  # Should be faster due to caching
+        threshold: 2000 # Should be faster due to caching
 ```
 
 ## Features
@@ -233,6 +234,7 @@ tests:
 ### Request Monitoring
 
 All requests routed through Helicone are automatically logged with:
+
 - Request/response payloads
 - Token usage and costs
 - Latency metrics
@@ -241,6 +243,7 @@ All requests routed through Helicone are automatically logged with:
 ### Cost Analytics
 
 Track costs across different providers and models:
+
 - Per-request cost breakdown
 - Aggregated cost analytics
 - Cost optimization recommendations
@@ -248,6 +251,7 @@ Track costs across different providers and models:
 ### Caching
 
 Intelligent response caching:
+
 - Semantic similarity matching
 - Configurable cache duration
 - Cost reduction through cache hits
@@ -255,6 +259,7 @@ Intelligent response caching:
 ### Rate Limiting
 
 Built-in rate limiting:
+
 - Per-user limits
 - Per-session limits
 - Custom rate limiting rules
@@ -288,4 +293,4 @@ LOG_LEVEL=debug promptfoo eval
 - [Helicone Documentation](https://docs.helicone.ai/)
 - [Helicone Dashboard](https://helicone.ai/dashboard)
 - [Helicone GitHub](https://github.com/Helicone/helicone)
-- [promptfoo Provider Guide](/docs/providers/) 
+- [promptfoo Provider Guide](/docs/providers/)
