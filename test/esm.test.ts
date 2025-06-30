@@ -1,5 +1,5 @@
 import path from 'path';
-import { importModule, getDirectory, require, currentFileDir } from '../src/esm';
+import { importModule } from '../src/esm';
 import logger from '../src/logger';
 
 // Mock logger only (do not mock ./util/file.node)
@@ -16,15 +16,6 @@ jest.mock('../src/logger', () => ({
 describe('ESM utilities', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-  });
-
-  describe('getDirectory', () => {
-    it('returns the current file directory', () => {
-      const dir = getDirectory();
-      expect(dir).toBe(currentFileDir);
-      expect(typeof dir).toBe('string');
-      expect(path.isAbsolute(dir)).toBe(true);
-    });
   });
 
   describe('importModule', () => {
@@ -335,35 +326,6 @@ describe('ESM utilities', () => {
 
       jest.unmock('node:url');
       jest.unmock('../src/util/file.node');
-    });
-  });
-
-  describe('require', () => {
-    it('can require CommonJS modules', () => {
-      const modulePath = path.resolve(__dirname, 'fixtures/commonjs.js');
-      jest.doMock(
-        modulePath,
-        () => ({
-          testFunction: () => 'commonjs result',
-        }),
-        { virtual: true },
-      );
-
-      const result = require(modulePath);
-      expect(result).toEqual({ testFunction: expect.any(Function) });
-    });
-
-    it('uses createRequire implementation', () => {
-      const modulePath = path.resolve(__dirname, 'fixtures/requireTest.js');
-      jest.doMock(
-        modulePath,
-        () => ({
-          foo: 'bar',
-        }),
-        { virtual: true },
-      );
-      const result = require(modulePath);
-      expect(result).toEqual({ foo: 'bar' });
     });
   });
 });
