@@ -38,6 +38,7 @@ import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
+import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
   HuggingfaceFeatureExtractionProvider,
@@ -540,6 +541,25 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const modelName = providerPath.split(':')[1];
       return new GroqProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('helicone:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      // Parse helicone:model format (e.g., helicone:openai/gpt-4o)
+      const model = providerPath.substring('helicone:'.length);
+
+      if (!model) {
+        throw new Error(
+          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-3-5-sonnet)',
+        );
+      }
+
+      return new HeliconeGatewayProvider(model, providerOptions);
     },
   },
   {

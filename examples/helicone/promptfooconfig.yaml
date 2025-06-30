@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Helicone AI Gateway provider comparison'
+
+providers:
+  # Basic usage with different providers through Helicone AI Gateway
+  - id: helicone:openai/gpt-4o-mini
+    label: 'OpenAI via Helicone Gateway'
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+  - id: helicone:anthropic/claude-3-5-sonnet
+    label: 'Anthropic via Helicone Gateway'
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+  - id: helicone:groq/llama-3.1-8b-instant
+    label: 'Groq via Helicone Gateway'
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+prompts:
+  - |
+    You are a helpful AI assistant. Please answer the following question concisely and accurately.
+
+    Question: {{question}}
+
+    Provide a clear, informative response.
+
+tests:
+  - description: 'Basic question answering'
+    vars:
+      question: 'What is machine learning?'
+    assert:
+      - type: contains
+        value: 'algorithm'
+      - type: contains
+        value: 'data'
+      - type: llm-rubric
+        value: 'Response accurately explains machine learning concepts'
+
+  - description: 'Creative writing task'
+    vars:
+      question: 'Write a short story about a robot learning to paint in exactly 3 sentences.'
+    assert:
+      - type: llm-rubric
+        value: 'Story is exactly 3 sentences long'
+      - type: llm-rubric
+        value: 'Story is creative and engaging'
+      - type: contains
+        value: 'robot'
+
+  - description: 'Technical explanation'
+    vars:
+      question: 'Explain the difference between supervised and unsupervised learning.'
+    assert:
+      - type: contains
+        value: 'supervised'
+      - type: contains
+        value: 'unsupervised'
+      - type: llm-rubric
+        value: 'Explanation clearly distinguishes between the two types of learning'
+
+  - description: 'Math problem solving'
+    vars:
+      question: 'If a train travels 60 miles per hour for 2.5 hours, how far does it travel?'
+    assert:
+      - type: contains
+        value: '150'
+      - type: llm-rubric
+        value: 'Calculation is correct and clearly explained'
+
+  - description: 'Code explanation'
+    vars:
+      question: 'What does this Python code do: `[x**2 for x in range(10)]`?'
+    assert:
+      - type: contains
+        value: 'list comprehension'
+      - type: contains
+        value: 'square'
+      - type: llm-rubric
+        value: 'Explanation is accurate and includes the output'
+
+defaultTest:
+  options:
+    # Helicone provides built-in cost tracking
+    # Enable cost tracking for comparison
+    includeMetrics: true

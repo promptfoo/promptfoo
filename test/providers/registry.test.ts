@@ -439,5 +439,46 @@ describe('Provider Registry', () => {
       // The actual path resolution logic (path.isAbsolute check) is identical in all providers
       // and is already covered by the implementation in registry.ts.
     });
+
+    it('should handle helicone provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('helicone:openai/gpt-4o'));
+      expect(factory).toBeDefined();
+
+      // Create a version of options without ID for Helicone tests
+      const heliconeOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const provider = await factory!.create(
+        'helicone:openai/gpt-4o',
+        heliconeOptions,
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('helicone-gateway:openai/gpt-4o');
+
+      // Test with router configuration
+      const providerWithRouter = await factory!.create(
+        'helicone:anthropic/claude-3-5-sonnet',
+        {
+          ...heliconeOptions,
+          config: {
+            ...heliconeOptions.config,
+            router: 'production',
+          },
+        },
+        mockContext,
+      );
+      expect(providerWithRouter).toBeDefined();
+      expect(providerWithRouter.id()).toBe(
+        'helicone-gateway:production:anthropic/claude-3-5-sonnet',
+      );
+
+      // Test error case with missing model
+      await expect(factory!.create('helicone:', mockProviderOptions, mockContext)).rejects.toThrow(
+        'Helicone provider requires a model in format helicone:<provider/model>',
+      );
+    });
   });
 });
