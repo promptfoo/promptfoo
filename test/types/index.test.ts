@@ -55,6 +55,14 @@ describe('AssertionSchema', () => {
       const result = AssertionSchema.safeParse(assertion);
       expect(result.success).toBe(true);
     });
+
+    // Explicitly test the finish-reason type
+    const finishReasonAssertion = {
+      type: 'finish-reason',
+      value: 'stop',
+    };
+    const finishReasonResult = AssertionSchema.safeParse(finishReasonAssertion);
+    expect(finishReasonResult.success).toBe(true);
   });
 
   it('should validate "not-" prefixed assertion types', () => {
