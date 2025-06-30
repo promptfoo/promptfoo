@@ -169,15 +169,15 @@ outputPath: evaluations/customer_service_results.html
 
 | Format               | Prompts | Tests | Use Case                            |
 | -------------------- | ------- | ----- | ----------------------------------- |
-| `.txt`               | ✅       | ❌     | Simple text prompts                 |
-| `.json`              | ✅       | ✅     | Chat conversations, structured data |
-| `.yaml`              | ✅       | ✅     | Complex configurations              |
-| `.csv`               | ✅       | ✅     | Bulk data, multiple variants        |
-| `.js`/`.ts`          | ✅       | ✅     | Dynamic generation with logic       |
-| `.py`                | ✅       | ✅     | Python-based generation             |
-| `.md`                | ✅       | ❌     | Markdown-formatted prompts          |
-| `.j2`                | ✅       | ❌     | Jinja2 templates                    |
-| HuggingFace datasets | ❌       | ✅     | Import from existing datasets       |
+| `.txt`               | ✅      | ❌    | Simple text prompts                 |
+| `.json`              | ✅      | ✅    | Chat conversations, structured data |
+| `.yaml`              | ✅      | ✅    | Complex configurations              |
+| `.csv`               | ✅      | ✅    | Bulk data, multiple variants        |
+| `.js`/`.ts`          | ✅      | ✅    | Dynamic generation with logic       |
+| `.py`                | ✅      | ✅    | Python-based generation             |
+| `.md`                | ✅      | ❌    | Markdown-formatted prompts          |
+| `.j2`                | ✅      | ❌    | Jinja2 templates                    |
+| HuggingFace datasets | ❌      | ✅    | Import from existing datasets       |
 
 ### Variable Syntax
 
