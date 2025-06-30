@@ -498,29 +498,30 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     // Since it's inside the component, we'll capture it through the setTable calls
     render(<ResultsTable {...defaultProps} />);
 
-    // Force the store to update with our mock handleRating
-    const { result } = await import('./ResultsTable');
-    
-    // The handleRating function is created in the component
+        // The handleRating function is created in the component
     // We need to trigger it through the component's internal logic
     // For now, let's verify the behavior by checking what setTable would be called with
     
     // Simulate calling handleRating for highlight toggle (isPass and score are undefined)
-    const updatedTable = {
+    const _updatedTable = {
       ...mockTable,
-      body: [{
-        ...mockTable.body[0],
-        outputs: [{
-          ...mockTable.body[0].outputs[0],
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: '!highlight New comment',
-            // componentResults should NOT be included here since it was empty
-          },
-        }],
-      }],
+      body: [
+        {
+          ...mockTable.body[0],
+          outputs: [
+            {
+              ...mockTable.body[0].outputs[0],
+              gradingResult: {
+                pass: true,
+                score: 1,
+                reason: 'Test passed',
+                comment: '!highlight New comment',
+                // componentResults should NOT be included here since it was empty
+              },
+            },
+          ],
+        },
+      ],
     };
 
     // Since we can't directly call handleRating, let's verify the logic would work correctly
@@ -566,7 +567,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     }));
 
     render(<ResultsTable {...defaultProps} />);
-    
+
     // Verify the logic for preserving non-empty componentResults
     const existingOutput = mockTable.body[0].outputs[0];
     const { componentResults: _, ...existingGradingResultWithoutComponents } =
@@ -602,10 +603,9 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     }));
 
     render(<ResultsTable {...defaultProps} />);
-    
+
     // When rating with isPass = true, componentResults should be updated
     const existingOutput = mockTable.body[0].outputs[0];
-    const modifiedComponentResults = true;
     const componentResults = [
       {
         pass: true,
@@ -626,7 +626,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       reason: 'Manual result (overrides all other grading results)',
       comment: 'Test comment',
       assertion: null,
-      componentResults: componentResults,
+      componentResults,
     };
 
     expect(expectedGradingResult.componentResults).toBeDefined();
@@ -684,7 +684,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     }));
 
     render(<ResultsTable {...defaultProps} />);
-    
+
     // When there's no existing gradingResult, it should create one
     const existingOutput = mockTable.body[0].outputs[0];
     const expectedGradingResult = {
