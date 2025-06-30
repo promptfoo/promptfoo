@@ -275,8 +275,8 @@ describe('Azure Assistant Provider', () => {
 
       // Verify the callback was only stored once but called twice
       expect(mockCallback).toHaveBeenCalledTimes(2);
-      expect(mockCallback).toHaveBeenNthCalledWith(1, '{"test":"value"}');
-      expect(mockCallback).toHaveBeenNthCalledWith(2, '{"test":"value2"}');
+      expect(mockCallback).toHaveBeenNthCalledWith(1, '{"test":"value"}', undefined);
+      expect(mockCallback).toHaveBeenNthCalledWith(2, '{"test":"value2"}', undefined);
     });
 
     it('should handle errors when loading external functions', async () => {
@@ -384,8 +384,16 @@ describe('Azure Assistant Provider', () => {
       // Assert on the entire result object
       expect(result).toEqual({ output: 'Function called successfully' });
 
-      // Verify the function was called with the correct arguments
-      expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
+      // Verify the function was called with the correct arguments and context
+      expect(functionCallbacks.testFunction).toHaveBeenCalledWith(
+        '{"param": "value"}',
+        expect.objectContaining({
+          threadId: 'thread-123',
+          runId: 'run-123',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        }),
+      );
 
       // Verify the API requests were made correctly
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
@@ -624,7 +632,15 @@ describe('Azure Assistant Provider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
+      expect(functionCallbacks.testFunction).toHaveBeenCalledWith(
+        '{"param": "value"}',
+        expect.objectContaining({
+          threadId: 'thread-123',
+          runId: 'run-123',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        }),
+      );
 
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
       expect((provider as any).makeRequest.mock.calls[4][0]).toContain('submit_tool_outputs');
@@ -1185,4 +1201,7 @@ describe('Azure Assistant Provider', () => {
       expect((provider as any).isRetryableError()).toBe(false);
     });
   });
+
+  // TODO: Add comprehensive context tests for Azure assistant provider
+  // The Azure provider now supports explicit context parameters like the OpenAI provider
 });

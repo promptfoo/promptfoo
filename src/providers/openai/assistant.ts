@@ -11,7 +11,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
-import type { OpenAiSharedOptions } from './types';
+import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
 import { failApiCall, getTokenUsage } from './util';
 
 export type OpenAiAssistantOptions = OpenAiSharedOptions & {
@@ -24,7 +24,7 @@ export type OpenAiAssistantOptions = OpenAiSharedOptions & {
    */
   functionToolCallbacks?: Record<
     OpenAI.FunctionDefinition['name'],
-    string | ((arg: string) => Promise<string>)
+    string | AssistantFunctionCallback
   >;
   metadata?: Metadata;
   temperature?: number;
@@ -146,7 +146,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   private async executeFunctionCallback(
     functionName: string,
     args: string,
-    threadId?: string,
+    context?: CallbackContext,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -176,28 +176,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      // Parse and enhance function arguments with thread_id
-      let functionArguments;
-      try {
-        functionArguments = JSON.parse(args);
-      } catch (error) {
-        functionArguments = {};
-        logger.warn(`Error parsing function arguments: ${error}`);
-      }
-
-      // Add thread_id to function arguments if available
-      if (threadId) {
-        functionArguments = {
-          ...functionArguments,
-          thread_id: threadId,
-        };
-      }
-
-      // Execute the callback
+      // Execute the callback with explicit context
       logger.debug(
-        `Executing function '${functionName}' with args: ${JSON.stringify(functionArguments)}`,
+        `Executing function '${functionName}' with args: ${args}${
+          context ? ` and context: ${JSON.stringify(context)}` : ''
+        }`,
       );
-      const result = await callback(JSON.stringify(functionArguments));
+      const result = await callback(args, context);
 
       // Format the result
       if (result === undefined || result === null) {
@@ -300,7 +285,14 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           run = currentRun;
           break;
         }
-        const threadId = currentRun.thread_id;
+
+        // Build context for function callbacks
+        const callbackContext: CallbackContext = {
+          threadId: currentRun.thread_id,
+          runId: currentRun.id,
+          assistantId: this.assistantId,
+          provider: 'openai',
+        };
 
         logger.debug(
           `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
@@ -315,7 +307,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             const functionResult = await this.executeFunctionCallback(
               toolCall.function.name,
               toolCall.function.arguments,
-              threadId,
+              callbackContext,
             );
             return {
               tool_call_id: toolCall.id,
