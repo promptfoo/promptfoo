@@ -2,6 +2,8 @@
 
 Evaluate LLMs against [Humanity's Last Exam (HLE)](https://arxiv.org/abs/2501.14249), a challenging benchmark created by 1,000+ experts across 500+ institutions. HLE features 3,000+ questions spanning 100+ subjects, designed to push AI capabilities to their limits.
 
+**📖 [Read the complete HLE benchmark guide →](https://www.promptfoo.dev/docs/guides/hle-benchmark/)**
+
 You can run this example with:
 
 ```bash
@@ -56,6 +58,16 @@ This evaluation tests models on:
 
 Each question is evaluated for accuracy using an LLM judge that compares the model's response against the verified correct answer.
 
+## Current AI Performance
+
+HLE is designed to be extremely challenging. Recent model performance:
+
+- **OpenAI Deep Research**: 26.6% accuracy
+- **o4-mini**: ~13% accuracy
+- **DeepSeek-R1**: 8.5% accuracy
+
+Low scores are expected - this benchmark represents the cutting edge of AI evaluation.
+
 ## Customization
 
 ### Test More Questions
@@ -87,16 +99,6 @@ prompts:
   - 'Answer this question step by step: {{question}}'
   - file://prompt.py:create_hle_prompt
 ```
-
-## Results
-
-HLE is designed to be extremely challenging. Current model performance:
-
-- **OpenAI Deep Research**: 26.6% accuracy
-- **o4-mini**: ~13% accuracy
-- **DeepSeek-R1**: 8.5% accuracy
-
-Low scores are expected - this benchmark represents the cutting edge of AI evaluation.
 
 ## Resources
 

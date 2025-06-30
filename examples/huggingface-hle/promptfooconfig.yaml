@@ -9,11 +9,11 @@ providers:
     config:
       thinking:
         type: enabled
-        budget_tokens: 20000
-      max_tokens: 32000
+        budget_tokens: 3000
+      max_tokens: 4000
   - id: openai:o4-mini
     config:
-      max_completion_tokens: 32000
+      max_completion_tokens: 4000
   # - deepseek:deepseek-reasoner
 
 defaultTest:
