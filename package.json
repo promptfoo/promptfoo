@@ -166,7 +166,6 @@
     "@typescript-eslint/parser": "^8.35.0",
     "axios": "^1.7.9",
     "check-dependency-version-consistency": "^5.0.1",
-    "cloudflare": "3.4.0",
     "concurrently": "^9.2.0",
     "drizzle-kit": "^0.31.4",
     "eslint": "^9.30.0",
