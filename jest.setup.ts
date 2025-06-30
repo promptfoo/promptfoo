@@ -1,7 +1,8 @@
 /* eslint-disable jest/require-top-level-describe */
 import { rm } from 'fs/promises';
 import nock from 'nock';
-import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
+
+const { TEST_CONFIG_DIR } = require('./.jest/setEnvVars');
 
 jest.mock('./src/logger');
 jest.mock('./src/globalConfig/globalConfig');

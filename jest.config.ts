@@ -1,6 +1,43 @@
 /** @type {import('ts-jest/dist/types').InitialOptionsTsJest} */
 import type { Config } from 'jest';
 
+// Try to detect if we're in a CI environment where SWC might not work
+const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+
+// Use different transformers based on environment
+const transform = isCI 
+  ? {
+      '^.+\\.m?tsx?$': ['ts-jest', {
+        useESM: true,
+        tsconfig: {
+          module: 'ES2022',
+          target: 'ES2022',
+          allowJs: true,
+        },
+      }],
+    }
+  : {
+      '^.+\\.m?[tj]sx?$': [
+        '@swc/jest',
+        {
+          jsc: {
+            target: 'es2022',
+            parser: {
+              syntax: 'typescript',
+              decorators: true,
+            },
+            transform: {
+              legacyDecorator: true,
+              decoratorMetadata: true,
+            },
+          },
+          module: {
+            type: 'es6',
+          },
+        },
+      ],
+    };
+
 const config: Config = {
   collectCoverage: false,
   coverageDirectory: '.coverage',
@@ -17,27 +54,7 @@ const config: Config = {
     '<rootDir>/node_modules',
     '<rootDir>/src/app',
   ],
-  transform: {
-    '^.+\\.m?[tj]sx?$': [
-      '@swc/jest',
-      {
-        jsc: {
-          target: 'es2022',
-          parser: {
-            syntax: 'typescript',
-            decorators: true,
-          },
-          transform: {
-            legacyDecorator: true,
-            decoratorMetadata: true,
-          },
-        },
-        module: {
-          type: 'es6',
-        },
-      },
-    ],
-  },
+  transform,
   transformIgnorePatterns: [
     'node_modules/(?!(chalk|ansi-styles|@types|strip-ansi|ansi-regex|supports-color|has-flag|inquirer|@inquirer|wrap-ansi|string-width|strip-ansi|ansi-regex|is-fullwidth-code-point|emoji-regex|eastasianwidth)/)',
   ],
