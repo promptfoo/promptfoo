@@ -140,8 +140,9 @@ Think carefully and respond to the user concisely and accurately.
 Now that we've constructed a prompt, let's set up some test cases. In this example, the eval will format each of these test cases using the prompt template and send it to the LLM API:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini]
+providers: [openai:o3-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -279,8 +280,9 @@ defaultTest:
 Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:llama3.1]
+providers: [openai:o3-mini, openai:gpt-4o, ollama:llama3.1]
 defaultTest:
   assert:
     - type: python

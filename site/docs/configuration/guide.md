@@ -70,12 +70,13 @@ We can create additional tests. Let's add a couple other **[types of assertions]
 In this example, the `javascript` assertion runs Javascript against the LLM output. The `similar` assertion checks for semantic similarity using embeddings:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Language translation'
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:o3-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -273,11 +274,12 @@ Use `defaultTest` to set properties for all tests.
 In this example, we use a `llm-rubric` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:o3-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
@@ -820,7 +822,6 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading Tests
 
-<<<<<<< HEAD
 promptfoo supports multiple ways to load test cases:
 
 ### From Files and Directories
@@ -830,7 +831,7 @@ The `tests` config property takes a list of paths to files or directories:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://prompts.txt
-providers: openai:gpt-4o
+providers: openai:o3-mini
 
 tests:
   # You can supply an exact filepath
@@ -862,27 +863,20 @@ tests:
 
 ### From CSV and Spreadsheets
 
-CSV files and Google Sheets provide an easy way to collaborate on test cases with non-technical team members:
-
-````yaml
-# Load from a local CSV file
-=======
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format).
+CSV files and Google Sheets provide an easy way to collaborate on test cases with non-technical team members. promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format):
 
 ```yaml
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:o3-mini
   - vertex:gemini-2.0-flash-exp
-// highlight-next-line
->>>>>>> main
 tests: file://tests.csv
 
 # Or directly from Google Sheets
 tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
-````
+```
 
 See the [CSV tests guide](/docs/configuration/tests/csv) for detailed examples and best practices.
 
@@ -891,22 +885,11 @@ See the [CSV tests guide](/docs/configuration/tests/csv) for detailed examples a
 promptfoo integrates with HuggingFace datasets, making it easy to evaluate your models against popular benchmarks:
 
 ```yaml
-<<<<<<< HEAD
 # Test against MMLU benchmark
 tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
 
 # Or use the ChatGPT prompts dataset
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts
-=======
-prompts:
-  - file://prompt1.txt
-  - file://prompt2.txt
-providers:
-  - openai:gpt-4.1-mini
-  - vertex:gemini-2.0-flash-exp
-// highlight-next-line
-tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
->>>>>>> main
 ```
 
 See the [HuggingFace tests guide](/docs/configuration/tests/huggingface) for more examples and configuration options.
