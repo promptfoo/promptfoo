@@ -15,7 +15,12 @@ import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import {
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_CHAT_MODELS,
+  isOpenAIGuardrailError,
+} from './util';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -354,6 +359,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     logger.debug(`\tcompletions API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
+      if (isOpenAIGuardrailError(data)) {
+        return { guardrails: { flagged: true } };
+      }
       return {
         error: formatOpenAiError(data),
       };

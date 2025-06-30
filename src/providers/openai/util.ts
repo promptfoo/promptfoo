@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { TokenUsage } from '../../types';
+import type { ProviderResponse, TokenUsage } from '../../types';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv } from '../../util/json';
@@ -366,8 +366,15 @@ export function calculateOpenAICost(
   return totalCost || undefined;
 }
 
-export function failApiCall(err: any) {
+export function failApiCall(err: any): ProviderResponse {
   if (err instanceof OpenAI.APIError) {
+    if (
+      isOpenAIGuardrailError({
+        error: { message: err.error?.message, code: err.error?.code },
+      })
+    ) {
+      return { guardrails: { flagged: true } };
+    }
     const errorType = err.error?.type || err.type || 'unknown';
     const errorMessage = err.error?.message || err.message || 'Unknown error';
     const statusCode = err.status ? ` ${err.status}` : '';
@@ -468,4 +475,22 @@ export function formatOpenAiError(data: {
   }
   errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
   return errorMessage;
+}
+
+/**
+ * Detects whether an OpenAI error corresponds to a guardrail-triggered refusal.
+ */
+export function isOpenAIGuardrailError(data: {
+  error?: { message?: string; type?: string; code?: string };
+}): boolean {
+  const code = data.error?.code?.toLowerCase() || '';
+  const message = data.error?.message?.toLowerCase() || '';
+  return (
+    code.includes('invalid_prompt') ||
+    code.includes('content_policy_violation') ||
+    code.includes('content_filter') ||
+    message.includes('invalid_prompt') ||
+    message.includes('content_policy_violation') ||
+    message.includes('content_filter')
+  );
 }

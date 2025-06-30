@@ -9,7 +9,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage } from './util';
+import { formatOpenAiError, getTokenUsage, isOpenAIGuardrailError } from './util';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
@@ -249,6 +249,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
+      if (isOpenAIGuardrailError(data)) {
+        return { guardrails: { flagged: true } };
+      }
       return {
         error: formatOpenAiError(data),
       };

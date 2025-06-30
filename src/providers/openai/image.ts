@@ -6,7 +6,7 @@ import type { EnvOverrides } from '../../types/env';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiSharedOptions } from './types';
-import { formatOpenAiError } from './util';
+import { formatOpenAiError, isOpenAIGuardrailError } from './util';
 
 export type OpenAiImageModel = 'dall-e-2' | 'dall-e-3';
 export type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
@@ -180,6 +180,9 @@ export async function processApiResponse(
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
+    if (isOpenAIGuardrailError(data)) {
+      return { guardrails: { flagged: true } };
+    }
     return {
       error: formatOpenAiError(data),
     };
