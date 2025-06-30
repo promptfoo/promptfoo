@@ -1,14 +1,6 @@
+import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-
-// Types for Azure OpenAI Assistants (optional dependency)
-interface AssistantCreationOptions {
-  [key: string]: any;
-}
-
-interface FunctionDefinition {
-  [key: string]: any;
-}
 
 /**
  * Options for configuring retry behavior

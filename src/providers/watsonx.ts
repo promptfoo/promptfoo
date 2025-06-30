@@ -1,4 +1,6 @@
+import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
+import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import { z } from 'zod';
 import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
 import type { EnvVarKey } from '../envars';
@@ -9,19 +11,6 @@ import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
-
-// Types for IBM Watson (optional dependencies)
-interface WatsonXAIClient {
-  [key: string]: any;
-}
-
-interface IamAuthenticator {
-  [key: string]: any;
-}
-
-interface BearerTokenAuthenticator {
-  [key: string]: any;
-}
 
 interface TextGenRequestParametersModel {
   max_new_tokens: number;
@@ -233,10 +222,7 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
-    const getIbmCloudModuleName = () => 'ibm-cloud-sdk-core';
-    const ibmCloudModule = await import(getIbmCloudModuleName());
-    const IamAuthenticator = ibmCloudModule.IamAuthenticator;
-    const BearerTokenAuthenticator = ibmCloudModule.BearerTokenAuthenticator;
+    const { IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core');
 
     const apiKey =
       this.config.apiKey ||
@@ -317,17 +303,12 @@ export class WatsonXProvider implements ApiProvider {
     }
 
     const authenticator = await this.getAuth();
-    const getWatsonModuleName = () => '@ibm-cloud/watsonx-ai';
-    const watsonModule = await import(getWatsonModuleName());
-    const WatsonXAI = watsonModule.WatsonXAI;
+    const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
     this.client = WatsonXAI.newInstance({
       version: this.options.config.version || '2023-05-29',
       serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
       authenticator,
     });
-    if (!this.client) {
-      throw new Error('Failed to create Watson client instance');
-    }
     return this.client;
   }
 

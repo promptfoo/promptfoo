@@ -140,9 +140,7 @@ export abstract class SageMakerGenericProvider {
   async getSageMakerRuntimeInstance() {
     if (!this.sagemakerRuntime) {
       try {
-        const getModuleName = () => '@aws-sdk/client-sagemaker-runtime';
-        const sagemakerModule = await import(getModuleName());
-        const SageMakerRuntimeClient = sagemakerModule.SageMakerRuntimeClient;
+        const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
         const credentials = await this.getCredentials();
 
         this.sagemakerRuntime = new SageMakerRuntimeClient({
@@ -754,9 +752,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     );
 
     try {
-      const getModuleName = () => '@aws-sdk/client-sagemaker-runtime';
-      const sagemakerModule = await import(getModuleName());
-      const InvokeEndpointCommand = sagemakerModule.InvokeEndpointCommand;
+      const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
 
       const command = new InvokeEndpointCommand({
         EndpointName: this.getEndpointName(),
@@ -971,9 +967,7 @@ export class SageMakerEmbeddingProvider
     logger.debug(`With payload: ${payload}`);
 
     try {
-      const getModuleName = () => '@aws-sdk/client-sagemaker-runtime';
-      const sagemakerModule = await import(getModuleName());
-      const InvokeEndpointCommand = sagemakerModule.InvokeEndpointCommand;
+      const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
 
       const command = new InvokeEndpointCommand({
         EndpointName: this.getEndpointName(),

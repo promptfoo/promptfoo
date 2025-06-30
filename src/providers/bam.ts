@@ -1,28 +1,15 @@
+import type {
+  Client as GenAIClient,
+  TextGenerationCreateInput,
+  TextGenerationCreateOutput,
+} from '@ibm-generative-ai/node-sdk';
 import { getCache, isCacheEnabled } from '../cache';
 import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
-
-// Types for IBM Generative AI SDK (optional dependency)
-interface GenAIClient {
-  text: {
-    generation: {
-      create: (input: any) => Promise<any>;
-    };
-  };
-}
-
-interface TextGenerationCreateInput {
-  [key: string]: any;
-}
-
-interface TextGenerationCreateOutput {
-  [key: string]: any;
-}
-
-// Removed REQUEST_TIMEOUT_MS import as it's no longer used
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface BAMGenerationParameters {
   apiKey?: string | null;
@@ -85,7 +72,7 @@ interface BAMModerations {
 
 export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
-    (acc: number, result: any) => acc + result.generated_token_count,
+    (acc, result) => acc + result.generated_token_count,
     0,
   );
   const tokenUsage: Partial<TokenUsage> = {
@@ -96,7 +83,7 @@ export function convertResponse(response: TextGenerationCreateOutput): ProviderR
 
   const providerResponse: ProviderResponse = {
     error: undefined,
-    output: response.results.map((result: any) => result.generated_text).join(', '),
+    output: response.results.map((result) => result.generated_text).join(', '),
     tokenUsage,
     cost: undefined,
     cached: undefined,
@@ -154,9 +141,7 @@ export class BAMProvider implements ApiProvider {
 
   async getClient() {
     if (!this.client) {
-      const getModuleName = () => '@ibm-generative-ai/node-sdk';
-      const sdkModule = await import(getModuleName());
-      const Client = sdkModule.Client;
+      const { Client } = await import('@ibm-generative-ai/node-sdk');
       this.client = new Client({
         apiKey: this.apiKey,
         endpoint: 'https://bam-api.res.ibm.com/',
@@ -193,12 +178,9 @@ export class BAMProvider implements ApiProvider {
           };
         }
       }
-      // Note: Signal removed in favor of simplified API call
+      const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
       const client = await this.getClient();
-      if (!client) {
-        throw new Error('Failed to initialize BAM client');
-      }
-      const result = await client.text.generation.create(params);
+      const result = await client.text.generation.create(params, { signal });
 
       return convertResponse(result);
     } catch (err) {

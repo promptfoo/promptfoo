@@ -1,3 +1,25 @@
+import { Anthropic as GatewayAnthropic } from '@adaline/anthropic';
+import { Azure as GatewayAzure } from '@adaline/azure';
+import { Gateway } from '@adaline/gateway';
+import type { Cache as GatewayCache } from '@adaline/gateway';
+import type {
+  CompleteChatHandlerResponseType,
+  GetEmbeddingsHandlerResponseType,
+} from '@adaline/gateway';
+import { Google as GatewayGoogle } from '@adaline/google';
+import { Groq as GatewayGroq } from '@adaline/groq';
+import { OpenRouter as GatewayOpenRouter } from '@adaline/open-router';
+import { OpenAI as GatewayOpenAI } from '@adaline/openai';
+import type { ChatModelV1 as GatewayChatModel } from '@adaline/provider';
+import type { EmbeddingModelV1 as GatewayEmbeddingModel } from '@adaline/provider';
+import { TogetherAI as GatewayTogetherAi } from '@adaline/together-ai';
+import type {
+  MessageType as GatewayMessageType,
+  ToolType as GatewayToolType,
+  ResponseSchemaType as GatewayResponseSchemaType,
+  EmbeddingRequestsType as GatewayEmbeddingRequestsType,
+} from '@adaline/types';
+import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { isCacheEnabled, getCache } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
@@ -28,93 +50,6 @@ import type { OpenAiCompletionOptions } from './openai/types';
 import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VoyageEmbeddingProvider } from './voyage';
-
-// Types for Adaline modules (optional dependencies)
-interface GatewayAnthropic {
-  new (config: any): any;
-}
-
-interface GatewayAzure {
-  new (config: any): any;
-}
-
-interface Gateway {
-  new (config: any): any;
-  getEmbeddings(request: any): Promise<any>;
-  completeChat(request: any): Promise<any>;
-}
-
-interface GatewayCache<T = any> {
-  get(key: string): Promise<T | undefined>;
-  set(key: string, value: T, ttl?: number): Promise<void>;
-}
-
-interface CompleteChatHandlerResponseType {
-  [key: string]: any;
-}
-
-interface GetEmbeddingsHandlerResponseType {
-  [key: string]: any;
-}
-
-interface GatewayGoogle {
-  new (config: any): any;
-}
-
-interface GatewayGroq {
-  new (config: any): any;
-}
-
-interface GatewayOpenRouter {
-  new (config: any): any;
-}
-
-interface GatewayOpenAI {
-  new (config: any): any;
-}
-
-interface GatewayChatModel {
-  [key: string]: any;
-}
-
-interface GatewayEmbeddingModel {
-  [key: string]: any;
-}
-
-interface GatewayTogetherAi {
-  new (config: any): any;
-}
-
-interface GatewayMessageType {
-  [key: string]: any;
-}
-
-interface GatewayToolType {
-  [key: string]: any;
-}
-
-interface GatewayResponseSchemaType {
-  [key: string]: any;
-}
-
-interface GatewayEmbeddingRequestsType {
-  [key: string]: any;
-}
-
-interface GatewayVertex {
-  new (config: any): any;
-}
-
-// Placeholders for optional Adaline modules
-const GatewayAnthropic: any = null;
-const GatewayAzure: any = null;
-const Gateway: any = null;
-const GatewayGoogle: any = null;
-const GatewayGroq: any = null;
-const GatewayOpenRouter: any = null;
-const GatewayOpenAI: any = null;
-const GatewayTogetherAi: any = null;
-const GatewayVertex: any = null;
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
 class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
@@ -158,9 +93,6 @@ class AdalineGateway {
         completeChatCache: new AdalineGatewayCachePlugin(),
         getEmbeddingsCache: new AdalineGatewayCachePlugin(),
       });
-    }
-    if (!this.gateway) {
-      throw new Error('Failed to initialize Adaline Gateway');
     }
     return this.gateway;
   }
@@ -683,19 +615,18 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         if (formatType === 'openai') {
           // convert gateway message type to openai message type if it's more than just text content
           if (
-            response.response.messages[0].content.filter(
-              (content: any) => content.modality === 'text',
-            ).length > 0
+            response.response.messages[0].content.filter((content) => content.modality === 'text')
+              .length > 0
           ) {
             // response has both text and tool-call content
             output = {
               content: response.response.messages[0].content
-                .filter((content: any) => content.modality === 'text')
-                .map((content: any) => content.value)
+                .filter((content) => content.modality === 'text')
+                .map((content) => content.value)
                 .join(' '),
               tool_calls: response.response.messages[0].content
-                .filter((content: any) => content.modality === 'tool-call')
-                .map((content: any) => {
+                .filter((content) => content.modality === 'tool-call')
+                .map((content) => {
                   return {
                     id: content.id,
                     type: 'function',
@@ -709,8 +640,8 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           } else {
             // response has only tool-call content
             output = response.response.messages[0].content
-              .filter((content: any) => content.modality === 'tool-call')
-              .map((content: any) => {
+              .filter((content) => content.modality === 'tool-call')
+              .map((content) => {
                 return {
                   id: content.id,
                   type: 'function',
@@ -751,7 +682,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         );
       }
 
-      const logProbs = response.response.logProbs?.map((logProb: any) => logProb.logProb);
+      const logProbs = response.response.logProbs?.map((logProb) => logProb.logProb);
       const tokenUsage: TokenUsage = {};
       if (response.cached) {
         tokenUsage.cached = response.response.usage?.totalTokens;

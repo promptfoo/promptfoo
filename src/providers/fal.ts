@@ -22,8 +22,8 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
   config: FalProviderOptions;
   input: Input;
 
-  // FAL client instance
-  private fal: any = null;
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+  private fal: typeof import('@fal-ai/client') | null = null;
 
   constructor(
     modelType: 'image',
@@ -75,8 +75,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     }
 
     if (!this.fal) {
-      const getModuleName = () => '@fal-ai/client';
-      this.fal = await import(getModuleName());
+      this.fal = await import('@fal-ai/client');
     }
 
     this.fal.fal.config({
@@ -103,8 +102,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
 
   async runInference<Result = FalResult<unknown>>(input: Input): Promise<Result> {
     if (!this.fal) {
-      const getModuleName = () => '@fal-ai/client';
-      this.fal = await import(getModuleName());
+      this.fal = await import('@fal-ai/client');
     }
 
     const result = await this.fal.fal.subscribe(this.modelName, {
