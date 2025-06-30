@@ -37,7 +37,7 @@ providers:
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                         | `azureopenai:gpt-4o-custom-deployment-name`                      |
 | [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models    | `cerebras:llama-4-scout-17b-16e-instruct`                        |
 | [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers           | Compatible with OpenAI syntax                                    |
-| [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's AI platform                           | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`                     |
+| [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform         | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`     |
 | [Cohere](./cohere.md)                               | Cohere's language models                           | `cohere:command`                                                 |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                         | `deepseek:deepseek-chat`                                         |
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface             | `f5:path-name`                                                   |

@@ -1,6 +1,18 @@
 ---
-sidebar_position: 0
+sidebar_position: 1
 sidebar_label: Guide
+title: Configuration Guide - Getting Started with Promptfoo
+description: Complete guide to configuring promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
+keywords:
+  [
+    promptfoo configuration,
+    LLM evaluation setup,
+    prompt testing,
+    AI model comparison,
+    evaluation framework,
+    getting started,
+  ]
+pagination_next: configuration/reference
 ---
 
 # Configuration

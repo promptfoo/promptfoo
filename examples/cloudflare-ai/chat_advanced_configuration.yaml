@@ -1,26 +1,25 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - Tell me a really funny joke about {{topic}}. The joke should contain the word {{topic}}
+  - Tell me a funny joke about {{topic}}
 
 providers:
-  - id: cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+  - id: cloudflare-ai:chat:@cf/google/gemma-3-12b-it
     config:
-      accountId: YOUR_ACCOUNT_ID_HERE
+      accountId: your_account_id_here
       # ===============
-      # It is not recommended to keep your API key on the config file since it is a secret value.
-      # Use the CLOUDFLARE_API_KEY environment variable or set the apiKeyEnvar value
-      # in the config
-      # apiKey: YOUR_API_KEY_HERE
-      # apiKeyEnvar: SOME_ENV_HAR_CONTAINING_THE_API_KEY
+      # API key is loaded from CLOUDFLARE_API_KEY environment variable
+      # Alternatively, use custom environment variable names:
+      # apiKeyEnvar: CUSTOM_CLOUDFLARE_KEY
+      # accountIdEnvar: CUSTOM_CLOUDFLARE_ACCOUNT
       # ===============
-      # Additional model parameters that are passed through in the HTTP request body to the Cloudflare REST API call
-      # to run the model
+      # OpenAI-compatible model parameters
       max_tokens: 800
+      temperature: 0.7
       seed: 1
 
 tests:
   - vars:
-      topic: birds
+      topic: programming
     assert:
       - type: icontains
         value: '{{topic}}'

@@ -221,7 +221,7 @@ plugins:
 
 ## Custom Business Logic
 
-Promptfoo also supports custom test cases to reflect more nuanced requirements, whether you have certain benchmarks you want to test against or have specific behavioral standards defined by your legal, compliance, marketing, or brand teams. This could include enforcing policies such as an AI code of conduct or preventing an LLM from responding in ways that might breach legal requirements, such as in the [EU AI Act](https://www.promptfoo.dev/blog/eu-ai-act/).
+Promptfoo also supports custom test cases to reflect more nuanced requirements, whether you have certain benchmarks you want to test against or have specific behavioral standards defined by your legal, compliance, marketing, or brand teams. This could include enforcing policies such as an AI code of conduct or preventing an LLM from responding in ways that might breach legal requirements, such as in the [EU AI Act](/blog/eu-ai-act/).
 
 ### Custom Policies
 
