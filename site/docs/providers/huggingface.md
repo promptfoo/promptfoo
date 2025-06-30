@@ -192,7 +192,7 @@ prompts:
   - 'Act as {{act}}. {{prompt}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:o4-mini
 
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&limit=50
 ```
