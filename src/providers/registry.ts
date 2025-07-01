@@ -3,6 +3,7 @@ import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants';
+import AdvNoiseProvider from '../redteam/providers/advNoise';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
@@ -1173,6 +1174,16 @@ export const providerMap: ProviderFactory[] = [
         config: providerOptions,
         env: context.env,
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:adv-noise',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new AdvNoiseProvider(providerOptions.config);
     },
   },
 ];

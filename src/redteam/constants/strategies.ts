@@ -37,6 +37,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'adv-noise',
   'audio',
   'base64',
   'best-of-n',

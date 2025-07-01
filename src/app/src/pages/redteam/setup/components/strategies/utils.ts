@@ -7,6 +7,7 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 }
 
 export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
+  'adv-noise': 5, // Higher multiplier due to multiple noise variations per test
   audio: 1,
   base64: 1,
   basic: 1,
