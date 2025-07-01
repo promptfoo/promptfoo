@@ -26,15 +26,7 @@ Use `promptfoo scan-model` to access ModelAudit's comprehensive security scannin
 
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
-Promptfoo also includes a UI that allows you to set up a scan:
-
-![model scan](/img/docs/modelaudit/model-audit-setup.png)
-
-And displays the results:
-
-![model scan results](/img/docs/modelaudit/model-audit-results.png)
-
-## Purpose
+## Why Use ModelAudit?
 
 AI/ML models can introduce security risks through:
 
@@ -48,143 +40,87 @@ AI/ML models can introduce security risks through:
 
 ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
 
-## Usage
-
-### Basic Command Structure
+## Quick Start
 
 ```bash
-promptfoo scan-model [OPTIONS] PATH...
-```
+# Install
+npm install -g promptfoo
+pip install modelaudit
 
-### Examples
-
-```bash
-# Local models
+# Scan a model
 promptfoo scan-model ./model.pkl
-promptfoo scan-model ./models/
 
-# HuggingFace models (no download required)
-promptfoo scan-model https://huggingface.co/bert-base-uncased
+# Scan from HuggingFace
 promptfoo scan-model hf://microsoft/resnet-50
 
-# Cloud storage
-promptfoo scan-model s3://my-bucket/model.pt
-promptfoo scan-model gs://my-bucket/model.h5
-
-# Advanced sources
-promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl
-promptfoo scan-model model.pkl.dvc  # DVC pointer files
-promptfoo scan-model models:/MyModel/1  # MLflow registry
-
-# Output options
-promptfoo scan-model model.pkl --format json --output results.json
-promptfoo scan-model models/ --sbom compliance-report.json  # Software Bill of Materials
+# Export results
+promptfoo scan-model ./models/ --format json --output results.json
 ```
 
-:::info Alternative Installation and Usage
+For detailed installation and usage, see the **[Installation Guide](./installation.md)** and **[Usage Guide](./usage.md)**.
 
-- **Standalone**: Install modelaudit directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
-- **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
-  :::
+## Supported Formats
 
-For complete CLI options and advanced usage, see **[Usage Guide](./usage.md)**.
+| Format                                                        | Extensions               | Description                     |
+| ------------------------------------------------------------- | ------------------------ | ------------------------------- |
+| **[PyTorch](./scanners.md#pytorch-zip-scanner)**              | `.pt`, `.pth`, `.bin`    | ZIP archives and raw tensors    |
+| **[TensorFlow](./scanners.md#tensorflow-savedmodel-scanner)** | `.pb`, `.tflite`         | SavedModel and TensorFlow Lite  |
+| **[Keras](./scanners.md#keras-h5-scanner)**                   | `.h5`, `.keras`, `.hdf5` | Including Lambda layer analysis |
+| **[ONNX](./scanners.md#onnx-scanner)**                        | `.onnx`                  | With custom operator detection  |
+| **[SafeTensors](./scanners.md#safetensors-scanner)**          | `.safetensors`           | Safer alternative to pickle     |
+| **[GGUF/GGML](./scanners.md#ggufggml-scanner)**               | `.gguf`, `.ggml`         | LLaMA and quantized LLMs        |
+| **[Cloud/Remote](./usage.md#remote-model-scanning)**          | Various                  | S3, GCS, HuggingFace, MLflow    |
 
-## Web Interface
+[View all 15+ supported formats →](./scanners.md)
 
-For users who prefer visual interfaces, Promptfoo includes a web-based ModelAudit interface at `/model-audit`. This provides an intuitive alternative to command-line scanning with visual path selection, real-time progress tracking, and detailed results visualization.
+## How It Works
 
-**Access:** Run `promptfoo view` and navigate to `http://localhost:15500/model-audit`
+ModelAudit performs three types of security analysis:
 
-**Key Features:**
+1. **Code Execution Risks**: Detects malicious code, unsafe operations, and arbitrary code execution paths
+2. **Data Integrity**: Validates formats, finds embedded threats, and checks for anomalies
+3. **Compliance**: License detection, SBOM generation, and custom security patterns
 
-The web interface streamlines the scanning process with visual file/directory selection, GUI configuration for all scan options, live progress tracking with severity color coding, and automatic scan history management.
-
-## Supported Model Formats
-
-| Format                                                        | Extensions                   | Description                             |
-| ------------------------------------------------------------- | ---------------------------- | --------------------------------------- |
-| **[PyTorch](./scanners.md#pytorch-zip-scanner)**              | `.pt`, `.pth`, `.bin`        | ZIP archives and raw tensors            |
-| **[TensorFlow](./scanners.md#tensorflow-savedmodel-scanner)** | `.pb`, `.tflite`             | SavedModel and TensorFlow Lite formats  |
-| **[Keras](./scanners.md#keras-h5-scanner)**                   | `.h5`, `.keras`, `.hdf5`     | Including Lambda layer analysis         |
-| **[ONNX](./scanners.md#onnx-scanner)**                        | `.onnx`                      | With custom operator detection          |
-| **[SafeTensors](./scanners.md#safetensors-scanner)**          | `.safetensors`               | Safer alternative to pickle             |
-| **[GGUF/GGML](./scanners.md#ggufggml-scanner)**               | `.gguf`, `.ggml`             | LLaMA, Alpaca, and quantized LLMs       |
-| **[JAX/Flax](./scanners.md#flaxjax-scanner)**                 | `.msgpack`, `.orbax`, `.jax` | JAX ecosystem checkpoints               |
-| **[TensorRT](./scanners.md#tensorrt-scanner)**                | `.engine`, `.plan`           | NVIDIA optimized inference engines      |
-| **[PMML](./scanners.md#pmml-scanner)**                        | `.pmml`                      | Predictive Model Markup Language        |
-| **[Pickle/Joblib](./scanners.md#pickle-scanner)**             | `.pkl`, `.joblib`            | Python serialization formats            |
-| **[NumPy](./scanners.md#numpy-scanner)**                      | `.npy`, `.npz`               | Array data with integrity checking      |
-| **[ZIP Archives](./scanners.md#zip-archive-scanner)**         | `.zip`                       | Recursive scanning with bomb protection |
-| **[Containers](./scanners.md#oci-layer-scanner)**             | `.manifest`                  | OCI/Docker embedded models              |
-| **[HuggingFace URLs](./scanners.md#huggingface-url-support)** | `hf://`, `https://`          | Direct model scanning without download  |
-| **Cloud Storage**                                             | `s3://`, `gs://`, `r2://`    | S3, GCS, Cloudflare R2 support          |
-| **MLflow Registry**                                           | `models://`                  | Model registry integration              |
-| **JFrog Artifactory**                                         | `https://`                   | Enterprise artifact repositories        |
-
-For detailed scanner capabilities, see **[Scanner Reference](./scanners.md)**.
-
-## Security Checks Performed
-
-ModelAudit performs comprehensive security analysis across all supported formats:
-
-**Code Execution Risks:**
-
-- **Malicious Code** - Dangerous imports, eval/exec calls, system commands
-- **Pickle Exploits** - Unsafe opcodes, serialization attacks, encoded payloads
-- **Custom Operations** - Risky TensorFlow operations, ONNX custom operators
-- **Lambda Layers** - Arbitrary code in Keras Lambda layers
-
-**Data Integrity:**
-
-- **Format Validation** - File structure integrity, magic byte verification
-- **Embedded Threats** - Hidden executables (PE, ELF, Mach-O), scripts
-- **Compression Attacks** - Zip bombs, decompression exploits
-- **Weight Anomalies** - Statistical analysis for backdoors and trojans
-
-**Compliance & Configuration:**
-
-- **License Detection** - AGPL network service warnings, commercial use restrictions, software bill of materials (SBOM) generation
-- **Container Security** - OCI/Docker layer scanning with path traversal attack prevention
-- **XML Security** - XXE attack prevention in PMML files
-- **Blacklist Matching** - Custom security patterns and known threats
-
-For detailed security capabilities by format, see **[Scanner Reference](./scanners.md)**.
-
-## Interpreting Results
-
-The scan results are classified by severity:
-
-- **CRITICAL**: Definite security concerns that should be addressed immediately
-- **WARNING**: Potential issues that require review
-- **INFO**: Informational findings, not necessarily security concerns
-- **DEBUG**: Additional details (only shown with `--verbose`)
-
-## Integration in Workflows
-
-ModelAudit is particularly useful in CI/CD pipelines when incorporated with Promptfoo:
+## Understanding Results
 
 ```bash
-# Example CI/CD script segment
-npm install -g promptfoo
-promptfoo scan-model --format json --output scan-results.json ./models/
-if [ $? -ne 0 ]; then
-  echo "Security issues found in models! Check scan-results.json"
-  exit 1
-fi
+✓ Scanning model.pkl
+🚨 Found 2 critical, 1 warning
+
+1. model.pkl (pos 28): [CRITICAL] Suspicious module reference found: os.system
+2. model.pkl (pos 71): [WARNING] Found REDUCE opcode - potential code execution
 ```
 
-### Exit Codes
+- 🚨 **CRITICAL**: Immediate security concerns requiring investigation
+- ⚠️ **WARNING**: Potential issues that should be reviewed
+- ℹ️ **INFO**: Informational findings
+- 🔍 **DEBUG**: Detailed analysis (use `--verbose`)
 
-ModelAudit returns specific exit codes for automation:
+## Integration
 
-- **0**: No security issues found ✅
-- **1**: Security issues detected (warnings or critical) 🟡
-- **2**: Scan errors occurred (installation, file access, etc.) 🔴
+### CI/CD
 
-:::tip CI/CD Best Practice
-In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but don't necessarily block deployment. Only exit code 2 represents actual scan failures.
-:::
+```yaml
+# GitHub Actions example
+- name: Scan models
+  run: |
+    npm install -g promptfoo
+    pip install modelaudit
+    promptfoo scan-model models/ --format json --output results.json
+    if grep -q '"severity":"critical"' results.json; then
+      echo "Critical issues found!"
+      exit 1
+    fi
+```
 
-## Getting Started
+**Exit codes**: 0 (clean), 1 (issues found), 2 (scan error)
 
-Start with the **[Installation & Quick Start Guide](./installation.md)** to scan your first model in 5 minutes, or explore the **[Usage Guide](./usage.md)** for advanced integrations and CI/CD workflows.
+### Web Interface
+
+Run `promptfoo view` and navigate to `/model-audit` for visual scanning with progress tracking and result visualization.
+
+## Next Steps
+
+- **[Installation Guide](./installation.md)** - Get started in 5 minutes
+- **[Usage Guide](./usage.md)** - CLI options and integrations
+- **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities

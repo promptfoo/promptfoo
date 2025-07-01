@@ -1,83 +1,95 @@
 ---
-title: Installation & Quick Start - Get ModelAudit Running in 5 Minutes
-description: Complete installation guide for ModelAudit with quick start examples. Install dependencies, scan your first model, and set up authentication.
+title: Installation & Quick Start
+description: Install ModelAudit and scan your first model in 5 minutes.
 keywords:
-  [
-    modelaudit installation,
-    quick start,
-    AI security setup,
-    ML model scanner setup,
-    dependencies,
-    authentication,
-  ]
-sidebar_label: Installation & Quick Start
+  [modelaudit installation, quick start, AI security setup, ML model scanner setup, dependencies]
+sidebar_label: Installation
 sidebar_position: 2
 ---
 
 # Installation & Quick Start
 
-Install ModelAudit and scan your first model in 5 minutes, then configure detailed settings for production use.
+Get ModelAudit running and scan your first model in 5 minutes.
 
-## Quick Start (5 Minutes)
+## System Requirements
 
-### Installation
+- **Python**: 3.9 or higher
+- **Memory**: 1GB+ RAM (more for large models)
+- **Storage**: 500MB+ free space
+- **Network**: Internet access for remote scanning (optional)
+- **Platforms**: Linux, macOS, Windows, Docker
 
-Choose your preferred installation method:
+## Installation
 
-#### Option 1: Via Promptfoo (Recommended)
+### Recommended: Via Promptfoo
 
 ```bash
 npm install -g promptfoo
 pip install modelaudit
 ```
 
-#### Option 2: Standalone
+### Alternative Methods
+
+<details>
+<summary>Standalone Installation</summary>
 
 ```bash
+# Basic installation
 pip install modelaudit
+
+# With all optional dependencies
+pip install modelaudit[all]
+
+# Use modelaudit command instead of promptfoo scan-model
+modelaudit scan model.pkl
 ```
 
-#### Option 3: Homebrew (macOS/Linux)
+</details>
+
+<details>
+<summary>Docker Installation</summary>
 
 ```bash
-# Install Promptfoo via Homebrew
-brew install promptfoo
+# Pull and run
+docker pull ghcr.io/promptfoo/modelaudit:latest
+docker run --rm -v $(pwd):/data ghcr.io/promptfoo/modelaudit:latest scan /data/model.pkl
 
-# Install ModelAudit
-pip install modelaudit
+# Available variants
+docker pull ghcr.io/promptfoo/modelaudit:latest-full        # All ML frameworks
+docker pull ghcr.io/promptfoo/modelaudit:latest-tensorflow  # TensorFlow only
 ```
 
-### Your First Scan
+</details>
 
-**Local models:**
+<details>
+<summary>Development Installation</summary>
 
 ```bash
-# Scan a single model file
+git clone https://github.com/promptfoo/modelaudit.git
+cd modelaudit
+pip install -e .[all]
+```
+
+</details>
+
+## Scan Your First Model
+
+```bash
+# Local file
 promptfoo scan-model ./model.pkl
 
-# Scan a directory of models
+# Directory of models
 promptfoo scan-model ./models/
-```
 
-**Remote models:**
-
-```bash
-# HuggingFace models (no download required)
-promptfoo scan-model https://huggingface.co/bert-base-uncased
+# Remote model (no download required)
 promptfoo scan-model hf://microsoft/resnet-50
-
-# Cloud storage
-promptfoo scan-model s3://my-bucket/model.pt
-promptfoo scan-model gs://my-bucket/model.h5
 ```
 
 ### Understanding Results
 
-ModelAudit classifies findings by severity:
-
 ```bash
 ✓ Scanning model.pkl
-🚨 Found 2 critical, 1 warnings
+🚨 Found 2 critical, 1 warning
 
 1. model.pkl (pos 28): [CRITICAL] Suspicious module reference found: os.system
    Why: Direct system access could execute arbitrary commands
@@ -87,205 +99,45 @@ ModelAudit classifies findings by severity:
 
 **Severity Levels:**
 
-ModelAudit classifies each finding to help you prioritize response actions:
+- 🚨 **CRITICAL**: Immediate security concerns
+- ⚠️ **WARNING**: Potential issues to review
+- ℹ️ **INFO**: Informational findings
+- 🔍 **DEBUG**: Detailed analysis with `--verbose`
 
-- 🚨 **CRITICAL**: Immediate security concerns requiring investigation
-- ⚠️ **WARNING**: Potential issues that should be reviewed and assessed
-- ℹ️ **INFO**: Informational findings for awareness
-- 🔍 **DEBUG**: Detailed analysis available with `--verbose` flag
+**Exit Codes:**
 
-### Exit Codes for Automation
+- `0` = Clean (no issues found)
+- `1` = Issues found (warnings or critical)
+- `2` = Scan errors (file not found, etc.)
 
-```bash
-# 0 = Clean (no issues found)
-# 1 = Issues found (warnings or critical findings)
-# 2 = Scan errors (file not found, permission denied, etc.)
-```
+## Dependencies
 
-You can now scan models and interpret security findings. Continue below for detailed installation options and production configuration.
+ModelAudit uses a modular dependency system. Core scanning works out of the box, with optional packages for specific formats:
 
----
+| Format                        | Required Package                | Install Command                       |
+| ----------------------------- | ------------------------------- | ------------------------------------- |
+| Pickle, ZIP, GGUF/GGML, NumPy | Built-in                        | (included)                            |
+| TensorFlow/TFLite             | `tensorflow`                    | `pip install modelaudit[tensorflow]`  |
+| Keras H5                      | `h5py`, `tensorflow`            | `pip install modelaudit[h5]`          |
+| PyTorch (weight analysis)     | `torch`                         | `pip install modelaudit[pytorch]`     |
+| ONNX                          | `onnx`                          | `pip install modelaudit[onnx]`        |
+| SafeTensors                   | `safetensors`                   | `pip install modelaudit[safetensors]` |
+| JAX/Flax                      | `msgpack`                       | `pip install modelaudit[flax]`        |
+| Joblib                        | `joblib`                        | `pip install modelaudit[joblib]`      |
+| HuggingFace URLs              | `huggingface-hub`               | `pip install modelaudit[huggingface]` |
+| Cloud Storage                 | `boto3`, `google-cloud-storage` | `pip install modelaudit[cloud]`       |
+| All formats                   | All above                       | `pip install modelaudit[all]`         |
 
-## Detailed Installation
+### NumPy Compatibility
 
-### Via Promptfoo (Recommended)
-
-For most users, installing via Promptfoo provides the best experience with web interface integration:
-
-```bash
-# Install Promptfoo
-npm install -g promptfoo
-
-# Install ModelAudit
-pip install modelaudit
-
-# Verify installation
-promptfoo scan-model --help
-```
-
-### Standalone Installation
-
-Install ModelAudit directly for command-line use:
+ModelAudit supports both NumPy 1.x and 2.x:
 
 ```bash
-# Basic installation
-pip install modelaudit
-
-# With all optional dependencies
-pip install modelaudit[all]
-
-# Verify installation
-modelaudit scan --help
-```
-
-### Docker Installation
-
-Use Docker for isolated environments:
-
-```bash
-# Pull from GitHub Container Registry
-docker pull ghcr.io/promptfoo/modelaudit:latest
-
-# Run with Docker
-docker run --rm -v $(pwd):/data ghcr.io/promptfoo/modelaudit:latest scan /data/model.pkl
-
-# Available variants
-docker pull ghcr.io/promptfoo/modelaudit:latest-full        # All ML frameworks
-docker pull ghcr.io/promptfoo/modelaudit:latest-tensorflow  # TensorFlow only
-```
-
-## Dependencies by Model Format
-
-ModelAudit uses a modular dependency system, installing only the packages needed for your specific model formats. This reduces installation size and potential conflicts.
-
-### Quick Reference
-
-| Model Format          | Required Package              | Install Command                       |
-| --------------------- | ----------------------------- | ------------------------------------- |
-| Pickle files          | Built-in                      | (included)                            |
-| TensorFlow SavedModel | `tensorflow`                  | `pip install modelaudit[tensorflow]`  |
-| TensorFlow Lite       | `tensorflow`                  | `pip install modelaudit[tensorflow]`  |
-| Keras H5              | `h5py`, `tensorflow`          | `pip install modelaudit[h5]`          |
-| PyTorch               | `torch` (for weight analysis) | `pip install modelaudit[pytorch]`     |
-| ONNX                  | `onnx`                        | `pip install modelaudit[onnx]`        |
-| SafeTensors           | `safetensors`                 | `pip install modelaudit[safetensors]` |
-| GGUF/GGML             | Built-in                      | (included)                            |
-| Flax/JAX              | `msgpack`                     | `pip install modelaudit[flax]`        |
-| Joblib                | `joblib`                      | `pip install modelaudit[joblib]`      |
-| NumPy arrays          | Built-in                      | (included)                            |
-| YAML manifests        | `pyyaml`                      | `pip install modelaudit[yaml]`        |
-| HuggingFace URLs      | `huggingface-hub`             | `pip install modelaudit[huggingface]` |
-
-### Core Dependencies (Always Installed)
-
-```bash
-# These are included with basic installation
-# - Pickle files (.pkl, .pickle, .bin, .ckpt)
-# - GGUF/GGML files (.gguf, .ggml)
-# - NumPy arrays (.npy, .npz)
-# - ZIP archives (.zip)
-# - PMML files (.pmml)
-# - TensorRT engines (.engine, .plan)
-# - PyTorch binary files (.bin)
-# - Manifest files (.json, .yaml, etc.)
-```
-
-### Optional Dependencies
-
-Install these for specific model formats:
-
-```bash
-# TensorFlow models
-pip install modelaudit[tensorflow]
-# Provides: SavedModel (.pb), TensorFlow Lite (.tflite)
-
-# Keras models
-pip install modelaudit[h5]
-# Provides: HDF5 format (.h5, .hdf5, .keras)
-
-# PyTorch models (for weight analysis)
-pip install modelaudit[pytorch]
-# Provides: Advanced PyTorch model analysis
-
-# ONNX models
-pip install modelaudit[onnx]
-# Provides: ONNX format (.onnx) validation
-
-# SafeTensors models
-pip install modelaudit[safetensors]
-# Provides: SafeTensors format (.safetensors)
-
-# YAML manifest scanning
-pip install modelaudit[yaml]
-# Provides: Enhanced YAML configuration file scanning
-
-# Flax/JAX models
-pip install modelaudit[flax]
-# Provides: MessagePack format (.msgpack, .flax, .orbax)
-
-# Joblib models
-pip install modelaudit[joblib]
-# Provides: Joblib serialization (.joblib)
-```
-
-### Integration Dependencies
-
-For advanced integrations:
-
-```bash
-# HuggingFace URL scanning
-pip install modelaudit[huggingface]
-# Enables: hf:// URLs, private model access
-
-# Cloud storage support
-pip install modelaudit[cloud]
-# Enables: S3, GCS, Cloudflare R2 scanning
-
-# MLflow integration
-pip install modelaudit[mlflow]
-# Enables: models:// URI scanning
-
-# All dependencies
-pip install modelaudit[all]
-# Installs everything above
-```
-
-## NumPy Compatibility
-
-ModelAudit supports both NumPy 1.x and 2.x with automatic graceful fallback:
-
-```bash
-# Default installation (works with NumPy 2.x)
-pip install modelaudit[all]
-
-# Full NumPy 1.x compatibility (ensures all ML frameworks work)
-pip install modelaudit[numpy1]
-
-# Check scanner compatibility
+# Check which scanners loaded
 modelaudit doctor --show-failed
-```
 
-**NumPy 2.x Notes:**
-
-While ModelAudit fully supports NumPy 2.x, some ML framework scanners may not load due to downstream compatibility issues. However, the core scanning functionality works perfectly, and you can use `modelaudit doctor` to see which scanners loaded successfully.
-
-## Development Installation
-
-For contributing to ModelAudit:
-
-```bash
-# Clone the repository
-git clone https://github.com/promptfoo/modelaudit.git
-cd modelaudit
-
-# Using Rye (recommended)
-rye sync --features all
-
-# Or using pip
-pip install -e .[all]
-
-# Run tests
-pytest tests/
+# Force NumPy 1.x if needed
+pip install modelaudit[numpy1]
 ```
 
 ## Verification
@@ -293,138 +145,52 @@ pytest tests/
 Test your installation:
 
 ```bash
-# Basic functionality test
-echo "test content" > test_file.txt
-modelaudit scan test_file.txt
+# Quick test
+echo "test" > test.txt && promptfoo scan-model test.txt
 
 # Check available scanners
 modelaudit doctor
 
-# Test specific format (if you have dependencies installed)
-# Create a simple pickle file for testing
+# Test with a pickle file
 python -c "import pickle; pickle.dump({'test': 'data'}, open('test.pkl', 'wb'))"
-modelaudit scan test.pkl
-```
-
-## Authentication Setup
-
-### HuggingFace
-
-```bash
-# For private models or higher rate limits
-export HF_TOKEN=your_token_here
-# Or any of: HF_API_TOKEN, HUGGING_FACE_HUB_TOKEN
-```
-
-### Cloud Storage
-
-**AWS S3:**
-
-```bash
-export AWS_ACCESS_KEY_ID=your_access_key
-export AWS_SECRET_ACCESS_KEY=your_secret_key
-export AWS_DEFAULT_REGION=us-east-1
-
-# Or use ~/.aws/credentials file
-# Or IAM roles (automatic on EC2/Lambda)
-```
-
-**Google Cloud Storage:**
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
-
-# Or use gcloud authentication
-gcloud auth application-default login
-```
-
-**Cloudflare R2:**
-
-```bash
-export AWS_ACCESS_KEY_ID=your_r2_access_key
-export AWS_SECRET_ACCESS_KEY=your_r2_secret_key
-export AWS_ENDPOINT_URL=https://your-account.r2.cloudflarestorage.com
-```
-
-### MLflow
-
-```bash
-export MLFLOW_TRACKING_URI=http://your-mlflow-server:5000
-```
-
-### JFrog Artifactory
-
-```bash
-export JFROG_API_TOKEN=your_api_token
-# Or: JFROG_ACCESS_TOKEN
-
-# Or create .env file
-echo "JFROG_API_TOKEN=your_token" > .env
+promptfoo scan-model test.pkl
 ```
 
 ## Troubleshooting
 
-Resolve common installation and configuration issues.
-
-### Common Issues
+<details>
+<summary>Common Issues & Solutions</summary>
 
 **Missing Dependencies:**
 
 ```bash
-# Error: h5py not installed
-pip install h5py tensorflow
-
-# Error: msgpack not installed
-pip install msgpack
-```
-
-**Scanner Loading Issues:**
-
-```bash
-# Check which scanners loaded
-modelaudit doctor --show-failed
-
-# For NumPy compatibility issues
-pip install "numpy<2.0" --force-reinstall
+pip install h5py tensorflow  # For Keras files
+pip install msgpack          # For JAX/Flax files
 ```
 
 **Permission Issues:**
 
 ```bash
-# On some systems, use --user flag
-pip install --user modelaudit[all]
-
-# Or use virtual environment
+# Use virtual environment
 python -m venv modelaudit-env
 source modelaudit-env/bin/activate  # Linux/Mac
-# modelaudit-env\Scripts\activate   # Windows
 pip install modelaudit[all]
 ```
 
-**Docker Issues:**
+**Docker Volume Issues:**
 
 ```bash
-# Ensure proper volume mounting for file access
+# Linux/Mac
 docker run --rm -v "$(pwd)":/data ghcr.io/promptfoo/modelaudit:latest scan /data/
 
-# For Windows PowerShell
+# Windows PowerShell
 docker run --rm -v "${PWD}:/data" ghcr.io/promptfoo/modelaudit:latest scan /data/
 ```
 
+</details>
+
 ## Next Steps
 
-- **[Usage Guide](./usage.md)** - CLI options and integrations
-- **[Scanner Reference](./scanners.md)** - Understanding what each scanner does
-
-## System Requirements
-
-Ensure your system meets these minimum requirements for optimal ModelAudit performance:
-
-- **Python**: 3.9 or higher
-- **Memory**: 1GB+ RAM (more for large models)
-- **Storage**: 500MB+ free space (for temporary model downloads)
-- **Network**: Internet access for remote model scanning (HuggingFace, cloud storage, etc.)
-
-**Platform Support:**
-
-ModelAudit runs on all major platforms: Linux (x86_64, ARM64), macOS (Intel, Apple Silicon), Windows (x86_64), and Docker containers.
+- **[Usage Guide](./usage.md)** - Remote scanning, CLI options, integrations
+- **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities
+- **[Examples Repository](https://github.com/promptfoo/modelaudit-examples)** - CI/CD templates and configurations

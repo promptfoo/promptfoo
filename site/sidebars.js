@@ -352,6 +352,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'model-audit/installation' },
         { type: 'doc', id: 'model-audit/usage' },
+        { type: 'doc', id: 'model-audit/scanner-overview' },
         { type: 'doc', id: 'model-audit/scanners' },
       ],
     },
