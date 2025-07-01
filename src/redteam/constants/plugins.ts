@@ -142,7 +142,14 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii', 'bias', 'guardrails-eval'] as const;
+export const COLLECTIONS = [
+  'default',
+  'foundation',
+  'harmful',
+  'pii',
+  'bias',
+  'guardrails-eval',
+] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
