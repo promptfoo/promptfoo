@@ -320,3 +320,5 @@ export default class AdvNoiseProvider implements ApiProvider {
     }
   }
 }
+
+export { addTypos, addSynonymSwaps, addPunctuationJitter, applyNoise, calculateSimilarity };
