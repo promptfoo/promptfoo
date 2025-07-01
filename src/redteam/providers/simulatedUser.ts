@@ -1,6 +1,7 @@
-import { SimulatedUser } from '../../providers/simulatedUser';
+import { SimulatedUser, type Message } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
 import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
+import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
 const PROVIDER_ID = `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`;
 
@@ -30,5 +31,19 @@ export default class RedteamSimulatedUserProvider extends SimulatedUser {
 
   get taskId() {
     return 'simulated-user-redteam';
+  }
+
+  serializeOutput(messages: Message[], numRequests: number) {
+    return {
+      output: getLastMessageContent(messages, 'assistant') || '',
+      tokenUsage: {
+        numRequests,
+      },
+      metadata: {
+        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        messages,
+        redteamHistory: messagesToRedteamHistory(messages),
+      },
+    };
   }
 }

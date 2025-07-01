@@ -136,6 +136,14 @@ export class SimulatedUser implements ApiProvider {
       numRequests += 1; // Only count the request to the agent.
     }
 
+    return this.serializeOutput(messages, numRequests);
+  }
+
+  toString() {
+    return 'AgentProvider';
+  }
+
+  serializeOutput(messages: Message[], numRequests: number) {
     return {
       output: messages
         .map(
@@ -149,9 +157,5 @@ export class SimulatedUser implements ApiProvider {
         messages,
       },
     };
-  }
-
-  toString() {
-    return 'AgentProvider';
   }
 }
