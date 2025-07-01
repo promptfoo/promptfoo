@@ -6,6 +6,7 @@ import {
   validateFunctionCall,
   formatOpenAiError,
   OPENAI_CHAT_MODELS,
+  isOpenAIGuardrailError,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -41,6 +42,125 @@ describe('failApiCall', () => {
     expect(result).toEqual({
       error: `API error: Error: Network error`,
     });
+  });
+
+  it('should handle guardrail errors', () => {
+    const error = new OpenAI.APIError(400, {}, 'Content policy violation', new Headers());
+    Object.defineProperty(error, 'error', {
+      value: {
+        message: 'Content policy violation',
+        code: 'content_policy_violation',
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    const result = failApiCall(error);
+    expect(result).toEqual({
+      guardrails: { flagged: true },
+    });
+  });
+});
+
+describe('isOpenAIGuardrailError', () => {
+  it('should return true for invalid_prompt code', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: 'invalid_prompt',
+          message: 'Some message',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('should return true for content_policy_violation code', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: 'content_policy_violation',
+          message: 'Some message',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('should return true for content_filter code', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: 'content_filter',
+          message: 'Some message',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('should return true for invalid_prompt in message', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: 'other',
+          message: 'Invalid_prompt detected',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('should return true for content_policy_violation in message', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: 'other',
+          message: 'Content_policy_violation detected',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('should return true for content_filter in message', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: 'other',
+          message: 'Content_filter detected',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('should return false for other error types', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: 'rate_limit_exceeded',
+          message: 'Rate limit exceeded',
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('should handle undefined error field', () => {
+    expect(isOpenAIGuardrailError({})).toBe(false);
+  });
+
+  it('should handle undefined code and message', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {},
+      }),
+    ).toBe(false);
+  });
+
+  it('should handle null values', () => {
+    expect(
+      isOpenAIGuardrailError({
+        error: {
+          code: undefined,
+          message: undefined,
+        },
+      }),
+    ).toBe(false);
   });
 });
 
@@ -255,7 +375,7 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate cost correctly for o3-pro-2025-06-10', () => {
     const cost = calculateOpenAICost('o3-pro-2025-06-10', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.06); // 20/1M * 1000 + 80/1M * 500
+    expect(cost).toBeCloseTo(0.06);
   });
 
   it('should calculate audio token costs for gpt-4o-realtime-preview-2024-12-17', () => {
@@ -303,7 +423,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it('should use custom audioCost from config when provided', () => {
-    const audioCost = 0.05; // per 1M tokens
+    const audioCost = 0.05;
 
     const promiseTokens = 1000;
     const completionTokens = 500;
@@ -350,47 +470,44 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeUndefined();
   });
 
-  // Legacy GPT-4 model tests
   it('should calculate cost correctly for gpt-4-0314', () => {
     const cost = calculateOpenAICost('gpt-4-0314', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.06); // 30/1M * 1000 + 60/1M * 500
+    expect(cost).toBeCloseTo(0.06);
   });
 
   it('should calculate cost correctly for gpt-4-32k-0314', () => {
     const cost = calculateOpenAICost('gpt-4-32k-0314', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.12); // 60/1M * 1000 + 120/1M * 500
+    expect(cost).toBeCloseTo(0.12);
   });
 
   it('should calculate cost correctly for gpt-4-32k-0613', () => {
     const cost = calculateOpenAICost('gpt-4-32k-0613', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.12); // 60/1M * 1000 + 120/1M * 500
+    expect(cost).toBeCloseTo(0.12);
   });
 
   it('should calculate cost correctly for gpt-4-vision-preview', () => {
     const cost = calculateOpenAICost('gpt-4-vision-preview', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.025); // 10/1M * 1000 + 30/1M * 500
+    expect(cost).toBeCloseTo(0.025);
   });
 
-  // Legacy GPT-3.5 model tests
   it('should calculate cost correctly for gpt-3.5-turbo-0301', () => {
     const cost = calculateOpenAICost('gpt-3.5-turbo-0301', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.0025); // 1.5/1M * 1000 + 2/1M * 500
+    expect(cost).toBeCloseTo(0.0025);
   });
 
   it('should calculate cost correctly for gpt-3.5-turbo-16k', () => {
     const cost = calculateOpenAICost('gpt-3.5-turbo-16k', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.005); // 3/1M * 1000 + 4/1M * 500
+    expect(cost).toBeCloseTo(0.005);
   });
 
   it('should calculate cost correctly for gpt-3.5-turbo-16k-0613', () => {
     const cost = calculateOpenAICost('gpt-3.5-turbo-16k-0613', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.005); // 3/1M * 1000 + 4/1M * 500
+    expect(cost).toBeCloseTo(0.005);
   });
 
-  // Latest audio model test
   it('should calculate cost correctly for gpt-4o-audio-preview-2025-06-03', () => {
     const cost = calculateOpenAICost('gpt-4o-audio-preview-2025-06-03', {}, 1000, 500);
-    expect(cost).toBeCloseTo(0.0075); // 2.5/1M * 1000 + 10/1M * 500
+    expect(cost).toBeCloseTo(0.0075);
   });
 });
 
