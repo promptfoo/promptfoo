@@ -4,13 +4,13 @@ import cliProgress from 'cli-progress';
 import { URL } from 'url';
 import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
-import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import { makeRequest as makeCloudRequest } from './util/cloud';
+import { fetchWithProxy } from './util/fetch';
 
 export interface ShareDomainResult {
   domain: string;

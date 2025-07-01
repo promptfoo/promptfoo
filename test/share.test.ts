@@ -46,7 +46,7 @@ function buildMockEval(): Partial<Eval> {
 const mockFetch = jest.fn();
 
 jest.mock('../src/globalConfig/cloud');
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithProxy: jest.fn().mockImplementation((...args) => mockFetch(...args)),
 }));
 

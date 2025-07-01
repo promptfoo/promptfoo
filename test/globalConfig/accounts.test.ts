@@ -1,7 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
-import { fetchWithTimeout } from '../../src/fetch';
 import {
   getUserId,
   getUserEmail,
@@ -19,10 +18,11 @@ import {
 } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
+import { fetchWithTimeout } from '../../src/util/fetch';
 
 jest.mock('@inquirer/input');
 jest.mock('../../src/envars');
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/telemetry');
 jest.mock('../../src/util');
 

@@ -15,7 +15,7 @@ import { getProviderFromCloud, isCloudProvider, getCloudDatabaseId } from '../sr
 
 jest.mock('fs');
 jest.mock('js-yaml');
-jest.mock('../src/fetch');
+jest.mock('../src/util/fetch/index.ts');
 jest.mock('../src/providers/http');
 jest.mock('../src/providers/openai/chat');
 jest.mock('../src/providers/openai/embedding');

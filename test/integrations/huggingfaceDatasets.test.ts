@@ -1,11 +1,11 @@
 import { getEnvString } from '../../src/envars';
-import { fetchWithProxy } from '../../src/fetch';
 import {
   fetchHuggingFaceDataset,
   parseDatasetPath,
 } from '../../src/integrations/huggingfaceDatasets';
+import { fetchWithProxy } from '../../src/util/fetch';
 
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/util/fetch/index.ts', () => ({
   fetchWithProxy: jest.fn(),
 }));
 

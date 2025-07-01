@@ -1,11 +1,11 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { randomUUID } from 'crypto';
+import { fetchWithTimeout } from 'src/util/fetch';
 import { z } from 'zod';
 import type { GlobalConfig } from '../configTypes';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
-import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 

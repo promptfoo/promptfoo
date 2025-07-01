@@ -1,10 +1,10 @@
 import { Command } from 'commander';
 import { authCommand } from '../../src/commands/auth';
-import { fetchWithProxy } from '../../src/fetch';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
+import { fetchWithProxy } from '../../src/util/fetch';
 import { createMockResponse } from '../util/utils';
 
 const mockCloudUser = {
@@ -34,7 +34,7 @@ jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/logger');
 jest.mock('../../src/telemetry');
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;

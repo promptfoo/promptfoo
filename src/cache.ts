@@ -4,10 +4,10 @@ import fsStore from 'cache-manager-fs-hash';
 import fs from 'fs';
 import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
-import { fetchWithRetries } from './fetch';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
+import { fetchWithRetries } from './util/fetch';
 
 let cacheInstance: Cache | undefined;
 

@@ -1,7 +1,7 @@
-import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
+import { fetchWithTimeout } from '../../util/fetch';
 import { RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';

@@ -1,11 +1,11 @@
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import type { Plugin, Severity } from '../redteam/constants';
 import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
+import { fetchWithProxy } from './fetch';
 import invariant from './invariant';
 
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {

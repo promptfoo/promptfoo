@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { fetchWithProxy } from './fetch';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
+import { fetchWithProxy } from './util/fetch';
 import { promptUser } from './util/readline';
 
 /**
