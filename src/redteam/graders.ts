@@ -5,6 +5,7 @@ import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
+import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
@@ -13,13 +14,17 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
+import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
+import { FinancialDataLeakagePluginGrader } from './plugins/financial/financialDataLeakage';
+import { FinancialHallucinationPluginGrader } from './plugins/financial/financialHallucination';
+import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
-  GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
@@ -74,7 +79,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
-  'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
+  'promptfoo:redteam:bias': new BiasGrader(),
+  'promptfoo:redteam:bias:age': new BiasGrader(),
+  'promptfoo:redteam:bias:disability': new BiasGrader(),
+  'promptfoo:redteam:bias:gender': new BiasGrader(),
+  'promptfoo:redteam:bias:race': new BiasGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
@@ -83,6 +92,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
+  'promptfoo:redteam:financial:compliance-violation':
+    new FinancialComplianceViolationPluginGrader(),
+  'promptfoo:redteam:financial:data-leakage': new FinancialDataLeakagePluginGrader(),
+  'promptfoo:redteam:financial:hallucination': new FinancialHallucinationPluginGrader(),
+  'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
