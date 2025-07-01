@@ -1,0 +1,203 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google ADK multi-agent travel planning system evaluation
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: file://provider.py
+    label: ADK Travel Coordinator
+
+tests:
+  # Basic trip planning
+  - description: 'Complete trip planning request'
+    vars:
+      query: 'Plan a 3-day trip to Tokyo leaving December 15, 2024'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return typeof response === 'string' && 
+                 response.toLowerCase().includes('tokyo') &&
+                 response.toLowerCase().includes('december');
+      - type: llm-rubric
+        value: |
+          The response should include:
+          1. Flight recommendations
+          2. Hotel suggestions
+          3. A day-by-day itinerary
+          4. Weather information
+          5. Budget estimates
+
+  # Budget-conscious planning
+  - description: 'Budget-restricted trip planning'
+    vars:
+      query: 'I need a budget trip to Paris for 4 days, max $1000 per person'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('budget') &&
+                 response.toLowerCase().includes('paris');
+      - type: python
+        value: |
+          response = output.get('response', output)
+          return ('budget' in response.lower() or 'affordable' in response.lower()) and \
+                 '$1000' in response
+
+  # Specific flight search
+  - description: 'Flight-only request'
+    vars:
+      query: 'Find me flights from New York to London for Christmas week'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('flight') &&
+                 response.toLowerCase().includes('new york') &&
+                 response.toLowerCase().includes('london');
+      - type: llm-rubric
+        value: 'The response should focus on flight options with airlines, times, and prices'
+
+  # Hotel search with preferences
+  - description: 'Hotel search with specific requirements'
+    vars:
+      query: 'I need a family-friendly hotel in Tokyo with a pool, staying June 10-15'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('hotel') &&
+                 response.toLowerCase().includes('family') &&
+                 response.toLowerCase().includes('pool');
+      - type: llm-rubric
+        value: |
+          The response should recommend hotels that:
+          1. Are suitable for families
+          2. Have pool facilities
+          3. Show availability for the specified dates
+          4. Include pricing information
+
+  # Activity planning
+  - description: 'Activity and itinerary planning'
+    vars:
+      query: 'Create a 2-day itinerary for London focusing on museums and historical sites'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('museum') &&
+                 response.toLowerCase().includes('itinerary') &&
+                 (response.toLowerCase().includes('day 1') || response.toLowerCase().includes('first day'));
+      - type: python
+        value: |
+          response = output.get('response', output)
+          return 'British Museum' in response or 'Tower of London' in response or \
+                 'National Gallery' in response
+
+  # Weather-dependent planning
+  - description: 'Weather-aware trip planning'
+    vars:
+      query: "What's the weather like in Tokyo in April? Should I pack rain gear?"
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('weather') &&
+                 response.toLowerCase().includes('april') &&
+                 (response.toLowerCase().includes('rain') || response.toLowerCase().includes('cherry blossom'));
+      - type: llm-rubric
+        value: 'Should mention cherry blossom season and spring weather conditions'
+
+  # Multi-city trip
+  - description: 'Complex multi-city itinerary'
+    vars:
+      query: 'Plan a 10-day trip visiting Tokyo, Kyoto, and Osaka'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          const cities = ['tokyo', 'kyoto', 'osaka'];
+          return cities.every(city => response.toLowerCase().includes(city));
+      - type: llm-rubric
+        value: |
+          Should include:
+          1. Transportation between cities
+          2. Suggested days to spend in each city
+          3. Different activities for each location
+          4. Logical flow between destinations
+
+  # Last-minute planning
+  - description: 'Urgent travel request'
+    vars:
+      query: 'I need to fly to Paris tomorrow for an emergency. What are my options?'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('urgent') || 
+                 response.toLowerCase().includes('last-minute') ||
+                 response.toLowerCase().includes('immediately');
+      - type: llm-rubric
+        value: 'Should acknowledge urgency and provide immediate flight options'
+
+  # Group travel planning
+  - description: 'Large group coordination'
+    vars:
+      query: 'Planning a trip for 8 people to New York, need 4 hotel rooms near Times Square'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('group') || 
+                 response.toLowerCase().includes('8 people') ||
+                 response.toLowerCase().includes('4 rooms');
+      - type: python
+        value: |
+          response = output.get('response', output)
+          return 'Times Square' in response and \
+                 ('group' in response.lower() or 'rooms' in response.lower())
+
+  # Error handling - Invalid dates
+  - description: 'Invalid date handling'
+    vars:
+      query: 'Book a flight for yesterday'
+    assert:
+      - type: llm-rubric
+        value: 'Should politely explain that past dates cannot be booked and ask for valid dates'
+
+  # Destination information request
+  - description: 'Destination overview request'
+    vars:
+      query: 'Tell me about visiting London - visa requirements, currency, best time to visit'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.toLowerCase().includes('pound') &&
+                 response.toLowerCase().includes('visa') &&
+                 response.toLowerCase().includes('weather');
+      - type: python
+        value: |
+          response = output.get('response', output).lower()
+          keywords = ['gbp', 'pound', 'currency', 'visa', 'weather', 'spring', 'summer']
+          return sum(1 for keyword in keywords if keyword in response) >= 3
+
+  # Budget estimation
+  - description: 'Trip cost estimation'
+    vars:
+      query: 'How much would a 5-day luxury trip to Paris cost for 2 people?'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          return response.includes('$') || response.includes('USD') || 
+                 response.includes('cost') || response.includes('budget');
+      - type: llm-rubric
+        value: |
+          Should provide:
+          1. Accommodation costs (luxury hotels)
+          2. Flight estimates
+          3. Daily expenses (meals, transport, activities)
+          4. Total estimated budget
+          5. Cost breakdown per person 
