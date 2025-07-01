@@ -259,6 +259,24 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 | -------------- | ---------- | ------------------------------ |
 | `context.test` | `TestCase` | The test case to be evaluated. |
 
+### Debugging Python Hooks
+
+To debug Python extension hooks:
+
+```bash
+export PROMPTFOO_PYTHON_PDB_TRACING_ENABLED=true
+```
+
+Then in your hook file:
+
+```python
+def extension_hook(hook_name, context):
+    if hook_name == 'beforeEach':
+        import pdb; pdb.set_trace()
+        # Debug the test context
+    return context
+```
+
 ## Provider-related types
 
 ### Guardrails

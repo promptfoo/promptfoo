@@ -98,3 +98,13 @@ This enables:
 - **Backward compatibility**: Existing generators work unchanged
 - **Flexible configuration**: Pass any parameters as JSON
 - **Reusable functions**: Same function, different configurations
+
+## Debugging
+
+To debug the Python code interactively:
+
+```bash
+export PROMPTFOO_PYTHON_PDB_TRACING_ENABLED=true
+```
+
+Then add `import pdb; pdb.set_trace()` anywhere in the Python code to set a breakpoint.
