@@ -581,6 +581,47 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail when the is-json assertion fails with external schema', async () => {
+    const assertion: Assertion = {
+      type: 'is-json',
+      value: 'file:///schema.json',
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
+
+    const output = '{"latitude": "high", "longitude": [-1]}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
+  });
+
   it('should pass when the is-sql assertion passes', async () => {
     const output = 'SELECT id, name FROM users';
 
