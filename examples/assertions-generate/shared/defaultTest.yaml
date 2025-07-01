@@ -1,15 +1,14 @@
 # Shared default test configuration for translation assertions
 assert:
-  - type: llm-rubric
-    value: Rate the accuracy of the translation of {{text}} from English to {{language}}
-    metric: accuracy
-  - type: llm-rubric
-    value: Rate the fluency of the translation of {{text}} from English to {{language}}
-    metric: fluency
-  - type: llm-rubric
-    value: Rate the grammar of the translation of {{text}} from English to {{language}}
-    metric: grammar
+  - type: not-icontains
+    value: 'error'
+  - type: latency
+    threshold: 10000 # 10 second max latency
+  - type: cost
+    threshold: 0.01 # 1 cent max cost
+  - type: not-equals
+    value: ''
 options:
   provider:
     text: openai:gpt-4.1-mini
-    embedding: openai:embedding:text-embedding-3-small 
+    embedding: openai:embedding:text-embedding-3-small

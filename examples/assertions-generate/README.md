@@ -56,6 +56,7 @@ defaultTest: file://shared/defaultTest.yaml
 ```
 
 This allows you to:
+
 - Share common test configurations across multiple projects
 - Keep your main config file cleaner
 - Maintain test configurations separately

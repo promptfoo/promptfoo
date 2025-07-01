@@ -497,7 +497,11 @@ describe('combineConfigs', () => {
       expect.anything(),
     );
 
-    expect(result.defaultTest?.metadata).toEqual({
+    expect(typeof result.defaultTest).toBe('object');
+    expect(result.defaultTest).toBeDefined();
+    // Type assertion since we've verified it's an object above
+    const defaultTest = result.defaultTest as { metadata?: Record<string, any> };
+    expect(defaultTest.metadata).toEqual({
       key1: 'value1',
       key2: 'value2',
     });

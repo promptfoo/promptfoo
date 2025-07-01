@@ -706,12 +706,16 @@ export function evalCommand(
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      defaultConfig.defaultTest?.options?.prefix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.prefix
+        : undefined,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is appended to every prompt.',
-      defaultConfig.defaultTest?.options?.suffix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.suffix
+        : undefined,
     )
     .option(
       '--var <key=value>',

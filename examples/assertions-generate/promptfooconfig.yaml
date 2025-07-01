@@ -15,6 +15,6 @@ tests:
       language: Spanish
       text: Hello, how are you today?
     assert:
-      - type: similar
-        value: Como estas?
-        metric: similar
+      # This test case will inherit all assertions from defaultTest
+      - type: contains
+        value: 'Hola'
