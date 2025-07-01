@@ -240,7 +240,7 @@ def create_itinerary(
 # Create the activity agent
 activity_agent = Agent(
     name="activity_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash-preview-04-17",
     description="A specialized agent for planning activities and creating itineraries.",
     instruction="""You are an expert travel activity planner. Your role is to help users discover amazing experiences and create well-organized itineraries for their trips.
 

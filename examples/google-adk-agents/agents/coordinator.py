@@ -42,7 +42,7 @@ def estimate_trip_budget(
 # Create the coordinator agent with sub-agents
 travel_coordinator = Agent(
     name="travel_coordinator",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash-preview-04-17",
     description="A master travel planning coordinator that orchestrates specialized agents to create comprehensive travel plans.",
     instruction="""You are the lead travel planning coordinator. You manage a team of specialized agents to help users plan amazing trips.
 

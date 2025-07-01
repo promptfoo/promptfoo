@@ -143,7 +143,7 @@ def filter_hotels_by_amenities(hotels: list, required_amenities: list) -> list:
 # Create the hotel agent
 hotel_agent = Agent(
     name="hotel_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash-preview-04-17",
     description="A specialized agent for finding and recommending hotels.",
     instruction="""You are a hotel accommodation specialist. Your role is to help users find the perfect place to stay for their trips.
 

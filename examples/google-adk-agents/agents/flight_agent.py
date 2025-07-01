@@ -98,7 +98,7 @@ def search_flights(
 # Create the flight agent
 flight_agent = Agent(
     name="flight_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash-preview-04-17",
     description="A specialized agent for searching and recommending flights.",
     instruction="""You are a flight search specialist. Your role is to help users find the best flight options for their travel needs.
 

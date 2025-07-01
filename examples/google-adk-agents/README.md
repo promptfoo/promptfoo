@@ -2,6 +2,8 @@
 
 This example demonstrates how to evaluate [Google's Agent Development Kit (ADK)](https://github.com/google/adk-python) agents using promptfoo. ADK is Google's open-source Python framework for building, evaluating, and deploying sophisticated AI agents with flexibility and control.
 
+**Model**: This example uses **Gemini 2.5 Flash** (preview), Google's latest hybrid reasoning model with thinking capabilities, offering an optimal balance between performance, cost, and reasoning depth.
+
 ## Quick Start
 
 Run this example with:
@@ -132,8 +134,49 @@ Make sure you're running `adk web` from the example directory and that `__init__
 3. **Tool Usage**: Agents use tools to fetch weather, destination info, and search for options
 4. **Response Synthesis**: Coordinator combines sub-agent responses into a comprehensive plan
 
+## Gemini 2.5 Flash with Thinking Mode
+
+This example uses **Gemini 2.5 Flash** (gemini-2.5-flash-preview-04-17), which is Google's first fully hybrid reasoning model. Key features:
+
+- **Hybrid Reasoning**: Can toggle thinking mode on/off for optimal performance
+- **Thinking Budget**: Configurable token budget for reasoning (0-24,576 tokens)
+- **Smart Adaptation**: Automatically adjusts thinking based on task complexity
+- **Cost Efficiency**: Best price-to-performance ratio among reasoning models
+
+### Thinking Mode Configuration
+
+While ADK doesn't yet directly expose thinking configuration, you can control reasoning behavior:
+
+- **Complex Tasks**: The model automatically applies more reasoning for multi-step problems
+- **Simple Queries**: Minimal reasoning overhead for straightforward requests
+- **Future Support**: ADK may add explicit thinking_budget configuration in future releases
+
+For direct Gemini API usage with thinking configuration, see `thinking_mode_example.py`:
+
+```python
+# Example for direct Gemini API (not ADK)
+from google import genai
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-preview-04-17",
+    contents="Plan a complex multi-city trip...",
+    config=genai.types.GenerateContentConfig(
+        thinking_config=genai.types.ThinkingConfig(
+            thinking_budget=1024  # Tokens for reasoning
+        )
+    )
+)
+```
+
+Run the example:
+
+```bash
+python thinking_mode_example.py
+```
+
 ## Learn More
 
 - [ADK Documentation](https://github.com/google/adk-python)
 - [Promptfoo Documentation](https://promptfoo.dev)
 - [Google AI Studio](https://makersuite.google.com)
+- [Gemini 2.5 Flash Documentation](https://developers.googleblog.com/en/start-building-with-gemini-25-flash/)

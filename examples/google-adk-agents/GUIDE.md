@@ -29,7 +29,7 @@ The coordinator agent manages three specialized sub-agents:
 ```python
 travel_coordinator = Agent(
     name="travel_coordinator",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash-preview-04-17",  # Latest reasoning model
     sub_agents=[flight_agent, hotel_agent, activity_agent]
 )
 ```
@@ -122,7 +122,7 @@ from google.adk.agents import Agent
 
 restaurant_agent = Agent(
     name="restaurant_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash-preview-04-17",
     description="Finds and recommends restaurants",
     instruction="...",
     tools=[search_restaurants]
