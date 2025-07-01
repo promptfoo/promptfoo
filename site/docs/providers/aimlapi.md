@@ -17,7 +17,7 @@ The `aimlapi` provider lets you use [AI/ML API](https://aimlapi.com/app/?utm_sou
 
 ```bash
 npx promptfoo@latest init --example aimlapi
-````
+```
 
 ## Setup
 
@@ -28,7 +28,7 @@ export AIML_API_KEY=<your_api_key>
 ```
 
 If you don’t have an API key yet, sign up at
-👉 [https://aimlapi.com/app/?utm\_source=promptfoo\&utm\_medium=github\&utm\_campaign=integration](https://aimlapi.com/app/?utm_source=promptfoo&utm_medium=github&utm_campaign=integration)
+👉 [https://aimlapi.com/app/?utm_source=promptfoo\&utm_medium=github\&utm_campaign=integration](https://aimlapi.com/app/?utm_source=promptfoo&utm_medium=github&utm_campaign=integration)
 
 ## Provider Usage
 
@@ -41,9 +41,9 @@ providers:
 
 Where `<type>` can be:
 
-* `chat`
-* `completion`
-* `embedding`
+- `chat`
+- `completion`
+- `embedding`
 
 You can also use `aimlapi:<model>` to default to chat-completion mode.
 

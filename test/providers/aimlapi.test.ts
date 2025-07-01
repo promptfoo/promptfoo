@@ -1,12 +1,12 @@
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
-import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { fetchWithCache } from '../../src/cache';
 import {
   createAimlApiProvider,
   fetchAimlApiModels,
   clearAimlApiModelsCache,
 } from '../../src/providers/aimlapi';
-import { fetchWithCache } from '../../src/cache';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 jest.mock('../../src/providers/openai');
 jest.mock('../../src/cache');
