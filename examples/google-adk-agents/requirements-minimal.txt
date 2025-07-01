@@ -1,0 +1,8 @@
+# Core ADK dependencies
+google-adk>=1.5.0
+google-generativeai>=0.8.0
+
+# Essential dependencies
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+httpx>=0.25.0 

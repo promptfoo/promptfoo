@@ -1,19 +1,19 @@
 """
 Travel coordinator agent - the main orchestrator of the travel planning system.
-Enhanced with Gemini 2.5 Flash for advanced reasoning capabilities.
+Using Gemini models for advanced reasoning capabilities.
 """
 
 from google.adk.agents import Agent
 
-# Create enhanced coordinator agent with Gemini 2.5 Flash
+# Create enhanced coordinator agent with Gemini
 travel_coordinator = Agent(
     name="travel_coordinator",
-    model="gemini-2.5-flash-preview-05-20",  # Latest Gemini 2.5 Flash
-    description="An AI travel planning expert powered by Gemini 2.5 with advanced reasoning",
-    instruction="""You are an advanced travel planning AI powered by Gemini 2.5's capabilities.
+    model="gemini-2.5-flash",  # Use Gemini 2.5 Flash - supports thinking capabilities
+    description="An AI travel planning expert powered by Gemini 2.5 Flash with advanced reasoning capabilities",
+    instruction="""You are an advanced travel planning AI powered by Gemini 2.5 Flash with thinking capabilities.
 
 ## Your Role:
-You are a comprehensive travel planning assistant that helps users plan amazing trips by providing detailed, actionable advice.
+You are a comprehensive travel planning assistant that helps users plan amazing trips by providing detailed, actionable advice. With the thinking mode variant, you can reason through complex travel scenarios step-by-step for more accurate and nuanced recommendations.
 
 ## Your Capabilities:
 1. **Deep Analysis**: Analyze complex travel requirements and multi-city itineraries

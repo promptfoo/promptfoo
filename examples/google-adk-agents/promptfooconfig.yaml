@@ -23,30 +23,27 @@ providers:
     config:
       # Model configuration
       apiKey: ${GOOGLE_API_KEY}
-      model: gemini-2.5-flash-preview-05-20
+      model: gemini-2.5-flash
       temperature: 0.7
-      maxOutputTokens: 65000  # Leverage Gemini 2.5's massive output capacity
-      
-      # Enable thinking mode for complex queries
-      thinking:
-        enabled: true
-        mode: auto  # Let model decide when to think
-        maxBudget: 8192  # High budget for complex planning
-      
+      maxOutputTokens: 65000 # Leverage Gemini 2.5's massive output capacity
+
+      # Gemini 2.5 Flash has controllable thinking capabilities
+      # The model can adjust reasoning depth based on query complexity
+
       # Travel agent specific settings
       defaults:
         budget_level: mid-range
         trip_style: balanced
         include_tips: true
-        enable_search: true  # Use Google Search tool
-        enable_calculations: true  # Use code execution
-      
+        enable_search: true # Use Google Search tool
+        enable_calculations: true # Use code execution
+
       # Response formatting
       response_format:
         include_budget_breakdown: true
         include_weather: true
         max_itinerary_days: 14
-        format: structured  # Request structured output
+        format: structured # Request structured output
 
 tests:
   # Test 1: Simple query (low thinking)

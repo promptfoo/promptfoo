@@ -1,6 +1,6 @@
 # Core ADK dependencies
-google-adk>=1.7.0  # Latest version with Gemini 2.5 Flash support
-google-generativeai>=0.9.0  # Latest Gemini SDK
+google-adk>=1.5.0  # Latest available version
+google-generativeai>=0.8.0  # Latest Gemini SDK
 google-cloud-aiplatform>=1.25.0  # For Vertex AI integration
 
 # Data models and validation
@@ -23,7 +23,7 @@ tavily-python>=0.3.0  # Advanced search tool
 serpapi>=0.1.5  # Google search results
 
 # MCP tools support (optional)
-mcp>=0.1.0  # Model Context Protocol
+mcp>=0.9.1  # Model Context Protocol
 
 # Performance and caching
 aiofiles>=23.0.0  # Async file operations

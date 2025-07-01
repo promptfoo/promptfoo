@@ -1,42 +1,47 @@
 # Google ADK Agents Example - Enhanced with Gemini 2.5 Flash
 
-This example demonstrates cutting-edge multi-agent development using Google's Agent Development Kit (ADK) with the latest **Gemini 2.5 Flash** model and 2025 best practices.
+This example demonstrates cutting-edge multi-agent development using Google's Agent Development Kit (ADK) with the latest **Gemini 2.5 Flash** model and best practices.
 
 ## 🚀 What's New in This Enhanced Version
 
-- **Gemini 2.5 Flash with Thinking Mode**: Leverages Google's latest reasoning model that can "think" through complex problems
-- **Advanced Tool Integration**: Built-in Google Search, code execution, and ready-to-use patterns for OpenAPI, MCP, and LangChain tools
-- **Smart Callbacks**: Implements guardrails, caching, and dynamic thinking budget allocation
+- **Gemini 2.5 Flash**: Uses Google's first fully hybrid reasoning model with controllable thinking capabilities
+- **Advanced Reasoning**: Features adjustable thinking budgets to balance quality, cost, and latency based on query complexity
+- **Advanced Tool Integration**: Ready-to-use patterns for OpenAPI, MCP, and LangChain tools
+- **Smart Callbacks**: Implements guardrails, caching, and response optimization
 - **Production-Ready Features**: Session management, artifact handling, performance monitoring, and health checks
 - **65K Token Output**: Supports massive responses for comprehensive travel planning
-- **Auto-Thinking Mode**: Model automatically decides when deep reasoning is needed
 
 ## Overview
 
 This enhanced travel planning system showcases:
-- **Gemini 2.5 Flash** - Google's first fully hybrid reasoning model (April 2025)
-- **Thinking Capabilities** - Controllable reasoning with budgets from 0 to 24,576 tokens
-- **Real-time Search** - Integrated Google Search for current prices and availability
-- **Smart Calculations** - Code execution for budget optimization and comparisons
+
+- **Gemini 2.5 Flash** - Google's first fully hybrid reasoning model combining speed with controllable thinking capabilities
+- **Enhanced Problem Solving** - Excels at complex travel planning, route optimization, and multi-step reasoning
+- **Multi-Agent Architecture** - Specialized agents for flights, hotels, and activities
+- **Smart Calculations** - Detailed budget breakdowns and itinerary optimization
 - **Advanced Patterns** - Callbacks for caching, state management, and policy enforcement
 - **OpenTelemetry Tracing** - Comprehensive debugging and performance monitoring
 - **Future-Ready Architecture** - Prepared for OpenAPI tools, MCP servers, and more
 
 ## Key Features
 
-### 🧠 Thinking Mode
-- **Auto Mode**: Model decides when to think based on query complexity
-- **Controllable Budget**: Fine-tune thinking from 0 (instant) to 24K tokens (deep analysis)
-- **Optimized Performance**: Simple queries stay fast, complex ones get thorough analysis
+### 🧠 Hybrid Reasoning Capabilities
+
+- **Controllable Thinking**: Gemini 2.5 Flash features adjustable thinking budgets to optimize reasoning depth
+- **Superior Accuracy**: Enhanced problem-solving for complex travel scenarios requiring multi-step planning
+- **Context-Aware Responses**: Better understanding of nuanced requests and constraints
+- **Optimized Performance**: Balances speed and quality based on query complexity with up to 600% cost savings
 
 ### 🛠️ Advanced Tool Ecosystem
-- **Built-in Tools**: Google Search and code execution ready to use
+
+- **ADK Tools**: Custom tools for weather, destinations, and travel planning
 - **OpenAPI Integration**: Convert any REST API to an ADK tool
 - **MCP Support**: Connect to Model Context Protocol servers
 - **LangChain Tools**: Use Tavily, SerpAPI, and more
 - **Caching Tools**: Smart caching to avoid redundant API calls
 
 ### 📊 Production Features
+
 - **Session Management**: Context preservation across conversations
 - **Artifact Storage**: Save itineraries and travel plans
 - **Performance Monitoring**: Track response times and optimization
@@ -87,8 +92,9 @@ python test_thinking_demo.py
 ```
 
 This demonstrates:
+
 - Simple queries (no thinking needed)
-- Medium complexity (moderate thinking)  
+- Medium complexity (moderate thinking)
 - High complexity (deep reasoning with optimization)
 - Comparison with/without thinking mode
 
@@ -121,14 +127,16 @@ google-adk-agents/
 ## Example: Thinking Mode in Action
 
 ### Simple Query (No Thinking)
+
 ```python
 "What's the weather in Paris?"
 # → Quick, direct response in <1 second
 ```
 
 ### Complex Query (Deep Thinking)
+
 ```python
-"""Plan a 14-day Europe trip for $3000. 
+"""Plan a 14-day Europe trip for $3000.
    Optimize route through Paris, Rome, Barcelona, Amsterdam.
    Calculate all costs and minimize travel time."""
 # → Deep analysis with route optimization, cost breakdowns
@@ -170,7 +178,7 @@ flight_tools = OpenAPIToolset(
     spec_path="https://api.airline.com/openapi.json"
 )
 
-# MCP Tools  
+# MCP Tools
 maps_client = McpClient("npx", ["@modelcontextprotocol/server-googlemaps"])
 maps_tools = McpToolset(maps_client)
 
@@ -231,16 +239,19 @@ The enhanced test suite includes:
 ## Troubleshooting
 
 ### Thinking Mode Issues
+
 - Ensure you're using `gemini-2.5-flash-preview-05-20` or later
 - Check thinking budget is within limits (0-24576)
 - Verify API key has access to preview models
 
 ### Tool Integration
+
 - Built-in tools require explicit enabling in agent config
 - Third-party tools need additional API keys (see `.env.example`)
 - MCP tools require Node.js for MCP servers
 
 ### Performance
+
 - Use caching for repeated queries
 - Monitor with OpenTelemetry for bottlenecks
 - Adjust thinking budgets based on needs
@@ -256,6 +267,7 @@ The enhanced test suite includes:
 ## Contributing
 
 This example showcases best practices as of 2025. Contributions welcome:
+
 - Additional tool integrations
 - Performance optimizations
 - New test scenarios

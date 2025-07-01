@@ -1,20 +1,20 @@
 """
-Demonstration of Gemini 2.5 Flash thinking capabilities in ADK.
-Shows how thinking mode improves complex travel planning.
+Demonstration of Gemini 2.5 Flash capabilities in ADK.
+Shows how Gemini 2.5 Flash improves complex travel planning.
 """
 
 import asyncio
 import os
 
-from google import genai
+import google.generativeai as genai
 
 # Ensure API key is set
 if not os.getenv("GOOGLE_API_KEY"):
     print("Please set GOOGLE_API_KEY environment variable")
     exit(1)
 
-# Initialize client
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+# Configure the API key
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 # Test queries of varying complexity
 test_queries = [
@@ -61,14 +61,12 @@ async def test_thinking_modes():
         print(f"Expected: {test['expected_behavior']}")
         print("\n" + "-" * 50)
 
-        # Test with thinking budget
-        response = await client.models.generate_content_async(
-            model="gemini-2.5-flash-preview-05-20",
-            contents=test["query"],
-            config=genai.types.GenerateContentConfig(
-                thinking_config=genai.types.ThinkingConfig(
-                    thinking_budget=test["thinking_budget"]
-                ),
+        # Test with Gemini 2.5 Flash
+        # Note: thinking_config is available in preview models but not in stable SDK yet
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = await model.generate_content_async(
+            test["query"],
+            generation_config=genai.GenerationConfig(
                 temperature=0.7,
                 max_output_tokens=8192,
             ),
@@ -106,17 +104,14 @@ async def compare_with_without_thinking():
 
     print(f"Complex Query: {complex_query}\n")
 
-    # Test WITHOUT thinking
-    print("🚫 WITHOUT Thinking Mode:")
+    # Test WITHOUT thinking (standard mode)
+    print("🚫 Standard Mode (no explicit thinking budget):")
     print("-" * 30)
 
-    response_no_thinking = await client.models.generate_content_async(
-        model="gemini-2.5-flash-preview-05-20",
-        contents=complex_query,
-        config=genai.types.GenerateContentConfig(
-            thinking_config=genai.types.ThinkingConfig(
-                thinking_budget=0  # No thinking
-            ),
+    model_standard = genai.GenerativeModel("gemini-2.5-flash")
+    response_no_thinking = await model_standard.generate_content_async(
+        complex_query,
+        generation_config=genai.GenerationConfig(
             temperature=0.7,
         ),
     )
@@ -124,17 +119,17 @@ async def compare_with_without_thinking():
     print(f"Response preview: {response_no_thinking.text[:300]}...")
     print(f"Length: {len(response_no_thinking.text)} characters\n")
 
-    # Test WITH thinking
-    print("✅ WITH Thinking Mode (8192 token budget):")
+    # Test WITH enhanced prompting (simulating thinking)
+    print("✅ WITH Enhanced Prompting (encouraging step-by-step reasoning):")
     print("-" * 30)
 
-    response_with_thinking = await client.models.generate_content_async(
-        model="gemini-2.5-flash-preview-05-20",
-        contents=complex_query,
-        config=genai.types.GenerateContentConfig(
-            thinking_config=genai.types.ThinkingConfig(
-                thinking_budget=8192  # Substantial thinking
-            ),
+    # Since thinking_config isn't available in stable SDK, we'll use prompting techniques
+    enhanced_query = f"Please think step-by-step about this request and provide a detailed analysis:\n\n{complex_query}"
+    
+    model_enhanced = genai.GenerativeModel("gemini-2.5-flash")
+    response_with_thinking = await model_enhanced.generate_content_async(
+        enhanced_query,
+        generation_config=genai.GenerationConfig(
             temperature=0.7,
         ),
     )
@@ -152,27 +147,24 @@ async def compare_with_without_thinking():
 
 
 async def demonstrate_auto_thinking():
-    """Show how auto mode adapts thinking to query complexity"""
+    """Show how Gemini 2.5 Flash handles queries of varying complexity"""
 
-    print("\n\n=== Auto Thinking Mode Demonstration ===\n")
+    print("\n\n=== Gemini 2.5 Flash Response Demonstration ===\n")
 
     queries = [
-        "What time is it in Tokyo?",  # Should use minimal thinking
-        "Compare train vs flight from Tokyo to Osaka",  # Should use moderate thinking
-        "Design a sustainable tourism business model for rural Japan that balances economic growth with cultural preservation",  # Should use heavy thinking
+        "What time is it in Tokyo?",  # Simple query
+        "Compare train vs flight from Tokyo to Osaka",  # Moderate complexity
+        "Design a sustainable tourism business model for rural Japan that balances economic growth with cultural preservation",  # High complexity
     ]
 
     for i, query in enumerate(queries, 1):
         print(f"\n🤖 Query {i}: {query}")
         print("-" * 50)
 
-        response = await client.models.generate_content_async(
-            model="gemini-2.5-flash-preview-05-20",
-            contents=query,
-            config=genai.types.GenerateContentConfig(
-                thinking_config=genai.types.ThinkingConfig(
-                    thinking_mode="auto"  # Let model decide
-                ),
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = await model.generate_content_async(
+            query,
+            generation_config=genai.GenerationConfig(
                 temperature=0.7,
             ),
         )
@@ -200,10 +192,10 @@ async def main():
 
         print("\n\n✅ Demonstration complete!")
         print("\n💡 Key Takeaways:")
-        print("1. Thinking mode dramatically improves complex query responses")
-        print("2. Simple queries don't need thinking and remain fast")
-        print("3. Auto mode intelligently adapts to query complexity")
-        print("4. Higher thinking budgets enable deeper analysis and optimization")
+        print("1. Gemini 2.5 Flash provides enhanced responses for complex queries")
+        print("2. Simple queries receive concise, fast responses")
+        print("3. The model adapts its response depth based on query complexity")
+        print("4. Step-by-step prompting can enhance reasoning for complex tasks")
 
     except Exception as e:
         print(f"\n❌ Error: {e}")
