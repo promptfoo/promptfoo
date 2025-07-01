@@ -1,12 +1,13 @@
 {
   "legacyWatch": true,
-  "watch": ["src"],
+  "watch": [
+    "src"
+  ],
   "ignore": [
     "src/app/*",
     "dist/*",
     "node_modules/*",
     ".git/*",
-    "site/*",
-    "src/generated-constants.ts"
+    "site/*"
   ]
 }

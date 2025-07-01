@@ -9,7 +9,3 @@ process.env.OPENAI_API_KEY = 'foo';
 process.env.PROMPTFOO_CONFIG_DIR = TEST_CONFIG_DIR;
 
 delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-
-// Generate constants file for tests
-const { execSync } = require('child_process');
-execSync('node scripts/generate-constants.js', { stdio: 'inherit' });

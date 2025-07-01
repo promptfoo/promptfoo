@@ -2,9 +2,9 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
+import { POSTHOG_KEY } from './constants-provider';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { POSTHOG_KEY } from './generated-constants';
 import { getUserEmail, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 
