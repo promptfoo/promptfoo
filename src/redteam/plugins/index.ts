@@ -7,14 +7,8 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import type { HarmPlugin } from '../constants';
-import {
-  REDTEAM_PROVIDER_HARM_PLUGINS,
-  UNALIGNED_PROVIDER_HARM_PLUGINS,
-} from '../constants';
-import {
-  BIAS_PLUGINS,
-  PII_PLUGINS,
-} from '../constants/plugins';
+import { REDTEAM_PROVIDER_HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
+import { BIAS_PLUGINS, PII_PLUGINS } from '../constants/plugins';
 import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
