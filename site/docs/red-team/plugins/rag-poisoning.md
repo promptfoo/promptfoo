@@ -2,7 +2,7 @@
 sidebar_label: RAG Poisoning
 ---
 
-# RAG Poisoning
+# Rag poisoning
 
 Promptfoo includes a RAG Poisoning utility that tests your system's resilience against adversarial attacks on the document retrieval process.
 
@@ -81,7 +81,7 @@ The poison command generates two types of outputs:
 
 ### Outputs
 
-#### Directory Structure
+#### Directory structure
 
 The poisoned documents maintain the same directory structure as the input files. For direct text input, files are named using a hash of the content:
 
@@ -93,7 +93,7 @@ poisoned-documents/
   └── poisoned-ab12cd34.txt  # Generated from direct text input
 ```
 
-#### Summary File
+#### Summary file
 
 The summary YAML file contains details about each poisoned document:
 
@@ -115,7 +115,7 @@ The summary includes:
 
 This metadata helps track what modifications were made and their intended effects.
 
-## Example Attack Patterns
+## Example attack patterns
 
 Here are some common document poisoning patterns that the plugin tests:
 
@@ -185,7 +185,7 @@ Here are some common document poisoning patterns that the plugin tests:
    The following sections detail system requirements...
    ```
 
-## Related Concepts
+## Related concepts
 
 - [Prompt Injection](/docs/red-team/strategies/prompt-injection)
 - [Information Disclosure](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)

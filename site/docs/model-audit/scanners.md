@@ -20,11 +20,11 @@ sidebar_label: Scanners
 sidebar_position: 200
 ---
 
-# ModelAudit Scanners
+# Modelaudit scanners
 
 ModelAudit includes specialized scanners for different model formats and file types. Each scanner is designed to identify specific security issues relevant to that format.
 
-## Pickle Scanner
+## Pickle scanner
 
 **File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`
 
@@ -51,7 +51,7 @@ The Pickle Scanner analyzes Python pickle files for security risks, which are co
 **Why it matters:**
 Pickle files are a common serialization format for ML models but can execute arbitrary code during unpickling. Attackers can craft malicious pickle files that execute harmful commands when loaded.
 
-## TensorFlow SavedModel Scanner
+## Tensorflow savedmodel scanner
 
 **File types:** `.pb` files and SavedModel directories
 
@@ -68,7 +68,7 @@ This scanner examines TensorFlow models saved in the SavedModel format.
 **Why it matters:**
 TensorFlow models can contain operations that interact with the filesystem or execute arbitrary code, which could be exploited if a malicious model is loaded.
 
-## TensorFlow Lite Scanner
+## Tensorflow lite scanner
 
 **File types:** `.tflite`
 
@@ -85,7 +85,7 @@ This scanner examines TensorFlow Lite model files, which are optimized for mobil
 **Why it matters:**
 While TensorFlow Lite models are generally safer than full TensorFlow models due to their limited operator set, they can still include custom operations or use the Flex delegate to access the full TensorFlow runtime, potentially introducing security risks. Malicious actors could embed harmful code in custom ops or metadata.
 
-## Keras H5 Scanner
+## Keras h5 scanner
 
 **File types:** `.h5`, `.hdf5`, `.keras`
 
@@ -101,7 +101,7 @@ This scanner analyzes Keras models stored in HDF5 format.
 **Why it matters:**
 Keras models with Lambda layers can contain arbitrary Python code that executes when the model is loaded or run. This could be exploited to execute malicious code on the host system.
 
-## ONNX Scanner
+## Onnx scanner
 
 **File types:** `.onnx`
 
@@ -117,7 +117,7 @@ This scanner examines ONNX (Open Neural Network Exchange) model files for securi
 **Why it matters:**
 ONNX models can reference external data files and custom operators. Malicious actors could exploit these features to include harmful custom operations or manipulate external data references to access unauthorized files on the system.
 
-## PyTorch Zip Scanner
+## Pytorch zip scanner
 
 **File types:** `.pt`, `.pth`
 
@@ -133,7 +133,7 @@ This scanner examines PyTorch model files, which are ZIP archives containing pic
 **Why it matters:**
 PyTorch models are essentially ZIP archives containing pickled objects, which can include malicious code. The scanner unpacks these archives and applies pickle security checks to the contents.
 
-## GGUF/GGML Scanner
+## Gguf/ggml scanner
 
 **File types:** `.gguf`, `.ggml`
 
@@ -150,7 +150,7 @@ This scanner validates GGUF (GPT-Generated Unified Format) and GGML model files 
 **Why it matters:**
 GGUF/GGML files are increasingly popular for distributing large language models. While generally safer than pickle formats, they can still contain malicious metadata or be crafted to cause resource exhaustion attacks. The scanner ensures these files are structurally sound and don't contain hidden threats.
 
-## Joblib Scanner
+## Joblib scanner
 
 **File types:** `.joblib`
 
@@ -166,7 +166,7 @@ This scanner analyzes joblib serialized files, which are commonly used by ML lib
 **Why it matters:**
 Joblib files often contain compressed pickle data, inheriting the same security risks as pickle files. Additionally, malicious actors could craft compression bombs that consume excessive memory or CPU resources when loaded. The scanner provides safe decompression with security limits.
 
-## Flax/JAX Scanner
+## Flax/jax scanner
 
 **File types:** `.msgpack`
 
@@ -183,7 +183,7 @@ This scanner analyzes Flax/JAX model files serialized in MessagePack format.
 **Why it matters:**
 Flax models serialized as msgpack files can potentially contain embedded code or malicious data structures. While MessagePack is generally safer than pickle, it can still be exploited through carefully crafted payloads that target specific deserializer vulnerabilities or cause denial of service through resource exhaustion.
 
-## NumPy Scanner
+## Numpy scanner
 
 **File types:** `.npy`
 
@@ -200,7 +200,7 @@ This scanner validates NumPy binary array files for integrity issues and potenti
 **Why it matters:**
 While NumPy files are generally safer than pickle files, they can still be crafted maliciously. Object arrays can contain arbitrary Python objects (including code), and extremely large arrays can cause denial of service. The scanner ensures arrays are safe to load and don't contain hidden threats.
 
-## OCI Layer Scanner
+## Oci layer scanner
 
 **File types:** `.manifest` (with `.tar.gz` layer references)
 
@@ -216,7 +216,7 @@ This scanner examines OCI (Open Container Initiative) and Docker manifest files 
 **Why it matters:**
 Container images are increasingly used to distribute ML models and datasets. These containers can contain multiple layers with various file types, potentially hiding malicious models within what appears to be a legitimate container image. The scanner ensures that all model files within container layers are safe.
 
-## Manifest Scanner
+## Manifest scanner
 
 **File types:** `.json`, `.yaml`, `.yml`, `.xml`, `.toml`, `.config`, etc.
 
@@ -235,7 +235,7 @@ This scanner analyzes model configuration files and manifests.
 **Why it matters:**
 Model configuration files can contain settings that lead to insecure behavior, such as downloading content from untrusted sources, accessing sensitive files, or executing commands.
 
-## PyTorch Binary Scanner
+## Pytorch binary scanner
 
 **File types:** `.bin` (raw PyTorch tensor files)
 
@@ -254,7 +254,7 @@ This scanner examines raw PyTorch binary tensor files that contain serialized we
 **Why it matters:**
 While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis with PE file detection (including DOS stub validation) to detect such threats.
 
-## ZIP Archive Scanner
+## ZIP archive scanner
 
 **File types:** `.zip`, `.npz`
 
@@ -271,7 +271,7 @@ This scanner examines ZIP archives and their contents recursively.
 **Why it matters:**
 ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
 
-## Weight Distribution Scanner
+## Weight distribution scanner
 
 **File types:** `.pt`, `.pth`, `.h5`, `.keras`, `.hdf5`, `.pb`, `.onnx`, `.safetensors`
 
@@ -298,7 +298,7 @@ Backdoored or trojaned models often contain specific neurons that activate on tr
 **Special handling for LLMs:**
 Large language models with vocabulary layers (>10,000 outputs) use more conservative thresholds due to their naturally varied weight distributions. LLM checking is disabled by default but can be enabled via configuration.
 
-## SafeTensors Scanner
+## Safetensors scanner
 
 **File types:** `.safetensors`, `.bin` (when containing SafeTensors data)
 
@@ -314,7 +314,7 @@ This scanner examines SafeTensors format files, which are designed to be a safer
 **Why it matters:**
 While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata. The scanner ensures the format integrity and metadata safety.
 
-## PMML Scanner
+## Pmml scanner
 
 **File types:** `.pmml`
 
@@ -338,7 +338,7 @@ This scanner performs security checks on PMML (Predictive Model Markup Language)
 **Why it matters:**
 PMML files are XML-based and can be exploited through XML vulnerabilities like XXE attacks. Extension elements can contain arbitrary content that might execute scripts or access external resources. The scanner ensures PMML files don't contain hidden security threats while maintaining model functionality.
 
-## Auto Format Detection
+## Auto format detection
 
 ModelAudit includes comprehensive file format detection for ambiguous file extensions, particularly `.bin` files, which can contain different types of model data:
 
@@ -357,7 +357,7 @@ ModelAudit includes comprehensive file format detection for ambiguous file exten
 
 This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied instead of assuming it's a raw binary file.
 
-## HuggingFace URL Support
+## Huggingface URL support
 
 ModelAudit can scan models directly from HuggingFace URLs without manual downloading. When a HuggingFace URL is provided, ModelAudit:
 
@@ -373,7 +373,7 @@ ModelAudit can scan models directly from HuggingFace URLs without manual downloa
 
 This feature requires the `huggingface-hub` package to be installed.
 
-## See Also
+## See also
 
 - [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
 - [Installation & Usage](./usage.md) - How to install and use ModelAudit

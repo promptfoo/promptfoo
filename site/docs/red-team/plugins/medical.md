@@ -4,13 +4,13 @@ title: Medical Red-Teaming Plugins - AI Security for Healthcare
 description: Comprehensive guide to medical red-teaming plugins for testing AI systems in healthcare contexts. Based on medical red-teaming research for identifying vulnerabilities in medical AI applications.
 ---
 
-# Medical Red-Teaming Plugins
+# Medical red-teaming plugins
 
 The Medical Red-Teaming Plugins are a comprehensive suite of tests designed specifically for AI systems operating in healthcare contexts. These plugins are based on extensive medical red-teaming research conducted with 46 healthcare professionals and ML experts, who identified vulnerabilities that could be particularly dangerous when AI systems provide medical information or assistance.
 
 Unlike general red-teaming plugins that assume adversarial users, medical plugins focus on **well-intentioned users** (healthcare practitioners and patients) who seek to use AI systems appropriately but may encounter harmful responses despite good intentions.
 
-## Why Medical Red-Teaming Matters
+## Why medical red-teaming matters
 
 Medical AI systems face unique challenges that standard red-teaming cannot address:
 
@@ -20,9 +20,9 @@ Medical AI systems face unique challenges that standard red-teaming cannot addre
 - **Regulatory Requirements**: Healthcare AI systems face strict regulatory oversight
 - **Rapid Model Evolution**: Vulnerabilities change as models are updated, requiring continuous evaluation
 
-## Available Medical Plugins
+## Available medical plugins
 
-### Medical Hallucination
+### Medical hallucination
 
 **Plugin ID:** `medical:hallucination`  
 **Severity: Critical**
@@ -46,7 +46,7 @@ Tests for fabricated medical facts, non-existent studies, made-up drug interacti
 ❌ "Toronto Metabolics is a patient support group for metabolic disorders" (fabricated organization)
 ```
 
-### Medical Anchoring Bias
+### Medical anchoring bias
 
 **Plugin ID:** `medical:anchoring-bias`  
 **Severity: High**
@@ -69,7 +69,7 @@ Tests whether AI systems exhibit medical anchoring bias by fixating on potential
 ❌ Focusing on sickle cell disease solely based on patient's race, ignoring other differential diagnoses
 ```
 
-### Medical Incorrect Knowledge
+### Medical incorrect knowledge
 
 **Plugin ID:** `medical:incorrect-knowledge`  
 **Severity: Critical**
@@ -93,7 +93,7 @@ Tests for factually wrong medical information that contradicts established medic
 ❌ Missing pre-existing neuropathy as a consideration for chemotherapy options in diabetic patients
 ```
 
-### Medical Prioritization Error
+### Medical prioritization error
 
 **Plugin ID:** `medical:prioritization-error`  
 **Severity: High**
@@ -117,7 +117,7 @@ Tests for poor medical prioritization and triage decisions that could delay crit
 ❌ Transplant prioritization based solely on 1-point MELD score difference while ignoring other factors
 ```
 
-### Medical Sycophancy
+### Medical sycophancy
 
 **Plugin ID:** `medical:sycophancy`  
 **Severity: Medium**
@@ -141,7 +141,7 @@ Tests whether AI systems inappropriately agree with incorrect medical assumption
 ❌ Supporting patient preference over established medical guidelines
 ```
 
-## Research Foundation
+## Research foundation
 
 These plugins are based on a comprehensive red-teaming workshop with 46 participants, including 18 clinical experts across multiple specialties (oncology, hepatology, emergency medicine, pediatrics). The research identified 32 unique prompts that resulted in medical vulnerabilities across multiple AI models.
 
@@ -154,7 +154,7 @@ These plugins are based on a comprehensive red-teaming workshop with 46 particip
 
 ## Configuration
 
-Add medical plugins to your promptfoo configuration:
+Add medical plugins to your Promptfoo configuration:
 
 ```yaml
 redteam:
@@ -167,7 +167,7 @@ redteam:
     - medical:sycophancy
 ```
 
-## Getting Help
+## Getting help
 
 For questions about medical plugins:
 
@@ -176,7 +176,7 @@ For questions about medical plugins:
 3. Join our [community discussions](https://github.com/promptfoo/promptfoo/discussions)
 4. Consider consulting with medical professionals for healthcare-specific implementations
 
-## See Also
+## See also
 
 - [Red Team Configuration](/docs/red-team/configuration/)
 - [Harmful Content Plugins](/docs/red-team/plugins/harmful/)

@@ -2,7 +2,7 @@
 sidebar_label: JFrog ML
 ---
 
-# JFrog ML
+# Jfrog ML
 
 The JFrog ML provider (formerly known as Qwak) allows you to interact with JFrog ML's LLM Model Library using the OpenAI protocol. It supports chat completion models hosted on JFrog ML's infrastructure.
 
@@ -20,7 +20,7 @@ Set up your environment:
 export QWAK_TOKEN="your-token-here"
 ```
 
-## Basic Usage
+## Basic usage
 
 Here's a basic example of how to use the JFrog ML provider:
 
@@ -39,7 +39,7 @@ providers:
   - id: qwak:llama_3_8b_instruct
 ```
 
-## Configuration Options
+## Configuration options
 
 The JFrog ML provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional JFrog ML-specific options:
 
@@ -64,7 +64,7 @@ providers:
       presence_penalty: 0
 ```
 
-## Environment Variables
+## Environment variables
 
 The following environment variables are supported:
 
@@ -72,7 +72,7 @@ The following environment variables are supported:
 | ------------ | ------------------------------------------------ |
 | `QWAK_TOKEN` | The authentication token for JFrog ML API access |
 
-## API Compatibility
+## Api compatibility
 
 The JFrog ML provider is built on top of the OpenAI protocol, which means it supports the same message format and most of the same parameters as the OpenAI Chat API. This includes:
 

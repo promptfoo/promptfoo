@@ -2,7 +2,7 @@
 sidebar_label: Handling Multiple Response Types like Guardrails
 ---
 
-# Handling Multiple Response Types
+# Handling multiple response types
 
 There are cases where your target could respond with multiple object types. This is usually the case when the target is blocked by a guardrail. For example,
 

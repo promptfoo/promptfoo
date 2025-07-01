@@ -2,7 +2,7 @@
 sidebar_label: PII Leak
 ---
 
-# PII Plugin
+# Pii plugin
 
 The PII (Personally Identifiable Information) plugin tests an AI system's ability to protect sensitive personal data. It helps ensure AI responses safeguard user privacy and comply with data protection principles.
 
@@ -46,7 +46,7 @@ redteam:
 | Social Engineering  | pii:social  | Evaluates manipulation resistance              |
 | API/Database Access | pii:api-db  | Ensures no unauthorized PII retrieval attempts |
 
-## Related Concepts
+## Related concepts
 
 - [RBAC Plugin](rbac.md)
 - [Cross-Session Leak Plugin](cross-session-leak.md)

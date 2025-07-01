@@ -8,7 +8,7 @@ sidebar_label: Fireworks AI
 
 The Fireworks AI provider supports all options available in the [OpenAI provider](/docs/providers/openai/).
 
-## Example Usage
+## Example usage
 
 To configure the provider to use the `accounts/fireworks/models/llama-v3-8b-instruct` model, use the following YAML configuration:
 
@@ -22,7 +22,7 @@ providers:
 
 Alternatively, you can set the `FIREWORKS_API_KEY` environment variable to use your API key directly.
 
-## API Details
+## Api details
 
 - **Base URL**: `https://api.fireworks.ai/inference/v1`
 - **API format**: OpenAI-compatible

@@ -4,9 +4,9 @@ sidebar_position: 1
 
 # Intro
 
-`promptfoo` is an [open-source](https://github.com/promptfoo/promptfoo) CLI and library for evaluating and red-teaming LLM apps.
+Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for evaluating and red-teaming LLM apps.
 
-With promptfoo, you can:
+With Promptfoo, you can:
 
 - **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
 - **Secure your apps** with automated [red teaming](/docs/red-team) and pentesting
@@ -26,7 +26,7 @@ The goal: **test-driven LLM development**, not trial-and-error.
 
 </div>
 
-promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
+Promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
@@ -40,17 +40,21 @@ Promptfoo also produces high-level vulnerability and risk reports:
 
 ![gen ai red team](/img/riskreport-1@2x.png)
 
-## Why choose promptfoo?
+## Why choose Promptfoo?
 
-There are many different ways to evaluate prompts. Here are some reasons to consider promptfoo:
+There are many different ways to evaluate prompts. Here are some reasons to consider Promptfoo:
 
-- **Developer friendly**: promptfoo is fast, with quality-of-life features like live reloads and caching.
+- **Developer friendly**: Fast, with quality-of-life features like live reloads and caching.
 - **Battle-tested**: Originally built for LLM apps serving over 10 million users in production. Our tooling is flexible and can be adapted to many setups.
 - **Simple, declarative test cases**: Define evals without writing code or working with heavy notebooks.
 - **Language agnostic**: Use Python, Javascript, or any other language.
 - **Share & collaborate**: Built-in share functionality & web viewer for working with teammates.
 - **Open-source**: LLM evals are a commodity and should be served by 100% open-source projects with no strings attached.
-- **Private**: This software runs completely locally. The evals run on your machine and talk directly with the LLM.
+- **Private**: Runs completely locally. The evals run on your machine and talk directly with the LLM.
+
+:::info Privacy Note
+While Promptfoo runs locally by default, we do collect basic anonymous telemetry to improve the product. You can [opt out](/docs/configuration/telemetry) at any time.
+:::
 
 ## Workflow and philosophy
 

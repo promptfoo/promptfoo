@@ -2,7 +2,7 @@
 sidebar_label: Pliny Injections
 ---
 
-# Pliny prompt injections for LLMs
+# Pliny prompt injections for llms
 
 ## Overview
 
@@ -39,7 +39,7 @@ redteam:
       numTests: 25
 ```
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Prompt Injection](../strategies/prompt-injection.md)

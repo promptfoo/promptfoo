@@ -4,7 +4,7 @@ title: Iterative Jailbreaks Strategy
 description: Systematically probe and bypass AI system constraints by repeatedly refining prompts through multiple iterations
 ---
 
-# Iterative Jailbreaks Strategy
+# Iterative jailbreaks strategy
 
 The Iterative Jailbreaks strategy is a technique designed to systematically probe and potentially bypass an AI system's constraints by repeatedly refining a single-shot prompt through multiple iterations. This approach is inspired by research on automated jailbreaking techniques like the Tree of Attacks method [^1].
 
@@ -30,7 +30,7 @@ You can also override the number of iterations via an environment variable:
 PROMPTFOO_NUM_JAILBREAK_ITERATIONS=5
 ```
 
-## How It Works
+## How it works
 
 ![algorithmic jailbreak diagram](/img/docs/iterative-jailbreak-diagram.svg)
 
@@ -48,7 +48,7 @@ The Iterative Jailbreaks strategy works by:
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
 
-## Example Scenario
+## Example scenario
 
 Here's how the iteration process works:
 
@@ -63,11 +63,11 @@ The process continues until either:
 - The maximum iterations are reached
 - A successful prompt is found
 
-## Importance in Gen AI Red Teaming
+## Importance in gen AI red teaming
 
 The iterative jailbreak strategy creates refined single-shot jailbreaks that continually improve based on an attacker-judge feedback loop. This approach helps test across a wide range of malicious inputs and identify the most effective ones.
 
-## Related Concepts
+## Related concepts
 
 - [Prompt Injections](prompt-injection.md)
 - [Tree-based Jailbreaks](tree.md)

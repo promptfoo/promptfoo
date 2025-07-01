@@ -2,7 +2,7 @@
 sidebar_label: Custom Python
 ---
 
-# Python Provider
+# Python provider
 
 The Python provider enables you to create custom evaluation logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
 
@@ -22,11 +22,11 @@ Before using the Python provider, ensure you have:
 - Basic familiarity with Promptfoo configuration
 - Understanding of Python dictionaries and JSON
 
-## Quick Start
+## Quick start
 
 Let's create a simple Python provider that echoes back the input with a prefix.
 
-### Step 1: Create your Python script
+### Step 1: create your Python script
 
 ```python
 # echo_provider.py
@@ -40,7 +40,7 @@ def call_api(prompt, options, context):
     }
 ```
 
-### Step 2: Configure Promptfoo
+### Step 2: configure Promptfoo
 
 ```yaml
 # promptfooconfig.yaml
@@ -52,7 +52,7 @@ prompts:
   - 'What is 2+2?'
 ```
 
-### Step 3: Run the evaluation
+### Step 3: run the evaluation
 
 ```bash
 npx promptfoo@latest eval
@@ -60,7 +60,7 @@ npx promptfoo@latest eval
 
 That's it! You've created your first custom Python provider.
 
-## How It Works
+## How it works
 
 When Promptfoo evaluates a test case with a Python provider:
 
@@ -84,9 +84,9 @@ When Promptfoo evaluates a test case with a Python provider:
                     └──────────────┘
 ```
 
-## Basic Usage
+## Basic usage
 
-### Function Interface
+### Function interface
 
 Your Python script must implement one or more of these functions. Both synchronous and asynchronous versions are supported:
 
@@ -122,7 +122,7 @@ async def call_classification_api(prompt: str, options: dict, context: dict) -> 
     pass
 ```
 
-### Understanding Parameters
+### Understanding parameters
 
 #### The `prompt` Parameter
 
@@ -174,7 +174,7 @@ Provides information about the current test case:
 }
 ```
 
-### Return Format
+### Return format
 
 Your function must return a dictionary with these fields:
 
@@ -244,9 +244,9 @@ class ProviderClassificationResponse:
 Always include the `output` field in your response, even if it's an empty string when an error occurs.
 :::
 
-## Complete Examples
+## Complete examples
 
-### Example 1: OpenAI-Compatible Provider
+### Example 1: OpenAI-compatible provider
 
 ```python
 # openai_provider.py
@@ -294,7 +294,7 @@ def call_api(prompt, options, context):
         }
 ```
 
-### Example 2: Local Model with Preprocessing
+### Example 2: local model with preprocessing
 
 ```python
 # local_model_provider.py
@@ -330,7 +330,7 @@ def call_api(prompt, options, context):
     }
 ```
 
-### Example 3: Mock Provider for Testing
+### Example 3: mock provider for testing
 
 ```python
 # mock_provider.py
@@ -375,7 +375,7 @@ def call_api(prompt, options, context):
 
 ## Configuration
 
-### Basic Configuration
+### Basic configuration
 
 ```yaml
 providers:
@@ -390,7 +390,7 @@ providers:
         max_tokens: 100
 ```
 
-### Using External Configuration Files
+### Using external configuration files
 
 You can load configuration from external files:
 
@@ -421,9 +421,9 @@ Supported formats:
 - **Python** (`.py`) - Must export a function returning config
 - **JavaScript** (`.js`, `.mjs`) - Must export a function returning config
 
-### Environment Configuration
+### Environment configuration
 
-#### Custom Python Executable
+#### Custom Python executable
 
 ```yaml
 providers:
@@ -432,7 +432,7 @@ providers:
       pythonExecutable: /path/to/venv/bin/python
 ```
 
-#### Environment Variables
+#### Environment variables
 
 ```bash
 # Use specific Python version
@@ -445,9 +445,9 @@ export PYTHONPATH=/path/to/my/modules:$PYTHONPATH
 npx promptfoo@latest eval
 ```
 
-## Advanced Features
+## Advanced features
 
-### Custom Function Names
+### Custom function names
 
 Override the default function name:
 
@@ -465,7 +465,7 @@ def generate_response(prompt, options, context):
     return {"output": "Custom response"}
 ```
 
-### Handling Different Input Types
+### Handling different input types
 
 ```python
 def call_api(prompt, options, context):
@@ -487,7 +487,7 @@ def call_api(prompt, options, context):
             return handle_text(prompt, options)
 ```
 
-### Implementing Guardrails
+### Implementing guardrails
 
 ```python
 def call_api(prompt, options, context):
@@ -520,7 +520,7 @@ def call_api(prompt, options, context):
 
 ## Troubleshooting
 
-### Common Issues and Solutions
+### Common issues and solutions
 
 | Issue                     | Solution                                                            |
 | ------------------------- | ------------------------------------------------------------------- |
@@ -530,7 +530,7 @@ def call_api(prompt, options, context):
 | JSON parsing errors       | Ensure prompt format matches your parsing logic                     |
 | Timeout errors            | Optimize initialization code, load models once                      |
 
-### Debugging Tips
+### Debugging tips
 
 1. **Enable debug logging:**
 
@@ -563,7 +563,7 @@ def call_api(prompt, options, context):
    print(result)
    ```
 
-### Performance Optimization
+### Performance optimization
 
 :::tip
 Initialize expensive resources (models, connections) outside the function to avoid reloading on each call:
@@ -579,9 +579,9 @@ def call_api(prompt, options, context):
 
 :::
 
-## Migration Guide
+## Migration guide
 
-### From HTTP Provider
+### FROM HTTP provider
 
 If you're currently using an HTTP provider, you can wrap your API calls:
 
@@ -599,7 +599,7 @@ def call_api(prompt, options, context):
     return response.json()
 ```
 
-### From JavaScript Provider
+### FROM JavaScript provider
 
 The Python provider follows the same interface as JavaScript providers:
 
@@ -618,7 +618,7 @@ def call_api(prompt, options, context):
     return {"output": f"Echo: {prompt}"}
 ```
 
-## Next Steps
+## Next steps
 
 - Learn about [custom assertions](/docs/configuration/expected-outputs/)
 - Set up [CI/CD integration](/docs/integrations/github-action.md)

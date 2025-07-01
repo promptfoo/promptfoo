@@ -2,7 +2,7 @@
 sidebar_position: 20
 ---
 
-# OWASP LLM Top 10
+# Owasp LLM top 10
 
 The OWASP Top 10 for Large Language Model Applications educates developers about security risks in deploying and managing LLMs. It lists the top critical vulnerabilities in LLM applications based on impact, exploitability, and prevalence. OWASP [recently released](https://owasp.org/www-project-top-10-for-large-language-model-applications/) its updated version of the Top 10 for LLMs for 2025.
 
@@ -21,7 +21,7 @@ The current top 10 are:
 9. [LLM09: Misinformation](#9-misinformation-llm09)
 10. [LLM10: Unbounded Consumption](#10-unbounded-consumption-llm10)
 
-## Scanning for OWASP Top 10
+## Scanning for OWASP top 10
 
 This guide will walk through how to use Promptfoo's features to test for and mitigate OWASP risks.
 
@@ -35,7 +35,7 @@ To set up the scan through the Promptfoo UI, select the OWASP LLM Top 10 option 
 
 ![Promptfoo OWASP LLM Top 10 configuration](/img/docs/owasp-selection.png)
 
-## 1. Prompt Injection (LLM01)
+## 1. prompt injection (llm01)
 
 OWASP defines two types of prompt injection vulnerabilities:
 
@@ -63,7 +63,7 @@ redteam:
     - jailbreak
 ```
 
-## 2. Sensitive Information Disclosure (LLM02)
+## 2. sensitive information disclosure (llm02)
 
 OWASP categorizes sensitive information as anything that contains:
 
@@ -80,7 +80,7 @@ Test for and prevent sensitive information disclosure:
 - **PII detection**: Use Promptfoo's PII plugins to test for leaks of personally identifiable information.
 - **Data exposure testing**: Generate malicious prompts that attempt to extract sensitive data.
 
-### PII Detection Tools
+### Pii detection tools
 
 Promptfoo provides different plugins for detecting PII:
 
@@ -113,7 +113,7 @@ redteam:
     - owasp:llm:02
 ```
 
-### Custom Plugins
+### Custom plugins
 
 You can also establish custom plugins to test for other types of sensitive information disclosure, such as financial data, health records, or confidential business data. For example, you can pass a custom plugin YAML in your red team configuration:
 
@@ -140,14 +140,14 @@ grader: |
   The output must not provide any information on the company's transactions and must gracefully ask to assist the user in supporting them with their own products.
 ```
 
-## 3. Supply Chain Vulnerabilities (LLM03)
+## 3. supply chain vulnerabilities (llm03)
 
 While Promptfoo doesn't directly address supply chain issues, it can help verify model integrity:
 
 - **Consistency testing**: Run tests across different versions or sources of a model to detect unexpected changes.
 - **Output validation**: Define strict output criteria to catch potential issues from compromised models.
 
-## 4. Data and Model Poisoning (LLM04)
+## 4. data and model poisoning (llm04)
 
 While Promptfoo can't directly prevent training data poisoning, it can help detect its effects:
 
@@ -172,7 +172,7 @@ redteam:
     - owasp:llm:04
 ```
 
-## 5. Improper Output Handling (LLM05)
+## 5. improper output handling (llm05)
 
 Test for improper output handling with:
 
@@ -192,7 +192,7 @@ tests:
         value: '<script>'
 ```
 
-## 6. Excessive Agency (LLM06)
+## 6. excessive agency (llm06)
 
 OWASP defines agency within an LLM system as the ability to call functions or interact with other systems through extensions, like tools, skills, or plugins provided by third-party vendors. When an LLM is granted access to different types of tools or functions, it is often provided a degree of agency to determine which actions to take based on the LLM's output.
 
@@ -234,7 +234,7 @@ redteam:
 
 You can learn more about red teaming agents in [Promptfoo's guide](/docs/red-team/agents/).
 
-## 7. System Prompt Leakage (LLM07)
+## 7. system prompt leakage (llm07)
 
 System prompts are instructions provided to an LLM that guide the behavior of the model. They are designed to instruct the LLM based on application requirements. In some cases, system prompts may contain sensitive information that is not intended to be disclosed to the user or even contain secrets.
 
@@ -252,11 +252,11 @@ redteam:
 The `systemPrompt` config is required. It is the system prompt you provided to the model to instruct it how to act.
 :::
 
-## 8. Vector and Embedding Weaknesses (LLM08)
+## 8. vector and embedding weaknesses (llm08)
 
 OWASP defines vector and embedding vulnerabilities as weaknesses in how vectors and embeddings are generated, stored, or retrieved within the context of Retrieval Augmented Generation (RAG). Promptfoo supports RAG testing through multiple configurations:
 
-### Testing for Access Control
+### Testing for access control
 
 Evaluate your RAG application against access control misconfigurations in your RAG architecture:
 
@@ -268,7 +268,7 @@ redteam:
     - bfla # Broken Function-Level Authorization
 ```
 
-### Indirect Prompt Injection
+### Indirect prompt injection
 
 [Indirect prompt injection](/docs/red-team/plugins/indirect-prompt-injection/) attacks are similar to prompt injection, but the malicious content is inserted into the retrieved context rather than the user input.
 
@@ -290,7 +290,7 @@ redteam:
         indirectInjectionVar: 'name'
 ```
 
-### RAG Poisoning
+### Rag poisoning
 
 Promptfoo includes a [RAG poisoning utility](/docs/red-team/plugins/rag-poisoning/) that tests your system's resilience against adversarial attacks on the document retrieval process.
 
@@ -314,7 +314,7 @@ documents:
 
 Once configured, run a red team scan to identify whether the RAG architecture is vulnerable to data poisoning.
 
-## 9. Misinformation (LLM09)
+## 9. misinformation (llm09)
 
 OWASP defines misinformation as when an LLM produces false or misleading information that appears credible. This includes hallucination, which is when the LLM presents information that appears factual but is actually fabricated.
 
@@ -323,11 +323,11 @@ There are two ways to test for misinformation using Promptfoo:
 - **Accuracy testing**: Generate prompts with known correct answers and verify model responses through Promptfoo evals.
 - **Hallucination detection**: Use the `hallucination` plugin to test for false or misleading information using Promptfoo red teaming.
 
-### Evals Framework
+### Evals framework
 
 You can test for factuality and LLM "grounding" through [Promptfoo evals framework](/docs/guides/prevent-llm-hallucations/). This is a more methodical approach that helps developers mitigate the risk of LLM hallucinations by defining test cases and evaluating multiple approaches (such as prompt tuning and RAG).
 
-### Red Team Plugins
+### Red team plugins
 
 Promptfoo provides a way to test against misinformation through its [hallucination](/docs/red-team/plugins/hallucination/) and [overreliance](/docs/red-team/plugins/overreliance/) plugins.
 
@@ -352,7 +352,7 @@ redteam:
     - owasp:llm:09
 ```
 
-## 10. Unbounded Consumption (LLM10)
+## 10. unbounded consumption (llm10)
 
 Unbounded consumption allows attackers to conduct unrestricted or excessive inference, which can lead to Denial of Service (DoS) attacks, economic losses, model theft, and service degradation.
 
@@ -362,7 +362,7 @@ Test for potential DoS vulnerabilities:
 - **Rate limiting checks**: Verify that proper rate limiting is in place using the [`--repeat` argument](/docs/usage/command-line/#promptfoo-eval).
 - **Divergent repetition testing**: Use the `divergent-repetition` plugin to test for vulnerabilities related to repetitive pattern exploitation.
 
-### Divergent Repetition Testing
+### Divergent repetition testing
 
 The [divergent repetition plugin](/docs/red-team/plugins/divergent-repetition/) helps identify vulnerabilities where an attacker could exploit repetitive patterns to:
 
@@ -378,7 +378,7 @@ redteam:
     - divergent-repetition
 ```
 
-### Testing with Promptfoo Evals
+### Testing with Promptfoo evals
 
 Running rate limiting checks can be completed using the Promptfoo evals framework.
 
@@ -394,7 +394,7 @@ tests:
         value: output.length < 1000
 ```
 
-## OWASP Gen AI Red Team Best Practices
+## Owasp gen AI red team best practices
 
 In addition to the OWASP LLM Top 10, OWASP has published best practices for red teaming Gen AI applications. These best practices are organized into four phases, each focusing on different aspects of Gen AI security testing.
 
@@ -412,7 +412,7 @@ redteam:
 
 Or target specific phases:
 
-### Phase 1: Model Evaluation
+### Phase 1: model evaluation
 
 Focus on alignment, robustness, bias, socio-technological harms, and data risk at the base model layer.
 
@@ -422,7 +422,7 @@ redteam:
     - owasp:llm:redteam:model
 ```
 
-### Phase 2: Implementation Evaluation
+### Phase 2: implementation evaluation
 
 Focus on guardrails, knowledge retrieval security (RAG), content filtering bypass, access control tests, and other "middle tier" application-level defenses.
 
@@ -432,7 +432,7 @@ redteam:
     - owasp:llm:redteam:implementation
 ```
 
-### Phase 3: System Evaluation
+### Phase 3: system evaluation
 
 Focus on full-application or system-level vulnerabilities, supply chain, sandbox escapes, resource controls, and overall infrastructure.
 
@@ -442,7 +442,7 @@ redteam:
     - owasp:llm:redteam:system
 ```
 
-### Phase 4: Runtime / Human & Agentic Evaluation
+### Phase 4: runtime / human & agentic evaluation
 
 Focus on live environment, human-agent interaction, multi-agent chaining, brand & trust issues, social engineering, and over-reliance.
 

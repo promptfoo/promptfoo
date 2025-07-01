@@ -41,7 +41,7 @@ tests:
 
 `body` can be a string or JSON object. If the body is a string, the `Content-Type` header defaults to `text/plain` unless specified otherwise. If the body is an object, then content type is automatically set to `application/json`.
 
-### JSON Example
+### Json example
 
 ```yaml
 providers:
@@ -53,7 +53,7 @@ providers:
         translate: '{{language}}'
 ```
 
-### Form-data Example
+### Form-data example
 
 ```yaml
 providers:
@@ -166,7 +166,7 @@ providers:
       // highlight-end
 ```
 
-## Dynamic URLs
+## Dynamic urls
 
 Both the provider `id` and the `url` field support Nunjucks templates. Variables in your test `vars` will be rendered before sending the request.
 
@@ -179,7 +179,7 @@ providers:
 
 ## Using as a library
 
-If you are using promptfoo as a [node library](/docs/usage/node-package/), you can provide the equivalent provider config:
+If you are using Promptfoo as a [node library](/docs/usage/node-package/), you can provide the equivalent provider config:
 
 ```javascript
 {
@@ -201,7 +201,7 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 }
 ```
 
-## Request Transform
+## Request transform
 
 Request transform modifies your prompt after it is rendered but before it is sent to a provider API. This allows you to:
 
@@ -209,7 +209,7 @@ Request transform modifies your prompt after it is rendered but before it is sen
 - Add metadata or context
 - Handle nuanced message formats for multi-turn conversations
 
-### Basic Usage
+### Basic usage
 
 ```yaml
 providers:
@@ -221,9 +221,9 @@ providers:
         user_message: '{{prompt}}'
 ```
 
-### Transform Types
+### Transform types
 
-#### String Template
+#### String template
 
 Use Nunjucks templates to transform the prompt:
 
@@ -231,7 +231,7 @@ Use Nunjucks templates to transform the prompt:
 transformRequest: '{"text": "{{prompt}}"}'
 ```
 
-#### JavaScript Function
+#### Javascript function
 
 Define a function that transforms the prompt:
 
@@ -239,7 +239,7 @@ Define a function that transforms the prompt:
 transformRequest: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() });
 ```
 
-#### File-based Transform
+#### File-based transform
 
 Load a transform from an external file:
 
@@ -267,7 +267,7 @@ You can also specify a specific function to use:
 transformRequest: 'file://transforms/request.js:transformRequest'
 ```
 
-## Response Transform
+## Response transform
 
 The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 
@@ -342,7 +342,7 @@ Extracts the message content "hello world" from this response:
 Assistant: hello world
 ```
 
-### Response Parser Types
+### Response parser types
 
 #### String parser
 
@@ -369,7 +369,7 @@ This expression will be evaluated with three variables available:
 
 #### Function parser
 
-When using promptfoo as a Node.js library, you can provide a function as the response. You may return a string or an object of type `ProviderResponse`.
+When using Promptfoo as a Node.js library, you can provide a function as the response. You may return a string or an object of type `ProviderResponse`.
 
 parser:
 
@@ -458,7 +458,7 @@ export const BaseTokenUsageSchema = z.object({
 
 #### File-based parser
 
-You can use a JavaScript file as a response parser by specifying the file path with the `file://` prefix. The file path is resolved relative to the directory containing the promptfoo configuration file.
+You can use a JavaScript file as a response parser by specifying the file path with the `file://` prefix. The file path is resolved relative to the directory containing the Promptfoo configuration file.
 
 ```yaml
 providers:
@@ -509,7 +509,7 @@ providers:
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
 
-### Guardrails Support
+### Guardrails support
 
 If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. For example:
 
@@ -525,7 +525,7 @@ providers:
         }
 ```
 
-## Token Estimation
+## Token estimation
 
 By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis. Token estimation is automatically enabled when running redteam scans so you can track approximate costs without additional configuration.
 
@@ -535,7 +535,7 @@ Token estimation uses a simple word-based counting method with configurable mult
 Word-based estimation provides approximate token counts. For precise token counting, implement custom logic in your `transformResponse` function using a proper tokenizer library.
 :::
 
-### When to Use Token Estimation
+### When to use token estimation
 
 Token estimation is useful when:
 
@@ -550,7 +550,7 @@ Don't use token estimation when:
 - You need precise token counts for billing
 - You're working with non-English text where word counting is less accurate
 
-### Basic Token Estimation
+### Basic token estimation
 
 Enable basic token estimation with default settings:
 
@@ -567,7 +567,7 @@ providers:
 
 This will use word-based estimation with a multiplier of 1.3 for both prompt and completion tokens.
 
-### Custom Multipliers
+### Custom multipliers
 
 Configure a custom multiplier for more accurate estimation based on your specific use case:
 
@@ -590,7 +590,7 @@ providers:
 - Simple conversational text may work with lower multipliers (1.1-1.3)
 - Monitor actual vs. estimated usage to calibrate
 
-### Integration with Transform Response
+### Integration with transform response
 
 Token estimation works alongside response transforms. If your `transformResponse` returns token usage information, the estimation will be skipped:
 
@@ -612,7 +612,7 @@ providers:
         }
 ```
 
-### Custom Token Counting
+### Custom token counting
 
 For sophisticated token counting, implement it in your `transformResponse` function:
 
@@ -671,14 +671,14 @@ module.exports = (json, text, context) => {
 };
 ```
 
-### Configuration Options
+### Configuration options
 
 | Option     | Type    | Default                      | Description                                              |
 | ---------- | ------- | ---------------------------- | -------------------------------------------------------- |
 | enabled    | boolean | false (true in redteam mode) | Enable or disable token estimation                       |
 | multiplier | number  | 1.3                          | Multiplier applied to word count (adjust for complexity) |
 
-### Example: Cost Tracking
+### Example: cost tracking
 
 Here's a complete example for cost tracking with token estimation:
 
@@ -804,7 +804,7 @@ providers:
         user_message: '{{prompt}}'
 ```
 
-## Digital Signature Authentication
+## Digital signature authentication
 
 The HTTP provider supports digital signature authentication. This feature allows you to:
 
@@ -815,7 +815,7 @@ The HTTP provider supports digital signature authentication. This feature allows
 
 The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to Promptfoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
 
-### Basic Usage
+### Basic usage
 
 ```yaml
 providers:
@@ -831,7 +831,7 @@ providers:
         clientId: 'your-client-id'
 ```
 
-### Full Configuration
+### Full configuration
 
 ```yaml
 providers:
@@ -864,7 +864,7 @@ When signature authentication is enabled, the following variables are available 
 - `signature`: The generated signature string (base64 encoded)
 - `signatureTimestamp`: The Unix timestamp when the signature was generated
 
-### Signature Auth Options
+### Signature auth options
 
 | Option                   | Type   | Required | Default                             | Description                                                                                                           |
 | ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -878,7 +878,7 @@ When signature authentication is enabled, the following variables are available 
 
 \* Either `privateKeyPath` or `privateKey` must be provided
 
-## Request Retries
+## Request retries
 
 The HTTP provider automatically retries failed requests in the following scenarios:
 
@@ -915,7 +915,7 @@ Supported config options:
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
 | signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
 
-### Signature Auth Options
+### Signature auth options
 
 | Option                   | Type   | Required | Default                             | Description                                                                                                           |
 | ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -931,7 +931,7 @@ Supported config options:
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
-## Configuration Generator
+## Configuration generator
 
 Use the generator below to create an HTTP provider configuration based on your endpoint:
 
@@ -939,7 +939,7 @@ import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 
 <HttpConfigGenerator />
 
-## Error Handling
+## Error handling
 
 The HTTP provider throws errors for:
 

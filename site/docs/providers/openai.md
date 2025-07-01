@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# OpenAI
+# Openai
 
 To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify via `apiKey` field in the configuration file or pass the API key as an argument to the constructor.
 
@@ -148,7 +148,7 @@ GPT-4.1 is OpenAI's flagship model for complex tasks with a 1,047,576 token cont
 
 All variants support text and image input with text output and have a May 31, 2024 knowledge cutoff.
 
-#### Usage Examples
+#### Usage examples
 
 Standard model:
 
@@ -175,7 +175,7 @@ providers:
   - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
 ```
 
-### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
+### Reasoning models (o1, o3, o3-pro, o3-mini, o4-mini)
 
 Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
 
@@ -195,7 +195,7 @@ Unlike standard models that use `max_tokens`, reasoning models use:
 - `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
 - `reasoning` to control how thoroughly the model thinks before responding (with `effort`: low, medium, high)
 
-#### How Reasoning Models Work
+#### How reasoning models work
 
 Reasoning models "think before they answer," generating internal reasoning tokens that:
 
@@ -205,7 +205,7 @@ Reasoning models "think before they answer," generating internal reasoning token
 
 Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
-### GPT-4.5 Models (Preview)
+### Gpt-4.5 models (preview)
 
 GPT-4.5 is OpenAI's largest GPT model designed specifically for creative tasks and agentic planning, currently available in a research preview. It features a 128k token context length.
 
@@ -818,16 +818,16 @@ In the web UI, audio outputs display with an embedded player and transcript. For
 npx promptfoo@latest init --example openai-audio
 ```
 
-## Realtime API Models
+## Realtime API models
 
 The Realtime API allows for real-time communication with GPT-4o class models using WebSockets, supporting both text and audio inputs/outputs with streaming responses.
 
-### Supported Realtime Models
+### Supported realtime models
 
 - `gpt-4o-realtime-preview-2024-12-17`
 - `gpt-4.1-mini-realtime-preview-2024-12-17`
 
-### Using Realtime API
+### Using realtime API
 
 To use the OpenAI Realtime API, use the provider format `openai:realtime:<model name>`:
 
@@ -842,7 +842,7 @@ providers:
       websocketTimeout: 60000 # 60 seconds
 ```
 
-### Realtime-specific Configuration Options
+### Realtime-specific configuration options
 
 The Realtime API configuration supports these parameters in addition to standard OpenAI parameters:
 
@@ -858,7 +858,7 @@ The Realtime API configuration supports these parameters in addition to standard
 | `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
 | `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
 
-### Function Calling with Realtime API
+### Function calling with realtime API
 
 The Realtime API supports function calling via tools, similar to the Chat API. Here's an example configuration:
 
@@ -880,7 +880,7 @@ providers:
       tool_choice: 'auto'
 ```
 
-### Complete Example
+### Complete example
 
 For a complete working example that demonstrates the Realtime API capabilities, see the [OpenAI Realtime API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) or initialize it with:
 
@@ -897,9 +897,9 @@ This example includes:
 - Function calling with the Realtime API
 - Detailed documentation on handling content types correctly
 
-### Input and Message Format
+### Input and message format
 
-When using the Realtime API with promptfoo, you can specify the prompt in JSON format:
+When using the Realtime API with Promptfoo, you can specify the prompt in JSON format:
 
 ```json title="realtime-input.json"
 [
@@ -917,7 +917,7 @@ When using the Realtime API with promptfoo, you can specify the prompt in JSON f
 
 The Realtime API supports the same multimedia formats as the Chat API, allowing you to include images and audio in your prompts.
 
-### Multi-Turn Conversations
+### Multi-turn conversations
 
 The Realtime API supports multi-turn conversations with persistent context. For implementation details and examples, see the [OpenAI Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime), which demonstrates both single-turn interactions and conversation threading using the `conversationId` metadata property.
 
@@ -927,7 +927,7 @@ The Realtime API supports multi-turn conversations with persistent context. For 
 
 OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1, o3, and o4 series.
 
-### Supported Responses Models
+### Supported responses models
 
 The Responses API supports a wide range of models, including:
 
@@ -941,7 +941,7 @@ The Responses API supports a wide range of models, including:
 - `o4-mini` - Latest fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
 
-### Using the Responses API
+### Using the responses API
 
 To use the OpenAI Responses API, use the provider format `openai:responses:<model name>`:
 
@@ -954,7 +954,7 @@ providers:
       instructions: 'You are a helpful, creative AI assistant.'
 ```
 
-### Responses-specific Configuration Options
+### Responses-specific configuration options
 
 The Responses API configuration supports these parameters in addition to standard OpenAI parameters:
 
@@ -969,11 +969,11 @@ The Responses API configuration supports these parameters in addition to standar
 | `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
 | `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
 
-### MCP (Model Context Protocol) Support
+### Mcp (model context protocol) support
 
 The Responses API supports OpenAI's MCP integration, allowing models to use remote MCP servers to perform tasks. MCP tools enable access to external services and APIs through a standardized protocol.
 
-#### Basic MCP Configuration
+#### Basic MCP configuration
 
 To use MCP tools with the Responses API, add them to the `tools` array:
 
@@ -988,7 +988,7 @@ providers:
           require_approval: never
 ```
 
-#### MCP Tool Configuration Options
+#### Mcp tool configuration options
 
 | Parameter          | Description                             | Required | Options                                  |
 | ------------------ | --------------------------------------- | -------- | ---------------------------------------- |
@@ -999,7 +999,7 @@ providers:
 | `allowed_tools`    | Specific tools to allow from the server | No       | Array of tool names                      |
 | `headers`          | Custom headers for authentication       | No       | Object with header key-value pairs       |
 
-#### Authentication with MCP Servers
+#### Authentication with MCP servers
 
 Most MCP servers require authentication. Use the `headers` parameter to provide API keys or tokens:
 
@@ -1016,7 +1016,7 @@ providers:
           require_approval: never
 ```
 
-#### Filtering MCP Tools
+#### Filtering MCP tools
 
 To limit which tools are available from an MCP server, use the `allowed_tools` parameter:
 
@@ -1032,7 +1032,7 @@ providers:
           require_approval: never
 ```
 
-#### Approval Settings
+#### Approval settings
 
 By default, OpenAI requires approval before sharing data with MCP servers. You can configure approval settings:
 
@@ -1060,7 +1060,7 @@ providers:
               tool_names: ["ask_question", "read_wiki_structure"]
 ```
 
-#### Complete MCP Example
+#### Complete MCP example
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -1091,7 +1091,7 @@ For a complete working example, see the [OpenAI MCP example](https://github.com/
 npx promptfoo@latest init --example openai-mcp
 ```
 
-### Reasoning Models
+### Reasoning models
 
 When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-pro`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
 
@@ -1106,11 +1106,11 @@ providers:
 
 Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
 
-### o3 and o4-mini Models
+### O3 and o4-mini models
 
 OpenAI offers advanced reasoning models in the o-series:
 
-#### o3 and o4-mini
+#### O3 and o4-mini
 
 These reasoning models provide different performance and efficiency profiles:
 
@@ -1141,7 +1141,7 @@ providers:
       max_output_tokens: 1000
 ```
 
-### Sending Images in Prompts
+### Sending images in prompts
 
 The Responses API supports structured prompts with text and image inputs. Example:
 
@@ -1166,7 +1166,7 @@ The Responses API supports structured prompts with text and image inputs. Exampl
 ]
 ```
 
-### Function Calling
+### Function calling
 
 The Responses API supports tool and function calling, similar to the Chat API:
 
@@ -1189,7 +1189,7 @@ providers:
       tool_choice: 'auto'
 ```
 
-### Complete Example
+### Complete example
 
 For a complete working example, see the [OpenAI Responses API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses) or initialize it with:
 
@@ -1199,7 +1199,7 @@ npx promptfoo@latest init --example openai-responses
 
 ## Troubleshooting
 
-### OpenAI rate limits
+### Openai rate limits
 
 There are a few things you can do if you encounter OpenAI rate limits (most commonly with GPT-4):
 
@@ -1209,11 +1209,11 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
    or with the environment variable `PROMPTFOO_DELAY_MS` (all values are in milliseconds).
 3. **Adjust the exponential backoff for failed requests** by setting the environment variable `PROMPTFOO_REQUEST_BACKOFF_MS`. This defaults to 5000 milliseconds and retries exponential up to 4 times. You can increase this value if requests are still failing, but note that this can significantly increase end-to-end test time.
 
-### OpenAI flakiness
+### Openai flakiness
 
 To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
 
-## Agents SDK Integration
+## Agents SDK integration
 
 Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
 

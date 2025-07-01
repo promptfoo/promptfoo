@@ -2,13 +2,13 @@
 sidebar_label: Google Sheets
 ---
 
-# Google Sheets Integration
+# Google sheets integration
 
-promptfoo allows you to import eval test cases directly from Google Sheets. This can be done either unauthenticated (if the sheet is public) or authenticated using Google's Default Application Credentials, typically with a service account for programmatic access.
+Promptfoo allows you to import eval test cases directly from Google Sheets. This can be done either unauthenticated (if the sheet is public) or authenticated using Google's Default Application Credentials, typically with a service account for programmatic access.
 
-## Importing Test Cases from Google Sheets
+## Importing test cases from Google sheets
 
-### Public Sheets (Unauthenticated)
+### Public sheets (unauthenticated)
 
 For sheets that are accessible via "anyone with the link", simply specify the share URL in your configuration:
 
@@ -36,7 +36,7 @@ Swahili,Hello world,similar(0.8):hello world
 
 > 💡 See our [example sheet](https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=0) for the expected format. For details on sheet structure, refer to [loading assertions from CSV](/docs/configuration/expected-outputs/#load-assertions-from-csv).
 
-### Private Sheets (Authenticated)
+### Private sheets (authenticated)
 
 For private sheets, you'll need to set up Google's Default Application Credentials:
 
@@ -64,11 +64,11 @@ For private sheets, you'll need to set up Google's Default Application Credentia
    ```
    The system will automatically use authenticated access when the sheet is not public.
 
-## Writing Evaluation Results to Google Sheets
+## Writing evaluation results to Google sheets
 
 The `outputPath` parameter (`--output` or `-o` on the command line) supports writing evaluation results directly to Google Sheets. This requires Default Application Credentials with write access configured.
 
-### Basic Usage
+### Basic usage
 
 ```yaml
 prompts:
@@ -82,7 +82,7 @@ outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSa
 // highlight-end
 ```
 
-### Targeting Specific Sheets
+### Targeting specific sheets
 
 You have two options when writing results to a Google Sheet:
 
@@ -101,7 +101,7 @@ You have two options when writing results to a Google Sheet:
 
 This behavior helps prevent accidental data overwrites while keeping your evaluation results organized within the same Google Sheets document.
 
-## Using Custom Providers for Model-Graded Metrics
+## Using custom providers for model-graded metrics
 
 When using Google Sheets for test cases, you can still use custom providers for model-graded metrics
 like `llm-rubric` or `similar`. To do this, override the default LLM grader by adding a `defaultTest` property to your configuration:

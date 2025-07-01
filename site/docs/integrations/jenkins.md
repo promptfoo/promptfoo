@@ -2,9 +2,9 @@
 sidebar_label: Jenkins
 ---
 
-# Setting up promptfoo with Jenkins
+# Setting up Promptfoo with jenkins
 
-This guide demonstrates how to integrate promptfoo's LLM evaluation into your Jenkins pipeline. This setup enables automatic testing of your prompts and models whenever changes are made to your repository.
+This guide demonstrates how to integrate Promptfoo's LLM evaluation into your Jenkins pipeline. This setup enables automatic testing of your prompts and models whenever changes are made to your repository.
 
 ## Prerequisites
 
@@ -13,11 +13,11 @@ This guide demonstrates how to integrate promptfoo's LLM evaluation into your Je
 - Your LLM provider's API keys (e.g., OpenAI API key)
 - Basic familiarity with Jenkins Pipeline syntax
 
-## Configuration Steps
+## Configuration steps
 
-### 1. Create Jenkinsfile
+### 1. create jenkinsfile
 
-Create a `Jenkinsfile` in your repository root. Here's a basic configuration that installs promptfoo and runs evaluations:
+Create a `Jenkinsfile` in your repository root. Here's a basic configuration that installs Promptfoo and runs evaluations:
 
 ```groovy:Jenkinsfile
 pipeline {
@@ -76,7 +76,7 @@ pipeline {
 }
 ```
 
-### 2. Configure Jenkins Credentials
+### 2. configure jenkins credentials
 
 You'll need to add the API keys for any LLM providers you're using. For example, if you're using OpenAI, you'll need to add the OpenAI API key.
 
@@ -88,7 +88,7 @@ You'll need to add the API keys for any LLM providers you're using. For example,
    - Description: OpenAI API Key
    - Secret: Your API key value
 
-### 3. Set Up Caching
+### 3. set up caching
 
 To implement caching for better performance and reduced API costs:
 
@@ -104,7 +104,7 @@ mkdir -p ~/.promptfoo/cache
 chown -R jenkins:jenkins ~/.promptfoo/cache
 ```
 
-### 4. Advanced Pipeline Configuration
+### 4. advanced pipeline configuration
 
 Here's an example of a more advanced pipeline with additional features:
 
@@ -241,4 +241,4 @@ Common issues and solutions:
    - Verify npm is available in PATH
    - Consider using `nodejs` tool installer in Jenkins
 
-For more information on promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/guide/).
+For more information on Promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/guide/).

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 title: Self-hosting
-description: Learn how to self-host promptfoo using Docker, Docker Compose, or Helm. This comprehensive guide walks you through setup, configuration, and troubleshooting.
+description: Learn how to self-host Promptfoo using Docker, Docker Compose, or Helm. This comprehensive guide walks you through setup, configuration, and troubleshooting.
 keywords:
   - AI testing
   - configuration
@@ -11,7 +11,7 @@ keywords:
   - Kubernetes
   - LLM eval
   - LLM evaluation
-  - promptfoo
+  - Promptfoo
   - self-hosting
   - setup guide
   - team collaboration
@@ -45,11 +45,11 @@ The self-hosted app is an Express server serving the web UI and API.
 For production deployments requiring horizontal scaling, shared databases, or multi-team support, see our [Enterprise platform](/docs/enterprise/).
 :::
 
-## Method 1: Using Pre-built Docker Images (Recommended Start)
+## Method 1: using pre-built Docker images (recommended start)
 
 Get started quickly using a pre-built image.
 
-### 1. Pull the Image
+### 1. pull the image
 
 Pull the latest image or pin to a specific version (e.g., `0.109.1`):
 
@@ -61,7 +61,7 @@ docker pull ghcr.io/promptfoo/promptfoo:latest
 # docker pull ghcr.io/promptfoo/promptfoo:0.109.1
 ```
 
-### 2. Run the Container
+### 2. run the container
 
 Run the container, mapping a local directory for data persistence:
 
@@ -88,7 +88,7 @@ docker run -d \
 
 Access the UI at `http://localhost:3000`.
 
-## Method 2: Using Docker Compose
+## Method 2: using Docker compose
 
 For managing multi-container setups or defining configurations declaratively, use Docker Compose.
 
@@ -128,7 +128,7 @@ services:
 The example above uses a host path mapping (`./promptfoo_data:/home/promptfoo/.promptfoo`) which clearly maps to a directory you create. Alternatively, you can use Docker named volumes (uncomment the `volumes:` section and adjust the service `volumes:`).
 :::
 
-### 2. Create Host Directory (if using host path)
+### 2. create host directory (if using host path)
 
 If you used `./promptfoo_data` in the `volumes` mapping, create it:
 
@@ -136,7 +136,7 @@ If you used `./promptfoo_data` in the `volumes` mapping, create it:
 mkdir -p ./promptfoo_data
 ```
 
-### 3. Run with Docker Compose
+### 3. run with Docker compose
 
 Start the container in detached mode:
 
@@ -156,13 +156,13 @@ Stop and remove the container (data remains):
 docker compose down
 ```
 
-## Method 3: Using Kubernetes with Helm
+## Method 3: using Kubernetes with helm
 
 :::warning
 Helm support is currently experimental. Please report any issues you encounter.
 :::
 
-Deploy promptfoo to Kubernetes using the provided Helm chart located within the main promptfoo repository.
+Deploy Promptfoo to Kubernetes using the provided Helm chart located within the main Promptfoo repository.
 
 :::info
 Keep `replicaCount: 1` (the default) as the self-hosted server uses a local SQLite database and in-memory job queue that cannot be shared across multiple replicas.
@@ -177,8 +177,8 @@ Keep `replicaCount: 1` (the default) as the self-hosted server uses a local SQLi
 
 ### Installation
 
-1. **Clone the promptfoo Repository:**
-   If you haven't already, clone the main promptfoo repository:
+1. **Clone the Promptfoo Repository:**
+   If you haven't already, clone the main Promptfoo repository:
 
    ```bash
    git clone https://github.com/promptfoo/promptfoo.git
@@ -246,22 +246,22 @@ helm install my-promptfoo ./helm/chart/promptfoo \
 
 Refer to the [chart's `values.yaml`](https://github.com/promptfoo/promptfoo/blob/main/helm/chart/promptfoo/values.yaml) for all available options.
 
-### Persistence Considerations
+### Persistence considerations
 
 Ensure your Kubernetes cluster has a default StorageClass configured, or explicitly specify a `storageClassName` in your values that supports `ReadWriteOnce` access mode for the PVC.
 
-## Alternative: Building from Source
+## Alternative: building from source
 
 If you want to build the image yourself:
 
-### 1. Clone the Repository
+### 1. clone the repository
 
 ```sh
 git clone https://github.com/promptfoo/promptfoo.git
 cd promptfoo
 ```
 
-### 2. Build the Docker Image
+### 2. build the Docker image
 
 ```sh
 # Build for your current architecture
@@ -271,7 +271,7 @@ docker build -t promptfoo:custom .
 # docker build --platform linux/amd64 -t promptfoo:custom .
 ```
 
-### 3. Run the Custom Docker Container
+### 3. run the custom Docker container
 
 Use the same `docker run` command as in Method 1, but replace the image name:
 
@@ -309,31 +309,31 @@ sharing:
 # ... rest of config ...
 ```
 
-### Configuration Priority
+### Configuration priority
 
-promptfoo resolves the sharing target URL in this order (highest priority first):
+Promptfoo resolves the sharing target URL in this order (highest priority first):
 
 1. Config file (`sharing.apiBaseUrl` and `sharing.appBaseUrl`)
 2. Environment variables (`PROMPTFOO_REMOTE_API_BASE_URL`, `PROMPTFOO_REMOTE_APP_BASE_URL`)
 3. Cloud configuration (set via `promptfoo auth login`)
-4. Default promptfoo cloud URLs
+4. Default Promptfoo cloud URLs
 
-### Expected URL Format
+### Expected URL format
 
 When configured correctly, your self-hosted server handles requests like:
 
 - **API Endpoint**: `http://your-server:3000/api/eval`
 - **Web UI Link**: `http://your-server:3000/eval/{evalId}`
 
-## Advanced Configuration
+## Advanced configuration
 
-### Eval Storage Path
+### Eval storage path
 
-By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.
+By default, Promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.
 
-### Custom Config Directory
+### Custom config directory
 
-You can override the default internal configuration directory (`/home/promptfoo/.promptfoo`) using the `PROMPTFOO_CONFIG_DIR` environment variable. If set, promptfoo uses this path _inside the container_ for both configuration files and the `promptfoo.db` database. You still need to map this custom path to a persistent volume.
+You can override the default internal configuration directory (`/home/promptfoo/.promptfoo`) using the `PROMPTFOO_CONFIG_DIR` environment variable. If set, Promptfoo uses this path _inside the container_ for both configuration files and the `promptfoo.db` database. You still need to map this custom path to a persistent volume.
 
 **Example:** Store data in `/app/data` inside the container, mapped to `./my_custom_data` on the host.
 
@@ -359,7 +359,7 @@ docker run -d --name promptfoo_container -p 3000:3000 \
 - **Storage**: 10 GB+
 - **Dependencies**: Node.js v18+, npm
 
-### Server Requirements (Hosting the Web UI/API)
+### Server requirements (hosting the web UI/API)
 
 The server component is optional; you can run evals locally or in CI/CD without it.
 
@@ -372,13 +372,13 @@ The server component is optional; you can run evals locally or in CI/CD without 
 
 ## Troubleshooting
 
-### Lost Data After Container Restart
+### Lost data after container restart
 
 **Problem**: Evals disappear after `docker compose down` or container restarts.
 
 **Solution**: This indicates missing or incorrect volume mapping. Ensure your `docker run` command or `docker-compose.yml` correctly maps a host directory or named volume to `/home/promptfoo/.promptfoo` (or your `PROMPTFOO_CONFIG_DIR` if set) inside the container. Review the `volumes:` section in the examples above.
 
-## See Also
+## See also
 
 - [Configuration Reference](../configuration/reference.md)
 - [Command Line Interface](./command-line.md)

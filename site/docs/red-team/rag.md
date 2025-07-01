@@ -12,7 +12,7 @@ The end result is a report that looks like this:
 
 ![llm red team report for RAG](/img/riskreport-1@2x.png)
 
-## Prompt Injection
+## Prompt injection
 
 Prompt injection attacks involve manipulating the input to an LLM-based system to execute unauthorized actions or bypass security measures. In RAG systems, this can be particularly dangerous as it may lead to the retrieval and exposure of sensitive information.
 
@@ -54,7 +54,7 @@ This configuration uses the `prompt-injection` strategy, which generates test ca
 
 See [setup](/docs/red-team/quickstart/) for more details on how to run red teams.
 
-## Context Injection
+## Context injection
 
 Context injection attacks are similar to prompt injection, but the malicious content is inserted into the retrieved context rather than the user input.
 
@@ -96,7 +96,7 @@ tests:
         value: 'user data'
 ```
 
-## Data Poisoning
+## Data poisoning
 
 Data poisoning attacks target the retrieval component of RAG systems by introducing malicious or misleading information into the knowledge base. This can lead to the LLM generating incorrect or biased responses.
 
@@ -131,7 +131,7 @@ redteam:
     - 'pii:social'
 ```
 
-#### RAG Poisoning Attacks
+#### Rag poisoning attacks
 
 You can also run [RAG poisoning attacks](/docs/red-team/plugins/rag-poisoning/) using Promptfoo. Start by generating poisoned documents through the CLI:
 
@@ -151,7 +151,7 @@ documents:
 
 Ingest these poisoned documents into your RAG knowledge base. Then, run a red team using `promptfoo redteam run` to identify if the LLM application is vulnerable to data poisoning.
 
-## Data/PII Exfiltration
+## Data/PII exfiltration
 
 Data exfiltration in RAG systems involves attempts to extract sensitive information or personally identifiable information (PII) from the knowledge base or the model's training data.
 
@@ -178,7 +178,7 @@ The attacker continues this line of questioning, trying to piece together enough
 3. Ensure that the model and/or application recognizes and refuses potentially sensitive data requests
 4. Implement output filtering to catch and redact potential PII or sensitive data
 
-#### Automated Detection
+#### Automated detection
 
 Promptfoo can help detect potential data exfiltration vulnerabilities using its PII detection plugins and custom policies. Here's an example configuration:
 
@@ -223,7 +223,7 @@ tests:
       user_input: 'Can you tell me about the background of your customer service team?'
 ```
 
-## Dataset Manipulation
+## Dataset manipulation
 
 Retrieval Manipulation attacks exploit the process by which documents are fetched in RAG systems, causing the system to retrieve desired information.
 
@@ -255,7 +255,7 @@ redteam:
   numTests: 20
 ```
 
-## Context Window Overflow
+## Context window overflow
 
 Context Window Overflow attacks exploit the limited context window of LLMs by overloading it with irrelevant information, pushing out important context or instructions.
 
@@ -296,7 +296,7 @@ This attack aims to push out the system's risk warnings from the context window,
    - Break down long inputs into smaller chunks
    - Process each chunk separately and combine the results
 
-#### Automated Detection with Promptfoo
+#### Automated detection with Promptfoo
 
 Promptfoo can help detect Context Window Overflow vulnerabilities through custom policies and specialized test cases.
 
@@ -406,11 +406,11 @@ Note that you should adapt this approach to fill the context window for your app
 
 This red team will ensure that the application behaves correctly even with a bunch of a junk filling its context.
 
-## Testing Individual RAG Components
+## Testing individual RAG components
 
 RAG systems consist of two primary components: retrieval and generation. Testing these components separately allows you to pinpoint vulnerabilities and optimize each part of your system independently.
 
-### Component-Level Testing with Custom Providers
+### Component-level testing with custom providers
 
 By creating specialized providers for each component, you can isolate and test specific aspects of your RAG system:
 
@@ -434,7 +434,7 @@ For more details on implementing custom providers, refer to:
 - [Custom Javascript](/docs/providers/custom-api) - Implement providers in JavaScript/TypeScript
 - [Testing LLM Chains](/docs/configuration/testing-llm-chains) - Test multi-step LLM workflows
 
-### Example: Retrieval-Only Provider
+### Example: retrieval-only provider
 
 Here's an example of a Python provider that tests just the retrieval component:
 
@@ -461,7 +461,7 @@ def call_api(prompt, options, context):
         return {"error": str(e)}
 ```
 
-### Example: Generation-Only Provider with Fixed Context
+### Example: generation-only provider with fixed context
 
 This provider tests how the generation component handles potentially malicious context:
 
@@ -487,7 +487,7 @@ def call_api(prompt, options, context):
         return {"error": str(e)}
 ```
 
-### Using Purpose to Define Security Boundaries
+### Using purpose to define security boundaries
 
 The `purpose` field in your red team configuration helps define the security boundaries and intended behavior of your RAG system. This information is used to generate more targeted test cases and evaluate responses based on your specific requirements.
 
@@ -534,7 +534,7 @@ Note that these specific requirements are an excellent use case for the [custom 
 
 If you're interested in red teaming your RAG and finding potential vulnerabilities, see the [Getting Started](/docs/red-team/quickstart/) guide.
 
-### Setting Up a Complete RAG Provider for Red Team Evaluation
+### Setting up a complete RAG provider for red team evaluation
 
 To configure a red team for your entire RAG system, set up a custom provider that interfaces directly with your RAG application or pipeline.
 

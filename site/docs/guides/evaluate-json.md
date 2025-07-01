@@ -2,7 +2,7 @@
 sidebar_label: Evaluating JSON outputs
 ---
 
-# LLM evaluation techniques for JSON outputs
+# Llm evaluation techniques for JSON outputs
 
 Getting an LLM to output valid JSON can be a difficult task. There are a few failure modes:
 
@@ -16,7 +16,7 @@ This guide explains some eval techniques for testing your model's JSON quality o
 
 Before proceeding, ensure you have a basic understanding of how to set up test cases and assertions. Find more information in the [Getting Started](/docs/getting-started) guide and the [Assertions & Metrics](/docs/configuration/expected-outputs/index.md) documentation.
 
-## Example Scenario
+## Example scenario
 
 Let's say your language model outputs a JSON object like the following:
 
@@ -145,6 +145,6 @@ See the full example in [Github](https://github.com/promptfoo/promptfoo/tree/mai
 
 By using JavaScript within your assertions, you can perform complex checks on JSON outputs, including targeting specific fields. The `transform` can be used to tailor the output for similarity checks.
 
-promptfoo is free and open-source software. To install promptfoo and get started, see the [getting started guide](/docs/getting-started).
+Promptfoo is free and open-source software. To install Promptfoo and get started, see the [getting started guide](/docs/getting-started).
 
 For more on different assertion types available, see [assertions documentation](/docs/configuration/expected-outputs). You might also be interested in [Evaluating RAG pipelines](/docs/guides/evaluate-rag) guide, which provides insights into evaluating retrieval-augmented generation applications.

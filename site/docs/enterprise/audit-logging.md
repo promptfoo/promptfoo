@@ -1,23 +1,23 @@
 ---
 title: Audit Logging
-description: Track administrative operations in promptfoo Enterprise with comprehensive audit logs for security, compliance, and forensic analysis.
+description: Track administrative operations in Promptfoo Enterprise with comprehensive audit logs for security, compliance, and forensic analysis.
 sidebar_label: Audit Logging
 keywords: [audit, logging, security, compliance, enterprise, forensics, admin operations]
 ---
 
-# Audit Logging
+# Audit logging
 
-Audit Logging is a feature of promptfoo Enterprise that provides forensic access information at the organization level, user level, team level, and service account level.
+Audit Logging is a feature of Promptfoo Enterprise that provides forensic access information at the organization level, user level, team level, and service account level.
 
-Audit Logging answers "who, when, and what" questions about promptfoo resources. These answers can help you evaluate the security of your organization, and they can provide information that you need to satisfy audit and compliance requirements.
+Audit Logging answers "who, when, and what" questions about Promptfoo resources. These answers can help you evaluate the security of your organization, and they can provide information that you need to satisfy audit and compliance requirements.
 
-## Which events are supported by Audit Logging?
+## Which events are supported by audit logging?
 
-Audit Logging captures administrative operations within the promptfoo platform. The system tracks changes to users, teams, roles, permissions, and service accounts within your organization.
+Audit Logging captures administrative operations within the Promptfoo platform. The system tracks changes to users, teams, roles, permissions, and service accounts within your organization.
 
-Please note that Audit Logging captures operations in the promptfoo control plane and administrative actions. Evaluation runs, prompt testing, and other data plane operations are tracked separately.
+Please note that Audit Logging captures operations in the Promptfoo control plane and administrative actions. Evaluation runs, prompt testing, and other data plane operations are tracked separately.
 
-## Admin Operation events
+## Admin operation events
 
 The following list specifies the supported events and their corresponding actions:
 
@@ -25,18 +25,18 @@ The following list specifies the supported events and their corresponding action
 
 - **User Login**: `login` - Tracks when users successfully authenticate to the platform
 
-### User Management
+### User management
 
 - **User Added**: `user_added` - Records when new users are invited or added to the organization
 - **User Removed**: `user_removed` - Logs when users are removed from the organization
 
-### Role Management
+### Role management
 
 - **Role Created**: `role_created` - Captures creation of new custom roles
 - **Role Updated**: `role_updated` - Records changes to existing role permissions
 - **Role Deleted**: `role_deleted` - Logs deletion of custom roles
 
-### Team Management
+### Team management
 
 - **Team Created**: `team_created` - Records creation of new teams
 - **Team Deleted**: `team_deleted` - Logs team deletion
@@ -44,17 +44,17 @@ The following list specifies the supported events and their corresponding action
 - **User Removed from Team**: `user_removed_from_team` - Records when users leave teams
 - **User Role Changed in Team**: `user_role_changed_in_team` - Logs role changes within teams
 
-### Permission Management
+### Permission management
 
 - **System Admin Added**: `org_admin_added` - Records when system admin permissions are granted
 - **System Admin Removed**: `org_admin_removed` - Logs when system admin permissions are revoked
 
-### Service Account Management
+### Service account management
 
 - **Service Account Created**: `service_account_created` - Tracks creation of API service accounts
 - **Service Account Deleted**: `service_account_deleted` - Records deletion of service accounts
 
-## Audit Log format
+## Audit log format
 
 The audit log entries are stored in JSON format with the following structure:
 
@@ -78,7 +78,7 @@ The audit log entries are stored in JSON format with the following structure:
 }
 ```
 
-### Audit Log Targets
+### Audit log targets
 
 The system tracks changes to the following resource types:
 
@@ -88,11 +88,11 @@ The system tracks changes to the following resource types:
 - `SERVICE_ACCOUNT` - API service accounts
 - `ORGANIZATION` - Organization-level settings
 
-## Example Audit Log Entries
+## Example audit log entries
 
 The following examples show the contents of various audit log entries:
 
-### User Login
+### User login
 
 ```json
 {
@@ -112,7 +112,7 @@ The following examples show the contents of various audit log entries:
 }
 ```
 
-### Team Creation
+### Team creation
 
 ```json
 {
@@ -132,7 +132,7 @@ The following examples show the contents of various audit log entries:
 }
 ```
 
-### Role Update
+### Role update
 
 ```json
 {
@@ -157,17 +157,17 @@ The following examples show the contents of various audit log entries:
 }
 ```
 
-## Accessing Audit Logs
+## Accessing audit logs
 
-Audit logs are accessible through the promptfoo API. For complete API documentation, see the [API Reference](https://www.promptfoo.dev/docs/api-reference/#tag/audit-logs).
+Audit logs are accessible through the Promptfoo API. For complete API documentation, see the [API Reference](https://www.promptfoo.dev/docs/api-reference/#tag/audit-logs).
 
-### API Endpoint
+### Api endpoint
 
 ```
 GET /api/v1/audit-logs
 ```
 
-### Query Parameters
+### Query parameters
 
 - `limit` (optional): Number of logs to return (1-100, default: 20)
 - `offset` (optional): Number of logs to skip for pagination (default: 0)
@@ -184,7 +184,7 @@ Audit log access requires:
 - Valid authentication token
 - Organization administrator privileges
 
-### Example API Request
+### Example API request
 
 ```bash
 curl -X GET \
@@ -192,7 +192,7 @@ curl -X GET \
   -H "Authorization: Bearer YOUR_API_TOKEN"
 ```
 
-### Example API Response
+### Example API response
 
 ```json
 {
@@ -220,9 +220,9 @@ curl -X GET \
 }
 ```
 
-## Compliance Usage
+## Compliance usage
 
-Audit logs in promptfoo can help meet various compliance requirements:
+Audit logs in Promptfoo can help meet various compliance requirements:
 
 - **SOC 2**: Provides detailed access logs and administrative change tracking
 - **ISO 27001**: Supports access control monitoring and change management requirements
@@ -237,9 +237,9 @@ If you experience issues accessing audit logs:
 2. Check that your API token is valid and has not expired
 3. Ensure your query parameters are properly formatted
 
-For additional support, contact the promptfoo support team with details about your specific use case and any error messages received.
+For additional support, contact the Promptfoo support team with details about your specific use case and any error messages received.
 
-## See Also
+## See also
 
 - [Service Accounts](service-accounts.md) - Create API tokens for accessing audit logs
 - [Teams](teams.md) - Learn about team management and permissions

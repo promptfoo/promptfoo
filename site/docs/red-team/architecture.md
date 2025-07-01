@@ -110,9 +110,9 @@ graph TB
     click Analysis "/docs/red-team/llm-vulnerability-types" "View vulnerability types"
 ```
 
-## Core Components
+## Core components
 
-### Test Generation Engine
+### Test generation engine
 
 The test generation engine combines plugins and strategies to create attack probes:
 
@@ -130,7 +130,7 @@ The test generation engine combines plugins and strategies to create attack prob
 
   They contain the actual test inputs along with metadata about the intended vulnerability test. Promptfoo sends these to your target system.
 
-### Target Interface
+### Target interface
 
 The target interface defines how test probes interact with the system under test. We support [over 30 target types](/docs/providers/), including:
 
@@ -141,7 +141,7 @@ The target interface defines how test probes interact with the system under test
 
 Each target type implements a common interface for sending probes and receiving responses.
 
-### Evaluation Engine
+### Evaluation engine
 
 The evaluation engine processes target responses through:
 
@@ -164,7 +164,7 @@ The configuration defines:
 - [Active strategies](/docs/red-team/configuration/#strategies)
 - Application context and [policies](/docs/red-team/configuration/#custom-policies)
 
-## Component Flow
+## Component flow
 
 1. **Configuration** initializes **plugins** and **strategies**
 2. **Test engine** generates probes using enabled components

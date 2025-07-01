@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 import JestExampleImage from '../assets/jest-example.png';
 
-# Testing prompts with Jest and Vitest
+# Testing prompts with jest and vitest
 
 `promptfoo` can be integrated with test frameworks like [Jest](https://jestjs.io/) and [Vitest](https://vitest.dev/) to evaluate prompts as part of existing testing and CI workflows.
 

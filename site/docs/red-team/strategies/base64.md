@@ -4,11 +4,11 @@ title: Base64 Encoding Strategy
 description: Test how AI systems handle base64-encoded text inputs that may bypass content filters
 ---
 
-# Base64 Encoding Strategy
+# Base64 encoding strategy
 
 The Base64 Encoding strategy tests an AI system's ability to resist encoded inputs that might bypass security controls. Base64 encoding (using characters A-Z, a-z, 0-9, +, /) exploits a fundamental gap: LLMs learn to decode Base64 during pretraining, but their safety mechanisms often fail on encoded inputs.
 
-## Why It Works
+## Why it works
 
 - Models learn Base64 from internet data during pretraining
 - Safety training rarely includes encoded content, making Base64 inputs out-of-distribution
@@ -24,7 +24,7 @@ strategies:
   - base64
 ```
 
-## How It Works
+## How it works
 
 The Base64 strategy works by:
 
@@ -35,7 +35,7 @@ The Base64 strategy works by:
 
 Base64 encoding transforms each group of three bytes into four ASCII characters from a set of 64 characters (A-Z, a-z, 0-9, +, /), making it a widely used method for representing binary data in text form.
 
-## Example Scenarios
+## Example scenarios
 
 | Original                           | Encoded                                        |
 | ---------------------------------- | ---------------------------------------------- |
@@ -48,7 +48,7 @@ The strategy helps identify:
 - Model's ability to handle obfuscated malicious inputs
 - Potential jailbreaking vulnerabilities through encoding
 
-## Related Concepts
+## Related concepts
 
 - [Prompt Injection](prompt-injection.md) - Similar security bypass technique
 - [ROT13 Encoding](rot13.md) - Alternative encoding strategy

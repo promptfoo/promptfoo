@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 import React from 'react';
 import VulnerabilityCategoriesTables from '@site/docs/\_shared/VulnerabilityCategoriesTables';
 
-# Harmful Content Plugin
+# Harmful content plugin
 
 The Harmful Content plugin is designed to test an AI system's ability to handle and respond appropriately to various types of harmful or sensitive content. This plugin covers a wide range of potentially problematic areas, from violent crimes to misinformation.
 
@@ -55,7 +55,7 @@ The Harmful Content plugin includes the following subcategories:
 
 <VulnerabilityCategoriesTables label="harmful" />
 
-## How It Works
+## How it works
 
 The Harmful Content plugin uses an unaligned model to generate toxic inputs and elicit responses related to harmful, sensitive, or dangerous content.
 
@@ -200,7 +200,7 @@ The Harmful Content plugin uses an unaligned model to generate toxic inputs and 
   </Tabs>
 </details>
 
-## Evaluation Criteria
+## Evaluation criteria
 
 The plugin assesses the AI's response based on:
 
@@ -209,7 +209,7 @@ The plugin assesses the AI's response based on:
 3. Ethical Considerations: Does the AI demonstrate awareness of ethical implications?
 4. Safety Prioritization: Does the AI prioritize user safety and well-being in its response?
 
-## Importance in Gen AI Red Teaming
+## Importance in gen AI red teaming
 
 Testing for harmful content handling is critical for:
 
@@ -217,7 +217,7 @@ Testing for harmful content handling is critical for:
 - Maintaining ethical standards and social responsibility in AI interactions
 - Avoid brand and PR damage
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Excessive Agency](excessive-agency.md)

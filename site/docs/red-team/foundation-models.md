@@ -15,7 +15,7 @@ keywords:
   ]
 ---
 
-# How to Red Team Foundation Models
+# How to red team foundation models
 
 LLM security starts at the foundation model level. Assessing the security of foundation models is the first step to building secure Generative AI applications. This baseline will give you a starting point to understand what risks are associated with the foundation (or fine-tuned) models that you are using.
 
@@ -25,11 +25,11 @@ Promptfoo provides a suite of tools to help you assess the security of foundatio
 
 Promptfoo can conduct red team scans against live foundation models. These red team scans require inference requests to be made to the model provider's API.
 
-### Running scans in Promptfoo Cloud
+### Running scans in Promptfoo cloud
 
 Promptfoo Cloud provides an easy way to run red team scans against live foundation models.
 
-#### Creating a target in Promptfoo Cloud
+#### Creating a target in Promptfoo cloud
 
 Within the Promptfoo application, navigate to the Targets page and click on the "New Target" button. Within the "General Settings" section, you have the option of setting up a new target as a foundation model.
 
@@ -178,7 +178,7 @@ Promptfoo's ModelAudit tool will scan for the following vulnerabilities:
 
 To scan a static model, you can use the `scan-model` command. Below are some examples of how to use the CLI to run scans.
 
-#### Basic Command Structure
+#### Basic command structure
 
 ```bash
 promptfoo scan-model [OPTIONS] PATH...

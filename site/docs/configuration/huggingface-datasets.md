@@ -8,7 +8,7 @@ keywords:
     huggingface datasets,
     test cases,
     dataset integration,
-    promptfoo datasets,
+    Promptfoo datasets,
     ml evaluation,
     dataset import,
     existing datasets,
@@ -17,7 +17,7 @@ pagination_prev: configuration/datasets
 pagination_next: configuration/outputs
 ---
 
-# HuggingFace Datasets
+# Huggingface datasets
 
 Promptfoo can import test cases directly from [HuggingFace datasets](https://huggingface.co/docs/datasets) using the `huggingface://datasets/` prefix.
 
@@ -164,7 +164,7 @@ Check that the specified split exists for the dataset. Try `split=train` if `spl
 
 Add the `limit` parameter to reduce the number of rows loaded: `&limit=100`
 
-## See Also
+## See also
 
 - [Test Case Configuration](/docs/configuration/test-cases) - Complete guide to configuring test cases
 - [HuggingFace Provider](/docs/providers/huggingface) - Using HuggingFace models for inference

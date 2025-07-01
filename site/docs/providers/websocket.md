@@ -2,7 +2,7 @@
 sidebar_label: WebSockets
 ---
 
-# WebSockets
+# Websockets
 
 The WebSocket provider allows you to connect to a WebSocket endpoint for inference. This is useful for real-time, bidirectional communication with a server that supports WebSocket connections.
 
@@ -21,7 +21,7 @@ providers:
         Authorization: 'Bearer your-token-here'
 ```
 
-### Configuration Options
+### Configuration options
 
 - `url` (required): The WebSocket URL to connect to.
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
@@ -29,7 +29,7 @@ providers:
 - `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 10000 (10 seconds).
 - `headers` (optional): A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.
 
-## Using Variables
+## Using variables
 
 You can use test variables in your `messageTemplate`:
 
@@ -46,7 +46,7 @@ tests:
       language: 'French'
 ```
 
-## Parsing the Response
+## Parsing the response
 
 Use the `transformResponse` property to extract specific values from the WebSocket response. For example:
 
@@ -72,9 +72,9 @@ This configuration extracts the message content from a response structure simila
 }
 ```
 
-## Using as a Library
+## Using as a library
 
-If you are using promptfoo as a node library, you can provide the equivalent provider config:
+If you are using Promptfoo as a node library, you can provide the equivalent provider config:
 
 ```js
 {

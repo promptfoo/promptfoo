@@ -4,9 +4,9 @@ title: Retry Strategy
 description: Automatically incorporate previously failed test cases into your test suite to prevent regression in target behavior
 ---
 
-# Retry Strategy
+# Retry strategy
 
-The retry strategy automatically incorporates previously failed test cases into your test suite, creating a regression testing system for target LLM systems. Each red team scan learns from past failures, making promptfoo increasingly effective at finding vulnerabilities in your target. The retry strategy runs first in your pipeline, allowing other strategies to build upon these historical test cases.
+The retry strategy automatically incorporates previously failed test cases into your test suite, creating a regression testing system for target LLM systems. Each red team scan learns from past failures, making Promptfoo increasingly effective at finding vulnerabilities in your target. The retry strategy runs first in your pipeline, allowing other strategies to build upon these historical test cases.
 
 :::note
 The retry strategy is target-specific - it only retries test cases that previously failed against the same target system (identified by target label). This ensures that the retried test cases are relevant to the specific target's known vulnerabilities.
@@ -42,7 +42,7 @@ redteam:
     - id: retry
 ```
 
-## How It Works
+## How it works
 
 The retry strategy works by:
 
@@ -51,7 +51,7 @@ The retry strategy works by:
 3. Incorporating these cases into the current test suite
 4. Allowing subsequent strategies to build upon this historical knowledge
 
-## Example Scenarios
+## Example scenarios
 
 If you have a test suite with:
 
@@ -73,7 +73,7 @@ And previously some hate speech tests failed against your target, the retry stra
 4. Select the top 5 most relevant test cases
 5. Pass these to subsequent strategies (like multilingual)
 
-## Best Practices
+## Best practices
 
 1. Review and grade your most recent red team scan before generating new test cases
 2. Use it in combination with other strategies for maximum coverage
@@ -82,7 +82,7 @@ And previously some hate speech tests failed against your target, the retry stra
 Currently, the retry strategy uses only your local database. Cloud sharing of retry test cases across teams is coming soon.
 :::
 
-## Related Concepts
+## Related concepts
 
 - [Strategies Overview](/docs/red-team/strategies) - See how retry fits with other strategies
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Understand what vulnerabilities to test for

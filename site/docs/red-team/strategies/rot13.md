@@ -4,7 +4,7 @@ title: ROT13 Encoding Strategy
 description: Test how AI systems handle ROT13-encoded text that may bypass content filters through letter rotation
 ---
 
-# ROT13 Encoding Strategy
+# Rot13 encoding strategy
 
 The ROT13 Encoding strategy tests an AI system's ability to resist encoded inputs that might bypass security controls. ROT13 is a simple substitution cipher (A→N, B→O, etc) historically used for hiding spoilers and light obfuscation on the internet, making it an interesting probe for testing how models handle familiar-but-transformed text. The strategy works because character-level transformations often fall outside safety training's focus on semantic content, and models may encounter ROT13 during pretraining in different contexts like forums, games, and puzzles.
 
@@ -17,7 +17,7 @@ strategies:
   - rot13
 ```
 
-## How It Works
+## How it works
 
 ROT13 works by replacing each letter with the letter 13 positions after it in the alphabet. This simple transformation:
 
@@ -26,7 +26,7 @@ ROT13 works by replacing each letter with the letter 13 positions after it in th
 3. Leaves numbers and special characters unchanged
 4. Tests whether the model can decode and respond to the ROT13-encoded content
 
-## Example Scenarios
+## Example scenarios
 
 | Original                           | Encoded                            |
 | ---------------------------------- | ---------------------------------- |
@@ -40,7 +40,7 @@ The strategy helps identify:
 - Inconsistencies in model capabilities (e.g., handling complex vs simple encodings)
 - Potential for combining with other obfuscation techniques
 
-## Related Concepts
+## Related concepts
 
 - [Base64 Encoding](base64.md) - More complex but widely recognized encoding
 - [Leetspeak](leetspeak.md) - Similar character-level obfuscation

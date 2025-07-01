@@ -2,15 +2,15 @@
 sidebar_label: Google AI / Gemini
 ---
 
-# Google AI / Gemini
+# Google AI / gemini
 
 The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
 
 You can use it by specifying one of the [available models](https://ai.google.dev/models). Currently, the following models are supported:
 
-## Available Models
+## Available models
 
-### Chat and Multimodal Models
+### Chat and multimodal models
 
 - `google:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
@@ -29,7 +29,7 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-pro` - General purpose text and chat
 - `google:gemini-pro-vision` - Multimodal understanding (text + vision)
 
-### Embedding Models
+### Embedding models
 
 - `google:embedding:text-embedding-004` - Latest text embedding model (Recommended)
 - `google:embedding:embedding-001` - Legacy embedding model
@@ -44,7 +44,7 @@ If you are using Google Vertex, see the [`vertex` provider](/docs/providers/vert
 - `GOOGLE_API_HOST` - used to override the Google API host, defaults to `generativelanguage.googleapis.com`
 - `GOOGLE_API_BASE_URL` - used to override the Google API base url, defaults to `https://generativelanguage.googleapis.com`
 
-### Basic Configuration
+### Basic configuration
 
 The provider supports various configuration options that can be used to customize the behavior of the model:
 
@@ -59,7 +59,7 @@ providers:
       stopSequences: ['END'] # Stop generation at these sequences
 ```
 
-### Thinking Configuration
+### Thinking configuration
 
 For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
 
@@ -96,7 +96,7 @@ For multimodal inputs (images and video), the provider supports:
 - Images: PNG, JPEG, WEBP, HEIC, HEIF formats (max 3,600 files)
 - Videos: MP4, MPEG, MOV, AVI, FLV, MPG, WEBM, WMV, 3GPP formats (up to ~1 hour)
 
-### Safety Settings
+### Safety settings
 
 Safety settings can be configured to control content filtering:
 
@@ -109,7 +109,7 @@ providers:
           probability: BLOCK_ONLY_HIGH # or other thresholds
 ```
 
-### System Instructions
+### System instructions
 
 Configure system-level instructions for the model:
 
@@ -128,9 +128,9 @@ System instructions support Nunjucks templating and can be loaded from external 
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
-## Model Examples
+## Model examples
 
-### Gemini 2.5 Pro
+### Gemini 2.5 pro
 
 Latest stable model for complex reasoning, coding, and multimodal understanding:
 
@@ -147,7 +147,7 @@ providers:
           thinkingBudget: 2048 # Enhanced thinking for complex tasks
 ```
 
-### Gemini 2.5 Flash
+### Gemini 2.5 flash
 
 Latest stable Flash model with enhanced reasoning and thinking capabilities:
 
@@ -164,7 +164,7 @@ providers:
           thinkingBudget: 1024 # Fast model with thinking capabilities
 ```
 
-### Gemini 2.5 Flash-Lite
+### Gemini 2.5 flash-lite
 
 Most cost-efficient and fastest 2.5 model for high-volume, latency-sensitive tasks:
 
@@ -181,7 +181,7 @@ providers:
           thinkingBudget: 512 # Optimized for speed and cost efficiency
 ```
 
-### Gemini 2.0 Flash
+### Gemini 2.0 flash
 
 Best for fast, efficient responses and general tasks:
 
@@ -195,9 +195,9 @@ providers:
       topK: 40
 ```
 
-## Advanced Features
+## Advanced features
 
-### Overriding Providers
+### Overriding providers
 
 You can override both the text generation and embedding providers in your configuration. Because of how model-graded evals are implemented, **the text generation model must support chat-formatted prompts**.
 
@@ -247,7 +247,7 @@ tests:
         value: The answer is 4
 ```
 
-### Function Calling
+### Function calling
 
 Enable your model to interact with external systems through defined functions:
 
@@ -276,11 +276,11 @@ providers:
 
 For practical examples of function calling with Google AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution patterns that work with Google AI Studio models.
 
-### Structured Output
+### Structured output
 
 You can constrain the model to output structured JSON responses in two ways:
 
-#### 1. Using Response Schema Configuration
+#### 1. using response schema configuration
 
 ```yaml
 providers:
@@ -302,7 +302,7 @@ providers:
           required: ['title', 'summary']
 ```
 
-#### 2. Using Response Schema File
+#### 2. using response schema file
 
 ```yaml
 providers:
@@ -314,11 +314,11 @@ providers:
 
 For more details, see the [Gemini API documentation](https://ai.google.dev/docs).
 
-### Search Grounding
+### Search grounding
 
 Search grounding allows Gemini models to access the internet for up-to-date information, enhancing responses about recent events and real-time data.
 
-#### Basic Usage
+#### Basic usage
 
 To enable Search grounding:
 
@@ -330,7 +330,7 @@ providers:
         - googleSearch: {} # or google_search: {}
 ```
 
-#### Combining with Other Features
+#### Combining with other features
 
 You can combine Search grounding with thinking capabilities for better reasoning:
 
@@ -345,7 +345,7 @@ providers:
         - googleSearch: {}
 ```
 
-#### Supported Models
+#### Supported models
 
 :::info
 Search grounding works with most recent Gemini models including:
@@ -355,7 +355,7 @@ Search grounding works with most recent Gemini models including:
 - Gemini 1.5 Flash and Pro models
   :::
 
-#### Use Cases
+#### Use cases
 
 Search grounding is particularly valuable for:
 
@@ -365,7 +365,7 @@ Search grounding is particularly valuable for:
 - Sports results
 - Technical documentation updates
 
-#### Working with Response Metadata
+#### Working with response metadata
 
 When using Search grounding, the API response includes additional metadata:
 
@@ -373,7 +373,7 @@ When using Search grounding, the API response includes additional metadata:
 - `groundingChunks` - Web sources that informed the response
 - `webSearchQueries` - Queries used to retrieve information
 
-#### Limitations and Requirements
+#### Limitations and requirements
 
 - Search results may vary by region and time
 - Results may be subject to Google Search rate limits
@@ -381,17 +381,17 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
-#### Example and Resources
+#### Example and resources
 
 For a complete working example, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
 
 For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
 
-## Google Live API
+## Google live API
 
 Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
 
-### Using the Live Provider
+### Using the live provider
 
 Access the Live API by specifying the model with the 'live' service type:
 
@@ -404,7 +404,7 @@ providers:
       timeoutMs: 10000
 ```
 
-### Key Features
+### Key features
 
 - **Real-time bidirectional communication**: Uses WebSockets for faster responses
 - **Multimodal capabilities**: Can process text, audio, and video inputs
@@ -412,7 +412,7 @@ providers:
 - **Low-latency interactions**: Optimized for conversational applications
 - **Session memory**: The model retains context throughout the session
 
-### Function Calling Example
+### Function calling example
 
 The Live API supports function calling, allowing you to define tools that the model can use:
 
@@ -457,7 +457,7 @@ Where `tools.json` contains function declarations and built-in tools:
 ]
 ```
 
-### Built-in Tools
+### Built-in tools
 
 The Live API includes several built-in tools:
 
@@ -476,7 +476,7 @@ The Live API includes several built-in tools:
    }
    ```
 
-### Getting Started
+### Getting started
 
 Try the examples:
 

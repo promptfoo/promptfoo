@@ -2,9 +2,9 @@
 sidebar_label: GitLab CI
 ---
 
-# Setting up Promptfoo with GitLab CI
+# Setting up Promptfoo with GitLab ci
 
-This guide shows how to integrate Promptfoo's LLM evaluation into your GitLab CI pipeline. This allows you to automatically test your prompts and models whenever changes are made to your repository.
+integrate Promptfoo's LLM evaluation into your GitLab CI pipeline. This allows you to automatically test your prompts and models whenever changes are made to your repository.
 
 ## Prerequisites
 
@@ -12,9 +12,9 @@ This guide shows how to integrate Promptfoo's LLM evaluation into your GitLab CI
 - Your LLM provider's API keys (e.g., OpenAI API key)
 - Basic familiarity with GitLab CI/CD configuration
 
-## Configuration Steps
+## Configuration steps
 
-### 1. Create GitLab CI Configuration
+### 1. create GitLab ci configuration
 
 Create a `.gitlab-ci.yml` file in your repository root. Here's a basic configuration that installs Promptfoo and runs evaluations:
 
@@ -44,7 +44,7 @@ evaluate_prompts:
         - prompts/**/*
 ```
 
-### 2. Set Up Environment Variables
+### 2. set up environment variables
 
 1. Go to Settings > CI/CD in your GitLab project
 2. Expand the Variables section
@@ -52,7 +52,7 @@ evaluate_prompts:
    - Click "Add Variable"
    - Add `OPENAI_API_KEY` (or other provider keys) as masked and protected variables
 
-### 3. Configure Caching (Optional but Recommended)
+### 3. configure caching (optional but recommended)
 
 The configuration above includes caching to save time and API costs. The cache:
 
@@ -60,7 +60,7 @@ The configuration above includes caching to save time and API costs. The cache:
 - Is keyed based on the content of your prompt files
 - Is saved in `.promptfoo/cache`
 
-### 4. Storing Results
+### 4. storing results
 
 The configuration stores the evaluation results as artifacts:
 
@@ -68,9 +68,9 @@ The configuration stores the evaluation results as artifacts:
 - GitLab makes these available in the job artifacts
 - The `--share` flag creates a shareable web URL for results
 
-## Advanced Configuration
+## Advanced configuration
 
-### Adding Custom Test Steps
+### Adding custom test steps
 
 You can add custom steps to process the evaluation results:
 
@@ -86,7 +86,7 @@ evaluate_prompts:
       fi
 ```
 
-### Parallel Evaluation
+### Parallel evaluation
 
 For large test suites, you can use GitLab's parallel feature:
 
@@ -99,7 +99,7 @@ evaluate_prompts:
       promptfoo eval -c promptfooconfig.yaml --prompts $prompts
 ```
 
-### Integration with GitLab Merge Requests
+### Integration with GitLab merge requests
 
 You can configure the job to post results as merge request comments:
 
@@ -126,13 +126,13 @@ evaluate_prompts:
       fi
 ```
 
-## Example Output
+## Example output
 
 After the evaluation runs, you'll see:
 
 - Test results in the GitLab CI/CD pipeline interface
 - Artifacts containing the full evaluation data
-- A shareable link to view results in the promptfoo web viewer
+- A shareable link to view results in the Promptfoo web viewer
 - Any test failures will cause the GitLab job to fail
 
 ## Troubleshooting

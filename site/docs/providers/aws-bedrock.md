@@ -51,7 +51,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
 Amazon Bedrock follows a specific credential resolution order that prioritizes explicitly configured credentials over default AWS mechanisms.
 
-### Credential Resolution Order
+### Credential resolution order
 
 When authenticating with AWS Bedrock, credentials are resolved in this sequence:
 
@@ -63,9 +63,9 @@ When authenticating with AWS Bedrock, credentials are resolved in this sequence:
    - EC2 instance profile or ECS task role
    - SSO credentials from AWS CLI
 
-### Authentication Options
+### Authentication options
 
-#### 1. Explicit credentials (highest priority)
+#### 1. explicit credentials (highest priority)
 
 Specify direct access keys in your config:
 
@@ -81,7 +81,7 @@ providers:
 
 This method overrides all other credential sources, including EC2 instance roles.
 
-#### 2. SSO profile authentication
+#### 2. sso profile authentication
 
 Use a profile from your AWS configuration:
 
@@ -93,7 +93,7 @@ providers:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-#### 3. Default credentials (lowest priority)
+#### 3. default credentials (lowest priority)
 
 Rely on the AWS default credential chain:
 
@@ -161,11 +161,11 @@ tests:
       topic: Behind-the-scenes at our latest photoshoot
 ```
 
-## Model-specific Configuration
+## Model-specific configuration
 
 Different models may support different configuration options. Here are some model-specific parameters:
 
-### Amazon Nova Models
+### Amazon nova models
 
 Amazon Nova models (e.g., `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `amazon.nova-micro-v1:0`, `amazon.nova-premier-v1:0`) support advanced features like tool use and structured outputs. You can configure them with the following options:
 
@@ -203,7 +203,7 @@ Nova models use a slightly different configuration structure compared to other B
 
 :::
 
-### Amazon Nova Sonic Model
+### Amazon nova sonic model
 
 The Amazon Nova Sonic model (`amazon.nova-sonic-v1:0`) is a multimodal model that supports audio input and text/audio output with tool-using capabilities. It has a different configuration structure compared to other Nova models:
 
@@ -239,7 +239,7 @@ providers:
 
 Note: Nova Sonic has advanced multimodal capabilities including audio input/output, but audio input requires base64 encoded data which may be better handled through the API directly rather than in the configuration file.
 
-### AI21 Models
+### Ai21 models
 
 For AI21 models (e.g., `ai21.jamba-1-5-mini-v1:0`, `ai21.jamba-1-5-large-v1:0`), you can use the following configuration options:
 
@@ -252,7 +252,7 @@ config:
   presence_penalty: 0.3
 ```
 
-### Claude Models
+### Claude models
 
 For Claude models (e.g., `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
@@ -289,7 +289,7 @@ This is useful when you want to use thinking for better reasoning but don't want
 
 :::
 
-### Titan Models
+### Titan models
 
 For Titan models (e.g., `amazon.titan-text-express-v1`), you can use the following configuration options:
 
@@ -312,7 +312,7 @@ config:
   top_p: 0.9
 ```
 
-### Cohere Models
+### Cohere models
 
 For Cohere models (e.g., `cohere.command-text-v14`), you can use the following configuration options:
 
@@ -325,7 +325,7 @@ config:
   stop_sequences: ['END']
 ```
 
-### Mistral Models
+### Mistral models
 
 For Mistral models (e.g., `mistral.mistral-7b-instruct-v0:2`), you can use the following configuration options:
 
@@ -337,7 +337,7 @@ config:
   top_k: 50
 ```
 
-### DeepSeek Models
+### Deepseek models
 
 For DeepSeek models, you can use the following configuration options:
 
@@ -415,11 +415,11 @@ tests:
         value: Do not mention that you are an AI or chat assistant
 ```
 
-## Multimodal Capabilities
+## Multimodal capabilities
 
 Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
 
-### Nova Vision Capabilities
+### Nova vision capabilities
 
 Amazon Nova supports comprehensive vision understanding for both images and videos:
 
@@ -508,7 +508,7 @@ providers:
       guardrailVersion: 1 # The version number for the guardrail. The value can also be DRAFT.
 ```
 
-## Environment Variables
+## Environment variables
 
 The following environment variables can be used to configure the Bedrock provider:
 
@@ -530,7 +530,7 @@ These environment variables can be overridden by the configuration specified in 
 
 ## Troubleshooting
 
-### ValidationException: On-demand throughput isn't supported
+### Validationexception: on-demand throughput isn't supported
 
 If you see this error:
 
@@ -558,7 +558,7 @@ Make sure to:
 2. Configure the corresponding region in your provider config
 3. Ensure you have model access enabled in your AWS Bedrock console for that region
 
-### AccessDeniedException: You don't have access to the model with the specified model ID
+### Accessdeniedexception: you don't have access to the model with the specified model id
 
 If you see this error. Make sure you have access to the model in the region you're using:
 
@@ -568,7 +568,7 @@ If you see this error. Make sure you have access to the model in the region you'
    - Enable access for the specific model
 2. Check your region configuration matches the model's region.
 
-## Knowledge Base
+## Knowledge base
 
 AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functionality, allowing you to query a knowledge base with natural language and get responses based on your data.
 
@@ -652,7 +652,7 @@ When viewing evaluation results in the UI, citations appear in a separate sectio
 
 :::
 
-### Response Format
+### Response format
 
 When using the Knowledge Base provider, the response will include:
 
@@ -661,10 +661,10 @@ When using the Knowledge Base provider, the response will include:
    - `retrievedReferences`: References to source documents that informed the response
    - `generatedResponsePart`: Parts of the response that correspond to specific citations
 
-## See Also
+## See also
 
 - [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
-- [Configuration Reference](../configuration/reference.md) - Complete configuration options for promptfoo
-- [Command Line Interface](../usage/command-line.md) - How to use promptfoo from the command line
+- [Configuration Reference](../configuration/reference.md) - Complete configuration options for Promptfoo
+- [Command Line Interface](../usage/command-line.md) - How to use Promptfoo from the command line
 - [Provider Options](../providers/index.md) - Overview of all supported providers
 - [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Runnable examples of Bedrock integration, including Knowledge Base examples

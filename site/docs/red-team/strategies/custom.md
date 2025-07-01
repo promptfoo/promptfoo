@@ -4,7 +4,7 @@ title: Custom Strategies
 description: Create your own red team testing approaches by programmatically transforming test cases
 ---
 
-# Custom Strategies
+# Custom strategies
 
 Custom strategies give you full control over how your prompts are modified for adversarial testing. This allows you to create your own red team testing approaches by transforming pre-existing test cases programmatically. Strategies can range from simple jailbreaks to calling external APIs or models.
 
@@ -19,7 +19,7 @@ strategies:
       optionalConfigKey: 'optionalConfigValue'
 ```
 
-## How It Works
+## How it works
 
 Custom strategies work by:
 
@@ -28,7 +28,7 @@ Custom strategies work by:
 3. Returning transformed test cases with new content
 4. Tracking the transformation with metadata
 
-## Example Strategy
+## Example strategy
 
 Here's a simple strategy that ignores previous instructions:
 
@@ -56,7 +56,7 @@ module.exports = {
 Note that the strategy adds `strategyId` to the metadata while preserving the original `pluginId` using the spread operator (`...testCase.metadata`). Both identifiers are important for tracking and analysis purposes.
 :::
 
-## Configuration Options
+## Configuration options
 
 The strategy action function receives:
 
@@ -64,7 +64,7 @@ The strategy action function receives:
 - `injectVar`: Variable name to modify in each test case
 - `config`: Optional configuration passed from promptfooconfig.yaml
 
-## Related Concepts
+## Related concepts
 
 - [Prompt Injection](prompt-injection.md) - Built-in strategy that can be replicated with custom strategies
 - [Iterative Jailbreaks](iterative.md) - Complex strategy that could be extended with custom logic

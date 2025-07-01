@@ -2,7 +2,7 @@
 sidebar_label: Cohere Command-R benchmarks
 ---
 
-# Command R vs GPT vs Claude: create your own benchmark
+# Command r vs GPT vs claude: create your own benchmark
 
 While public benchmarks provide a general sense of capability, the only way to truly understand which model will perform best for your specific application is to run your own custom evaluation.
 
@@ -19,16 +19,16 @@ The end result is a side-by-side comparison view that looks like this:
 - Anthropic API key for Claude Opus
 - Node 18+
 
-## Step 1: Initial Setup
+## Step 1: initial setup
 
-Create a new promptfoo project:
+Create a new Promptfoo project:
 
 ```sh
 npx promptfoo@latest init cohere-benchmark
 cd cohere-benchmark
 ```
 
-## Step 2: Configure the models
+## Step 2: configure the models
 
 Edit `promptfooconfig.yaml` to specify the models to compare:
 
@@ -64,7 +64,7 @@ providers:
 
 See [Cohere](/docs/providers/cohere/), [OpenAI](/docs/providers/openai), and [Anthropic](/docs/providers/anthropic) docs for more detail.
 
-## Step 3: Set up prompts
+## Step 3: set up prompts
 
 Define the prompt to test. Get creative - this is your chance to see how the models handle queries unique to your application!
 
@@ -79,7 +79,7 @@ prompts:
     {{contract}}
 ```
 
-## Step 4: Add test cases
+## Step 4: add test cases
 
 Provide test case inputs and assertions to evaluate performance:
 
@@ -105,7 +105,7 @@ tests:
         value: output.length < 500
 ```
 
-## Step 5: Run the evaluation
+## Step 5: run the evaluation
 
 Run the benchmark:
 

@@ -2,7 +2,7 @@
 sidebar_label: Preventing hallucinations
 ---
 
-# How to Measure and Prevent LLM Hallucinations
+# How to measure and prevent LLM hallucinations
 
 LLMs have great potential, but they are prone to generating incorrect or misleading information, a phenomenon known as hallucination. Factuality and LLM "grounding" are key concerns for developers building LLM applications.
 
@@ -24,9 +24,9 @@ In this guide, we'll cover how to:
 2. **Evaluate multiple approaches** such as prompt tuning and retrieval-augmented generation.
 3. **Set up automated checks** and analyze the results.
 
-## Defining Test Cases
+## Defining test cases
 
-To get started, we'll use [promptfoo](/docs/intro), an eval framework for LLMs. The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assert").
+To get started, we'll use [Promptfoo](/docs/intro), an eval framework for LLMs. The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assert").
 
 For example, let's imagine we're building an app that provides real-time information. This presents a potential hallucination scenario as LLMs don't have access to real-time data.
 
@@ -65,11 +65,11 @@ In this configuration, we're using the `llm-rubric` assertion type to ensure tha
 
 `llm-rubric` returns a score that the framework uses to measure how well the LLM adheres to its limitations.
 
-## Evaluating Anti-Hallucination Techniques
+## Evaluating anti-hallucination techniques
 
 Below are some examples of how to evaluate different hallucination mitigations on your own data. Remember, **testing on your own data is key**. There is no one-size-fits-all solution to hallucination.
 
-### Prompt Tuning
+### Prompt tuning
 
 Changing the LLM prompt to remind it of its limitations can be an effective tool. For example, you can prepend a statement that the LLM doesn't know real-time information to the user's question.
 
@@ -136,7 +136,7 @@ The default prompt shown on the left side has a pass rate of **55%**. On the rig
 
 For more info on running the eval itself, see the [Getting Started guide](/docs/getting-started).
 
-### Measuring Perplexity
+### Measuring perplexity
 
 Perplexity is a measure of how well a language model predicts a sample of text. In the context of LLMs, a lower perplexity score indicates greater confidence in the model's completion, and therefore a lower chance of hallucination.
 
@@ -169,7 +169,7 @@ The evaluation will output the perplexity scores of each model, and you can get 
 
 For more detailed information on perplexity and other useful metrics, refer to the [perplexity assertion](/docs/configuration/expected-outputs/deterministic#perplexity).
 
-### Retrieval-Augmented Generation
+### Retrieval-augmented generation
 
 We can use retrieval-augmented generation to provide additional context to the LLM. Common approaches here are with LangChain, LlamaIndex, or a direct integration with an external data source such as a vector database or API.
 
@@ -225,7 +225,7 @@ Running `promptfoo eval` and `promptfoo view` will produce a similar view to the
 
 ![comparing langchain and vanilla gpt for hallucinations](/img/docs/hallucination-example-2.png)
 
-### Fine-Tuning
+### Fine-tuning
 
 Suppose you spent some time fine-tuning a model and wanted to compare different versions of the same model. Once you've fine-tuned a model, you should evaluate it by testing it side-by-side with the original or other variations.
 
@@ -247,7 +247,7 @@ tests:
 
 `promptfoo eval` will run each test case against both models, allowing us to compare their performance.
 
-### Controlled Decoding
+### Controlled decoding
 
 Several open-source projects such as [Guidance](https://github.com/guidance-ai/guidance) and [Outlines](https://github.com/normal-computing/outlines) make it possible to control LLM outputs in a more fundamental way.
 
@@ -274,7 +274,7 @@ In this example, the AI is given a recipe and it needs to classify it into one o
 
 With this approach, you can nearly guarantee that the LLM cannot suggest other cuisines.
 
-## Your Workflow
+## Your workflow
 
 The key takeaway from this article is that you should set up tests and run them continuously as you iterate. Without test cases and a framework for tracking results, you will likely be feeling around in the dark with trial and error.
 

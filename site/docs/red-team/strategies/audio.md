@@ -4,11 +4,11 @@ title: Audio Jailbreaking Strategy
 description: Test how AI systems handle audio-encoded text inputs that may bypass content filters
 ---
 
-# Audio Jailbreaking
+# Audio jailbreaking
 
 The Audio strategy converts prompt text into speech audio and then encodes that audio as a base64 string. This allows for testing how AI systems handle audio-encoded text, which may potentially bypass text-based content filters or lead to different behaviors than when processing plain text.
 
-## Use Case
+## Use case
 
 This strategy is useful for:
 
@@ -40,7 +40,7 @@ If remote generation is disabled or unavailable, the strategy will throw an erro
 
 :::
 
-## How It Works
+## How it works
 
 The strategy performs the following operations:
 
@@ -51,7 +51,7 @@ The strategy performs the following operations:
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.
 
-## Configuration Options
+## Configuration options
 
 - `language`: An ISO 639-1 language code to specify which language the text-to-speech system should use. This parameter controls the accent and pronunciation patterns of the generated audio. **Defaults to 'en' (English)** if not specified. Note that this parameter only changes the accent of the speech – it does not translate your text. If you provide English text with `language: 'fr'`, you'll get English words spoken with a French accent.
 
@@ -64,7 +64,7 @@ This strategy is worth implementing because:
 3. It can reveal inconsistencies in how models handle the same content presented in different formats
 4. Audio modalities may have different thresholds or processing pipelines for harmful content
 
-## Related Concepts
+## Related concepts
 
 - [Image Jailbreaking](/docs/red-team/strategies/image.md) - Similar approach using images instead of audio
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities

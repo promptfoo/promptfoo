@@ -2,7 +2,7 @@
 sidebar_label: Databricks
 ---
 
-# Databricks (Mosaic AI)
+# Databricks (mosaic AI)
 
 The Databricks provider allows you to interact with Databricks' Mosaic AI serving endpoints using the OpenAI protocol. It supports chat completion models hosted on Databricks' infrastructure.
 
@@ -21,7 +21,7 @@ export DATABRICKS_WORKSPACE_URL=https://your-workspace.cloud.databricks.com
 export DATABRICKS_TOKEN=your-token-here
 ```
 
-## Basic Usage
+## Basic usage
 
 Here's a basic example of how to use the Databricks provider:
 
@@ -32,7 +32,7 @@ providers:
       workspaceUrl: https://your-workspace.cloud.databricks.com # Optional if DATABRICKS_WORKSPACE_URL is set
 ```
 
-## Configuration Options
+## Configuration options
 
 The Databricks provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional Databricks-specific options:
 
@@ -58,7 +58,7 @@ providers:
       presence_penalty: 0
 ```
 
-## Environment Variables
+## Environment variables
 
 The following environment variables are supported:
 
@@ -67,7 +67,7 @@ The following environment variables are supported:
 | `DATABRICKS_WORKSPACE_URL` | The Databricks workspace URL for API requests      |
 | `DATABRICKS_TOKEN`         | The authentication token for Databricks API access |
 
-## API Compatibility
+## Api compatibility
 
 The Databricks provider is built on top of the OpenAI protocol, which means it supports the same message format and most of the same parameters as the OpenAI Chat API. This includes:
 

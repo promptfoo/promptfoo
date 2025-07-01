@@ -15,7 +15,7 @@ npx promptfoo@latest view
 
 After you [run an eval](/docs/getting-started), the viewer will present the latest results in a view like this one:
 
-![promptfoo web viewer](https://user-images.githubusercontent.com/310310/244891219-2b79e8f8-9b79-49e7-bffb-24cba18352f2.png)
+![Promptfoo web viewer](https://user-images.githubusercontent.com/310310/244891219-2b79e8f8-9b79-49e7-bffb-24cba18352f2.png)
 
 Currently, the viewer is just an easier way to look at output. It automatically updates on every eval, and allows you to thumbs up/thumbs down individual outputs to more easily compare prompts.
 

@@ -36,7 +36,7 @@ The `anthropic` provider supports the following models via the messages API:
 | `anthropic:messages:claude-3-sonnet-20240229`                              | Claude 3 Sonnet model            |
 | `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku model             |
 
-### Cross-Platform Model Availability
+### Cross-platform model availability
 
 Claude models are available across multiple platforms. Here's how the model names map across different providers:
 
@@ -51,7 +51,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 3 Sonnet   | claude-3-sonnet-20240229                              | anthropic.claude-3-sonnet-20240229-v1:0                    | claude-3-sonnet@20240229                                |
 | Claude 3 Haiku    | claude-3-haiku-20240307                               | anthropic.claude-3-haiku-20240307-v1:0                     | claude-3-haiku@20240307                                 |
 
-### Supported Parameters
+### Supported parameters
 
 | Config Property | Environment Variable  | Description                                                       |
 | --------------- | --------------------- | ----------------------------------------------------------------- |
@@ -68,7 +68,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | headers         | -                     | Additional headers to be sent with the API request                |
 | extra_body      | -                     | Additional parameters to be included in the API request body      |
 
-### Prompt Template
+### Prompt template
 
 To allow for compatibility with the OpenAI prompt template, the following format is supported:
 
@@ -117,7 +117,7 @@ prompts:
   - file://prompt.json
 ```
 
-### Tool Use
+### Tool use
 
 The Anthropic provider supports tool use (or function calling). Here's an example configuration for defining tools:
 
@@ -145,7 +145,7 @@ providers:
 
 See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
 
-### Images / Vision
+### Images / vision
 
 You can include images in the prompts in Claude 3 models.
 
@@ -156,7 +156,7 @@ This is different from how OpenAI's vision works, as it supports grabbing images
 
 See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
 
-### Prompt Caching
+### Prompt caching
 
 Claude supports prompt caching to optimize API usage and reduce costs for repetitive tasks. This feature caches portions of your prompts to avoid reprocessing identical content in subsequent requests.
 
@@ -220,7 +220,7 @@ prompts:
 
 See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details.
 
-### Extended Thinking
+### Extended thinking
 
 Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
 
@@ -279,7 +279,7 @@ Example response with thinking enabled:
 }
 ```
 
-#### Controlling Thinking Output
+#### Controlling thinking output
 
 By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
 
@@ -295,7 +295,7 @@ providers:
 
 When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
-#### Redacted Thinking
+#### Redacted thinking
 
 Sometimes Claude's internal reasoning may be flagged by safety systems. When this occurs, the thinking block will be encrypted and returned as a `redacted_thinking` block:
 
@@ -316,7 +316,7 @@ Sometimes Claude's internal reasoning may be flagged by safety systems. When thi
 
 Redacted thinking blocks are automatically decrypted when passed back to the API, allowing Claude to maintain context without compromising safety guardrails.
 
-#### Extended Output with Thinking
+#### Extended output with thinking
 
 Claude 4 models provide enhanced output capabilities and extended thinking support:
 
@@ -340,7 +340,7 @@ When using extended output:
 
 See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
 
-## Model-Graded Tests
+## Model-graded tests
 
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if `ANTHROPIC_API_KEY` is set and `OPENAI_API_KEY` is not set.
 
@@ -384,29 +384,29 @@ tests:
         value: Answer should mention Paris
 ```
 
-### Additional Capabilities
+### Additional capabilities
 
 - **Caching**: Promptfoo caches previous LLM requests by default.
 - **Token Usage Tracking**: Provides detailed information on the number of tokens used in each request, aiding in usage monitoring and optimization.
 - **Cost Calculation**: Calculates the cost of each request based on the number of tokens generated and the specific model used.
 
-## See Also
+## See also
 
 ### Examples
 
 We provide several example implementations demonstrating Claude's capabilities:
 
-#### Core Features
+#### Core features
 
 - [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use) - Shows how to use Claude's tool calling capabilities
 - [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude's vision capabilities
 
-#### Model Comparisons & Evaluations
+#### Model comparisons & evaluations
 
 - [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
 - [Claude vs GPT Image Analysis](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt-image) - Compares Claude's and GPT's image analysis capabilities
 
-#### Cloud Platform Integrations
+#### Cloud platform integrations
 
 - [AWS Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Using Claude through AWS Bedrock
 - [Google Vertex AI](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex) - Using Claude through Google Vertex AI

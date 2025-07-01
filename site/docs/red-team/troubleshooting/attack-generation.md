@@ -2,7 +2,7 @@
 sidebar_label: Attack Generation
 ---
 
-# Attack Generation
+# Attack generation
 
 Sometimes attacks may not be generated as expected. This is usually due to the `Purpose` property not being clear enough.
 

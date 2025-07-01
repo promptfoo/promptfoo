@@ -66,7 +66,7 @@ assert:
     value: 'The expected substring'
 ```
 
-### Contains-All
+### Contains-all
 
 The `contains-all` assertion checks if the LLM output contains all of the specified values.
 
@@ -81,7 +81,7 @@ assert:
       - 'Value 3'
 ```
 
-### Contains-Any
+### Contains-any
 
 The `contains-any` assertion checks if the LLM output contains at least one of the specified values.
 
@@ -171,7 +171,7 @@ assert:
 
 See also: [`is-json`](#is-json)
 
-### Contains-Sql
+### Contains-SQL
 
 This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
 
@@ -455,15 +455,15 @@ assert:
         - 'update::null::id'
 ```
 
-### is-valid-function-call
+### Is-valid-function-call
 
 This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#function-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#using-tools-and-functions), which this is implemented for.
 
-### is-valid-openai-function-call
+### Is-valid-OpenAI-function-call
 
 Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
 
-### is-valid-openai-tools-call
+### Is-valid-OpenAI-tools-call
 
 This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
 
@@ -564,15 +564,15 @@ Perplexity requires the LLM API to output `logprobs`. Currently only more recent
 
 You can compare perplexity scores across different outputs from the same model to get a sense of which output the model finds more likely (or less surprising). This is a good way to tune your prompts and hyperparameters (like temperature).
 
-#### Comparing outputs from different LLMs
+#### Comparing outputs from different llms
 
 Comparing scores across models may not be meaningful, unless the models have been trained on similar datasets, the tokenization process is consistent between models, and the vocabulary of the models is roughly the same.
 
-#### perplexity-score
+#### Perplexity-score
 
 `perplexity-score` is a supported metric similar to `perplexity`, except it is normalized between 0 and 1 and inverted, meaning larger numbers are better.
 
-This makes it easier to include in an aggregate promptfoo score, as higher scores are usually better. In this example, we compare perplexity across multiple GPTs:
+This makes it easier to include in an aggregate Promptfoo score, as higher scores are usually better. In this example, we compare perplexity across multiple GPTs:
 
 ```yaml
 providers:
@@ -589,7 +589,7 @@ tests:
 
 See [Python assertions](/docs/configuration/expected-outputs/python).
 
-### Starts-With
+### Starts-with
 
 The `starts-with` assertion checks if the LLM output begins with the specified string.
 
@@ -650,7 +650,7 @@ You may also return a score:
 }
 ```
 
-### Rouge-N
+### Rouge-n
 
 The `rouge-n` assertion checks if the Rouge-N score between the LLM output and expected value is above a given threshold.
 
@@ -763,7 +763,7 @@ METEOR (Metric for Evaluation of Translation with Explicit ORdering) is an autom
 
 > **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
 
-#### How METEOR Works
+#### How meteor works
 
 METEOR evaluates text by:
 
@@ -776,7 +776,7 @@ METEOR evaluates text by:
    - Unigram recall (coverage of reference words)
    - Word order/fragmentation (how well the word order matches)
 
-#### Basic Usage
+#### Basic usage
 
 ```yaml
 assert:
@@ -792,7 +792,7 @@ By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 
 - 0.6-0.8: Very good match
 - 0.8-1.0: Excellent match
 
-#### Custom Threshold
+#### Custom threshold
 
 Set your own threshold based on your quality requirements:
 
@@ -803,7 +803,7 @@ assert:
     threshold: 0.7 # Test fails if score < 0.7
 ```
 
-#### Using Variables
+#### Using variables
 
 Useful when your reference text comes from test data or external sources:
 
@@ -817,7 +817,7 @@ tests:
         threshold: 0.6
 ```
 
-#### Multiple References
+#### Multiple references
 
 METEOR can evaluate against multiple reference texts, using the best-matching reference for scoring:
 
@@ -837,7 +837,7 @@ This is particularly useful when:
 - You're working with different writing styles
 - You want to account for acceptable variations
 
-#### Practical Example
+#### Practical example
 
 Here's how METEOR scores different outputs against the reference "The weather is beautiful today":
 
@@ -860,7 +860,7 @@ tests:
 
 Note: Actual scores may vary based on the specific METEOR implementation and parameters used.
 
-### F-Score
+### F-score
 
 F-score (also F1 score) is a measure of accuracy that considers both precision and recall. It is the harmonic mean of precision and recall, providing a single score that balances both metrics. The score ranges from 0 (worst) to 1 (best).
 
@@ -910,7 +910,7 @@ This is particularly useful for evaluating classification tasks like sentiment a
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
 
-### Is-Refusal
+### Is-refusal
 
 The `is-refusal` assertion checks if the LLM output indicates that the model refused to
 perform the requested task. This is useful for testing whether your model appropriately
@@ -945,7 +945,7 @@ tests:
       - type: not-is-refusal # Ensure model helps with safe requests
 ```
 
-## See Also
+## See also
 
 - [JavaScript Assertions](/docs/configuration/expected-outputs/javascript.md) - Using custom JavaScript functions for validation
 - [Python Assertions](/docs/configuration/expected-outputs/python.md) - Using custom Python functions for validation

@@ -11,7 +11,7 @@ Currently, this supports [OpenAI's moderation model](https://platform.openai.com
 
 In general, we encourage the use of Meta's LlamaGuard as it substantially outperforms OpenAI's moderation API as well as GPT-4. [See benchmarks](https://github.com/meta-llama/PurpleLlama/blob/main/Llama-Guard2/MODEL_CARD.md#model-performance).
 
-## OpenAI moderation
+## Openai moderation
 
 By default, the `moderation` assertion uses OpenAI if an OpenAI API key is provided. Just make sure that the `OPENAI_API_KEY` environment variable is set:
 
@@ -59,7 +59,7 @@ tests:
         // highlight-end
 ```
 
-## Meta LlamaGuard moderation
+## Meta llamaguard moderation
 
 This example uses the LlamaGuard model hosted on Replicate. Be sure to set the `REPLICATE_API_KEY` environment variable:
 
@@ -110,7 +110,7 @@ tests:
         // highlight-end
 ```
 
-## Azure Content Safety moderation
+## Azure content safety moderation
 
 You can use the Azure Content Safety API for moderation. To set it up, you need to create an Azure Content Safety resource and get the API key and endpoint.
 
@@ -137,7 +137,7 @@ tests:
         provider: 'azure:moderation'
 ```
 
-### Moderation Categories
+### Moderation categories
 
 The Azure Content Safety API checks content for these categories:
 

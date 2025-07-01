@@ -5,11 +5,11 @@ sidebar_label: Model Context Protocol (MCP)
 sidebar_position: 20
 ---
 
-# Using MCP (Model Context Protocol) in Promptfoo
+# Using MCP (model context protocol) in Promptfoo
 
 Promptfoo supports the Model Context Protocol (MCP) for advanced tool use, and agentic workflows. MCP allows you to connect your Promptfoo providers to an external MCP server, such as the [modelcontextprotocol/server-memory](https://github.com/modelcontextprotocol/server-memory), to enable tool orchestration, and more.
 
-## Basic Configuration
+## Basic configuration
 
 To enable MCP for a provider, add the `mcp` block to your provider's `config` in your `promptfooconfig.yaml`:
 
@@ -26,7 +26,7 @@ providers:
           name: memory
 ```
 
-### MCP Config Options
+### Mcp config options
 
 - `enabled`: Set to `true` to enable MCP for this provider.
 - `server`: (Optional) Configuration for launching or connecting to an MCP server.
@@ -43,7 +43,7 @@ providers:
 
 MCP servers can be run locally or accessed remotely. For development and testing, a local server is often simplest, while production environments may use a centralized remote server.
 
-#### Example: Connecting to a Remote MCP Server
+#### Example: connecting to a remote MCP server
 
 ```yaml
 providers:
@@ -56,7 +56,7 @@ providers:
           url: http://localhost:8000
 ```
 
-#### Example: Using Custom Headers with a Remote MCP Server
+#### Example: using custom headers with a remote MCP server
 
 ```yaml
 providers:
@@ -79,11 +79,11 @@ This can be useful when:
 - You need to provide custom identifiers or session information
 - The server needs specific headers for configuration or tracking
 
-## Connecting a Single Provider to Multiple MCP Servers
+## Connecting a single provider to multiple MCP servers
 
 Promptfoo allows a single provider to connect to multiple MCP servers by using the `servers` array in your provider's MCP config. All tools from all connected servers will be available to the provider.
 
-### Example: One Provider, Multiple MCP Servers
+### Example: one provider, multiple MCP servers
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -106,7 +106,7 @@ providers:
 - All tools from all servers will be available to the provider.
 - You can specify different headers for each server when using URL connections.
 
-## Using Multiple MCP Servers
+## Using multiple MCP servers
 
 You can configure multiple MCP servers by assigning different MCP server configurations to different providers in your `promptfooconfig.yaml`. Each provider can have its own `mcp.server` block, allowing you to run separate memory/tool servers for different models or use cases.
 
@@ -153,7 +153,7 @@ In this example:
 
 This setup is useful for testing, benchmarking, or running isolated agentic workflows in parallel.
 
-## Supported Providers
+## Supported providers
 
 MCP is supported by most major providers in Promptfoo, including:
 
@@ -161,7 +161,7 @@ MCP is supported by most major providers in Promptfoo, including:
 - OpenAI (and compatible providers like Groq, Together, etc.)
 - Anthropic
 
-## OpenAI Responses API MCP Integration
+## Openai responses API MCP integration
 
 In addition to the general MCP integration described above, OpenAI's Responses API has native MCP support that allows direct connection to remote MCP servers without running local MCP servers. This approach is specific to OpenAI's Responses API and offers:
 
@@ -178,7 +178,7 @@ For detailed information about using MCP with OpenAI's Responses API, see the [O
 - Check your provider logs for MCP connection errors.
 - Verify that your custom headers are correctly formatted if you're having authentication issues.
 
-## See Also
+## See also
 
 - [Configuration Reference](../configuration/reference.md)
 - [Provider Configuration](../providers/index.md)

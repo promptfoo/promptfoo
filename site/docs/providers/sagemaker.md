@@ -1,10 +1,10 @@
 ---
 sidebar_label: Amazon SageMaker
 title: Amazon SageMaker Provider
-description: Evaluate models deployed on Amazon SageMaker endpoints with promptfoo
+description: Evaluate models deployed on Amazon SageMaker endpoints with Promptfoo
 ---
 
-# Amazon SageMaker
+# Amazon sagemaker
 
 The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your evals. This enables testing and evaluation of any model deployed on SageMaker, including models from Hugging Face, custom-trained models, foundation models from Amazon SageMaker JumpStart, and more. For AWS-managed foundation models without custom endpoints, you might also consider the [AWS Bedrock provider](./aws-bedrock.md).
 
@@ -82,7 +82,7 @@ Setting `profile: 'YourProfileName'` will use that profile from your AWS credent
 
 The AWS SDK uses the standard credential chain ([Setting Credentials in Node.js - AWS SDK for JavaScript](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html)). If no region is specified, the provider defaults to `us-east-1`. It's recommended to set `region` to the region where your endpoint is deployed (or use the `AWS_REGION` environment variable) to avoid misrouting requests.
 
-## Provider Syntax
+## Provider syntax
 
 The SageMaker provider supports several syntax patterns:
 
@@ -118,7 +118,7 @@ The provider will auto-detect JumpStart endpoints if `'jumpstart'` is in the nam
 
 ## Examples
 
-### Standard Example
+### Standard example
 
 ```yaml
 prompts:
@@ -145,7 +145,7 @@ tests:
       topic: Behind-the-scenes at our latest photoshoot
 ```
 
-### Llama Model Example (JumpStart)
+### Llama model example (jumpstart)
 
 For Llama 3 models deployed via JumpStart:
 
@@ -177,7 +177,7 @@ tests:
       flavor: lavender
 ```
 
-### Advanced Response Processing Example
+### Advanced response processing example
 
 This example demonstrates advanced response processing with a file-based transform:
 
@@ -226,7 +226,7 @@ module.exports = function (json) {
 
 This transform not only extracts the content but also parses it to identify specific information and formats the response with added context.
 
-### Mistral Model Example (Hugging Face)
+### Mistral model example (hugging face)
 
 For Mistral 7B models deployed via Hugging Face:
 
@@ -258,7 +258,7 @@ tests:
       flavor: lavender
 ```
 
-### Comparing Multiple Models
+### Comparing multiple models
 
 This example shows how to compare Llama and Mistral models side-by-side:
 
@@ -318,7 +318,7 @@ tests:
       audience: a senior citizen
 ```
 
-## Model Types
+## Model types
 
 The SageMaker provider supports various model types to properly format requests and parse responses. Specify the model type in the provider ID or in the configuration:
 
@@ -355,7 +355,7 @@ Different model types return results in different response formats. Configure th
 For more complex extraction logic, use file-based transforms as described in the [Response Path Expressions](#response-path-expressions) section.
 :::
 
-## Input/Output Format
+## Input/output format
 
 SageMaker endpoints expect the request in the format that the model container was designed for. For most text-generation models (e.g., Hugging Face Transformers or JumpStart LLMs), this means sending a JSON payload with an `"inputs"` key (and optional `"parameters"` for generation settings).
 
@@ -366,7 +366,7 @@ For example:
 
 The provider's `modelType` setting will try to format the request appropriately, but ensure your input matches what the model expects. You can provide a custom transformer if needed (see [Transforming Prompts](#transforming-prompts)).
 
-## Configuration Options
+## Configuration options
 
 Common configuration options for SageMaker endpoints:
 
@@ -384,7 +384,7 @@ Common configuration options for SageMaker endpoints:
 | `delay`         | Delay between API calls in milliseconds      | `0`                |
 | `transform`     | Function to transform prompts before sending | N/A                |
 
-### Stop Sequences Example
+### Stop sequences example
 
 ```yaml
 providers:
@@ -397,7 +397,7 @@ providers:
 
 These will be passed to the model (if supported) to halt generation when encountered. For instance, JumpStart Hugging Face LLM containers accept a `stop` parameter as a list of strings.
 
-## Content Type and Accept Headers
+## Content type and accept headers
 
 Ensure the `contentType` and `acceptType` match your model's expectations:
 
@@ -406,7 +406,7 @@ Ensure the `contentType` and `acceptType` match your model's expectations:
 
 The default is JSON because popular SageMaker LLM containers (Hugging Face, JumpStart) use JSON payloads. If your endpoint returns a non-JSON response, you may need to adjust these settings accordingly.
 
-## Response Parsing with JavaScript Expressions
+## Response parsing with JavaScript expressions
 
 For endpoints with unique response formats, you can use JavaScript expressions to extract specific fields from the response:
 
@@ -481,7 +481,7 @@ defaultTest:
           region: us-east-1
 ```
 
-## Environment Variables
+## Environment variables
 
 Promptfoo will also read certain environment variables to set default generation parameters:
 
@@ -493,9 +493,9 @@ Promptfoo will also read certain environment variables to set default generation
 
 These serve as global defaults for your eval runs. You can use them to avoid repetition in config files. Any values set in the provider's YAML config will override these environment defaults.
 
-## Caching Support
+## Caching support
 
-The SageMaker provider fully supports the promptfoo caching system, which can significantly speed up evaluations and reduce costs when running repeated tests:
+The SageMaker provider fully supports the Promptfoo caching system, which can significantly speed up evaluations and reduce costs when running repeated tests:
 
 ```yaml
 # Enable caching in your config
@@ -525,7 +525,7 @@ Or disable caching for specific test runs even when globally enabled:
 promptfoo eval --no-cache
 ```
 
-## Rate Limiting with Delays
+## Rate limiting with delays
 
 SageMaker endpoints will process requests as fast as the underlying instance allows. If you send too many requests in rapid succession, you may saturate the endpoint's capacity and get latency spikes or errors. To avoid this, you can configure a delay between calls.
 
@@ -553,7 +553,7 @@ Spacing out requests can help avoid bursty usage that might scale up more instan
 
 Note that delays are only applied for actual API calls, not when responses are retrieved from cache.
 
-## Transforming Prompts
+## Transforming prompts
 
 The SageMaker provider supports transforming prompts before they're sent to the endpoint. This is especially useful for:
 
@@ -614,11 +614,11 @@ providers:
 
 Transformed prompts maintain proper caching and include metadata about the transformation in the response.
 
-## Response Path Expressions
+## Response path expressions
 
 The `responseFormat.path` configuration option allows you to extract specific fields from the SageMaker endpoint response using JavaScript expressions or custom transformer functions from files.
 
-### JavaScript Expressions
+### Javascript expressions
 
 You can use JavaScript expressions to access nested properties in the response. Use `json` to refer to the response JSON object in the path expression:
 
@@ -635,7 +635,7 @@ providers:
         path: 'json.generated_text'
 ```
 
-### Response Format Issues
+### Response format issues
 
 If you're getting unusual responses from your endpoint, try:
 

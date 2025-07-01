@@ -2,13 +2,13 @@
 sidebar_label: Cloudflare Workers AI
 ---
 
-# Cloudflare Workers AI
+# Cloudflare workers AI
 
 This provider supports the [models](https://developers.cloudflare.com/workers-ai/models/) provided by Cloudflare Workers AI, a serverless edge inference platform that runs AI models closer to users for low-latency responses.
 
 The provider uses Cloudflare's OpenAI-compatible API endpoints, making it easy to migrate between OpenAI and Cloudflare AI or use them interchangeably.
 
-## Required Configuration
+## Required configuration
 
 Set your Cloudflare account ID and API key as environment variables:
 
@@ -17,7 +17,7 @@ export CLOUDFLARE_ACCOUNT_ID=your_account_id_here
 export CLOUDFLARE_API_KEY=your_api_key_here
 ```
 
-The Cloudflare account ID is not secret and can be included in your promptfoo configuration file. The API key is secret, so use environment variables instead of hardcoding it in config files.
+The Cloudflare account ID is not secret and can be included in your Promptfoo configuration file. The API key is secret, so use environment variables instead of hardcoding it in config files.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -37,7 +37,7 @@ tests:
         value: '{{topic}}'
 ```
 
-### Alternative Environment Variable Names
+### Alternative environment variable names
 
 Use custom environment variable names with `apiKeyEnvar` and `accountIdEnvar`:
 
@@ -50,7 +50,7 @@ providers:
       accountIdEnvar: CUSTOM_CLOUDFLARE_ACCOUNT
 ```
 
-## OpenAI Compatibility
+## Openai compatibility
 
 This provider leverages Cloudflare's OpenAI-compatible endpoints:
 
@@ -60,11 +60,11 @@ This provider leverages Cloudflare's OpenAI-compatible endpoints:
 
 All standard OpenAI parameters work with Cloudflare AI models: `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, and `presence_penalty`.
 
-## Provider Types
+## Provider types
 
 The Cloudflare AI provider supports three different provider types:
 
-### Chat Completion
+### Chat completion
 
 For conversational AI and instruction-following models:
 
@@ -75,7 +75,7 @@ providers:
   - cloudflare-ai:chat:@hf/nousresearch/hermes-2-pro-mistral-7b
 ```
 
-### Text Completion
+### Text completion
 
 For completion-style tasks:
 
@@ -95,11 +95,11 @@ providers:
   - cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5
 ```
 
-## Current Model Examples
+## Current model examples
 
 Here are some of the latest models available on Cloudflare Workers AI:
 
-### State-of-the-Art Models
+### State-of-the-art models
 
 **Reasoning & Problem Solving:**
 
@@ -122,9 +122,9 @@ Cloudflare is constantly adding new models. See their [official model catalog](h
 
 :::
 
-## Configuration Examples
+## Configuration examples
 
-### Basic Chat Configuration
+### Basic chat configuration
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -135,7 +135,7 @@ providers:
       max_tokens: 1000
 ```
 
-### Advanced Configuration with Multiple Models
+### Advanced configuration with multiple models
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -155,7 +155,7 @@ providers:
       max_tokens: 2000
 ```
 
-### Embedding Configuration
+### Embedding configuration
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -164,7 +164,7 @@ providers:
       accountId: your_account_id_here
 ```
 
-## Custom API Base URL
+## Custom API base URL
 
 Override the default API base URL for custom deployments or specific regions:
 
@@ -176,7 +176,7 @@ providers:
       apiBaseUrl: https://api.cloudflare.com/client/v4/accounts/your_account_id/ai/v1
 ```
 
-## See Also
+## See also
 
 - [Cloudflare Workers AI Models](https://developers.cloudflare.com/workers-ai/models/) - Complete model catalog
 - [Cloudflare Workers AI OpenAI Compatibility](https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/) - OpenAI-compatible endpoints

@@ -2,7 +2,7 @@
 sidebar_label: BeaverTails
 ---
 
-# BeaverTails Dataset for LLM Safety Testing
+# Beavertails dataset for LLM safety testing
 
 ## Overview
 
@@ -57,7 +57,7 @@ The plugin uses a specialized grader that evaluates model outputs against a safe
 
 Outputs are graded as either SAFE (pass) or COMPLICIT (fail) based on these criteria.
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Prompt Injection](../strategies/prompt-injection.md)

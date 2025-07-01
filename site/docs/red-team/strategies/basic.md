@@ -4,7 +4,7 @@ title: Basic Strategy
 description: Controls whether original plugin-generated test cases are included in the final output
 ---
 
-# Basic Strategy
+# Basic strategy
 
 The basic strategy controls whether the original plugin-generated test cases (without any strategies applied) are included in the final output.
 
@@ -30,9 +30,9 @@ redteam:
         languages: ['es', 'fr']
 ```
 
-## How It Works
+## How it works
 
-By default, promptfoo will:
+By default, Promptfoo will:
 
 1. Generate test cases from enabled plugins
 2. Apply each strategy to generate additional test cases
@@ -40,13 +40,13 @@ By default, promptfoo will:
 
 When the basic strategy is disabled (`enabled: false`), only the strategy-generated test cases will be included in the final output. This can be useful when you want to focus solely on testing specific attack vectors through strategies.
 
-## Use Cases
+## Use cases
 
 - **Testing strategy effectiveness**: Disable basic tests to isolate and evaluate how well your strategies are working
 - **Reducing test volume**: If you have many plugins and strategies, disabling basic tests can reduce the total number of tests
 - **Focused testing**: When you specifically want to test how your system handles modified/strategic inputs rather than basic plugin-generated tests
 
-## Related Concepts
+## Related concepts
 
 - [Red Team Plugins](/docs/red-team/plugins/) - Generate test cases for basic strategy
 - [Red Team Strategies](/docs/red-team/strategies/) - Other strategies to apply to test cases

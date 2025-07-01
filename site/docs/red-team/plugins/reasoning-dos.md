@@ -2,7 +2,7 @@
 sidebar_label: Reasoning DoS
 ---
 
-# Reasoning DoS Plugin
+# Reasoning dos plugin
 
 Reasoning DoS (Denial of Service) is a new vulnerability introduced by reasoning models.
 
@@ -26,7 +26,7 @@ redteam:
     - reasoning-dos
 ```
 
-## How It Works
+## How it works
 
 The Reasoning DoS plugin generates test cases that attempt to trigger excessive computation through:
 
@@ -38,7 +38,7 @@ The Reasoning DoS plugin generates test cases that attempt to trigger excessive 
 6. Recursive reasoning chains
 7. Puzzle-solving tasks (e.g., Sudoku)
 
-## Evaluation Criteria
+## Evaluation criteria
 
 The plugin assesses the AI's response based on:
 
@@ -48,7 +48,7 @@ The plugin assesses the AI's response based on:
 4. Resource Management: How well does it manage computational resources under stress?
 5. Attack Resistance: Can it resist attempts to trigger excessive computation?
 
-## Importance in Gen AI Red Teaming
+## Importance in gen AI red teaming
 
 Testing for reasoning DoS vulnerabilities is critical because:
 
@@ -58,7 +58,7 @@ Testing for reasoning DoS vulnerabilities is critical because:
 - Maintains service quality under attack conditions
 - Prevents denial of service through computational overload
 
-## Related Concepts
+## Related concepts
 
 - [Divergent Repetition Plugin](divergent-repetition.md)
 

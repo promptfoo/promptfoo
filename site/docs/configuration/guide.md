@@ -2,10 +2,10 @@
 sidebar_position: 1
 sidebar_label: Guide
 title: Configuration Guide - Getting Started with Promptfoo
-description: Complete guide to configuring promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
+description: Complete guide to configuring Promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
 keywords:
   [
-    promptfoo configuration,
+    Promptfoo configuration,
     LLM evaluation setup,
     prompt testing,
     AI model comparison,
@@ -333,9 +333,9 @@ tests:
       shared_var: 'override shared content' # Optionally override defaults
 ```
 
-### YAML references
+### Yaml references
 
-promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
+Promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
 
 Use the `$ref` key to re-use assertions without having to fully define them more than once. Here's an example:
 
@@ -552,17 +552,17 @@ tests:
       headline: 'Articles about {{ env.TOPIC }}'
 ```
 
-## Tools and Functions
+## Tools and functions
 
-promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#function-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
+Promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#function-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
 
-## Thinking Output
+## Thinking output
 
 Some models, like Anthropic's Claude and DeepSeek, support thinking/reasoning capabilities that allow the model to show its reasoning process before providing a final answer.
 
 This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
 
-### Controlling Thinking Output
+### Controlling thinking output
 
 By default, thinking content is included in the response. You can hide it by setting `showThinking` to `false`.
 
@@ -825,7 +825,7 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading tests from CSV
 
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format).
+YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. Promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format).
 
 ```yaml
 prompts:
@@ -838,7 +838,7 @@ providers:
 tests: file://tests.csv
 ```
 
-promptfoo also has built-in ability to pull test cases from a Google Sheet. The easiest way to get started is to set the sheet visible to "anyone with the link". For example:
+Promptfoo also has built-in ability to pull test cases from a Google Sheet. The easiest way to get started is to set the sheet visible to "anyone with the link". For example:
 
 ```yaml
 prompts:
@@ -853,4 +853,4 @@ tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsK
 
 Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).
 
-See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.
+See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up Promptfoo to access a private spreadsheet.

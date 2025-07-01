@@ -8,7 +8,7 @@ Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the inter
 
 This feature allows you to collect detailed performance metrics and debug complex provider implementations.
 
-![traces in promptfoo](/img/docs/trace.png)
+![traces in Promptfoo](/img/docs/trace.png)
 
 ## Overview
 
@@ -21,7 +21,7 @@ Tracing provides visibility into:
 - **Error tracking**: Trace failures to specific operations
 - **Resource usage**: Monitor external API calls, database queries, and other operations
 
-### Key Features
+### Key features
 
 - **Standard OpenTelemetry support**: Use any OpenTelemetry SDK in any language
 - **Built-in OTLP receiver**: No external collector required for basic usage
@@ -29,9 +29,9 @@ Tracing provides visibility into:
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
 
-## Quick Start
+## Quick start
 
-### 1. Enable Tracing
+### 1. enable tracing
 
 Add tracing configuration to your `promptfooconfig.yaml`:
 
@@ -43,7 +43,7 @@ tracing:
       enabled: true # Required to start the built-in OTLP receiver
 ```
 
-### 2. Instrument Your Provider
+### 2. instrument your provider
 
 Promptfoo passes a W3C trace context to providers via the `traceparent` field. Use this to create child spans:
 
@@ -101,7 +101,7 @@ module.exports = {
 };
 ```
 
-### 3. View Traces
+### 3. view traces
 
 After running an evaluation, view traces in the web UI:
 
@@ -120,9 +120,9 @@ After running an evaluation, view traces in the web UI:
 3. Click the magnifying glass (🔎) icon on any test result
 4. Scroll to the "Trace Timeline" section
 
-## Configuration Reference
+## Configuration reference
 
-### Basic Configuration
+### Basic configuration
 
 ```yaml
 tracing:
@@ -134,7 +134,7 @@ tracing:
       # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
 ```
 
-### Environment Variables
+### Environment variables
 
 You can also configure tracing via environment variables:
 
@@ -152,7 +152,7 @@ export OTEL_SERVICE_NAME="my-rag-application"
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 ```
 
-### Forwarding to External Collectors
+### Forwarding to external collectors
 
 Forward traces to external observability platforms:
 
@@ -169,9 +169,9 @@ tracing:
       'api-key': '${OBSERVABILITY_API_KEY}'
 ```
 
-## Provider Implementation Guide
+## Provider implementation guide
 
-### JavaScript/TypeScript
+### Javascript/TypeScript
 
 For complete provider implementation details, see the [JavaScript Provider documentation](/docs/providers/custom-api/). For tracing-specific examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing).
 
@@ -214,7 +214,7 @@ def call_api(prompt, context):
     return {"output": your_llm_call(prompt)}
 ```
 
-## Trace Visualization
+## Trace visualization
 
 Promptfoo includes a built-in trace viewer that displays all collected telemetry data. Since Promptfoo functions as an OTLP receiver, you can view traces directly without configuring external tools like Jaeger or Grafana Tempo.
 
@@ -226,7 +226,7 @@ The web UI displays traces as a hierarchical timeline showing:
 - **Hover details**: Span attributes, duration, and timestamps
 - **Relative timing**: See which operations run in parallel vs. sequentially
 
-### Understanding the Timeline
+### Understanding the timeline
 
 ```
 [Root Span: provider.call (500ms)]
@@ -242,9 +242,9 @@ Each bar's width represents its duration relative to the total trace time. Hover
 - Custom attributes you've added
 - Error messages (if any)
 
-## Best Practices
+## Best practices
 
-### 1. Semantic Naming
+### 1. semantic naming
 
 Use descriptive, hierarchical span names:
 
@@ -260,7 +260,7 @@ Use descriptive, hierarchical span names:
 'call_api';
 ```
 
-### 2. Add Relevant Attributes
+### 2. add relevant attributes
 
 Include context that helps debugging:
 
@@ -273,7 +273,7 @@ span.setAttributes({
 });
 ```
 
-### 3. Handle Errors Properly
+### 3. handle errors properly
 
 Always record exceptions and set error status:
 
@@ -290,14 +290,14 @@ try {
 }
 ```
 
-### 4. Use Appropriate Span Processors
+### 4. use appropriate span processors
 
 - **SimpleSpanProcessor**: For development and testing (immediate export)
 - **BatchSpanProcessor**: For production (better performance)
 
-## Advanced Features
+## Advanced features
 
-### Custom Trace Attributes
+### Custom trace attributes
 
 Add metadata that appears in the UI:
 
@@ -309,7 +309,7 @@ span.setAttributes({
 });
 ```
 
-### Trace Sampling
+### Trace sampling
 
 Reduce overhead in high-volume scenarios:
 
@@ -321,7 +321,7 @@ const provider = new NodeTracerProvider({
 });
 ```
 
-### Multi-Service Tracing
+### Multi-service tracing
 
 Trace across multiple services:
 
@@ -337,14 +337,14 @@ const extractedContext = trace.propagation.extract(context.active(), request.hea
 
 ## Troubleshooting
 
-### Traces Not Appearing
+### Traces not appearing
 
 1. **Check tracing is enabled**: Verify `tracing.enabled: true` in config
 2. **Verify OTLP endpoint**: Ensure providers are sending to `http://localhost:4318/v1/traces`
 3. **Check trace context**: Log the `traceparent` value to ensure it's being passed
 4. **Review provider logs**: Look for connection errors or failed exports
 
-### Context Naming Conflicts
+### Context naming conflicts
 
 If you see `context.active is not a function`, rename the OpenTelemetry import:
 
@@ -358,13 +358,13 @@ async callApi(prompt, promptfooContext) {
 }
 ```
 
-### Performance Impact
+### Performance impact
 
 - Tracing adds ~1-2ms overhead per span
 - Use sampling for high-volume evaluations
 - Consider `BatchSpanProcessor` for production use
 
-### Debug Logging
+### Debug logging
 
 Enable debug logs to troubleshoot:
 
@@ -376,9 +376,9 @@ DEBUG=promptfoo:* promptfoo eval
 OTEL_LOG_LEVEL=debug promptfoo eval
 ```
 
-## Integration Examples
+## Integration examples
 
-### RAG Pipeline Tracing
+### Rag pipeline tracing
 
 ```javascript
 async function ragPipeline(query, context) {
@@ -415,7 +415,7 @@ async function ragPipeline(query, context) {
 }
 ```
 
-### Multi-Model Comparison
+### Multi-model comparison
 
 ```javascript
 async function compareModels(prompt, context) {
@@ -440,7 +440,7 @@ async function compareModels(prompt, context) {
 }
 ```
 
-## Next Steps
+## Next steps
 
 - Explore the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
 - Set up forwarding to your observability platform

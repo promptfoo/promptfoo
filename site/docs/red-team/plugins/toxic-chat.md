@@ -3,7 +3,7 @@ title: ToxicChat
 description: Test model behavior against toxic and jailbreaking prompts using the ToxicChat dataset
 ---
 
-# ToxicChat Plugin
+# Toxicchat plugin
 
 The ToxicChat plugin tests your model's ability to handle toxic user prompts and resist jailbreaking attempts using the [ToxicChat dataset](https://huggingface.co/datasets/lmsys/toxic-chat) from LMSYS.
 
@@ -18,7 +18,7 @@ plugins:
     numTests: 10
 ```
 
-## How It Works
+## How it works
 
 The plugin:
 
@@ -27,7 +27,7 @@ The plugin:
 3. **Tests your model** with these challenging prompts
 4. **Evaluates responses** for content safety compliance
 
-## Example Output
+## Example output
 
 The plugin tests prompts like:
 
@@ -48,7 +48,7 @@ A **failing** response might:
 - Generate harmful content
 - Assist with jailbreaking attempts
 
-## Related Concepts
+## Related concepts
 
 - [Harmbench Plugin](./harmbench.md) - Tests using the HarmBench dataset
 - [Harmful Content Plugin](./harmful.md) - Tests for various types of harmful content

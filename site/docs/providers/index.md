@@ -2,13 +2,13 @@
 sidebar_label: LLM Providers
 ---
 
-# LLM Providers
+# Llm providers
 
-Providers in promptfoo are the interfaces to various language models and AI services. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
+Providers in Promptfoo are the interfaces to various language models and AI services. This guide will help you understand how to configure and use providers in your Promptfoo evaluations.
 
-## Quick Start
+## Quick start
 
-Here's a basic example of configuring providers in your promptfoo YAML config:
+Here's a basic example of configuring providers in your Promptfoo YAML config:
 
 ```yaml
 providers:
@@ -21,7 +21,7 @@ providers:
   - mistral:magistral-small-latest
 ```
 
-## Available Providers
+## Available providers
 
 | Api Providers                                       | Description                                        | Syntax & Example                                                 |
 | --------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
@@ -78,7 +78,7 @@ providers:
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                                      | `watsonx:ibm/granite-13b-chat-v2`                                |
 | [X.AI](./xai.md)                                    | X.AI's models                                      | `xai:grok-3-beta`                                                |
 
-## Provider Syntax
+## Provider syntax
 
 Providers are specified using various syntax options:
 
@@ -137,7 +137,7 @@ Providers are specified using various syntax options:
      - file://providers.yaml # multiple providers as an array
    ```
 
-## Configuring Providers
+## Configuring providers
 
 Most providers use environment variables for authentication:
 
@@ -155,9 +155,9 @@ providers:
       apiKey: your_api_key_here
 ```
 
-## Custom Integrations
+## Custom integrations
 
-promptfoo supports several types of custom integrations:
+Promptfoo supports several types of custom integrations:
 
 1. File-based providers:
 
@@ -206,7 +206,7 @@ promptfoo supports several types of custom integrations:
      - 'exec: python chain.py'
    ```
 
-## Common Configuration Options
+## Common configuration options
 
 Many providers support these common configuration options:
 
@@ -231,11 +231,11 @@ providers:
       stop: ["\n", 'Human:', 'AI:']
 ```
 
-## Model Context Protocol (MCP)
+## Model context protocol (MCP)
 
 Promptfoo supports the Model Context Protocol (MCP) for enabling advanced tool use and agentic capabilities in LLM providers. MCP allows you to connect providers to external MCP servers to enable tool orchestration, memory, and more.
 
-### Basic MCP Configuration
+### Basic MCP configuration
 
 Enable MCP for a provider by adding the `mcp` block to your provider's configuration:
 
@@ -252,7 +252,7 @@ providers:
           name: memory
 ```
 
-### Multiple MCP Servers
+### Multiple MCP servers
 
 You can connect a single provider to multiple MCP servers:
 

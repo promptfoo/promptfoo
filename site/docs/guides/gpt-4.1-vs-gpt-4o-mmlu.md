@@ -1,12 +1,12 @@
 ---
 title: GPT-4.1 vs GPT-4o MMLU Benchmark Comparison
-description: Compare GPT-4.1 and GPT-4o performance on MMLU academic reasoning tasks using promptfoo with step-by-step setup and research-backed optimization techniques.
+description: Compare GPT-4.1 and GPT-4o performance on MMLU academic reasoning tasks using Promptfoo with step-by-step setup and research-backed optimization techniques.
 image: /img/docs/gpt-4.1-vs-gpt-4o-mmlu.png
 keywords: [gpt-4.1, gpt-4o, mmlu, benchmark, comparison, academic reasoning, openai, evaluation]
 sidebar_label: GPT-4.1 vs GPT-4o MMLU
 ---
 
-# GPT-4.1 vs GPT-4o: MMLU Benchmark Comparison
+# Gpt-4.1 vs GPT-4o: mmlu benchmark comparison
 
 OpenAI's [GPT-4.1](https://openai.com/index/introducing-gpt-4-1-in-the-api/) scores **90.2% on MMLU** vs GPT-4o's 85.7% - a **4.5 point improvement** on academic reasoning.
 
@@ -18,11 +18,11 @@ OpenAI's GPT-4.1 announcement prominently featured the 90.2% vs 85.7% MMLU score
 
 MMLU serves as an effective benchmark for comparing reasoning capabilities because it requires systematic thinking across diverse academic domains. The 4.5-point improvement that OpenAI highlighted indicates enhanced performance in mathematical reasoning, scientific knowledge, and logical analysis.
 
-This guide recreates those benchmark results using promptfoo, allowing you to verify the claimed performance differences and evaluate whether the improvements justify upgrading for your specific use cases.
+This guide recreates those benchmark results using Promptfoo, allowing you to verify the claimed performance differences and evaluate whether the improvements justify upgrading for your specific use cases.
 
-## Model Timeline & Key Differences
+## Model timeline & key differences
 
-### GPT-4o
+### Gpt-4o
 
 **Released: May 13, 2024**
 
@@ -46,7 +46,7 @@ GPT-4.1 includes improvements in reasoning capabilities and efficiency. Specific
 - **Cost**: 26% cheaper than GPT-4o for median queries
 - **Performance Gains**: Enhanced coding (+60% on internal benchmarks), instruction following, long document processing
 
-### GPT-4.1 Performance Improvements
+### Gpt-4.1 performance improvements
 
 GPT-4.1 outperforms GPT-4o through:
 
@@ -68,11 +68,11 @@ npx promptfoo@latest init --example openai-gpt-4.1-vs-gpt-4o-mmlu
 
 ## Prerequisites
 
-- [promptfoo CLI installed](/docs/installation)
+- [Promptfoo CLI installed](/docs/installation)
 - OpenAI API key (set as `OPENAI_API_KEY`)
 - [Hugging Face token](https://huggingface.co/settings/tokens) (set as `HF_TOKEN`)
 
-## Step 1: Basic Setup
+## Step 1: basic setup
 
 Initialize and configure:
 
@@ -115,7 +115,7 @@ tests:
   - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=5
 ```
 
-## Step 2: Run and View Results
+## Step 2: run and view results
 
 ```bash
 npx promptfoo@latest eval
@@ -128,7 +128,7 @@ You should see GPT-4.1 outperforming GPT-4o on reasoning questions.
 
 The results above show GPT-4.1 achieving a 92.5% pass rate on MMLU questions, demonstrating the improved reasoning capabilities compared to GPT-4o.
 
-## Step 3: Improve with Chain-of-Thought
+## Step 3: improve with chain-of-thought
 
 Chain-of-Thought prompting significantly improves reasoning performance. Update your prompt:
 
@@ -177,7 +177,7 @@ tests:
   - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&limit=10
 ```
 
-## Step 4: Scale Your Evaluation
+## Step 4: scale your evaluation
 
 Add more subjects for comprehensive testing:
 
@@ -193,16 +193,16 @@ tests:
   - huggingface://datasets/cais/mmlu?split=test&subset=chemistry&limit=15
 ```
 
-## Understanding Your Results
+## Understanding your results
 
-### What to Look For
+### What to look for
 
 - **Accuracy**: GPT-4.1 should score higher across subjects
 - **Reasoning Quality**: Look for clearer step-by-step explanations
 - **Format Compliance**: Better adherence to answer format
 - **Consistency**: More reliable performance across question types
 
-### MMLU-Specific Improvements in GPT-4.1
+### Mmlu-specific improvements in GPT-4.1
 
 GPT-4.1's **4.5-point MMLU gain** comes from targeted improvements in academic reasoning:
 
@@ -214,7 +214,7 @@ GPT-4.1's **4.5-point MMLU gain** comes from targeted improvements in academic r
 
 **Key MMLU subjects showing largest gains**: Abstract Algebra (+7%), Formal Logic (+6%), College Mathematics (+5%)
 
-## Next Steps
+## Next steps
 
 Ready to go deeper? Try these advanced techniques:
 
@@ -223,7 +223,7 @@ Ready to go deeper? Try these advanced techniques:
 3. **Add domain-specific assertions** - Create custom metrics for your use cases
 4. **Scale with distributed testing** - Run comprehensive benchmarks across all 57 MMLU subjects
 
-## See Also
+## See also
 
 - [MMLU Dataset](https://huggingface.co/datasets/cais/mmlu)
 - [GPT-4o vs GPT-4o Mini](/docs/guides/gpt-4-vs-gpt-4o)

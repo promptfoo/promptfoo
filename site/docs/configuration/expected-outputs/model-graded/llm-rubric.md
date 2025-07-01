@@ -2,7 +2,7 @@
 sidebar_label: LLM Rubric
 ---
 
-# LLM Rubric
+# Llm rubric
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.
 
@@ -130,7 +130,7 @@ defaultTest:
 
 ### Object handling in rubric prompts
 
-When using `{{output}}` or `{{rubric}}` variables that contain objects, promptfoo automatically converts them to JSON strings by default to prevent display issues. If you need to access specific properties of objects in your rubric prompts, you can enable object property access:
+When using `{{output}}` or `{{rubric}}` variables that contain objects, Promptfoo automatically converts them to JSON strings by default to prevent display issues. If you need to access specific properties of objects in your rubric prompts, you can enable object property access:
 
 ```bash
 export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
@@ -151,7 +151,7 @@ rubricPrompt: >
 
 For more details, see the [object template handling guide](/docs/usage/troubleshooting#object-template-handling).
 
-## Threshold Support
+## Threshold support
 
 The `llm-rubric` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass. For example:
 

@@ -2,11 +2,11 @@
 sidebar_label: Inference Limits
 ---
 
-# Inference Limits
+# Inference limits
 
 You may encounter a warning or error message about reaching inference limits when using Promptfoo's red teaming capabilities.
 
-## Understanding Inference Limits
+## Understanding inference limits
 
 Promptfoo's open source version includes access to cloud-based inference for several key functions:
 
@@ -18,7 +18,7 @@ These services have usage limits to ensure fair access for all users. When you r
 
 ## Solutions
 
-### 1. Use Your Own OpenAI API Key
+### 1. use your own OpenAI API key
 
 The simplest solution is to set your own OpenAI API key:
 
@@ -28,7 +28,7 @@ export OPENAI_API_KEY=sk-...
 
 When this environment variable is set, Promptfoo will use your OpenAI account instead of the built-in inference service whenever possible.
 
-### 2. Configure Alternative Providers
+### 2. configure alternative providers
 
 You can override the default red team providers with your own models:
 
@@ -41,7 +41,7 @@ redteam:
 
 See the [Red Team Configuration documentation](/docs/red-team/configuration/#providers) for detailed setup instructions.
 
-### 3. Use Local Models
+### 3. use local models
 
 For complete control and no inference limits, you can run models locally:
 
@@ -55,7 +55,7 @@ redteam:
 
 This requires more computational resources but eliminates cloud inference dependencies.
 
-### 4. Upgrade Your Account
+### 4. upgrade your account
 
 For enterprise users with high-volume needs, contact us to discuss custom inference plans:
 
@@ -71,6 +71,6 @@ For enterprise users with high-volume needs, contact us to discuss custom infere
 - Dedicated support with response guarantees
 - And more!
 
-## Getting Help
+## Getting help
 
 If you're unsure which approach best fits your needs, contact us at [inquiries@promptfoo.dev](mailto:inquiries@promptfoo.dev) for personalized assistance.

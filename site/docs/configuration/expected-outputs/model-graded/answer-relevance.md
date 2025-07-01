@@ -2,7 +2,7 @@
 sidebar_label: Answer Relevance
 ---
 
-# Answer Relevance
+# Answer relevance
 
 The `answer-relevance` assertion evaluates whether an LLM's output is relevant to the original query. It uses a combination of embedding similarity and LLM evaluation to determine relevance.
 
@@ -26,7 +26,7 @@ The answer relevance checker:
 
 A higher threshold requires the output to be more closely related to the original query.
 
-### Example Configuration
+### Example configuration
 
 Here's a complete example showing how to use answer relevance:
 
@@ -43,7 +43,7 @@ tests:
         threshold: 0.8
 ```
 
-### Overriding the Providers
+### Overriding the providers
 
 Answer relevance uses two types of providers:
 
@@ -75,7 +75,7 @@ assert:
       embedding: cohere:embed-english-v3.0
 ```
 
-### Customizing the Prompt
+### Customizing the prompt
 
 You can customize the question generation prompt using the `rubricPrompt` property:
 

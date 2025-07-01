@@ -40,7 +40,7 @@ There are many models out there to choose from! In general, it's best to select 
 
 Note that [model-graded evals](/docs/configuration/expected-outputs/model-graded) are also a good choice for some of these evaluations, especially if you want to quickly tune the eval to your use case.
 
-## Toxicity and Hate Speech example
+## Toxicity and hate speech example
 
 This assertion uses [Roberta hate speech detection](https://huggingface.co/facebook/roberta-hate-speech-dynabench-r4-target) to determine whether an LLM output is potentially problematic:
 
@@ -78,7 +78,7 @@ tests:
       topic: jack fruits
 ```
 
-## PII detection example
+## Pii detection example
 
 This assertion uses [starpii](https://huggingface.co/bigcode/starpii) to determine whether an LLM output potentially contains PII:
 

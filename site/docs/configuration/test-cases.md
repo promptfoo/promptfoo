@@ -18,11 +18,11 @@ pagination_prev: configuration/prompts
 pagination_next: configuration/scenarios
 ---
 
-# Test Case Configuration
+# Test case configuration
 
 Define evaluation scenarios with variables, assertions, and test data.
 
-## Inline Tests
+## Inline tests
 
 The simplest way to define tests is directly in your config:
 
@@ -41,7 +41,7 @@ tests:
         value: '4'
 ```
 
-### Test Structure
+### Test structure
 
 Each test case can include:
 
@@ -62,7 +62,7 @@ tests:
       difficulty: easy
 ```
 
-## External Test Files
+## External test files
 
 For larger test suites, store tests in separate files:
 
@@ -79,7 +79,7 @@ tests:
   - file://edge_cases/*.yaml
 ```
 
-## CSV Format
+## Csv format
 
 CSV is ideal for bulk test data:
 
@@ -98,7 +98,7 @@ question,expectedAnswer
 
 Variables are automatically mapped from column headers.
 
-### CSV with Assertions
+### Csv with assertions
 
 Use special `__expected` columns for assertions:
 
@@ -116,7 +116,7 @@ question,__expected1,__expected2,__expected3
 "What is 2+2?","equals: 4","contains: four","javascript: output.length < 10"
 ```
 
-### Special CSV Columns
+### Special CSV columns
 
 | Column                            | Purpose                    | Example             |
 | --------------------------------- | -------------------------- | ------------------- |
@@ -155,7 +155,7 @@ promptfoo eval --filter-metadata difficulty=easy
 promptfoo eval --filter-metadata tags=ai
 ```
 
-### JSON in CSV
+### Json in CSV
 
 Include structured data:
 
@@ -171,11 +171,11 @@ prompts:
   - 'Query: {{query}}, Location: {{(context | load).location}}'
 ```
 
-## Dynamic Test Generation
+## Dynamic test generation
 
 Generate tests programmatically:
 
-### JavaScript/TypeScript
+### Javascript/TypeScript
 
 ```yaml title="promptfooconfig.yaml"
 tests: file://generate_tests.js
@@ -236,7 +236,7 @@ def create_tests():
     return test_cases
 ```
 
-### With Configuration
+### With configuration
 
 Pass configuration to generators:
 
@@ -259,9 +259,9 @@ def create_tests(config):
     return generate_test_cases(dataset, category, size)
 ```
 
-## JSON/JSONL Format
+## Json/jsonl format
 
-### JSON Array
+### Json array
 
 ```json title="tests.json"
 [
@@ -290,14 +290,14 @@ def create_tests(config):
 ]
 ```
 
-### JSONL (One test per line)
+### Jsonl (one test per line)
 
 ```jsonl title="tests.jsonl"
 {"vars": {"x": 5, "y": 3}, "assert": [{"type": "equals", "value": "8"}]}
 {"vars": {"x": 10, "y": 7}, "assert": [{"type": "equals", "value": "17"}]}
 ```
 
-## Loading Media Files
+## Loading media files
 
 Include images, PDFs, and other files as variables:
 
@@ -309,7 +309,7 @@ tests:
       data: file://data/config.yaml
 ```
 
-### Supported File Types
+### Supported file types
 
 | Type                    | Handling            | Usage             |
 | ----------------------- | ------------------- | ----------------- |
@@ -319,7 +319,7 @@ tests:
 | Text files              | Loaded as string    | Any use case      |
 | YAML/JSON               | Parsed to object    | Structured data   |
 
-### Example: Vision Model Test
+### Example: vision model test
 
 ```yaml
 tests:
@@ -350,9 +350,9 @@ In your prompt:
 ]
 ```
 
-## Best Practices
+## Best practices
 
-### 1. Organize Test Data
+### 1. organize test data
 
 ```
 project/
@@ -365,7 +365,7 @@ project/
     └── regression_tests.json
 ```
 
-### 2. Use Descriptive Names
+### 2. use descriptive names
 
 ```yaml
 tests:
@@ -376,7 +376,7 @@ tests:
       tone: 'formal'
 ```
 
-### 3. Group Related Tests
+### 3. group related tests
 
 ```yaml
 # Use metadata for organization
@@ -388,7 +388,7 @@ tests:
       priority: high
 ```
 
-### 4. Combine Approaches
+### 4. combine approaches
 
 ```yaml
 tests:
@@ -403,9 +403,9 @@ tests:
   - file://tests/generate_edge_cases.js
 ```
 
-## Common Patterns
+## Common patterns
 
-### A/B Testing Variables
+### A/b testing variables
 
 ```csv title="ab_tests.csv"
 message_style,greeting,__expected
@@ -414,7 +414,7 @@ message_style,greeting,__expected
 "friendly","Hello!","contains: Hello"
 ```
 
-### Error Handling Tests
+### Error handling tests
 
 ```yaml
 tests:
@@ -426,7 +426,7 @@ tests:
         value: 'provide more information'
 ```
 
-### Performance Tests
+### Performance tests
 
 ```yaml
 tests:
@@ -437,7 +437,7 @@ tests:
         threshold: 1000 # milliseconds
 ```
 
-## Loading from Google Sheets
+## Loading from Google sheets
 
 See [Google Sheets integration](/docs/configuration/guide#loading-tests-from-csv) for details on loading test data directly from spreadsheets.
 

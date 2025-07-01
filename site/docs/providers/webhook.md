@@ -13,7 +13,7 @@ providers:
   - webhook:http://example.com/webhook
 ```
 
-promptfoo will send an HTTP POST request with the following JSON payload:
+Promptfoo will send an HTTP POST request with the following JSON payload:
 
 ```json
 {

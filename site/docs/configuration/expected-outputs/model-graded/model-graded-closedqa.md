@@ -2,7 +2,7 @@
 sidebar_label: Model-graded Closed QA
 ---
 
-# Model-graded Closed QA
+# Model-graded closed qa
 
 `model-graded-closedqa` is a criteria-checking evaluation that uses OpenAI's public evals prompt to determine if an LLM output meets specific requirements.
 
@@ -28,7 +28,7 @@ Under the hood, `model-graded-closedqa` uses OpenAI's closed QA evaluation promp
 
 The assertion passes if the response ends with 'Y' and fails if it ends with 'N'.
 
-### Example Configuration
+### Example configuration
 
 Here's a complete example showing how to use model-graded-closedqa:
 
@@ -47,7 +47,7 @@ tests:
         value: Includes a practical real-world example
 ```
 
-### Overriding the Grader
+### Overriding the grader
 
 Like other model-graded assertions, you can override the default grader:
 
@@ -73,7 +73,7 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-4.1-mini
    ```
 
-### Customizing the Prompt
+### Customizing the prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property:
 

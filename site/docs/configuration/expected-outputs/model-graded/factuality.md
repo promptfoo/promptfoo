@@ -29,7 +29,7 @@ The factuality checker evaluates whether completion A (the LLM output) and refer
 
 By default, options A, B, C, and E are considered passing grades, while D is considered failing.
 
-## Example Configuration
+## Example configuration
 
 Here's a complete example showing how to use factuality checks:
 
@@ -52,7 +52,7 @@ tests:
         value: Albany is the capital city of New York state
 ```
 
-## Customizing Score Thresholds
+## Customizing score thresholds
 
 You can customize which factuality categories are considered passing by setting scores in your test configuration:
 
@@ -67,7 +67,7 @@ defaultTest:
       differButFactual: 1 # Score for category E (default: 1)
 ```
 
-## Overriding the Grader
+## Overriding the grader
 
 Like other model-graded assertions, you can override the default grader:
 
@@ -94,13 +94,13 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-4.1-mini
    ```
 
-## Customizing the Prompt
+## Customizing the prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property. The prompt has access to the following Nunjucks template variables:
 
 - `{{input}}`: The original prompt/question
 - `{{ideal}}`: The reference answer (from the `value` field)
-- `{{completion}}`: The LLM's actual response (provided automatically by promptfoo)
+- `{{completion}}`: The LLM's actual response (provided automatically by Promptfoo)
 
 Your custom prompt should instruct the model to either:
 
@@ -133,7 +133,7 @@ The factuality checker will parse either format:
 - A single letter response like "A" or "(A)"
 - A JSON object: `{"category": "A", "reason": "Detailed explanation..."}`
 
-## See Also
+## See also
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options
 - [Guide on LLM factuality](/docs/guides/factuality-eval)

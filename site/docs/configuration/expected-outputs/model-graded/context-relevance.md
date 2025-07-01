@@ -2,7 +2,7 @@
 sidebar_label: Context Relevance
 ---
 
-# Context Relevance
+# Context relevance
 
 The `context-relevance` assertion evaluates whether the retrieved context is relevant to the original query. This is crucial for RAG (Retrieval-Augmented Generation) applications to ensure that the retrieved information is actually useful for answering the question.
 
@@ -29,7 +29,7 @@ The context relevance checker:
 
 A higher threshold requires the context to be more closely related to the query.
 
-### Example Configuration
+### Example configuration
 
 Here's a complete example showing how to use context relevance in a RAG system:
 
@@ -55,7 +55,7 @@ tests:
         threshold: 0.9
 ```
 
-### Overriding the Grader
+### Overriding the grader
 
 Like other model-graded assertions, you can override the default grader:
 
@@ -81,7 +81,7 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-4.1-mini
    ```
 
-### Customizing the Prompt
+### Customizing the prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property:
 

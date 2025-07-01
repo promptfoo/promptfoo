@@ -3,7 +3,7 @@ sidebar_label: Overview
 sidebar_position: 1
 ---
 
-# Model Scanning
+# Model scanning
 
 ## Overview
 
@@ -37,7 +37,7 @@ ModelAudit helps identify these risks before models are deployed to production e
 
 ## Usage
 
-### Basic Command Structure
+### Basic command structure
 
 ```bash
 promptfoo scan-model [OPTIONS] PATH...
@@ -88,7 +88,7 @@ promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709
 | `--max-file-size`   | Maximum file size to scan in bytes [default: unlimited]          |
 | `--max-total-size`  | Maximum total bytes to scan before stopping [default: unlimited] |
 
-## Web Interface
+## Web interface
 
 Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual path selection, real-time progress tracking, and detailed results visualization.
 
@@ -101,7 +101,7 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 - Live scanning progress and tabbed results display with severity color coding
 - Scan history and automatic installation detection
 
-## Supported Model Formats
+## Supported model formats
 
 ModelAudit can scan:
 
@@ -130,7 +130,7 @@ ModelAudit can scan:
   - `https://hf.co/user/model`
   - `hf://user/model`
 
-## Security Checks Performed
+## Security checks performed
 
 The scanner looks for various security issues, including:
 
@@ -148,7 +148,7 @@ The scanner looks for various security issues, including:
 - **Weight Anomalies**: Statistical analysis to detect potential backdoors or trojans in neural networks
 - **Format Integrity**: Validating file format structure and preventing malformed file attacks
 
-## Interpreting Results
+## Interpreting results
 
 The scan results are classified by severity:
 
@@ -157,7 +157,7 @@ The scan results are classified by severity:
 - **INFO**: Informational findings, not necessarily security concerns
 - **DEBUG**: Additional details (only shown with `--verbose`)
 
-## Integration in Workflows
+## Integration in workflows
 
 ModelAudit is particularly useful in CI/CD pipelines when incorporated with Promptfoo:
 
@@ -171,7 +171,7 @@ if [ $? -ne 0 ]; then
 fi
 ```
 
-### Exit Codes
+### Exit codes
 
 ModelAudit returns specific exit codes for automation:
 

@@ -30,7 +30,7 @@ The `promptfoo` command line utility supports the following subcommands:
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
 - `delete <id>` - Delete a resource by its ID (currently, just evaluations)
-- `validate` - Validate a promptfoo configuration file.
+- `validate` - Validate a Promptfoo configuration file.
 - `feedback <message>` - Send feedback to the Promptfoo developers.
 - `import <filepath>` - Import an eval file from JSON format.
 - `export <evalId>` - Export an eval record to JSON format.
@@ -45,7 +45,7 @@ The `promptfoo` command line utility supports the following subcommands:
   - `redteam report`
   - `redteam plugins`
 
-## Common Options
+## Common options
 
 Most commands support the following common options:
 
@@ -79,7 +79,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--no-cache`                        | Do not read or write results to disk cache                                  |
 | `--no-progress-bar`                 | Do not show progress bar                                                    |
 | `--no-table`                        | Do not output table in CLI                                                  |
-| `--no-write`                        | Do not write results to promptfoo directory                                 |
+| `--no-write`                        | Do not write results to Promptfoo directory                                 |
 | `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html)             |
 | `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                |
 | `--prompt-prefix <path>`            | Prefix prepended to every prompt                                            |
@@ -116,7 +116,7 @@ Start a browser UI for visualization of results.
 | `-p, --port <number>` | Port number for the local server        |
 | `-y, --yes`           | Skip confirmation and auto-open the URL |
 
-If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
+If you've used `PROMPTFOO_CONFIG_DIR` to override the Promptfoo output directory, run `promptfoo view [directory]`.
 
 ## `promptfoo share [evalId]`
 
@@ -137,7 +137,7 @@ Manage cache.
 
 ## `promptfoo feedback <message>`
 
-Send feedback to the promptfoo developers.
+Send feedback to the Promptfoo developers.
 
 | Option    | Description      |
 | --------- | ---------------- |
@@ -190,7 +190,7 @@ Export an eval record to JSON format. To export the most recent, use evalId `lat
 
 ## `promptfoo validate`
 
-Validate a promptfoo configuration file to ensure it follows the correct schema and structure.
+Validate a Promptfoo configuration file to ensure it follows the correct schema and structure.
 
 | Option                    | Description                                                             |
 | ------------------------- | ----------------------------------------------------------------------- |
@@ -231,17 +231,17 @@ Manage authentication for cloud features.
 
 ### `promptfoo auth login`
 
-Login to the promptfoo cloud.
+Login to the Promptfoo cloud.
 
 | Option                | Description                                                                |
 | --------------------- | -------------------------------------------------------------------------- |
 | `-o, --org <orgId>`   | The organization ID to login to                                            |
-| `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
+| `-h, --host <host>`   | The host of the Promptfoo instance (API URL if different from the app URL) |
 | `-k, --api-key <key>` | Login using an API key                                                     |
 
 ### `promptfoo auth logout`
 
-Logout from the promptfoo cloud.
+Logout from the Promptfoo cloud.
 
 ### `promptfoo auth whoami`
 
@@ -489,7 +489,7 @@ List all available red team plugins.
 | `--ids-only` | Show only plugin IDs without descriptions |
 | `--default`  | Show only the default plugins             |
 
-## Specifying Command Line Options in Config
+## Specifying command line options in config
 
 Many command line options can be specified directly in your `promptfooconfig.yaml` file using the `commandLineOptions` section. This is convenient for options you frequently use or want to set as defaults for your project.
 
@@ -515,7 +515,7 @@ commandLineOptions:
 
 With this configuration, you can simply run `promptfoo eval` without specifying these options on the command line. You can still override any of these settings by providing the corresponding flag when running the command.
 
-## ASCII-only outputs
+## Ascii-only outputs
 
 To disable terminal colors for printed outputs, set `FORCE_COLOR=0` (this is supported by the [chalk](https://github.com/chalk/chalk) library).
 
@@ -559,7 +559,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_SELF_HOSTED`                | Enables self-hosted mode. When true, disables OS environment variables in templates (only config `env:` values available), disables telemetry, and modifies other behaviors for controlled environments | `false`                       |
 
 :::tip
-promptfoo will load environment variables from the `.env` in your current working directory.
+Promptfoo will load environment variables from the `.env` in your current working directory.
 :::
 
 :::tip

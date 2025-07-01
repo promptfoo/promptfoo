@@ -2,11 +2,11 @@
 sidebar_label: WatsonX
 ---
 
-# WatsonX
+# Watsonx
 
 [IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
 
-## Supported Models
+## Supported models
 
 - **Granite Series**
   - `granite-20b-multilingual`
@@ -108,7 +108,7 @@ To install the WatsonX provider, use the following steps:
          serviceUrl: https://us-south.ml.cloud.ibm.com
    ```
 
-### Usage Examples
+### Usage examples
 
 Once configured, you can use the WatsonX provider to generate text responses based on prompts. Here’s an example of using the **Granite 13B Chat V2** model to answer a question:
 

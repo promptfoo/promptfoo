@@ -2,11 +2,11 @@
 sidebar_label: Phi vs Llama
 ---
 
-# Phi vs Llama: Benchmark on your own data
+# Phi vs llama: benchmark on your own data
 
 When choosing between LLMs like Phi 3 and Llama 3.1, it's important to benchmark them on your specific use cases rather than relying solely on public benchmarks. When models are in the same ballpark, the specific application makes a big difference.
 
-This guide walks you through the steps to set up a comprehensive benchmark of Llama and Phi using promptfoo + Ollama.
+This guide walks you through the steps to set up a comprehensive benchmark of Llama and Phi using Promptfoo + Ollama.
 
 In the end, you'll be able to create a side-by-side evaluation view that looks like this:
 
@@ -20,7 +20,7 @@ Before starting, ensure you have the following:
 - Ollama set up and running (see [Ollama documentation](/docs/providers/ollama))
 - Your Ollama API base URL and port (default is `http://localhost:11434`)
 
-## Step 1: Initialize
+## Step 1: initialize
 
 First, create a new directory for your benchmark:
 
@@ -29,7 +29,7 @@ npx promptfoo@latest init phi-vs-llama
 cd phi-vs-llama
 ```
 
-## Step 2: Configure
+## Step 2: configure
 
 Open `promptfooconfig.yaml` and set up the models you want to compare. We'll use the `ollama:chat:phi3` and `ollama:chat:llama3` endpoints.
 
@@ -62,7 +62,7 @@ providers:
       num_predict: 128
 ```
 
-## Step 3: Build a test set
+## Step 3: build a test set
 
 Test cases should be representative of your application's use cases. Here are some example test cases:
 
@@ -120,7 +120,7 @@ tests:
         value: Creative storytelling
 ```
 
-## Step 4: Run the benchmark
+## Step 4: run the benchmark
 
 Execute the comparison using the following command:
 
@@ -138,7 +138,7 @@ This will open a web viewer showing a side-by-side comparison of the models' per
 
 ![phi vs llama](/img/docs/phi-vs-llama.png)
 
-## Step 5: Analyze the results
+## Step 5: analyze the results
 
 After running the evaluation, analyze the results to determine which model performs best for your specific use cases. Look for patterns in the output, such as accuracy, creativity, and adherence to the prompt.
 

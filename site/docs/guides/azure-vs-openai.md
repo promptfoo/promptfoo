@@ -2,7 +2,7 @@
 sidebar_label: OpenAI vs Azure benchmark
 ---
 
-# OpenAI vs Azure: How to benchmark
+# Openai vs Azure: how to benchmark
 
 Whether you use GPT through the OpenAI or Azure APIs, the results are pretty similar. But there are some key differences:
 
@@ -33,7 +33,7 @@ OPENAI_API_KEY='...'
 AZURE_API_KEY='...'
 ```
 
-## Step 1: Set up the models
+## Step 1: set up the models
 
 Create a new directory for your comparison project and initialize it:
 
@@ -70,7 +70,7 @@ providers:
       max_tokens: 128
 ```
 
-## Step 2: Create prompts and test cases
+## Step 2: create prompts and test cases
 
 Define the prompts and test cases you want to use for the comparison. In this case, we're just going to test a single prompt, but we'll add a few test cases:
 
@@ -87,7 +87,7 @@ tests:
       message: 'Write a poem about the sea.'
 ```
 
-## Step 3: Run the comparison
+## Step 3: run the comparison
 
 Execute the comparison using the `promptfoo eval` command:
 
@@ -99,7 +99,7 @@ This will run the test cases against both models and output the results.
 
 We've added the `--no-cache` directive because we care about timings (in order to see which provider is faster), so we don't want any
 
-## Step 4: Review results and analyze
+## Step 4: review results and analyze
 
 After running the eval command, `promptfoo` will generate a report with the responses from both models.
 

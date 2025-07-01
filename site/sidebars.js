@@ -402,27 +402,6 @@ const sidebars = {
       id: 'faq',
     },
   ],
-  // Within enterprise docs, show only the following sidebar
-  enterprise: [
-    {
-      type: 'doc',
-      id: 'enterprise/index',
-    },
-    { type: 'doc', id: 'enterprise/authentication' },
-    { type: 'doc', id: 'enterprise/service-accounts' },
-    { type: 'doc', id: 'enterprise/teams' },
-    { type: 'doc', id: 'enterprise/red-teams' },
-    { type: 'doc', id: 'enterprise/findings' },
-    { type: 'doc', id: 'enterprise/webhooks' },
-    { type: 'doc', id: 'enterprise/audit-logging' },
-    {
-      type: 'link',
-      label: 'API Reference',
-      href: '/docs/api-reference',
-    },
-  ],
-  // Within red team docs, show only the following sidebar
-  redTeamSidebar,
 };
 
 module.exports = sidebars;

@@ -2,7 +2,7 @@
 sidebar_label: llamafile
 ---
 
-# llamafile
+# Llamafile
 
 Llamafile has an [OpenAI-compatible HTTP endpoint](https://github.com/Mozilla-Ocho/llamafile?tab=readme-ov-file#json-api-quickstart), so you can override the [OpenAI provider](/docs/providers/openai/) to talk to your llamafile server.
 

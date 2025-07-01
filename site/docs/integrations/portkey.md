@@ -24,13 +24,13 @@ To reference prompts in Portkey:
          topic: ...
    ```
 
-Variables from your promptfoo test cases will be automatically plugged into the Portkey prompt as variables. The resulting prompt will be rendered and returned to promptfoo, and used as the prompt for the test case.
+Variables from your Promptfoo test cases will be automatically plugged into the Portkey prompt as variables. The resulting prompt will be rendered and returned to Promptfoo, and used as the prompt for the test case.
 
-Note that promptfoo does not follow the temperature, model, and other parameters set in Portkey. You must set them in the `providers` configuration yourself.
+Note that Promptfoo does not follow the temperature, model, and other parameters set in Portkey. You must set them in the `providers` configuration yourself.
 
-## Using Portkey gateway
+## Using portkey gateway
 
-The Portkey AI gateway is directly supported by promptfoo. See also [portkey's documentation on integrating promptfoo](https://portkey.ai/docs/integrations/libraries/promptfoo).
+The Portkey AI gateway is directly supported by promptfoo. See also [portkey's documentation on integrating Promptfoo](https://portkey.ai/docs/integrations/libraries/promptfoo).
 
 Example:
 

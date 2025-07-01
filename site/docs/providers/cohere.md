@@ -10,7 +10,7 @@ The `cohere` provider is an interface to Cohere AI's [chat inference API](https:
 
 First, set the `COHERE_API_KEY` environment variable with your Cohere API key.
 
-Next, edit the promptfoo configuration file to point to the Cohere provider.
+Next, edit the Promptfoo configuration file to point to the Cohere provider.
 
 - `cohere:<model name>` - uses the specified Cohere model (e.g., `command`, `command-light`).
 
@@ -81,7 +81,7 @@ connectors:
   - id: web-search
 ```
 
-## Embedding Configuration
+## Embedding configuration
 
 Cohere provides embedding capabilities that can be used for various natural language processing tasks, including similarity comparisons. To use Cohere's embedding model in your evaluations, you can configure it as follows:
 

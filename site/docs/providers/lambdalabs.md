@@ -2,7 +2,7 @@
 sidebar_label: Lambda Labs
 ---
 
-# Lambda Labs
+# Lambda labs
 
 This provider enables you to use Lambda Labs models through their [Inference API](https://docs.lambda.ai/public-cloud/lambda-inference-api/).
 
@@ -25,7 +25,7 @@ providers:
       apiKey: your_api_key_here
 ```
 
-## Provider Format
+## Provider format
 
 The Lambda Labs provider supports the following formats:
 
@@ -33,7 +33,7 @@ The Lambda Labs provider supports the following formats:
 - `lambdalabs:completion:<model name>` - Uses any model with the completion interface
 - `lambdalabs:<model name>` - Defaults to the chat completion interface
 
-## Available Models
+## Available models
 
 The Lambda Labs Inference API officially supports these models:
 
@@ -71,7 +71,7 @@ The provider accepts all standard OpenAI parameters:
 - `frequency_penalty` - Penalizes frequent tokens
 - `presence_penalty` - Penalizes new tokens based on presence in text
 
-## Example Configuration
+## Example configuration
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -102,7 +102,7 @@ tests:
         value: 'labeled data'
 ```
 
-## See Also
+## See also
 
 - [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Lambda Labs
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers

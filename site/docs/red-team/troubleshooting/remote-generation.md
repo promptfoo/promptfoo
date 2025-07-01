@@ -2,11 +2,11 @@
 sidebar_label: Remote Generation Errors
 ---
 
-# Remote Generation Errors
+# Remote generation errors
 
 You may encounter connection issues due to corporate firewalls or security policies. Since our service generates potentially harmful outputs for testing purposes, some organizations' security policies may block access to our API endpoints.
 
-## Checking Connectivity
+## Checking connectivity
 
 To verify if you can reach our API, try accessing Promptfoo's version endpoint:
 
@@ -24,14 +24,14 @@ You should receive a response like:
 
 If this request fails or times out, it likely means your network is blocking access to our API. You can also try opening `https://api.promptfoo.app/version` in your browser to see if you can reach the page.
 
-## Common Solutions
+## Common solutions
 
-1. **Check with IT**: Since promptfoo generates adversarial content for security testing, our API endpoints may be blocked by corporate security policies. Contact your IT department to:
+1. **Check with IT**: Since Promptfoo generates adversarial content for security testing, our API endpoints may be blocked by corporate security policies. Contact your IT department to:
    - Allowlist `api.promptfoo.app`
    - Allow HTTPS traffic to our endpoints
    - Review security logs for blocked requests
 
-2. **Use a Different Network**: Try running promptfoo on:
+2. **Use a Different Network**: Try running Promptfoo on:
    - A personal network
    - Mobile hotspot
    - Development environment outside corporate network
@@ -43,7 +43,7 @@ If this request fails or times out, it likely means your network is blocking acc
    promptfoo eval
    ```
 
-## Alternative Options
+## Alternative options
 
 If you cannot get network access to our remote generation service, you can:
 
@@ -53,6 +53,6 @@ If you cannot get network access to our remote generation service, you can:
 
 See our [configuration guide](/docs/configuration/guide/) for more details on these options.
 
-## Getting Help
+## Getting help
 
 If you continue experiencing issues, [contact us](/contact/) for enterprise support.

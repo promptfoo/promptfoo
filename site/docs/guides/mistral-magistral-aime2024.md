@@ -1,6 +1,6 @@
 ---
-title: Recreating Mistral Magistral AIME2024 Benchmarks in promptfoo
-description: Reproduce Mistral's Magistral 73.6% AIME2024 mathematical reasoning benchmark using promptfoo with a simple evaluation setup comparing Magistral Medium vs Small.
+title: Recreating Mistral Magistral AIME2024 Benchmarks in Promptfoo
+description: Reproduce Mistral's Magistral 73.6% AIME2024 mathematical reasoning benchmark using Promptfoo with a simple evaluation setup comparing Magistral Medium vs Small.
 image: /img/docs/mistral-magistral-aime2024-evaluation-results.png
 keywords:
   [
@@ -8,12 +8,12 @@ keywords:
     aime2024,
     mathematical reasoning benchmark,
     mistral comparison,
-    promptfoo evaluation,
+    Promptfoo evaluation,
   ]
 sidebar_label: Magistral AIME2024 Benchmark
 ---
 
-# Recreating Mistral Magistral AIME2024 Benchmarks
+# Recreating mistral magistral aime2024 benchmarks
 
 Mistral's [Magistral models](https://mistral.ai/news/magistral/) achieved **73.6% on AIME2024** (Medium) and **70.7%** (Small) on mathematical reasoning problems. This guide shows you how to reproduce these benchmark results using promptfoo.
 
@@ -26,7 +26,7 @@ npx promptfoo@latest eval -c mistral/promptfooconfig.aime2024.yaml
 
 :::
 
-## The Benchmark Setup
+## The benchmark setup
 
 Mistral's published results:
 
@@ -37,11 +37,11 @@ Note: Our evaluation calls each model once per problem. Mistral's highest scores
 
 ## Prerequisites
 
-- [promptfoo CLI installed](/docs/installation)
+- [Promptfoo CLI installed](/docs/installation)
 - Mistral API key: `export MISTRAL_API_KEY=your_key`
 - Hugging Face token: `export HF_TOKEN=your_token` ([get one here](https://huggingface.co/settings/tokens))
 
-## Step 1: Create the Evaluation
+## Step 1: create the evaluation
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -89,9 +89,9 @@ defaultTest:
         Grade as FAIL if the final answer is incorrect, regardless of the reasoning quality.
 ```
 
-### Understanding the Configuration
+### Understanding the configuration
 
-This configuration demonstrates several key promptfoo concepts:
+This configuration demonstrates several key Promptfoo concepts:
 
 **Prompts**: The prompt template includes a `{{question}}` variable that gets populated from the dataset. You can modify this prompt to test different reasoning approaches - for example, you might add "Show your work clearly" or "Use multiple solution methods."
 
@@ -114,7 +114,7 @@ prompts:
 
 :::
 
-## Step 2: Run the Benchmark
+## Step 2: run the benchmark
 
 ```bash
 npx promptfoo@latest eval
@@ -125,32 +125,32 @@ You should see results showing Magistral Medium outperforming Magistral Small on
 
 ![Magistral AIME2024 Benchmark Results](/img/docs/mistral-magistral-aime2024-evaluation-results.png)
 
-## Understanding the Results
+## Understanding the results
 
-### What You'll See
+### What you'll see
 
 - **Accuracy comparison** between Magistral Medium and Small on exact answer matching
 - **Extended reasoning** traces using the full 40k token context for complex problems
 - **Performance on challenging problems** requiring multi-step mathematical logic
 
-### Expected Performance
+### Expected performance
 
 With single evaluations and strict answer matching (vs Mistral's 64-vote majority):
 
 - **Magistral Medium**: ~70-75% accuracy on AIME2024 problems
 - **Magistral Small**: ~65-70% accuracy on AIME2024 problems
 
-### How the Evaluation Works
+### How the evaluation works
 
 The evaluation process:
 
-1. **Dataset Loading**: promptfoo automatically downloads the AIME2024 dataset from Hugging Face, which contains 30 mathematical problems with verified answers.
+1. **Dataset Loading**: Promptfoo automatically downloads the AIME2024 dataset from Hugging Face, which contains 30 mathematical problems with verified answers.
 
 2. **Prompt Injection**: Each problem's `question` gets inserted into your prompt template, and the model generates a solution.
 
 3. **LLM-Based Grading**: Instead of simple string matching, the `llm-rubric` uses an LLM evaluator to assess whether the response demonstrates correct mathematical reasoning and arrives at the right answer.
 
-4. **Results Aggregation**: promptfoo calculates pass rates, shows individual responses, and highlights where each model succeeded or failed.
+4. **Results Aggregation**: Promptfoo calculates pass rates, shows individual responses, and highlights where each model succeeded or failed.
 
 The LLM rubric is particularly important here because mathematical solutions can be expressed in many ways - the evaluator can recognize correct math even if the formatting varies.
 
@@ -180,7 +180,7 @@ defaultTest:
 
 :::
 
-### About AIME Problems
+### About aime problems
 
 The **American Invitational Mathematics Examination (AIME)** is a prestigious mathematics competition where:
 
@@ -189,7 +189,7 @@ The **American Invitational Mathematics Examination (AIME)** is a prestigious ma
 - **Invitation only** - top 2.5% of AMC 10 and top 5% of AMC 12 students qualify
 - **Subject areas**: Algebra, Geometry, Number Theory, and Combinatorics
 
-#### Example AIME 2024 Problem
+#### Example aime 2024 problem
 
 :::note AIME 2024 Problem 4
 
@@ -207,7 +207,7 @@ Then the value of `|log₂(x⁴y³z²)|` is `m/n` where `m` and `n` are relative
 
 This problem requires logarithmic manipulation, algebraic substitution, and multi-step verification to reach the final answer.
 
-## Scaling the Benchmark
+## Scaling the benchmark
 
 To test more problems or reproduce the full benchmark:
 
@@ -228,16 +228,16 @@ providers:
 # Run multiple times and aggregate results manually
 ```
 
-## Key Insights
+## Key insights
 
-### Why Magistral Excels at AIME
+### Why magistral excels at aime
 
 1. **Extended Context**: 40k token budget allows for detailed mathematical reasoning
 2. **Transparent Thinking**: Shows complete step-by-step mathematical work
 3. **Problem Decomposition**: Breaks complex problems into manageable steps
 4. **Mathematical Fluency**: Strong grasp of advanced mathematical concepts
 
-## Working Example
+## Working example
 
 The complete example is available in our repository:
 
@@ -249,7 +249,7 @@ cd mistral
 npx promptfoo@latest eval -c promptfooconfig.aime2024.yaml
 ```
 
-## See Also
+## See also
 
 - [AIME2024 Dataset](https://huggingface.co/datasets/sea-snell/aime-2024)
 - [Mistral Magistral Announcement](https://mistral.ai/news/magistral/)

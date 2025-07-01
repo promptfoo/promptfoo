@@ -2,7 +2,7 @@
 sidebar_label: Indirect Prompt Injection
 ---
 
-# Indirect Prompt Injection Plugin
+# Indirect prompt injection plugin
 
 The Indirect Prompt Injection red teaming plugin tests an AI system's vulnerability to attacks where untrusted content is injected into the prompt, potentially influencing the model's behavior.
 
@@ -30,12 +30,12 @@ redteam:
         indirectInjectionVar: 'name'
 ```
 
-## Difference between Direct and Indirect Prompt Injection
+## Difference between direct and indirect prompt injection
 
 **Direct Prompt Injection:** The user provides a malicious prompt that instructs the LLM to behave in a harmful or unintended way. This is the classic form of prompt injection. Examples include "Ignore previous instructions" or the [DAN prompt injection](https://github.com/0xk1h0/ChatGPT_DAN), which instructs the LLM to "Do Anything Now" and behave unethically if necessary.
 
 **Indirect Prompt Injection:** This describes the scenario in which the application loads untrusted data into the context of the LLM. An example of this is a RAG system that loads a document from an untrusted source, which contains an instruction to behave in a malicious way. This technique is different from direct prompt injection because the attacker is third party (the user may be an unaware victim), and the injection is more likely to be in some privileged context such as a system prompt.
 
-## Related Concepts
+## Related concepts
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

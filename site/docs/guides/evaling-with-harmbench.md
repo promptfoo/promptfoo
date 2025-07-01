@@ -2,7 +2,7 @@
 sidebar_label: Evaluating LLM safety with HarmBench
 ---
 
-# Evaluating LLM safety with HarmBench
+# Evaluating LLM safety with harmbench
 
 Recent research has shown that even the most advanced LLMs [remain vulnerable](https://unit42.paloaltonetworks.com/jailbreaking-deepseek-three-techniques/) to adversarial attacks. Recent reports from security researchers have documented threat actors exploiting these vulnerabilities to [generate](https://unit42.paloaltonetworks.com/using-llms-obfuscate-malicious-javascript/) [malware](https://www.proofpoint.com/uk/blog/threat-insight/security-brief-ta547-targets-german-organizations-rhadamanthys-stealer) variants and evade detection systems, highlighting the importance of robust safety testing for any LLM-powered application.
 
@@ -60,7 +60,7 @@ By providing some additional context to OpenAI (from our application), you can o
 
 Promptfoo has built-in support for a wide variety of models such as those from OpenAI, Anthropic, Hugging Face, Deepseek, Ollama and more.
 
-### Ollama Models
+### Ollama models
 
 First, start your Ollama server and pull the model you want to test:
 
@@ -93,7 +93,7 @@ targets:
         myPrompt: '{{prompt}}'
 ```
 
-## Conclusion and Next Steps
+## Conclusion and next steps
 
 While HarmBench provides valuable insights through its static dataset, it's most effective when combined with other red teaming approaches.
 

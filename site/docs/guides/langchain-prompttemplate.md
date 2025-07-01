@@ -2,11 +2,11 @@
 sidebar_label: Using LangChain PromptTemplate with Promptfoo
 ---
 
-# Using LangChain PromptTemplate with Promptfoo
+# Using langchain prompttemplate with Promptfoo
 
 LangChain PromptTemplate is commonly used to format prompts with injecting variables. Promptfoo allows you to evaluate and test your prompts systematically. Combining the two can streamline your workflow, enabling you to test the prompts that use LangChain PromptTemplate in application code directly within Promptfoo.
 
-## Example of LangChain PromptTemplate
+## Example of langchain prompttemplate
 
 For example, this is one way a prompt could be saved in a TypeScript/JavaScript application.
 

@@ -9,7 +9,7 @@ Use the `guardrails` assert type to ensure that LLM outputs pass safety checks b
 
 This assertion checks both input and output content against provider guardrails. Input guardrails typically detect prompt injections and jailbreak attempts, while output guardrails check for harmful content categories like hate speech, violence, or inappropriate material based on your guardrails configuration. The assertion verifies that neither the input nor output have been flagged for safety concerns.
 
-## Provider Support
+## Provider support
 
 The guardrails assertion is currently supported on:
 
@@ -18,7 +18,7 @@ The guardrails assertion is currently supported on:
 
 Other providers do not currently support this assertion type. The assertion will pass with a score of 0 for unsupported providers.
 
-## Basic Usage
+## Basic usage
 
 Here's a basic example of using the guardrail assertion:
 
@@ -51,7 +51,7 @@ Pass/fail logic of the assertion:
 For Azure, if the prompt fails the input content safety filter, the response status is 400 with code `content_filter`. In this case, the guardrails assertion passes.
 :::
 
-## Red Team Configuration
+## Red team configuration
 
 When using guardrails assertions for red teaming scenarios, you should specify the `guardrails` property:
 

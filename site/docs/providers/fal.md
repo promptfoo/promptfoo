@@ -2,10 +2,10 @@
 title: fal.ai Provider
 description: Connect Promptfoo to fal.ai image generation models for AI image evaluation and testing
 sidebar_position: 42
-keywords: [fal.ai, image generation, AI images, flux, imagen, ideogram, promptfoo provider]
+keywords: [fal.ai, image generation, AI images, flux, imagen, ideogram, Promptfoo provider]
 ---
 
-# fal.ai
+# Fal.AI
 
 The `fal` provider supports the [fal.ai](https://fal.ai) inference API using the [fal-js](https://github.com/fal-ai/fal-js) client, providing a native experience for using fal.ai models in your evaluations.
 
@@ -24,11 +24,11 @@ The `fal` provider supports the [fal.ai](https://fal.ai) inference API using the
    export FAL_KEY=your_api_key_here
    ```
 
-## Provider Format
+## Provider format
 
 To run a model, specify the model type and model name: `fal:<model_type>:<model_name>`.
 
-### Featured Models
+### Featured models
 
 - `fal:image:fal-ai/flux-pro/v1.1-ultra` - Professional-grade image generation with up to 2K resolution
 - `fal:image:fal-ai/flux/schnell` - Fast, high-quality image generation in 1-4 steps
@@ -40,7 +40,7 @@ Browse the complete [model gallery](https://fal.ai/models) for the latest models
 
 :::
 
-## Popular Models
+## Popular models
 
 **For speed**: `fal:image:fal-ai/flux/schnell` - Ultra-fast generation in 1-4 steps  
 **For quality**: `fal:image:fal-ai/flux/dev` - High-quality 12B parameter model  
@@ -53,7 +53,7 @@ Browse the complete [model gallery](https://fal.ai/models) for the latest models
 
 Browse all models at [fal.ai/models](https://fal.ai/models?categories=text-to-image).
 
-## Environment Variables
+## Environment variables
 
 | Variable  | Description                              |
 | --------- | ---------------------------------------- |
@@ -61,7 +61,7 @@ Browse all models at [fal.ai/models](https://fal.ai/models?categories=text-to-im
 
 ## Configuration
 
-Configure the fal provider in your promptfoo configuration file. Here's an example using [`fal-ai/flux/schnell`](https://fal.ai/models/fal-ai/flux/schnell):
+Configure the fal provider in your Promptfoo configuration file. Here's an example using [`fal-ai/flux/schnell`](https://fal.ai/models/fal-ai/flux/schnell):
 
 :::info
 
@@ -69,7 +69,7 @@ Configuration parameters vary by model. For example, `fast-sdxl` supports additi
 
 :::
 
-### Basic Setup
+### Basic setup
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -83,7 +83,7 @@ providers:
       seed: 6252023
 ```
 
-### Advanced Options
+### Advanced options
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -97,7 +97,7 @@ providers:
         height: 1024
 ```
 
-### Configuration Options
+### Configuration options
 
 | Parameter             | Type   | Description                             | Example             |
 | --------------------- | ------ | --------------------------------------- | ------------------- |
@@ -108,7 +108,7 @@ providers:
 | `seed`                | number | Sets a seed for reproducible results    | `42`                |
 | `guidance_scale`      | number | Prompt adherence (model-dependent)      | `3.5` to `15`       |
 
-## See Also
+## See also
 
 - [Model gallery](https://fal.ai/models)
 - [API documentation](https://docs.fal.ai/)

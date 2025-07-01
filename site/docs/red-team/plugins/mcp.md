@@ -2,7 +2,7 @@
 sidebar_label: MCP Plugin
 ---
 
-# MCP Plugin
+# Mcp plugin
 
 ## Overview
 
@@ -19,7 +19,7 @@ MCP enables AI models to use tools, maintain context, and perform complex intera
 3. Techniques that manipulate tool usage in unintended ways
 4. Methods to bypass security controls in MCP implementations
 
-## How it Works
+## How it works
 
 The MCP Plugin:
 
@@ -28,7 +28,7 @@ The MCP Plugin:
 3. Evaluates the robustness of function calling implementations
 4. Tests tool invocation boundaries and privilege controls
 
-## Attack Vectors
+## Attack vectors
 
 The plugin tests for the following MCP-specific attack vectors:
 
@@ -43,7 +43,7 @@ The plugin tests for the following MCP-specific attack vectors:
 
 ## Configuration
 
-Add the following to your promptfoo configuration:
+Add the following to your Promptfoo configuration:
 
 ```yaml
 redteam:
@@ -95,7 +95,7 @@ redteam:
     - jailbreak
 ```
 
-## Working With Results
+## Working with results
 
 The test results will show:
 
@@ -119,7 +119,7 @@ To protect against MCP-specific attacks:
 7. Implement rate limiting for tool calls
 8. Separate system prompts from user-accessible memory
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Memory Poisoning](/docs/red-team/plugins/memory-poisoning)

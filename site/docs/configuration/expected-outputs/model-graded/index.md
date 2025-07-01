@@ -4,7 +4,7 @@ sidebar_position: 7
 
 # Model-graded metrics
 
-promptfoo supports several types of model-graded assertions:
+Promptfoo supports several types of model-graded assertions:
 
 Output-based:
 
@@ -286,7 +286,7 @@ defaultTest:
       ]
 ```
 
-#### select-best rubric prompt
+#### Select-best rubric prompt
 
 For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string). It expects the LLM output to contain the index of the winning output.
 

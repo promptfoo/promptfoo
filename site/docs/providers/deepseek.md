@@ -2,7 +2,7 @@
 sidebar_label: DeepSeek
 ---
 
-# DeepSeek
+# Deepseek
 
 [DeepSeek](https://platform.deepseek.com/) provides an OpenAI-compatible API for their language models, with specialized models for both general chat and advanced reasoning tasks. The DeepSeek provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
 
@@ -28,7 +28,7 @@ providers:
       max_tokens: 8000
 ```
 
-### Configuration Options
+### Configuration options
 
 - `temperature`
 - `max_tokens`
@@ -36,7 +36,7 @@ providers:
 - `stream`
 - `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
 
-## Available Models
+## Available models
 
 :::note
 
@@ -44,14 +44,14 @@ The API model names are aliases that automatically point to the latest versions:
 
 :::
 
-### deepseek-chat (DeepSeek-V3)
+### Deepseek-chat (deepseek-v3)
 
 - General purpose model for conversations and content
 - 64K context window, 8K output tokens
 - Input: $0.07/1M (cache), $0.27/1M (no cache)
 - Output: $1.10/1M
 
-### deepseek-reasoner (DeepSeek-R1)
+### Deepseek-reasoner (deepseek-r1)
 
 - Specialized for reasoning and problem-solving
 - 64K context, 32K reasoning tokens, 8K output tokens
@@ -65,7 +65,7 @@ The reasoning model does not support `temperature`, `top_p`, `presence_penalty`,
 
 :::
 
-## Example Usage
+## Example usage
 
 Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
 
@@ -87,7 +87,7 @@ tests:
       math_problem: 'What is the derivative of x^3 + 2x with respect to x?'
 ```
 
-### Controlling Reasoning Output
+### Controlling reasoning output
 
 The DeepSeek-R1 model (deepseek-reasoner) includes detailed reasoning steps in its output. You can control whether this reasoning content is shown using the `showThinking` parameter:
 
@@ -110,13 +110,13 @@ When set to `false`, only the final answer is included in the output. This is us
 
 See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 
-## API Details
+## Api details
 
 - Base URL: `https://api.deepseek.com/v1`
 - OpenAI-compatible API format
 - Full [API documentation](https://platform.deepseek.com/docs)
 
-## See Also
+## See also
 
 - [OpenAI Provider](/docs/providers/openai/) - Compatible configuration options
 - [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model

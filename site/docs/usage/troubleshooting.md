@@ -39,9 +39,9 @@ export PROMPTFOO_STRIP_METADATA=true
 
 You can use any combination of these variables to optimize memory usage while preserving the data you need.
 
-### Increase Node.js memory limit
+### Increase node.js memory limit
 
-If you're still encountering memory issues after trying the above options, you can increase the amount of memory available to promptfoo by setting the `NODE_OPTIONS` environment variable:
+If you're still encountering memory issues after trying the above options, you can increase the amount of memory available to Promptfoo by setting the `NODE_OPTIONS` environment variable:
 
 ```bash
 # 8192 MB is 8 GB. Set this to an appropriate value for your machine.
@@ -54,7 +54,7 @@ When working with complex data structures in templates, you might encounter issu
 
 ### `[object Object]` appears in outputs
 
-If you see `[object Object]` in your LLM outputs or grading results, this means JavaScript objects are being converted to their string representation without proper serialization. By default, promptfoo automatically stringifies objects to prevent this issue.
+If you see `[object Object]` in your LLM outputs or grading results, this means JavaScript objects are being converted to their string representation without proper serialization. By default, Promptfoo automatically stringifies objects to prevent this issue.
 
 **Example problem:**
 
@@ -118,9 +118,9 @@ NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
 the module (for instance, using `npm rebuild` or `npm install`).
 ```
 
-This happens because promptfoo uses native code modules (like better-sqlite3) that need to be compiled specifically for your Node.js version.
+This happens because Promptfoo uses native code modules (like better-sqlite3) that need to be compiled specifically for your Node.js version.
 
-### Solution: Remove npx cache and reinstall
+### Solution: remove npx cache and reinstall
 
 To fix this issue, run this single command:
 
@@ -128,7 +128,7 @@ To fix this issue, run this single command:
 rm -rf ~/.npm/_npx && npx -y promptfoo@latest
 ```
 
-This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
+This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of Promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
 
 ## Native build failures
 
@@ -146,7 +146,7 @@ npm install --build-from-source
 npm rebuild
 ```
 
-## OpenAI API key is not set
+## Openai API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
@@ -240,11 +240,11 @@ telnet 127.0.0.1 4444
 
 ### Handling errors
 
-If you encounter errors in your Python script, the error message and stack trace will be displayed in the promptfoo output. Make sure to check this information for clues about what might be going wrong in your code.
+If you encounter errors in your Python script, the error message and stack trace will be displayed in the Promptfoo output. Make sure to check this information for clues about what might be going wrong in your code.
 
-Remember that promptfoo runs your Python script in a separate process, so some standard debugging techniques may not work as expected. Using logging and remote debugging as described above are the most reliable ways to troubleshoot issues in your Python providers.
+Remember that Promptfoo runs your Python script in a separate process, so some standard debugging techniques may not work as expected. Using logging and remote debugging as described above are the most reliable ways to troubleshoot issues in your Python providers.
 
-## Debugging the Database
+## Debugging the database
 
 1. Set environment variables:
 
@@ -267,7 +267,7 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 ## Finding log files
 
-promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
+Promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
 `PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
 is created next to where you run your command.
 

@@ -2,17 +2,17 @@
 sidebar_label: Azure Pipelines
 ---
 
-# Azure Pipelines Integration
+# Azure pipelines integration
 
-This guide demonstrates how to set up promptfoo with Azure Pipelines to run evaluations as part of your CI pipeline.
+This guide demonstrates how to set up Promptfoo with Azure Pipelines to run evaluations as part of your CI pipeline.
 
 ## Prerequisites
 
-- A GitHub or Azure DevOps repository with a promptfoo project
+- A GitHub or Azure DevOps repository with a Promptfoo project
 - An Azure DevOps account with permission to create pipelines
 - API keys for your LLM providers stored as [Azure Pipeline variables](https://learn.microsoft.com/en-us/azure/devops/pipelines/process/variables)
 
-## Setting up the Azure Pipeline
+## Setting up the Azure pipeline
 
 Create a new file named `azure-pipelines.yml` in the root of your repository with the following configuration:
 
@@ -71,7 +71,7 @@ steps:
     displayName: 'Publish evaluation results'
 ```
 
-## Environment Variables
+## Environment variables
 
 Store your LLM provider API keys as [secret pipeline variables](https://learn.microsoft.com/en-us/azure/devops/pipelines/process/variables#secret-variables) in Azure DevOps:
 
@@ -80,11 +80,11 @@ Store your LLM provider API keys as [secret pipeline variables](https://learn.mi
 3. Add variables for each provider API key (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
 4. Mark them as secret to ensure they're not displayed in logs
 
-## Advanced Configuration
+## Advanced configuration
 
-### Fail the Pipeline on Failed Assertions
+### Fail the pipeline on failed assertions
 
-You can configure the pipeline to fail when promptfoo assertions don't pass by modifying the script step:
+You can configure the pipeline to fail when Promptfoo assertions don't pass by modifying the script step:
 
 ```yaml
 - script: |
@@ -94,7 +94,7 @@ You can configure the pipeline to fail when promptfoo assertions don't pass by m
     OPENAI_API_KEY: $(OPENAI_API_KEY)
 ```
 
-### Configure Custom Output Location
+### Configure custom output location
 
 If you want to customize where results are stored:
 
@@ -104,7 +104,7 @@ If you want to customize where results are stored:
   displayName: 'Run promptfoo evaluations'
 ```
 
-### Run on Pull Requests
+### Run on pull requests
 
 To run evaluations on pull requests, add a PR trigger:
 
@@ -119,9 +119,9 @@ pr:
 # Rest of pipeline configuration
 ```
 
-### Conditional Execution
+### Conditional execution
 
-Run promptfoo only when certain files change:
+Run Promptfoo only when certain files change:
 
 ```yaml
 steps:
@@ -154,7 +154,7 @@ steps:
       OPENAI_API_KEY: $(OPENAI_API_KEY)
 ```
 
-## Using with Matrix Testing
+## Using with matrix testing
 
 Test across multiple configurations or models in parallel:
 

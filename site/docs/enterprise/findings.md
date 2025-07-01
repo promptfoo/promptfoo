@@ -7,21 +7,21 @@ keywords:
   [findings, security reports, llm vulnerabilities, red team results, vulnerability management]
 ---
 
-# Findings and Reports
+# Findings and reports
 
 Promptfoo Enterprise allows you to review findings and reports from scans within the Promptfoo application.
 
-## How Grading Works
+## How grading works
 
 Grading is the process of evaluating the success of a red team attack. Promptfoo grades results based on the application context that is provided when creating a target. These results are subsequently compiled in the dashboard, vulnerabilities view, reports, and evaluations sections.
 
-## Reviewing the Dashboard
+## Reviewing the dashboard
 
 The dashboard is the main page for reviewing findings and reports in a centralized view. It displays a summary of all the scans that have been run, including the number of findings and reports generated.
 
 ![Promptfoo Cloud Dashboard](/img/enterprise-docs/promptfoo-dashboard.png)
 
-## Viewing Vulnerabilities
+## Viewing vulnerabilities
 
 The "Vulnerabilities" section displays a list of all the vulnerabilities that have been found. You can filter based on the target, severity level, status of finding, risk category, or type of vulnerability.
 
@@ -29,7 +29,7 @@ Selecting a vulnerability will open a finding that shows you the details of the 
 
 You can modify the status of the finding as either "Marked as Fixed", "False Positive", or "Ignore". You can also add comments to the finding to provide additional context about the vulnerability, as well as change the severity level of the vulnerability based on your company's risk assessment.
 
-## Viewing Reports
+## Viewing reports
 
 Reports are point-in-time scans of your target that are generated when you run a scan. These reports can be used to review the findings from a specific scan.
 
@@ -56,7 +56,7 @@ When reviewing an eval, there are also multiple ways that you can export the res
 
 ![Export options demonstration](/img/enterprise-docs/export-results.gif)
 
-## Filtering and Sorting Findings
+## Filtering and sorting findings
 
 The "Evals" section will display all of the evaluations and let you filter and sort through them based on the eval ID, date the scan was created, author, description, plugin, strategy, pass rate, or number of tests. You can then download the evals as a CSV file.
 
@@ -64,7 +64,7 @@ The "Evals" section will display all of the evaluations and let you filter and s
 
 You can also search for findings [using Promptfoo's API](https://www.promptfoo.dev/docs/api-reference/#tag/default/GET/api/v1/results).
 
-## Sharing Findings
+## Sharing findings
 
 There are several ways to share findings outside of the Promptfoo application:
 
@@ -73,7 +73,7 @@ There are several ways to share findings outside of the Promptfoo application:
 - **Use the Promptfoo API**: You can use the [Promptfoo API](https://www.promptfoo.dev/docs/api-reference/) to export findings, reports, and eval results.
 - **Share via URL**: You can generate shareable URLs for your evaluation results using the `promptfoo share` command. [Learn more about sharing options](/docs/usage/sharing.md).
 
-## See Also
+## See also
 
 - [Running Red Teams](./red-teams.md)
 - [Service Accounts](./service-accounts.md)

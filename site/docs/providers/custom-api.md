@@ -2,20 +2,20 @@
 sidebar_label: Custom Javascript
 ---
 
-# Javascript Provider
+# Javascript provider
 
 Custom Javascript providers let you create providers in JavaScript or TypeScript to integrate with any API or service not already built into promptfoo.
 
-## Supported File Formats and Examples
+## Supported file formats and examples
 
-promptfoo supports multiple JavaScript module formats. Complete working examples are available on GitHub:
+Promptfoo supports multiple JavaScript module formats. Complete working examples are available on GitHub:
 
 - [CommonJS Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider) - (`.js`, `.cjs`) - Uses `module.exports` and `require()`
 - [ESM Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-mjs) - (`.mjs`, `.js` with `"type": "module"`) - Uses `import`/`export`
 - [TypeScript Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-typescript) - (`.ts`) - Provides type safety with interfaces
 - [Embeddings Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings) (commonjs)
 
-## Provider Interface
+## Provider interface
 
 At minimum, a custom provider must implement an `id` method and a `callApi` method.
 
@@ -91,7 +91,7 @@ module.exports = class OpenAIProvider {
 }
 ```
 
-### Context Parameter
+### Context parameter
 
 The `context` parameter contains:
 
@@ -104,7 +104,7 @@ The `context` parameter contains:
 }
 ```
 
-### Two-Stage Provider
+### Two-stage provider
 
 ```javascript title="twoStageProvider.js"
 const promptfoo = require('promptfoo').default;
@@ -161,7 +161,7 @@ module.exports = class TwoStageProvider {
 };
 ```
 
-### TypeScript Implementation
+### Typescript implementation
 
 ```typescript title="typedProvider.ts"
 import promptfoo from 'promptfoo';
@@ -200,7 +200,7 @@ export default class TypedProvider implements ApiProvider {
 }
 ```
 
-## Additional Capabilities
+## Additional capabilities
 
 ### Embeddings API
 
@@ -245,7 +245,7 @@ async callClassificationApi(text) {
 }
 ```
 
-## Cache System
+## Cache system
 
 The built-in caching system helps avoid redundant API calls:
 
@@ -270,7 +270,7 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ## Configuration
 
-### Provider Configuration
+### Provider configuration
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -283,7 +283,7 @@ providers:
       custom_parameter: 'custom value'
 ```
 
-### Multiple Instances
+### Multiple instances
 
 ```yaml title="multiple-providers.yaml"
 providers:
@@ -297,7 +297,7 @@ providers:
       temperature: 0.1
 ```
 
-## See Also
+## See also
 
 - [Browser Provider](/docs/providers/browser/)
 - [Custom Provider Examples](https://github.com/promptfoo/promptfoo/tree/main/examples)

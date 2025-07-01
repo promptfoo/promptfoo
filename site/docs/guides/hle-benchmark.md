@@ -1,6 +1,6 @@
 ---
 title: Testing Humanity's Last Exam with Promptfoo
-description: Run evaluations against Humanity's Last Exam using promptfoo - the most challenging AI benchmark with expert-crafted questions across 100+ subjects.
+description: Run evaluations against Humanity's Last Exam using Promptfoo - the most challenging AI benchmark with expert-crafted questions across 100+ subjects.
 sidebar_label: HLE Benchmark
 keywords:
   [
@@ -11,7 +11,7 @@ keywords:
     model testing,
     claude,
     gpt,
-    promptfoo,
+    Promptfoo,
     expert questions,
   ]
 image: /img/hle-token-usage-summary.png
@@ -20,18 +20,18 @@ date: 2025-06-30
 authors: [michael]
 ---
 
-# Testing Humanity's Last Exam with Promptfoo
+# Testing humanity's last exam with Promptfoo
 
 [Humanity's Last Exam (HLE)](https://arxiv.org/abs/2501.14249) is a challenging benchmark commissioned by Scale AI and the Center for AI Safety (CAIS), developed by 1,000+ subject experts from over 500 institutions across 50 countries. Created to address benchmark saturation where current models achieve 90%+ accuracy on MMLU, HLE presents genuinely difficult expert-level questions that test AI capabilities at the frontier of human knowledge.
 
 This guide shows you how to:
 
-- Set up HLE evals with promptfoo
+- Set up HLE evals with Promptfoo
 - Configure reasoning models for HLE questions
 - Analyze real performance data from Claude 4 and o4-mini
 - Understand model limitations on challenging benchmarks
 
-## About Humanity's Last Exam
+## About humanity's last exam
 
 HLE addresses benchmark saturation - the phenomenon where advanced models achieve over 90% accuracy on existing tests like MMLU, making it difficult to measure continued progress. HLE provides a more challenging eval for current AI systems.
 
@@ -56,7 +56,7 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 
 _Official model performance on full HLE dataset_
 
-## Running the Eval
+## Running the eval
 
 Set up your HLE eval with these commands:
 
@@ -82,7 +82,7 @@ HLE is released under the MIT license. The dataset includes a canary string to h
 
 :::
 
-## Eval Results
+## Eval results
 
 After your eval completes, open the web interface:
 
@@ -94,7 +94,7 @@ Promptfoo generates a summary report showing token usage, costs, success rates, 
 
 ![HLE Evaluation Results](/img/hle-token-usage-summary.png)
 
-We tested Claude 4 and o4-mini on 50 HLE questions using promptfoo with optimized configurations to demonstrate real-world performance. Note that our results differ from official benchmarks due to different prompting strategies, token budgets, and question sampling.
+We tested Claude 4 and o4-mini on 50 HLE questions using Promptfoo with optimized configurations to demonstrate real-world performance. Note that our results differ from official benchmarks due to different prompting strategies, token budgets, and question sampling.
 
 ![Model Comparison on Bioinformatics Question](/img/hle-model-comparison-detail.png)
 
@@ -120,7 +120,7 @@ The interface provides:
 - Side-by-side model comparison with diff highlighting
 - Performance analytics by subject area
 
-## Prompt Engineering for HLE
+## Prompt engineering for hle
 
 To handle images across different AI providers, we wrote a custom prompt function in Python. OpenAI uses `image_url` format while Anthropic/Claude requires base64 `source` format.
 
@@ -150,7 +150,7 @@ The Python approach enables provider-specific adaptations:
 - **Anthropic models**: Converts images to base64 `source` format for Claude compatibility
 - **Response structure**: Standardized format with explanation, answer, and confidence scoring
 
-## Automated Grading
+## Automated grading
 
 Promptfoo uses LLM-as-a-judge for automated grading with the built-in `llm-rubric` assertion. This approach evaluates model responses against the expected answers without requiring exact string matches.
 
@@ -185,7 +185,7 @@ defaultTest:
 
 This automated approach scales well for large evaluations while maintaining accuracy comparable to human grading on HLE's objective, closed-ended questions.
 
-## Customization Options
+## Customization options
 
 **Key settings:**
 
@@ -221,13 +221,13 @@ providers:
       max_tokens: 12000
 ```
 
-## Eval Limitations
+## Eval limitations
 
 Keep in mind these results are preliminary - we only tested 50 questions per model in a single run. That's a pretty small sample from HLE's 14,000+ questions, and we didn't optimize our approach much (token budgets, prompts, etc. were chosen somewhat arbitrarily).
 
 o4-mini's 42% success rate stands out and requires validation through larger samples and multiple runs. Performance will likely vary considerably across different subjects and question formats.
 
-## Implications for AI Development
+## Implications for AI development
 
 HLE provides a useful benchmark for measuring AI progress on academic tasks. The low current scores indicate significant room for improvement in AI reasoning capabilities.
 
@@ -244,22 +244,22 @@ As Dan Hendrycks (CAIS co-founder) notes:
 
 Promptfoo provides HLE eval capabilities through automated dataset integration, parallel execution, and comprehensive results analysis.
 
-## Learn More
+## Learn more
 
-### Official Resources
+### Official resources
 
 - [HLE Research Paper](https://arxiv.org/abs/2501.14249) - Original academic paper from CAIS and Scale AI
 - [HLE Dataset](https://huggingface.co/datasets/cais/hle) - Dataset on Hugging Face
 - [Official HLE Website](https://lastexam.ai) - Questions and leaderboard
 - [Scale AI HLE Announcement](https://scale.com/blog/humanitys-last-exam-results) - Official results and methodology
 
-### Analysis and Coverage
+### Analysis and coverage
 
 - [OpenAI Deep Research Performance](https://scale.com/blog/o3-o4-mini-calibration) - Deep Research achieving 26.6% accuracy
 - [Medium: HLE Paper Review](https://medium.com/@sulbha.jindal/humanitys-last-exam-hle-paper-review-69316b2cfc04) - Technical analysis of the benchmark
 - [Hugging Face Papers](https://huggingface.co/papers/2501.14249) - Community discussion and insights
 
-### Promptfoo Integration
+### Promptfoo integration
 
 - [HuggingFace Provider Guide](../providers/huggingface.md) - Set up dataset access
 - [Model Grading Setup](../../configuration/expected-outputs/model-graded/) - Configure automated grading

@@ -53,7 +53,7 @@ tests:
 | transform    | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs) |
 | metric       | string             | No       | Tag that appears in the web UI as a named metric                                                                       |
 
-## Grouping assertions via Assertion Sets
+## Grouping assertions via assertion sets
 
 Assertions can be grouped together using an `assert-set`.
 
@@ -94,7 +94,7 @@ tests:
             threshold: 200
 ```
 
-## Assertion Set properties
+## Assertion set properties
 
 | Property  | Type             | Required | Description                                                                                                          |
 | --------- | ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -254,7 +254,7 @@ tests:
 
 The scoring function can be JavaScript or Python, referenced with `file://` prefix. For named exports, use `file://path/to/file.js:functionName`.
 
-#### Function Interface
+#### Function interface
 
 ```typescript
 type ScoringFunction = (
@@ -389,7 +389,7 @@ When the `__expected` field is provided, the success and failure statistics in t
 
 To run multiple assertions, use column names `__expected1`, `__expected2`, `__expected3`, etc.
 
-For more advanced test cases, we recommend using a testing framework like [Jest or Vitest](/docs/integrations/jest) or [Mocha](/docs/integrations/mocha-chai) and using promptfoo [as a library](/docs/usage/node-package).
+For more advanced test cases, we recommend using a testing framework like [Jest or Vitest](/docs/integrations/jest) or [Mocha](/docs/integrations/mocha-chai) and using Promptfoo [as a library](/docs/usage/node-package).
 
 ## Reusing assertions with templates
 
@@ -518,7 +518,7 @@ derivedMetrics:
     }
 ```
 
-#### Available Functions and Data
+#### Available functions and data
 
 In mathematical expressions:
 

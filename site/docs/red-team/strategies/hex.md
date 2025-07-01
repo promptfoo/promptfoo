@@ -4,11 +4,11 @@ title: Hex Encoding Strategy
 description: Test how AI systems handle hexadecimal-encoded text that may bypass content filters
 ---
 
-# Hex Encoding Strategy
+# Hex encoding strategy
 
 The Hex Encoding strategy tests an AI system's ability to resist ASCII hex-encoded inputs that might bypass security controls. Hex encoding (using characters 0-9, A-F) exploits a potential gap in safety mechanisms by representing text as a sequence of hexadecimal bytes.
 
-## Why It Works
+## Why it works
 
 - Models may learn hex encoding patterns from training data
 - Safety training rarely includes encoded content, making hex inputs out-of-distribution
@@ -24,7 +24,7 @@ strategies:
   - hex
 ```
 
-## Example Scenarios
+## Example scenarios
 
 | Original                           | Encoded                                                                                           |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -37,7 +37,7 @@ The strategy helps identify:
 - Model's ability to handle obfuscated malicious inputs
 - Potential jailbreaking vulnerabilities through encoding
 
-## Related Concepts
+## Related concepts
 
 - [Base64 Encoding](base64.md) - Similar encoding strategy
 - [ROT13 Encoding](rot13.md) - Alternative encoding strategy

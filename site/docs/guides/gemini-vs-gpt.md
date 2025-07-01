@@ -23,7 +23,7 @@ Before starting, ensure you have the following:
   - `VERTEX_API_KEY` and `VERTEX_PROJECT_ID` environment variables set for Google Vertex AI (see [Vertex configuration](/docs/providers/vertex))
   - `OPENAI_API_KEY` environment variable set for OpenAI (see [OpenAI configuration](/docs/providers/openai))
 
-## Step 1: Set up the config
+## Step 1: set up the config
 
 Create a new directory for your benchmarking project:
 
@@ -40,7 +40,7 @@ providers:
   - openai:gpt-4.1
 ```
 
-## Step 2: Set up the prompts
+## Step 2: set up the prompts
 
 Define the prompts you want to use for the comparison. For simplicity, we'll use a single prompt format that is compatible with all models:
 
@@ -67,7 +67,7 @@ providers:
       - gpt_prompt
 ```
 
-## Step 3: Add test cases
+## Step 3: add test cases
 
 Add your test cases to the `promptfooconfig.yaml` file. These should be representative of the types of queries you want to compare across the models:
 
@@ -83,7 +83,7 @@ tests:
 
 In this case, I just took some examples from a [Hacker News thread](https://news.ycombinator.com/item?id=38628456). This is where you should put in _your own_ test cases that are representative of the task you want these LLMs to complete.
 
-## Step 4: Run the comparison
+## Step 4: run the comparison
 
 Execute the comparison using the `promptfoo eval` command:
 
@@ -101,7 +101,7 @@ Then, use the `promptfoo view` command to open the viewer and compare the result
 npx promptfoo@latest view
 ```
 
-## Step 5: Add automatic evals (optional)
+## Step 5: add automatic evals (optional)
 
 Automatic evals are a nice way to scale your work, so you don't need to check each outputs every time.
 

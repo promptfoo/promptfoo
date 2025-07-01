@@ -2,9 +2,9 @@
 sidebar_label: OpenLLM
 ---
 
-# OpenLLM
+# Openllm
 
-To use [OpenLLM](https://github.com/bentoml/OpenLLM) with promptfoo, we take advantage of OpenLLM's support for [OpenAI-compatible endpoint](https://colab.research.google.com/github/bentoml/OpenLLM/blob/main/examples/openllm-llama2-demo/openllm_llama2_demo.ipynb#scrollTo=0G5clTYV_M8J&line=3&uniqifier=1).
+To use [OpenLLM](https://github.com/bentoml/OpenLLM) with Promptfoo, we take advantage of OpenLLM's support for [OpenAI-compatible endpoint](https://colab.research.google.com/github/bentoml/OpenLLM/blob/main/examples/openllm-llama2-demo/openllm_llama2_demo.ipynb#scrollTo=0G5clTYV_M8J&line=3&uniqifier=1).
 
 1. Start the server using the `openllm start` command.
 
@@ -21,7 +21,7 @@ To use [OpenLLM](https://github.com/bentoml/OpenLLM) with promptfoo, we take adv
    openllm start llama --model-id meta-llama/Llama-2-7b-chat-hf
    ```
 
-   Then set the promptfoo configuration:
+   Then set the Promptfoo configuration:
 
    ```yaml
    providers:
@@ -35,7 +35,7 @@ To use [OpenLLM](https://github.com/bentoml/OpenLLM) with promptfoo, we take adv
    openllm start flan-t5 --model-id google/flan-t5-large
    ```
 
-   Then set the promptfoo configuration:
+   Then set the Promptfoo configuration:
 
    ```yaml
    providers:

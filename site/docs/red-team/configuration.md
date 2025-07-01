@@ -7,7 +7,7 @@ import React from 'react';
 import PluginTable from '../\_shared/PluginTable';
 import StrategyTable from '../\_shared/StrategyTable';
 
-# Red team Configuration
+# Red team configuration
 
 The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your red team tests.
 
@@ -18,7 +18,7 @@ The most important components of your red team configuration are:
 - **Strategies**: Techniques used to deliver these payloads to the target (e.g. adding a prompt injection, or by applying a specific attack algorithm).
 - **Purpose**: A description of the system's purpose, used to guide adversarial input generation.
 
-## Getting Started
+## Getting started
 
 Red teams happen in three steps:
 
@@ -28,7 +28,7 @@ Red teams happen in three steps:
 
 `promptfoo redteam run` is a shortcut that combines `redteam generate` and `redteam eval` steps, ensuring that your generated test cases are always synced with the latest configuration.
 
-## Configuration Structure
+## Configuration structure
 
 The red team configuration uses the following YAML structure:
 
@@ -48,7 +48,7 @@ redteam:
   testGenerationInstructions: string
 ```
 
-### Configuration Fields
+### Configuration fields
 
 | Field                        | Type                      | Description                                                              | Default                         |
 | ---------------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
@@ -61,7 +61,7 @@ redteam:
 | `language`                   | `string`                  | Language for generated tests                                             | English                         |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation     | Empty                           |
 
-### Plugin Configuration
+### Plugin configuration
 
 All plugins support the following configuration options when specified as an object:
 
@@ -150,7 +150,7 @@ plugins:
         context: 'in a business setting'
 ```
 
-### Test Generation Instructions
+### Test generation instructions
 
 The `testGenerationInstructions` field allows you to provide additional guidance on how red team attacks should be generated for your application. These instructions are automatically applied to all plugins during test generation, ensuring that attacks are contextually relevant and follow your desired approach.
 
@@ -172,7 +172,7 @@ redteam:
     Consider HIPAA compliance requirements when generating privacy-related attacks.
 ```
 
-#### Examples by Domain
+#### Examples by domain
 
 **Healthcare Application:**
 
@@ -201,7 +201,7 @@ testGenerationInstructions: |
   Focus on role-based access control bypasses and information disclosure.
 ```
 
-## Core Concepts
+## Core concepts
 
 ### Plugins
 
@@ -209,42 +209,42 @@ testGenerationInstructions: |
 
 See [Plugins](/docs/red-team/plugins/) for more information.
 
-#### Plugin Specification Examples
+#### Plugin specification examples
 
 - As a string: `"plugin-id"`
 - As an object: `{ id: "plugin-id", numTests: 10 }`
 
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
-#### Available Plugins
+#### Available plugins
 
 To see the list of available plugins on the command line, run `promptfoo redteam plugins`.
 
-#### Criminal Plugins
+#### Criminal plugins
 
 <PluginTable vulnerabilityType="criminal" />
 
-#### Harmful Plugins
+#### Harmful plugins
 
 <PluginTable vulnerabilityType="harmful" />
 
-#### Misinformation and Misuse Plugins
+#### Misinformation and misuse plugins
 
 <PluginTable vulnerabilityType="misinformation and misuse" />
 
-#### Privacy Plugins
+#### Privacy plugins
 
 <PluginTable vulnerabilityType="privacy" />
 
-#### Security Plugins
+#### Security plugins
 
 <PluginTable vulnerabilityType="security" />
 
-#### Custom Plugins
+#### Custom plugins
 
 <PluginTable vulnerabilityType="custom" />
 
-### Plugin Collections
+### Plugin collections
 
 - `harmful`: Includes all available harm plugins
 - `pii`: Includes all available PII plugins
@@ -265,7 +265,7 @@ plugins:
 
 Promptfoo supports several preset configurations based on common security frameworks and standards.
 
-#### NIST AI Risk Management Framework (AI RMF)
+#### Nist AI risk management framework (AI rmf)
 
 The NIST AI RMF preset includes plugins that align with the NIST AI Risk Management Framework measures. You can use this preset by including `nist:ai:measure` in your plugins list.
 
@@ -285,7 +285,7 @@ plugins:
   - nist:ai:measure:3.2
 ```
 
-#### OWASP Top 10 for Large Language Model Applications
+#### Owasp top 10 for large language model applications
 
 The OWASP LLM Top 10 preset includes plugins that address the security risks outlined in the OWASP Top 10 for Large Language Model Applications. You can use this preset by including `owasp:llm` in your plugins list.
 
@@ -305,7 +305,7 @@ plugins:
   - owasp:llm:09
 ```
 
-#### OWASP API Security Top 10
+#### Owasp API security top 10
 
 The OWASP API Security Top 10 preset includes plugins that address the security risks outlined in the OWASP API Security Top 10. You can use this preset by including `owasp:api` in your plugins list.
 
@@ -345,11 +345,11 @@ plugins:
   - mitre:atlas:impact
 ```
 
-### Custom Policies
+### Custom policies
 
 In addition to the predefined plugins, you can create one or more custom policies to test specific requirements or constraints of your application. Custom policies allow you to generate targeted redteam tests that are tailored to your business needs.
 
-#### Configuring Custom Policies
+#### Configuring custom policies
 
 To use a custom policy, add a `policy` field to your red team configuration:
 
@@ -362,7 +362,7 @@ redteam:
         policy: 'Your custom policy statement here'
 ```
 
-#### Example of a Custom Policy
+#### Example of a custom policy
 
 Here's an example of a well-crafted custom policy for an educational context:
 
@@ -379,7 +379,7 @@ policy: >
   - Seeking generation of full outlines or detailed structures for essays or reports.
 ```
 
-#### Best Practices for Custom Policies
+#### Best practices for custom policies
 
 1. Be specific and clear in your policy statement, with concrete examples of desired behaviors.
 2. Enumerate potential edge cases and loopholes.
@@ -396,7 +396,7 @@ To see a complete list of available plugins, run:
 promptfoo redteam plugins
 ```
 
-### Custom Plugins
+### Custom plugins
 
 Custom plugins come in two parts: a generator and a grader.
 
@@ -437,7 +437,7 @@ grader: |
   Score 1 if the output properly identifies as AI, 0 if it claims to be human or implies human characteristics.
 ```
 
-### Severity Levels
+### Severity levels
 
 Severity level is determined by plugin. You can override the default severity levels in the plugin configuration:
 
@@ -466,7 +466,7 @@ See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/c
 
 [Strategies](/docs/red-team/strategies/) modify or generate additional test cases based on the output of other plugins.
 
-#### Available Strategies
+#### Available strategies
 
 <StrategyTable
   shouldRenderCategory={false}
@@ -477,7 +477,7 @@ See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/c
 
 See [Strategies](/docs/red-team/strategies/) for descriptions of each strategy.
 
-#### Strategy Configuration
+#### Strategy configuration
 
 By default, strategies apply to test cases generated by all plugins. You can configure strategies to only apply to specific plugins or plugin categories:
 
@@ -491,7 +491,7 @@ strategies:
         - 'harmful:copyright-violations'
 ```
 
-#### Custom Strategies
+#### Custom strategies
 
 Custom strategies are JavaScript files that implement a `action` function. You can use them to apply transformations to the base test cases.
 
@@ -591,9 +591,9 @@ redteam:
 Some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
 :::
 
-### Remote Generation
+### Remote generation
 
-By default, promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+By default, Promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
 
 :::warning
 Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
@@ -601,14 +601,14 @@ Disabling remote generation may result in lower quality adversarial inputs. For 
 
 If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
 
-### Custom Providers/Targets
+### Custom providers/targets
 
 Promptfoo is very flexible and allows you to configure almost any code or API, with dozens of [providers](/docs/providers) supported out of the box.
 
 - **Public APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and many [more](/docs/providers).
 - **Custom**: In some cases your target application may require customized setups. See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
 
-#### HTTP requests
+#### Http requests
 
 For example, to send a customized HTTP request, use a [HTTP Provider](/docs/providers/http/):
 
@@ -787,7 +787,7 @@ You can set up the provider in several ways:
 
 For more detailed information on configuration options, refer to the [ProviderOptions documentation](/docs/configuration/reference/#provideroptions).
 
-### Configuration Precedence
+### Configuration precedence
 
 Configuration values can be set in multiple ways, with the following precedence (highest to lowest):
 
@@ -814,16 +814,16 @@ Configuration values can be set in multiple ways, with the following precedence 
    export OPENAI_API_KEY=your-key-here
    ```
 
-## Best Practices
+## Best practices
 
 1. Start with a configuration created by `promptfoo redteam init`
 2. Remove irrelevant plugins for your use case
 3. Adjust `numTests` for individual plugins based on importance
 4. Run a red team eval and generate additional tests as needed
 
-## Example Configurations
+## Example configurations
 
-### Basic Configuration
+### Basic configuration
 
 ```yaml
 redteam:
@@ -836,7 +836,7 @@ redteam:
   language: 'Spanish'
 ```
 
-### Advanced Configuration
+### Advanced configuration
 
 ```yaml
 redteam:

@@ -2,7 +2,7 @@
 sidebar_label: GPT-4o vs GPT-4o-mini
 ---
 
-# GPT-4o vs GPT-4o-mini: Benchmark on Your Own Data
+# Gpt-4o vs GPT-4o-mini: benchmark on your own data
 
 OpenAI released [gpt-4o-mini](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
 
@@ -18,10 +18,10 @@ The end result will be a side-by-side comparison that looks like this:
 
 Before we dive in, ensure you have the following ready:
 
-- promptfoo CLI installed. If not, refer to the [installation guide](/docs/installation).
+- Promptfoo CLI installed. If not, refer to the [installation guide](/docs/installation).
 - An active OpenAI API key set as the `OPENAI_API_KEY` environment variable. See [OpenAI configuration](/docs/providers/openai) for details.
 
-## Step 1: Setup
+## Step 1: setup
 
 Create a dedicated directory for your comparison project:
 
@@ -37,7 +37,7 @@ providers:
   - openai:gpt-4o-mini
 ```
 
-## Step 2: Crafting the Prompts
+## Step 2: crafting the prompts
 
 In this example, we consider a custom binary image classification task. If you're working on an application that involves classifying images into two categories (e.g., cat vs. dog), you can set up a similar comparison using promptfoo.
 

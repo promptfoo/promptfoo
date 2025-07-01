@@ -23,7 +23,7 @@ Alternatively, you can specify the `apiKey` in the provider configuration (see b
 
 ## Configuration
 
-Configure the Groq provider in your promptfoo configuration file:
+Configure the Groq provider in your Promptfoo configuration file:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -56,11 +56,11 @@ Key configuration options:
 - `tools`: List of tools (functions) the model may call (max 128)
 - `top_p`: Alternative to temperature sampling using nucleus sampling
 
-## Supported Models
+## Supported models
 
 Groq supports a variety of models, including:
 
-### Production Models
+### Production models
 
 - **llama-3.3-70b-versatile** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 32,768
 - **llama-3.1-8b-instant** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 8,192
@@ -70,7 +70,7 @@ Groq supports a variety of models, including:
 - **mixtral-8x7b-32768** – Developer: Mistral, Context Window: 32,768 tokens
 - **gemma2-9b-it** – Developer: Google, Context Window: 8,192 tokens
 
-### Preview Models
+### Preview models
 
 Note: Preview models are intended for evaluation purposes only and should not be used in production environments as they may be discontinued at short notice.
 
@@ -81,7 +81,7 @@ Note: Preview models are intended for evaluation purposes only and should not be
 - **llama-3.2-11b-vision-preview** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 8,192
 - **llama-3.2-90b-vision-preview** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 8,192
 
-## Tool Use (Function Calling)
+## Tool use (function calling)
 
 Groq supports tool use, allowing models to call predefined functions. Configure tools in your provider settings:
 
@@ -115,16 +115,16 @@ providers:
 
 Promptfoo supports two vision models on GroqCloud: the **llama-3.2-90b-vision-preview**, and **llama-3.2-11b-vision-preview**, which support tool use, and JSON mode.
 
-### Image Input Guidelines
+### Image input guidelines
 
 - **Image URLs:** Maximum allowed size is 20MB. Requests with larger image URLs return a 400 error.
 - **Base64 Encoded Images:** For local images, convert the image to a base64 string. Maximum allowed size is 4MB; larger images return a 413 error.
 - **Single Image Per Request:** Only one image can be processed per request. Multiple images will result in a 400 error.
 - **System Prompt Restrictions:** Vision models do not support system prompts when processing images.
 
-### How to Use Vision in Promptfoo
+### How to use vision in Promptfoo
 
-To use vision models with promptfoo, specify the vision model ID in your provider configuration. For example:
+To use vision models with Promptfoo, specify the vision model ID in your provider configuration. For example:
 
 And include the image in an openai compatible format.
 

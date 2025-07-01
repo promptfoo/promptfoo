@@ -4,7 +4,7 @@ sidebar_label: CI/CD
 
 # Setting up CI/CD for LLM evaluation
 
-When scaling an LLM app, it's essential to be able to measure the impact of any prompt or model change. This guide shows how to use integrate promptfoo with CI/CD workflows to automatically evaluate test cases and ensure quality.
+When scaling an LLM app, it's essential to be able to measure the impact of any prompt or model change. This guide shows how to use integrate Promptfoo with CI/CD workflows to automatically evaluate test cases and ensure quality.
 
 This approach works for any CI system. If you're using Github, you can skip directly to the [Github Actions tutorial](/docs/integrations/github-action) or view the action on the [Github Marketplace](https://github.com/marketplace/actions/test-llm-outputs).
 
@@ -13,14 +13,14 @@ This approach works for any CI system. If you're using Github, you can skip dire
 ### Prerequisites
 
 - A CI/CD platform that supports custom scripts or actions (e.g., GitHub Actions, GitLab CI, Jenkins).
-- The promptfoo CLI installed in your CI/CD environment.
+- The Promptfoo CLI installed in your CI/CD environment.
 - Your LLM provider's API keys, if required.
 
-### Steps to Integrate promptfoo in CI/CD
+### Steps to integrate Promptfoo in CI/CD
 
 1. **Monitor Changes**: Configure your CI/CD pipeline to trigger on changes to prompt files. This can be done by setting path filters for pull requests or merge requests.
 
-2. **Install promptfoo**: Ensure that the `promptfoo`` CLI is installed in the CI/CD environment. You can install it using package managers like npm:
+2. **Install Promptfoo**: Ensure that the `promptfoo`` CLI is installed in the CI/CD environment. You can install it using package managers like npm:
 
    ```sh
    npm install -g promptfoo
@@ -30,7 +30,7 @@ This approach works for any CI system. If you're using Github, you can skip dire
 
 3. **Set API Keys**: Set the necessary API keys as environment variables in your CI/CD configuration. This may include keys for OpenAI, Azure, or other LLM providers.
 
-4. **Run Evaluation**: Create a step in your pipeline to execute the promptfoo evaluation. Use the `promptfoo eval` command, specifying the configuration file and the prompts to evaluate.
+4. **Run Evaluation**: Create a step in your pipeline to execute the Promptfoo evaluation. Use the `promptfoo eval` command, specifying the configuration file and the prompts to evaluate.
 
    ```sh
    promptfoo eval -c path/to/config.yaml --prompts path/to/prompts/**/*.json --share -o output.json
@@ -89,7 +89,7 @@ For a real-world example, see the [Github Action source code](https://github.com
 
    Ensure that the `PROMPTFOO_CACHE_PATH` environment variable in your `promptfoo eval` command matches the path specified in the cache action.
 
-### Example: GitHub Actions Integration
+### Example: GitHub actions integration
 
 Here's a simplified example of how you might set up a GitHub Actions workflow to evaluate prompts on every pull request:
 

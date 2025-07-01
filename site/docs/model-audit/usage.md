@@ -3,7 +3,7 @@ sidebar_label: Installation
 sidebar_position: 120
 ---
 
-# Installation & Usage
+# Installation & usage
 
 This page covers how to install ModelAudit and use it.
 
@@ -30,7 +30,7 @@ Once Promptfoo is installed, you can use ModelAudit via the `scan-model` command
 promptfoo scan-model <path-to-model>
 ```
 
-### Standalone Installation
+### Standalone installation
 
 You can also install ModelAudit directly and run it from the command line:
 
@@ -71,13 +71,13 @@ ModelAudit has different dependencies depending on which model formats you want 
 | Weight Distribution   | `numpy`, `scipy`, format-specific libs (torch, h5py, etc.) |
 | HuggingFace URLs      | `huggingface-hub`                                          |
 
-## Advanced Usage
+## Advanced usage
 
-### HuggingFace URL Scanning
+### Huggingface URL scanning
 
 ModelAudit can scan models directly from HuggingFace without requiring manual downloads. This feature automatically handles model downloading, scanning, and cleanup.
 
-#### Supported URL Formats
+#### Supported URL formats
 
 ```bash
 # Standard HuggingFace URL
@@ -96,7 +96,7 @@ modelaudit scan https://huggingface.co/facebook/bart-large
 modelaudit scan https://huggingface.co/bert-base-uncased
 ```
 
-#### How It Works
+#### How it works
 
 1. **Automatic Download**: ModelAudit uses the `huggingface-hub` library to download the model to a temporary directory
 2. **Security Scanning**: All model files are scanned with the appropriate scanners based on their format
@@ -133,7 +133,7 @@ Or with ModelAudit's all dependencies:
 pip install modelaudit[all]
 ```
 
-### Command Line Interface
+### Command line interface
 
 ModelAudit provides a flexible command line interface with various options:
 
@@ -141,7 +141,7 @@ ModelAudit provides a flexible command line interface with various options:
 modelaudit scan [OPTIONS] PATH [PATH...]
 ```
 
-#### Global Options
+#### Global options
 
 | Option              | Description                                                     |
 | ------------------- | --------------------------------------------------------------- |
@@ -157,7 +157,7 @@ modelaudit scan [OPTIONS] PATH [PATH...]
 The Promptfoo CLI wrapper (`promptfoo scan-model`) now provides full feature parity with the standalone `modelaudit` command, including all advanced options.
 :::
 
-### Configuration File
+### Configuration file
 
 For more complex scanning requirements, you can use a configuration file. For example:
 
@@ -245,7 +245,7 @@ modelaudit scan --config modelaudit-config.yaml path/to/models/
 promptfoo scan-model --verbose --max-file-size 1000000 path/to/models/
 ```
 
-## Promptfoo vs Standalone
+## Promptfoo vs standalone
 
 When using ModelAudit through Promptfoo, you get additional benefits:
 
@@ -253,9 +253,9 @@ When using ModelAudit through Promptfoo, you get additional benefits:
 - **Integrated Workflows**: Seamless integration with Promptfoo evaluation pipelines
 - **Unified Installation**: Single `npm install` gets both Promptfoo and ModelAudit integration
 
-## Advanced Security Features
+## Advanced security features
 
-### File Type Validation
+### File type validation
 
 ModelAudit performs comprehensive file type validation as a security measure:
 
@@ -271,7 +271,7 @@ This helps detect:
 - **Corruption** that might indicate tampering
 - **Format confusion** that could lead to incorrect handling
 
-### Resource Exhaustion Protection
+### Resource exhaustion protection
 
 Built-in protection against various resource exhaustion attacks:
 
@@ -281,7 +281,7 @@ Built-in protection against various resource exhaustion attacks:
 - **Infinite recursion**: Limits nesting depth in recursive file formats
 - **DoS prevention**: Enforces timeouts and maximum file sizes
 
-### Path Traversal Protection
+### Path traversal protection
 
 Automatic protection against path traversal attacks in archives:
 
@@ -295,7 +295,7 @@ All archive scanners (ZIP, model archives, OCI) include path sanitization to pre
 - Absolute path exploitation (`/etc/passwd`)
 - Windows path attacks (`C:\Windows\System32\`)
 
-### Executable Detection
+### Executable detection
 
 Sophisticated detection of embedded executables with validation:
 
@@ -304,9 +304,9 @@ Sophisticated detection of embedded executables with validation:
 - **macOS Mach-O**: Multiple architecture support and validation
 - **Script detection**: Shell script shebangs and interpreter directives
 
-## Integration with Development Workflows
+## Integration with development workflows
 
-### Pre-commit Hook
+### Pre-commit hook
 
 You can add ModelAudit as a pre-commit hook to scan models before committing them:
 
@@ -323,9 +323,9 @@ repos:
         pass_filenames: true
 ```
 
-### CI/CD Integration
+### Ci/cd integration
 
-#### GitHub Actions
+#### Github actions
 
 ```yaml
 # .github/workflows/model-security.yml
@@ -380,7 +380,7 @@ jobs:
           path: scan-results.json
 ```
 
-#### GitLab CI
+#### Gitlab ci
 
 ```yaml
 # .gitlab-ci.yml
@@ -411,7 +411,7 @@ model_security_scan:
       - '**/*.msgpack'
 ```
 
-## Programmatic Usage
+## Programmatic usage
 
 You can also use ModelAudit programmatically in your Python code:
 
@@ -463,9 +463,9 @@ zip_config = {
 results = scan_model_directory_or_file("dataset.zip", **zip_config)
 ```
 
-## Extending ModelAudit
+## Extending modelaudit
 
-### Creating Custom Scanners
+### Creating custom scanners
 
 You can create custom scanners by extending the `BaseScanner` class:
 
@@ -533,7 +533,7 @@ results = scan_model_directory_or_file("path/to/custom_model.mymodel")
 
 ## Troubleshooting
 
-### Common Issues
+### Common issues
 
 1. **Missing Dependencies**
 

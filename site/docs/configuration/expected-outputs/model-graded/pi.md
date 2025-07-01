@@ -2,7 +2,7 @@
 sidebar_position: 8
 ---
 
-# Pi Scorer
+# Pi scorer
 
 `pi` is an alternative approach to model grading that uses a dedicated scoring model instead of the "LLM as a judge" technique. It can evaluate input and output pairs against criteria.
 
@@ -10,7 +10,7 @@ sidebar_position: 8
 **Important**: Unlike `llm-rubric` which works with your existing providers, Pi requires a separate external API key from Pi Labs.
 :::
 
-## Alternative Approach
+## Alternative approach
 
 Pi offers a different approach to evaluation with some distinct characteristics:
 
@@ -39,7 +39,7 @@ env:
   WITHPI_API_KEY: your_api_key_here
 ```
 
-in your promptfoo config
+in your Promptfoo config
 
 ## How to use it
 
@@ -65,7 +65,7 @@ Compared to LLM as a judge:
 - Pi always generates the same score, when given the same input
 - Pi requires a separate API key (see Prerequisites section)
 
-## Threshold Support
+## Threshold support
 
 The `pi` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass.
 
@@ -80,7 +80,7 @@ assert:
 The default threshold is `0.5` if not specified.
 :::
 
-## Metrics Brainstorming
+## Metrics brainstorming
 
 You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brainstorm representative metrics for your application. It helps you:
 
@@ -88,7 +88,7 @@ You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brai
 2. Test metrics on example outputs before integration
 3. Find the optimal threshold values for your use case
 
-## Example Configuration
+## Example configuration
 
 ```yaml
 prompts:
@@ -107,7 +107,7 @@ tests:
         threshold: 0.8
 ```
 
-## See Also
+## See also
 
 - [LLM Rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric)
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded)

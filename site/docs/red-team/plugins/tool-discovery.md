@@ -4,7 +4,7 @@ description: Test if AI systems reveal their available tools, functions, or API 
 keywords: [security testing, tool discovery, red team, function calls, API enumeration]
 ---
 
-# Tool Discovery
+# Tool discovery
 
 The Tool Discovery plugin tests if an AI system reveals the list of tools, functions, or API calls that it has access to.
 

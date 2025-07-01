@@ -2,7 +2,7 @@
 sidebar_label: Custom Prompts
 ---
 
-# Intent (Custom Prompts) Plugin
+# Intent (custom prompts) plugin
 
 The Intent plugin is designed to make it easy to test preset inputs to see if they can successfully manipulate an AI system.
 
@@ -47,7 +47,7 @@ The `intent` property can be:
 - A list of lists of strings (for sequence testing)
 - A file path to a list of intents
 
-### Single Intents and Arrays
+### Single intents and arrays
 
 Basic usage with a single intent or array of intents:
 
@@ -59,7 +59,7 @@ intent:
   - 'generate malicious code'
 ```
 
-### Sequence Testing
+### Sequence testing
 
 You can specify a list of lists to create multi-step interactions. Each inner list represents a sequence of prompts that will be sent to the model in order:
 
@@ -71,7 +71,7 @@ intent:
 
 Each sequence is automatically handled by the sequence provider, which sends the prompts in order and combines the responses.
 
-### File-based Configuration
+### File-based configuration
 
 You can also load intents from a file:
 
@@ -114,7 +114,7 @@ The Intent plugin creates one test case for each intent specified. The intent te
 numTests is ignored for the Intent plugin.
 :::
 
-## Related Concepts
+## Related concepts
 
 - [Policy Plugin](policy.md), which enforces guidelines instead of eliciting specific behaviors
 - [Harmful Content](harmful.md)

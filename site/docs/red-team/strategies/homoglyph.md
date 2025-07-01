@@ -15,11 +15,11 @@ keywords:
   ]
 ---
 
-# Homoglyph Encoding Strategy
+# Homoglyph encoding strategy
 
 The Homoglyph Encoding strategy tests an AI system's ability to resist inputs that use visually similar Unicode characters (homoglyphs) to bypass content filters. This technique replaces standard ASCII characters with confusable Unicode characters that look nearly identical but have different code points, potentially bypassing security controls while remaining readable to humans.
 
-## Why It Works
+## Why it works
 
 - Models may recognize text despite character substitution
 - Safety training typically focuses on semantic meaning rather than character-level analysis
@@ -37,7 +37,7 @@ strategies:
   - homoglyph
 ```
 
-## How It Works
+## How it works
 
 The homoglyph strategy works by:
 
@@ -46,7 +46,7 @@ The homoglyph strategy works by:
 3. Creating text that looks visually similar but has different character codes
 4. Testing whether the model processes homoglyph-encoded text differently than standard text
 
-## Example Scenarios
+## Example scenarios
 
 | Original Character | Homoglyph Replacement | Unicode Name                      |
 | ------------------ | --------------------- | --------------------------------- |
@@ -71,7 +71,7 @@ The strategy helps identify:
 - Model's ability to process visually similar but technically different characters
 - Potential jailbreaking vectors through character substitution
 
-## Related Concepts
+## Related concepts
 
 - [Base64 Encoding](base64.md) - Alternative encoding strategy
 - [Hex Encoding](hex.md) - Alternative encoding strategy

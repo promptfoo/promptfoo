@@ -6,7 +6,7 @@ description: Attack techniques that systematically probe LLM applications for vu
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
 
-# Red Team Strategies
+# Red team strategies
 
 ## Overview
 
@@ -20,19 +20,19 @@ For example, a plugin might generate a harmful input, and a strategy like `jailb
 
 Strategies are applied during redteam generation and can significantly increase the Attack Success Rate (ASR) of adversarial inputs.
 
-## Available Strategies
+## Available strategies
 
 <StrategyTable />
 
-## Strategy Categories
+## Strategy categories
 
-### Static Strategies
+### Static strategies
 
 Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `prompt-injection` wraps the payload in a prompt injection such as `ignore previous instructions and {{original_adversarial_input}}`.
 
-### Dynamic Strategies
+### Dynamic strategies
 
-Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, promptfoo recommends two dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/) and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams.
+Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, Promptfoo recommends two dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/) and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams.
 
 By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
@@ -41,11 +41,11 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 - Stop early if they successfully generate a harmful output
 - Track token usage to prevent runaway costs
 
-### Multi-turn Strategies
+### Multi-turn strategies
 
 Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against its purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
 
-### Regression Strategies
+### Regression strategies
 
 Regression strategies help maintain security over time by learning from past failures. For example, the `retry` strategy automatically incorporates previously failed test cases into your test suite, creating a form of regression testing for LLM behaviors.
 
@@ -53,11 +53,11 @@ Regression strategies help maintain security over time by learning from past fai
 All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.
 :::
 
-## Strategy Selection
+## Strategy selection
 
 Choose strategies based on your application architecture and security requirements:
 
-### Single-turn Applications
+### Single-turn applications
 
 Single-turn applications process each request independently, creating distinct security boundaries:
 
@@ -78,7 +78,7 @@ redteam:
     - jailbreak:composite
 ```
 
-### Multi-turn Applications
+### Multi-turn applications
 
 Multi-turn applications maintain conversation state, introducing additional attack surfaces:
 
@@ -100,9 +100,9 @@ redteam:
     - crescendo
 ```
 
-## Implementation Guide
+## Implementation guide
 
-### Basic Configuration
+### Basic configuration
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -111,7 +111,7 @@ redteam:
     - id: jailbreak:composite # object syntax
 ```
 
-### Advanced Configuration
+### Advanced configuration
 
 Some strategies allow you to specify options in the configuration object. For example, the `multilingual` strategy allows you to specify the languages to use.
 
@@ -137,17 +137,17 @@ redteam:
           - harmful:hate
 ```
 
-### Custom Strategies
+### Custom strategies
 
 For advanced use cases, you can create custom strategies. See [Custom Strategy Development](/docs/red-team/strategies/custom) for details.
 
-## Related Concepts
+## Related concepts
 
 - [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Understand the types of vulnerabilities strategies can test
 - [Red Team Plugins](/docs/red-team/plugins/) - Learn about the plugins that generate the base test cases
 - [Custom Strategies](/docs/red-team/strategies/custom) - Create your own strategies
 
-## Next Steps
+## Next steps
 
 1. Review [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/)
 2. Set up your first test suite

@@ -10,7 +10,7 @@ The `azure` provider is an interface to Azure. It shares configuration settings 
 
 There are two ways to authenticate with Azure:
 
-### Option 1: API Key Authentication
+### Option 1: API key authentication
 
 Set the `AZURE_API_KEY` environment variable and configure your deployment:
 
@@ -21,7 +21,7 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
-### Option 2: Client Credentials Authentication
+### Option 2: client credentials authentication
 
 Set the following environment variables or config properties:
 
@@ -43,7 +43,7 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
-### Option 3: Azure CLI Authentication
+### Option 3: Azure CLI authentication
 
 Authenticate with Azure CLI using `az login` before running promptfoo. This is the fallback option if the parameters for the previous options are not provided.
 
@@ -60,12 +60,12 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
-## Provider Types
+## Provider types
 
 - `azure:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-35-turbo, gpt-4)
 - `azure:completion:<deployment name>` - uses the given deployment (for completion endpoints such as gpt-35-instruct)
 
-## Environment Variables
+## Environment variables
 
 The Azure OpenAI provider supports the following environment variables:
 
@@ -86,7 +86,7 @@ The Azure OpenAI provider supports the following environment variables:
 
 Note: For API URLs, you only need to set one of `AZURE_API_HOST`, `AZURE_API_BASE_URL`, or `AZURE_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
 
-### Default Deployment
+### Default deployment
 
 If `AZURE_DEPLOYMENT_NAME` is set, it will be automatically used as the default deployment when no other provider is configured. This makes Azure OpenAI the default provider when:
 
@@ -232,7 +232,7 @@ tests:
 
 The `similar` assertion type requires an embedding model such as `text-embedding-ada-002`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
 
-## AI Services
+## Ai services
 
 You may also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
 
@@ -297,7 +297,7 @@ OpenAI config:
 | stop                  | Specifies stop sequences for the generation.                                                                                                                                                                                                  |
 | passthrough           | Anything under `passthrough` will be sent as a top-level request param                                                                                                                                                                        |
 
-## Using Reasoning Models (o1, o3-mini)
+## Using reasoning models (o1, o3-mini)
 
 Azure OpenAI now supports reasoning models like `o1` and `o3-mini`. These models operate differently from standard models with specific requirements:
 
@@ -332,7 +332,7 @@ providers:
 
 > Note: The `o1` flag is still supported for backward compatibility, but `isReasoningModel` is preferred as it more clearly indicates its purpose.
 
-### Using Variables with Reasoning Effort
+### Using variables with reasoning effort
 
 You can use variables in your configuration to dynamically adjust the reasoning effort based on your test cases:
 
@@ -359,7 +359,7 @@ tests:
       effort_level: 'high'
 ```
 
-### Environment Variables
+### Environment variables
 
 These parameters can be configured directly in your configuration file as shown above.
 
@@ -373,7 +373,7 @@ API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is
 
 This means you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
 
-## Using DeepSeek Models
+## Using deepseek models
 
 Azure AI supports DeepSeek models such as DeepSeek-R1. Like other reasoning models, these require specific configuration:
 
@@ -429,7 +429,7 @@ providers:
 
 Be sure to replace the assistant ID and the name of your deployment.
 
-### Function Tools with Assistants
+### Function tools with assistants
 
 Azure OpenAI Assistants support custom function tools. You can define functions in your configuration and provide callback implementations to handle them:
 
@@ -464,7 +464,7 @@ providers:
           }
 ```
 
-### Using Vector Stores with Assistants
+### Using vector stores with assistants
 
 Azure OpenAI Assistants support vector stores for enhanced file search capabilities. To use a vector store with your assistant, first create a vector store in the Azure Portal or via the API, then configure your assistant to use it:
 
@@ -493,7 +493,7 @@ Make sure to:
 2. Configure the `tool_resources.file_search.vector_store_ids` array with your vector store IDs
 3. Set the appropriate `apiVersion` (recommended: `2024-05-01-preview` or later)
 
-### Simple Example
+### Simple example
 
 Here's an example of a simple full assistant eval:
 
@@ -515,7 +515,7 @@ For complete working examples of Azure OpenAI Assistants with various tool confi
 
 See the guide on [How to eval OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
 
-## See Also
+## See also
 
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions

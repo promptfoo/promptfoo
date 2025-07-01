@@ -17,11 +17,11 @@ pagination_prev: configuration/huggingface-datasets
 pagination_next: configuration/chat
 ---
 
-# Output Formats
+# Output formats
 
 Save and analyze your evaluation results in various formats.
 
-## Quick Start
+## Quick start
 
 ```bash
 # Interactive web viewer (default)
@@ -37,9 +37,9 @@ promptfoo eval --output results.json
 promptfoo eval --output results.csv
 ```
 
-## Available Formats
+## Available formats
 
-### HTML Report
+### Html report
 
 Generate a visual, shareable report:
 
@@ -56,7 +56,7 @@ promptfoo eval --output report.html
 
 **Use when:** Presenting results to stakeholders or reviewing outputs visually.
 
-### JSON Output
+### Json output
 
 Export complete evaluation data:
 
@@ -81,7 +81,7 @@ promptfoo eval --output results.json
 
 **Use when:** Integrating with other tools or performing custom analysis.
 
-### CSV Export
+### Csv export
 
 Create spreadsheet-compatible data:
 
@@ -100,7 +100,7 @@ promptfoo eval --output results.csv
 
 **Use when:** Analyzing results in Excel, Google Sheets, or data science tools.
 
-### YAML Format
+### Yaml format
 
 Human-readable structured data:
 
@@ -110,9 +110,9 @@ promptfoo eval --output results.yaml
 
 **Use when:** Reviewing results in a text editor or version control.
 
-## Configuration Options
+## Configuration options
 
-### Setting Output Path in Config
+### Setting output path in config
 
 ```yaml title="promptfooconfig.yaml"
 # Specify default output file
@@ -124,7 +124,7 @@ tests:
   - '...'
 ```
 
-### Multiple Output Formats
+### Multiple output formats
 
 Generate multiple formats simultaneously:
 
@@ -137,9 +137,9 @@ promptfoo eval --output results.json && \
 promptfoo eval --output results.csv
 ```
 
-## Output Contents
+## Output contents
 
-### Standard Fields
+### Standard fields
 
 All formats include:
 
@@ -153,7 +153,7 @@ All formats include:
 | `results`   | Pass/fail for each assertion |
 | `stats`     | Summary statistics           |
 
-### Detailed Metrics
+### Detailed metrics
 
 When available, outputs include:
 
@@ -162,9 +162,9 @@ When available, outputs include:
 - **Cost**: Estimated API costs
 - **Error Details**: Failure reasons and stack traces
 
-## Analyzing Results
+## Analyzing results
 
-### JSON Processing Example
+### Json processing example
 
 ```javascript
 const fs = require('fs');
@@ -190,7 +190,7 @@ results.results.outputs.forEach((output) => {
 console.log('Pass rates by provider:', providerStats);
 ```
 
-### CSV Analysis with Pandas
+### Csv analysis with pandas
 
 ```python
 import pandas as pd
@@ -208,9 +208,9 @@ summary = df.groupby('provider').agg({
 print(summary)
 ```
 
-## Best Practices
+## Best practices
 
-### 1. Organize Output Files
+### 1. organize output files
 
 ```
 project/
@@ -221,14 +221,14 @@ project/
 │   └── comparison.json
 ```
 
-### 2. Use Descriptive Filenames
+### 2. use descriptive filenames
 
 ```bash
 # Include date and experiment name
 promptfoo eval --output "results/$(date +%Y%m%d)-gpt4-temperature-test.html"
 ```
 
-### 3. Version Control Considerations
+### 3. version control considerations
 
 ```gitignore
 # .gitignore
@@ -240,7 +240,7 @@ evaluations/*.json
 !evaluations/summary-*.csv
 ```
 
-### 4. Automate Report Generation
+### 4. automate report generation
 
 ```bash
 #!/bin/bash
@@ -252,9 +252,9 @@ promptfoo eval \
   --output "reports/${TIMESTAMP}-summary.html"
 ```
 
-## Sharing Results
+## Sharing results
 
-### Web Viewer
+### Web viewer
 
 The default web viewer (`promptfoo view`) provides:
 
@@ -262,7 +262,7 @@ The default web viewer (`promptfoo view`) provides:
 - Interactive exploration
 - Local-only (no data sent externally)
 
-### Sharing HTML Reports
+### Sharing HTML reports
 
 HTML outputs are self-contained:
 
@@ -274,7 +274,7 @@ promptfoo eval --output team-review.html
 # No external dependencies required
 ```
 
-### Promptfoo Share
+### Promptfoo share
 
 For collaborative review:
 
@@ -291,7 +291,7 @@ Creates a shareable link with:
 
 ## Troubleshooting
 
-### Large Output Files
+### Large output files
 
 For extensive evaluations:
 
@@ -303,7 +303,7 @@ sharing:
   includeRawOutputs: false
 ```
 
-### Encoding Issues
+### Encoding issues
 
 Ensure proper encoding for international content:
 
@@ -312,14 +312,14 @@ Ensure proper encoding for international content:
 LANG=en_US.UTF-8 promptfoo eval --output results.csv
 ```
 
-### Performance Tips
+### Performance tips
 
 1. **Use JSON for large datasets** - Most efficient format
 2. **Generate HTML for presentations** - Best visual format
 3. **Use CSV for data analysis** - Easy Excel/Sheets integration
 4. **Stream outputs for huge evaluations** - Process results incrementally
 
-## Related Documentation
+## Related documentation
 
 - [Configuration Reference](/docs/configuration/reference) - All output options
 - [Integrations](/docs/category/integrations/) - Using outputs with other tools

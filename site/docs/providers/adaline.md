@@ -2,7 +2,7 @@
 sidebar_label: Adaline Gateway
 ---
 
-# Adaline Gateway
+# Adaline gateway
 
 Adaline Gateway is a fully local production-grade Super SDK that provides a simple, unified, and powerful interface for calling more than 200+ LLMs.
 
@@ -156,7 +156,7 @@ type GatewayChatOptions = {
 };
 ```
 
-## Adaline Gateway types
+## Adaline gateway types
 
 Here is an example of prompt messages used by adaline:
 

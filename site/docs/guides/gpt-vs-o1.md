@@ -3,7 +3,7 @@ sidebar_label: 'gpt-4.1 vs o1'
 description: 'Learn how to benchmark OpenAI o1 and o1-mini. Discover which model performs best for your specific use case.'
 ---
 
-# gpt-4.1 vs o1: Benchmark on Your Own Data
+# Gpt-4.1 vs o1: benchmark on your own data
 
 OpenAI has released a new model series called o1 designed to spend more time thinking before responding and excel at complex reasoning tasks.
 
@@ -19,10 +19,10 @@ The end result will be a side-by-side comparison that looks similar to this:
 
 Before we begin, you'll need:
 
-- promptfoo CLI installed. If not, refer to the [installation guide](/docs/installation).
+- Promptfoo CLI installed. If not, refer to the [installation guide](/docs/installation).
 - An active OpenAI API key set as the `OPENAI_API_KEY` environment variable.
 
-## Step 1: Setup
+## Step 1: setup
 
 Create a new directory for your comparison project:
 
@@ -30,7 +30,7 @@ Create a new directory for your comparison project:
 npx promptfoo@latest init openai-o1-comparison
 ```
 
-## Step 2: Configure the Comparison
+## Step 2: configure the comparison
 
 Edit the `promptfooconfig.yaml` file to define your comparison.
 
@@ -133,7 +133,7 @@ tests:
 
 This configuration sets up a comprehensive comparison between gpt-4.1 and o1-preview using a variety of riddles, with cost and latency requirements. We strongly encourage you to revise this with your own test cases and assertions!
 
-## Step 3: Run the Comparison
+## Step 3: run the comparison
 
 Execute the comparison using the `promptfoo eval` command:
 

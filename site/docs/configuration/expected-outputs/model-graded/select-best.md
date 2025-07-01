@@ -2,7 +2,7 @@
 sidebar_label: Select Best
 ---
 
-# Select Best
+# Select best
 
 The `select-best` assertion compares multiple outputs in the same test case and selects the one that best meets a specified criterion. This is useful for comparing different prompt or model variations to determine which produces the best result.
 
@@ -27,7 +27,7 @@ The select-best checker:
 3. Selects the best output
 4. Returns pass=true for the winning output and pass=false for others
 
-### Example Configuration
+### Example configuration
 
 Here's a complete example showing how to use select-best to compare different prompt variations:
 
@@ -51,7 +51,7 @@ tests:
         value: 'choose the tweet that best balances information and humor'
 ```
 
-### Overriding the Grader
+### Overriding the grader
 
 Like other model-graded assertions, you can override the default grader:
 
@@ -77,7 +77,7 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-4.1-mini
    ```
 
-### Customizing the Prompt
+### Customizing the prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property:
 

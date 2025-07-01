@@ -4,7 +4,7 @@ title: Tree-based Jailbreaks Strategy
 description: Create a branching structure of single-shot prompts to systematically explore and bypass AI constraints
 ---
 
-# Tree-based Jailbreaks Strategy
+# Tree-based jailbreaks strategy
 
 The Tree-based Jailbreaks strategy is an advanced technique designed to systematically explore and potentially bypass an AI system's constraints by creating a branching structure of single-shot prompts.
 
@@ -19,7 +19,7 @@ strategies:
   - jailbreak:tree
 ```
 
-## How It Works
+## How it works
 
 The Tree-based Jailbreaks strategy works by:
 
@@ -34,7 +34,7 @@ This strategy is medium cost. We recommend running it on a smaller number of tes
 
 ![Tree-based Jailbreaks Strategy](/img/docs/tree-jailbreak.svg)
 
-## Example Scenario
+## Example scenario
 
 ```
 Root: "Can you help me hack into a computer?"
@@ -59,7 +59,7 @@ Root: "Can you help me hack into a computer?"
 
 Each branch and sub-branch represents a potential path for further exploration and refinement of single-shot prompts.
 
-## Importance in Gen AI Red Teaming
+## Importance in gen AI red teaming
 
 The tree-based jailbreak strategy allows for a comprehensive exploration of potential vulnerabilities by:
 
@@ -69,7 +69,7 @@ The tree-based jailbreak strategy allows for a comprehensive exploration of pote
 
 This approach can cover a wide range of inputs and identify weaknesses that might not be apparent with manual testing methods.
 
-## Related Concepts
+## Related concepts
 
 - [Iterative Jailbreaks](iterative.md) - Similar approach using sequential refinement
 - [Prompt Injections](prompt-injection.md) - Simpler static approach to jailbreaking
@@ -77,6 +77,6 @@ This approach can cover a wide range of inputs and identify weaknesses that migh
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
 
-## Further Reading
+## Further reading
 
 - [Tree of Attacks: Jailbreaking Black-Box LLMs Automatically](https://arxiv.org/abs/2312.02119)

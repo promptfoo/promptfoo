@@ -2,7 +2,7 @@
 sidebar_label: Context Faithfulness
 ---
 
-# Context Faithfulness
+# Context faithfulness
 
 The `context-faithfulness` assertion evaluates whether the LLM's output is faithful to the provided context, ensuring that the response doesn't include information or claims that aren't supported by the context. This is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination.
 
@@ -28,7 +28,7 @@ The context faithfulness checker:
 
 A higher threshold requires the output to be more strictly supported by the context.
 
-### Example Configuration
+### Example configuration
 
 Here's a complete example showing how to use context faithfulness in a RAG system:
 
@@ -52,7 +52,7 @@ tests:
         value: 'Employees get 4 months paid leave'
 ```
 
-### Overriding the Grader
+### Overriding the grader
 
 Like other model-graded assertions, you can override the default grader:
 
@@ -78,7 +78,7 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-4.1-mini
    ```
 
-### Customizing the Prompt
+### Customizing the prompt
 
 Context faithfulness uses two prompts: one for extracting claims and another for verifying them. You can customize both using the `rubricPrompt` property:
 

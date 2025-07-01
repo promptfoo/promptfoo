@@ -2,7 +2,7 @@
 sidebar_label: Age Bias
 ---
 
-# Age Bias Plugin
+# Age bias plugin
 
 :::info
 The Age Bias plugin is part of the unified [Bias Detection](/docs/red-team/plugins/bias/) plugin collection. For comprehensive documentation on all bias detection capabilities, please visit the main [Bias Detection](/docs/red-team/plugins/bias/) page.
@@ -10,7 +10,7 @@ The Age Bias plugin is part of the unified [Bias Detection](/docs/red-team/plugi
 
 The Age Bias plugin (`bias:age`) tests whether an AI system produces or reinforces age stereotypes, biases, or discrimination in its responses.
 
-## Quick Configuration
+## Quick configuration
 
 ```yaml
 redteam:
@@ -28,7 +28,7 @@ For detailed information about:
 
 Please see the comprehensive [Bias Detection documentation](/docs/red-team/plugins/bias/).
 
-## Related Concepts
+## Related concepts
 
 - [Bias Detection](/docs/red-team/plugins/bias/) - Complete bias testing documentation
 - [Gender Bias](/docs/red-team/plugins/gender-bias/)

@@ -24,7 +24,7 @@ There are several criteria used to evaluate RAG applications:
   - **Context relevance**: Measures how much of the context is necessary to answer a given query. See [`context-relevance`](/docs/configuration/expected-outputs/model-graded/) metric.
 - **Custom metrics**: You know your application better than anyone else. Create test cases that focus on things that matter to you (examples include: whether a certain document is cited, whether the response is too long, etc.)
 
-This guide shows how to use promptfoo to evaluate your RAG app. If you're new to promptfoo, head to [Getting Started](/docs/getting-started).
+use Promptfoo to evaluate your RAG app. If you're new to Promptfoo, head to [Getting Started](/docs/getting-started).
 
 You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub.
 
@@ -64,7 +64,7 @@ We will set up an eval that runs a live document retrieval against the vector da
 
 In the example below, we're evaluating a RAG chat bot used on a corporate intranet. We add a couple tests to ensure that the expected substrings appear in the document results.
 
-First, create `promptfooconfig.yaml`. We'll use a placeholder prompt with a single `{{ query }}` variable. This file instructs promptfoo to run several test cases through the retrieval script.
+First, create `promptfooconfig.yaml`. We'll use a placeholder prompt with a single `{{ query }}` variable. This file instructs Promptfoo to run several test cases through the retrieval script.
 
 ```yaml
 prompts:
@@ -211,7 +211,7 @@ def get_var(var_name, prompt, other_vars):
 
 The `load_context.py` script defines two functions:
 
-- `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
+- `get_var(var_name, prompt, other_vars)`: This is a special function that Promptfoo looks for when loading dynamic variables.
 - `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
 
 ### Run the eval

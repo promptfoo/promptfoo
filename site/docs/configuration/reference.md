@@ -2,10 +2,10 @@
 sidebar_position: 2
 sidebar_label: Reference
 title: Configuration Reference - Complete API Documentation
-description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
+description: Comprehensive reference for all Promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
 keywords:
   [
-    promptfoo reference,
+    Promptfoo reference,
     configuration API,
     evaluation options,
     provider settings,
@@ -18,7 +18,7 @@ pagination_next: configuration/parameters
 
 # Reference
 
-Here is the main structure of the promptfoo configuration file:
+Here is the main structure of the Promptfoo configuration file:
 
 ### Config
 
@@ -38,7 +38,7 @@ Here is the main structure of the promptfoo configuration file:
 | extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 | env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
 
-### Test Case
+### Test case
 
 A test case represents a single example input that is fed into all prompts and providers.
 
@@ -72,7 +72,7 @@ More details on using assertions, including examples [here](/docs/configuration/
 | provider  | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
 | metric    | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                 |
 
-### AssertionValueFunctionContext
+### Assertionvaluefunctioncontext
 
 When using JavaScript or Python assertions, your function receives a context object with the following interface:
 
@@ -103,17 +103,17 @@ interface AssertionValueFunctionContext {
 
 :::note
 
-promptfoo supports `.js` and `.json` file extensions in addition to `.yaml`.
+Promptfoo supports `.js` and `.json` file extensions in addition to `.yaml`.
 
 It automatically loads `promptfooconfig.*`, but you can use a custom config file with `promptfoo eval -c path/to/config`.
 
 :::
 
-## Extension Hooks
+## Extension hooks
 
 Promptfoo supports extension hooks that allow you to run custom code that modifies the evaluation state at specific points in the evaluation lifecycle. These hooks are defined in extension files specified in the `extensions` property of the configuration.
 
-### Available Hooks
+### Available hooks
 
 | Name       | Description                                   | Context                                           |
 | ---------- | --------------------------------------------- | ------------------------------------------------- |
@@ -122,7 +122,7 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 | beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
 | afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
 
-### Implementing Hooks
+### Implementing hooks
 
 To implement these hooks, create a JavaScript or Python file with a function that handles the hooks you want to use. Then, specify the path to this file and the function name in the `extensions` array in your configuration.
 
@@ -139,7 +139,7 @@ extensions:
 ```
 
 :::important
-When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
+When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells Promptfoo which function to call in the extension file.
 :::
 
 Python example extension file:
@@ -236,11 +236,11 @@ async function extensionHook(hookName, context) {
 module.exports = extensionHook;
 ```
 
-These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
+These hooks provide powerful extensibility to your Promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
 The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
 
-#### beforeAll
+#### Beforeall
 
 | Property                          | Type                       | Description                            |
 | --------------------------------- | -------------------------- | -------------------------------------- |
@@ -253,7 +253,7 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 | `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of derived metrics.              |
 | `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.          |
 
-#### beforeEach
+#### Beforeeach
 
 | Property       | Type       | Description                    |
 | -------------- | ---------- | ------------------------------ |
@@ -273,7 +273,7 @@ interface GuardrailResponse {
 }
 ```
 
-### ProviderFunction
+### Providerfunction
 
 A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.
 
@@ -284,7 +284,7 @@ type ProviderFunction = (
 ) => Promise<ProviderResponse>;
 ```
 
-### ProviderOptions
+### Provideroptions
 
 ProviderOptions is an object that includes the `id` of the provider and an optional `config` object that can be used to pass provider-specific configurations.
 
@@ -308,7 +308,7 @@ interface ProviderOptions {
 }
 ```
 
-### ProviderResponse
+### Providerresponse
 
 ProviderResponse is an object that represents the response from a provider. It includes the output from the provider, any error that occurred, information about token usage, and a flag indicating whether the response was cached.
 
@@ -330,7 +330,7 @@ interface ProviderResponse {
 }
 ```
 
-### ProviderEmbeddingResponse
+### Providerembeddingresponse
 
 ProviderEmbeddingResponse is an object that represents the response from a provider's embedding API. It includes the embedding from the provider, any error that occurred, and information about token usage.
 
@@ -344,7 +344,7 @@ interface ProviderEmbeddingResponse {
 
 ## Evaluation inputs
 
-### TestSuiteConfiguration
+### Testsuiteconfiguration
 
 ```typescript
 interface TestSuiteConfig {
@@ -388,7 +388,7 @@ interface TestSuiteConfig {
 }
 ```
 
-### UnifiedConfig
+### Unifiedconfig
 
 UnifiedConfig is an object that includes the test suite configuration, evaluation options, and command line options. It is used to hold the complete configuration for the evaluation.
 
@@ -442,7 +442,7 @@ interface Prompt {
 }
 ```
 
-### EvaluateOptions
+### Evaluateoptions
 
 EvaluateOptions is an object that includes options for how the evaluation should be performed. It includes the maximum concurrency for API calls, whether to show a progress bar, a callback for progress updates, the number of times to repeat each test, and a delay between tests.
 
@@ -459,7 +459,7 @@ interface EvaluateOptions {
 
 ## Evaluation outputs
 
-### EvaluateTable
+### Evaluatetable
 
 EvaluateTable is an object that represents the results of the evaluation in a tabular format. It includes a header with the prompts and variables, and a body with the outputs and variables for each test case.
 
@@ -476,7 +476,7 @@ interface EvaluateTable {
 }
 ```
 
-### EvaluateTableOutput
+### Evaluatetableoutput
 
 EvaluateTableOutput is an object that represents the output of a single evaluation in a tabular format. It includes the pass/fail result, score, output text, prompt, latency, token usage, and grading result.
 
@@ -492,7 +492,7 @@ interface EvaluateTableOutput {
 }
 ```
 
-### EvaluateSummary
+### Evaluatesummary
 
 EvaluateSummary is an object that represents a summary of the evaluation results. It includes the version of the evaluator, the results of each evaluation, a table of the results, and statistics about the evaluation.
 The latest version is 3. It removed the table and added in a new prompts property.
@@ -517,7 +517,7 @@ interface EvaluateSummaryV2 {
 }
 ```
 
-### EvaluateStats
+### Evaluatestats
 
 EvaluateStats is an object that includes statistics about the evaluation. It includes the number of successful and failed tests, and the total token usage.
 
@@ -529,7 +529,7 @@ interface EvaluateStats {
 }
 ```
 
-### EvaluateResult
+### Evaluateresult
 
 EvaluateResult roughly corresponds to a single "cell" in the grid comparison view. It includes information on the provider, prompt, and other inputs, as well as the outputs.
 
@@ -547,7 +547,7 @@ interface EvaluateResult {
 }
 ```
 
-### GradingResult
+### Gradingresult
 
 GradingResult is an object that represents the result of grading a test case. It includes whether the test case passed, the score, the reason for the result, the tokens used, and the results of any component assertions.
 
@@ -563,7 +563,7 @@ interface GradingResult {
 }
 ```
 
-### CompletedPrompt
+### Completedprompt
 
 CompletedPrompt is an object that represents a prompt that has been evaluated. It includes the raw prompt, the provider, metrics, and other information.
 

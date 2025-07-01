@@ -2,7 +2,7 @@
 sidebar_label: Evaluating Replicate Lifeboat
 ---
 
-# How to evaluate GPT 3.5 vs Llama2-70b with Replicate Lifeboat
+# How to evaluate GPT 3.5 vs llama2-70b with replicate lifeboat
 
 Replicate put together a ["Lifeboat" OpenAI proxy](https://lifeboat.replicate.dev/) that allows you to swap to their hosted Llama2-70b instances. They are generously providing this API for free for a week.
 
@@ -14,7 +14,7 @@ In this guide, we'll put together a small test that compares the two models and 
 
 I encourage you to substitute your own tests in this walkthrough, so that the result is tailored to _your_ LLM application.
 
-## Running Evaluations with Promptfoo CLI
+## Running evaluations with Promptfoo CLI
 
 Promptfoo is a command-line tool that can help you run benchmarks across different language models. Below is a guide to set up and run evaluations using Promptfoo with Replicate Lifeboat:
 
@@ -24,7 +24,7 @@ First, we'll initialize the project directory for the eval.
 npx promptfoo@latest init replicate-lifeboat-eval
 ```
 
-### Step 2: Edit the configuration
+### Step 2: edit the configuration
 
 Modify the `promptfooconfig.yaml` file to include the models you wish to compare. Below is an example configuration that compares a Llama model on Replicate with a GPT model:
 
@@ -54,7 +54,7 @@ tests:
 You'll need to provide your own Replicate and OpenAI API tokens (these are used to call each LLM and compare outputs).
 :::
 
-### Step 3: Add more test cases
+### Step 3: add more test cases
 
 Define a set of test cases in `promptfooconfig.yaml`. Here's an example with a few test cases and corresponding assertions:
 
@@ -89,7 +89,7 @@ For the final example code, see [github](https://github.com/promptfoo/promptfoo/
 Learn more about how to set up [assertions](/docs/configuration/expected-outputs/) and [model-graded evals](/docs/configuration/expected-outputs/model-graded).
 :::
 
-### Step 4: Run the Comparison
+### Step 4: run the comparison
 
 Execute the comparison using the `promptfoo eval` command, which will run your test cases against each model and produce results.
 

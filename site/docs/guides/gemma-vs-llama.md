@@ -2,7 +2,7 @@
 sidebar_label: Gemma vs Llama
 ---
 
-# Gemma vs Llama: benchmark on your own data
+# Gemma vs llama: benchmark on your own data
 
 Comparing Google's Gemma and Meta's Llama involves more than just looking at their specs and reading about generic benchmarks. The true measure of their usefulness comes down to how they perform on the _specific tasks you need them for_, in the context of your specific application.
 
@@ -19,7 +19,7 @@ Before diving into the comparison, make sure you have the following:
 
 Although the configuration below uses Replicate, it wouldn't take much modification to run this eval on any local LLM provider (e.g. through [ollama](/docs/providers/ollama)).
 
-## Step 1: Setting Up Your Configuration
+## Step 1: setting up your configuration
 
 Let's start by creating a new directory for our eval:
 
@@ -50,11 +50,11 @@ prompts:
   - 'Write a instagram post about {{topic}}'
 ```
 
-#### Part 2: Configuring providers
+#### Part 2: configuring providers
 
 The next section of the configuration file deals with the providers, which in this context are the services hosting the models (Gemma and Llama). You'll need to specify each model's unique identifier, any configuration parameters like temperature and max token count, and any model-specific formatting.
 
-##### Llama Configuration
+##### Llama configuration
 
 ```yaml
 - id: replicate:meta/llama-2-7b-chat
@@ -71,7 +71,7 @@ The next section of the configuration file deals with the providers, which in th
 - `max_new_tokens`: Specifies the maximum length of the generated response.
 - `prompt`: Llama requires that we wrap prompts with `[INST]` tags to indicate instruction-based prompting.
 
-##### Gemma Configuration
+##### Gemma configuration
 
 ```yaml
 - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
@@ -110,7 +110,7 @@ providers:
         suffix: "<end_of_turn>\n<start_of_turn>model"
 ```
 
-## Step 2: Defining Test Cases
+## Step 2: defining test cases
 
 Test cases are where you specify the inputs that will be fed to both models. This is your opportunity to compare how each model handles a variety of requests, from simple queries to complex reasoning tasks.
 
@@ -180,7 +180,7 @@ tests:
 
 (Note that `llm-rubric` uses GPT-4o by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
 
-## Step 3: Running the Comparison
+## Step 3: running the comparison
 
 With your configuration and test cases set up, you're ready to run the comparison. Use the following command to start the evaluation:
 
@@ -198,7 +198,7 @@ npx promptfoo@latest view
 
 ![gemma vs llama](/img/docs/gemma-vs-llama.png)
 
-## Step 4: Analyzing the Results
+## Step 4: analyzing the results
 
 After running the evaluation, you'll have a dataset that compares the responses from Gemma and Llama across your test cases. Look for patterns in the results:
 
@@ -210,4 +210,4 @@ After running the evaluation, you'll have a dataset that compares the responses 
 
 Consider the implications of these results for your specific application or use case. Although Gemma outperforms Llama on generic test sets, you must create your own test set in order to really pick a winner!
 
-To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).
+To learn more about setting up Promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).

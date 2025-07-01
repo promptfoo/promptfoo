@@ -2,7 +2,7 @@
 sidebar_label: Connecting to Targets
 ---
 
-# Connecting to Targets
+# Connecting to targets
 
 When setting up your target, use these best practices:
 
@@ -25,7 +25,7 @@ headers:
   Authorization: Bearer <token>
 ```
 
-## Rate Limiting
+## Rate limiting
 
 If you're making a large number of requests to the target, you may encounter rate limiting. This is a common security measure to prevent abuse.
 
@@ -36,6 +36,6 @@ headers:
   User-Agent: Promptfoo
 ```
 
-## Streaming or Polling
+## Streaming or polling
 
 Many chatbots will stream responses back to the client or have the client poll for new messages. The solution here is to setup an alternate HTTP endpoint or parameter to return the response in a single message.

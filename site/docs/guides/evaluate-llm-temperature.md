@@ -32,7 +32,7 @@ Before setting up an evaluation to compare the performance of your LLM at differ
 npx promptfoo@latest init
 ```
 
-This command sets up a basic configuration file in your current directory, which you can then customize for your evaluation needs. For more information on getting started with promptfoo, refer to the [getting started guide](/docs/getting-started).
+This command sets up a basic configuration file in your current directory, which you can then customize for your evaluation needs. For more information on getting started with Promptfoo, refer to the [getting started guide](/docs/getting-started).
 
 ## Evaluating
 

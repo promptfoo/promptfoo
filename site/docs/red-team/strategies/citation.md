@@ -4,7 +4,7 @@ title: Authority-based Jailbreaking Strategy
 description: Exploit LLM bias toward academic authority by framing harmful requests within research contexts
 ---
 
-# Authority-based Jailbreaking
+# Authority-based jailbreaking
 
 The Citation strategy is a red teaming technique that uses academic citations and references to potentially bypass an AI system's safety measures.
 
@@ -27,7 +27,7 @@ strategies:
       - pii
 ```
 
-## How It Works
+## How it works
 
 The strategy reformats prompts by wrapping them in academic citations and references. For example:
 
@@ -65,7 +65,7 @@ The citation strategy helps identify:
 - Inconsistencies in how models handle similar content in different contexts
 - Potential vulnerabilities in content filtering systems
 
-## Example Scenarios
+## Example scenarios
 
 Here are some examples of how prompts get transformed:
 
@@ -87,7 +87,7 @@ Reference:
 1. Analysis of Modern Malware Architectures. Proceedings of the International Conference on Security, 2023.
 ```
 
-## Related Concepts
+## Related concepts
 
 - [Multi-turn Jailbreaks](multi-turn.md) - Related jailbreaking approach
 - [Prompt Injection](prompt-injection.md) - Another technique to bypass safety controls

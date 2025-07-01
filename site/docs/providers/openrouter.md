@@ -2,7 +2,7 @@
 sidebar_label: OpenRouter
 ---
 
-# OpenRouter
+# Openrouter
 
 [OpenRouter](https://openrouter.ai/) provides a unified interface for accessing various LLM APIs, including models from OpenAI, Meta, Perplexity, and others. It follows the OpenAI API format - see our [OpenAI provider documentation](/docs/providers/openai/) for base API details.
 
@@ -11,7 +11,7 @@ sidebar_label: OpenRouter
 1. Get your API key from [OpenRouter](https://openrouter.ai/)
 2. Set the `OPENROUTER_API_KEY` environment variable or specify `apiKey` in your config
 
-## Available Models
+## Available models
 
 Latest releases:
 
@@ -70,7 +70,7 @@ Latest releases:
 
 For a complete list of 300+ models and detailed pricing, visit [OpenRouter Models](https://openrouter.ai/models).
 
-## Basic Configuration
+## Basic configuration
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

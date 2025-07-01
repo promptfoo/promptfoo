@@ -16,7 +16,7 @@ The end result is a view that looks like this:
 
 Start by creating a blank `promptfooconfig.yaml` file (optionally, generate a placeholder using `npx promptfoo@latest init`).
 
-### Step 1: Define the Prompt(s)
+### Step 1: define the prompt(s)
 
 Specify the text prompts that will be used to generate the SQL queries. Use `{{placeholders}}` for variables that will be replaced with actual values during testing.
 
@@ -39,7 +39,7 @@ prompts:
   - file://path/to/another_prompt.json
 ```
 
-### Step 2: Specify the Providers
+### Step 2: specify the providers
 
 Define one or more language model providers to use. For example, here we compare the performance between GPT 3.5 and GPT 4:
 
@@ -51,14 +51,14 @@ providers:
 
 A wide variety of LLM APIs are supported, including local models. See [providers](/docs/providers) for more information.
 
-### Step 3: Define the Tests
+### Step 3: define the tests
 
 Create test cases to validate the generated SQL queries. Each test case includes:
 
 - **vars**: Variables used in the prompt template.
 - **assert**: Assertions to used to validate the output.
 
-#### Basic SQL Validation
+#### Basic SQL validation
 
 This test checks produces a query for `bananas` (remember our prompt above) and confirms that the generated output is valid SQL.
 
@@ -74,7 +74,7 @@ This test checks produces a query for `bananas` (remember our prompt above) and 
 Use `contains-sql` instead of `is-sql` to allow responses that contain text with SQL code blocks.
 :::
 
-#### Table-Specific SQL Validation
+#### Table-specific SQL validation
 
 This test ensures the SQL query only uses specified tables (`Products` and `Shipments`).
 
@@ -93,7 +93,7 @@ This test ensures the SQL query only uses specified tables (`Products` and `Ship
 
 The format for allowed notation is ` {type}::{tableName}::{columnName}`, and `null` can be used to allow any.
 
-#### Column-Specific SQL Validation
+#### Column-specific SQL validation
 
 This test is expected to fail since the `DoesntExist` column is not present in the database:
 
@@ -109,7 +109,7 @@ This test is expected to fail since the `DoesntExist` column is not present in t
           - select::null::DoesntExist
 ```
 
-### Step 4: Define the Database Schema
+### Step 4: define the database schema
 
 Define the structure of your database in a separate SQL file (`database.sql`).
 
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS ShipmentDetails (
 );
 ```
 
-### Final Configuration
+### Final configuration
 
 Combine all the steps into a final configuration file (`promptfooconfig.yaml`):
 
@@ -194,7 +194,7 @@ tests:
             - select::null::DoesntExist
 ```
 
-## Running Tests
+## Running tests
 
 Run your tests:
 

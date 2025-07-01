@@ -16,11 +16,11 @@ pagination_prev: configuration/parameters
 pagination_next: configuration/test-cases
 ---
 
-# Prompt Configuration
+# Prompt configuration
 
 Define what you send to your LLMs - from simple strings to complex multi-turn conversations.
 
-## Text Prompts
+## Text prompts
 
 The simplest way to define prompts is with plain text:
 
@@ -30,7 +30,7 @@ prompts:
   - 'Summarize this article: {{article}}'
 ```
 
-### Multiline Prompts
+### Multiline prompts
 
 Use YAML's multiline syntax for longer prompts:
 
@@ -45,7 +45,7 @@ prompts:
     Provide a detailed explanation.
 ```
 
-### Variables and Templates
+### Variables and templates
 
 Prompts use [Nunjucks](https://mozilla.github.io/nunjucks/) templating:
 
@@ -56,7 +56,7 @@ prompts:
   - '{% if premium %}Priority support: {% endif %}{{issue}}' # Conditionals
 ```
 
-## File-Based Prompts
+## File-based prompts
 
 Store prompts in external files for better organization:
 
@@ -74,13 +74,13 @@ Customer query: {{query}}
 Please provide a helpful and professional response.
 ```
 
-### Supported File Formats
+### Supported file formats
 
-#### Text Files (.txt)
+#### Text files (.txt)
 
 Simple text prompts with variable substitution.
 
-#### Markdown Files (.md)
+#### Markdown files (.md)
 
 ```markdown title="prompt.md"
 # System Instructions
@@ -92,7 +92,7 @@ You are an AI assistant for {{company}}.
 {{task}}
 ```
 
-#### Jinja2 Templates (.j2)
+#### Jinja2 templates (.j2)
 
 ```jinja title="prompt.j2"
 You are assisting with {{ topic }}.
@@ -103,7 +103,7 @@ Keep explanations simple and clear.
 {% endif %}
 ```
 
-### Multiple Prompts in One File
+### Multiple prompts in one file
 
 Separate multiple prompts with `---`:
 
@@ -115,7 +115,7 @@ Translate to Spanish: {{text}}
 Translate to German: {{text}}
 ```
 
-### Using Globs
+### Using globs
 
 Load multiple files with glob patterns:
 
@@ -125,7 +125,7 @@ prompts:
   - file://scenarios/**/*.json
 ```
 
-## Chat Format (JSON)
+## Chat format (JSON)
 
 For conversation-style interactions, use JSON format:
 
@@ -147,7 +147,7 @@ prompts:
 ]
 ```
 
-### Multi-Turn Conversations
+### Multi-turn conversations
 
 ```json title="conversation.json"
 [
@@ -170,11 +170,11 @@ prompts:
 ]
 ```
 
-## Dynamic Prompts (Functions)
+## Dynamic prompts (functions)
 
 Use JavaScript or Python to generate prompts with custom logic:
 
-### JavaScript Functions
+### Javascript functions
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -196,7 +196,7 @@ module.exports = async function ({ vars, provider }) {
 };
 ```
 
-### Python Functions
+### Python functions
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -215,7 +215,7 @@ def create_prompt(context):
         return f"Explain {vars['topic']} for beginners"
 ```
 
-### Function with Configuration
+### Function with configuration
 
 Return both prompt and provider configuration:
 
@@ -233,7 +233,7 @@ module.exports = async function ({ vars }) {
 };
 ```
 
-## Model-Specific Prompts
+## Model-specific prompts
 
 Different prompts for different providers:
 
@@ -251,7 +251,7 @@ providers:
     prompts: [claude_prompt]
 ```
 
-## CSV Prompts
+## Csv prompts
 
 Define multiple prompts in CSV format:
 
@@ -267,9 +267,9 @@ prompt,label
 "Translate to German: {{text}}","German Translation"
 ```
 
-## Advanced Features
+## Advanced features
 
-### Custom Nunjucks Filters
+### Custom nunjucks filters
 
 Create custom filters for prompt processing:
 
@@ -287,7 +287,7 @@ prompts:
   - 'Dear {{ name | uppercaseFirst }}, {{ message }}'
 ```
 
-### Prompt Labels and IDs
+### Prompt labels and ids
 
 Organize prompts with labels:
 
@@ -299,11 +299,11 @@ prompts:
     label: 'Technical Support'
 ```
 
-### Default Prompt
+### Default prompt
 
 If no prompts are specified, promptfoo uses `{{prompt}}` as a passthrough.
 
-## Best Practices
+## Best practices
 
 1. **Start Simple**: Use inline text for basic use cases
 2. **Organize Complex Prompts**: Move longer prompts to files
@@ -311,9 +311,9 @@ If no prompts are specified, promptfoo uses `{{prompt}}` as a passthrough.
 4. **Leverage Templates**: Use variables for reusable prompts
 5. **Test Variations**: Create multiple versions to compare performance
 
-## Common Patterns
+## Common patterns
 
-### System + User Message
+### System + user message
 
 ```json
 [
@@ -322,7 +322,7 @@ If no prompts are specified, promptfoo uses `{{prompt}}` as a passthrough.
 ]
 ```
 
-### Few-Shot Examples
+### Few-shot examples
 
 ```yaml
 prompts:
@@ -334,7 +334,7 @@ prompts:
     Text: "{{text}}" →
 ```
 
-### Chain of Thought
+### Chain of thought
 
 ```yaml
 prompts:
@@ -349,7 +349,7 @@ prompts:
     Answer:
 ```
 
-## Viewing Final Prompts
+## Viewing final prompts
 
 To see the final rendered prompts:
 

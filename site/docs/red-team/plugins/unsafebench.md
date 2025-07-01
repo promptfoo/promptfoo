@@ -4,7 +4,7 @@ description: Test multi-modal models with unsafe imagery from the UnsafeBench da
 keywords: [red team, multi-modal, image, safety, content moderation, unsafe content]
 ---
 
-# UnsafeBench Plugin
+# Unsafebench plugin
 
 The UnsafeBench plugin tests multi-modal models with potentially unsafe images from the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench). This helps evaluate how well models:
 
@@ -17,7 +17,7 @@ The UnsafeBench plugin tests multi-modal models with potentially unsafe images f
 The UnsafeBench dataset requires special permission due to its sensitive nature. You must [request access](https://huggingface.co/datasets/yiting/UnsafeBench) from the dataset owner and wait for approval before using this plugin.
 :::
 
-## Quick Start
+## Quick start
 
 1. Set your Hugging Face API token as an environment variable:
 
@@ -43,7 +43,7 @@ redteam:
 Unlike text-based plugins, the UnsafeBench plugin should not be used with any redteam strategies.
 :::
 
-## Available Categories
+## Available categories
 
 The UnsafeBench dataset contains 3,271 unsafe images across the following categories:
 
@@ -63,7 +63,7 @@ The UnsafeBench dataset contains 3,271 unsafe images across the following catego
 
 ## Usage
 
-### Defining an Image Prompt
+### Defining an image prompt
 
 Create a JSON prompt file to properly handle images:
 
@@ -110,14 +110,14 @@ redteam:
   num_tests: 5
 ```
 
-## How it Works
+## How it works
 
 1. The plugin connects to the Hugging Face Datasets API to fetch images labeled as "unsafe"
 2. It filters for specific categories if configured
 3. It uses the base64-encoded image data as input for your model
 4. It evaluates whether responses appropriately handle the unsafe content
 
-## Grading Criteria
+## Grading criteria
 
 The UnsafeBench grader evaluates whether model responses appropriately handle unsafe image content. Here's what the grader looks for:
 
@@ -133,7 +133,7 @@ The UnsafeBench grader evaluates whether model responses appropriately handle un
 
 **Example of a poor response:** "The image shows [detailed description of violent/sexual/harmful content]..." (Describing unsafe content in unnecessary detail)
 
-## See Also
+## See also
 
 - [Red Team Plugins Overview](../plugins/index.md)
 - [Beavertails Plugin](./beavertails.md)

@@ -1,10 +1,10 @@
 ---
 title: xAI (Grok) Provider
-description: Configure and use xAI's Grok models with promptfoo, including Grok-3 with reasoning capabilities
+description: Configure and use xAI's Grok models with Promptfoo, including Grok-3 with reasoning capabilities
 keywords: [xai, grok, grok-3, grok-2, reasoning, vision, llm]
 ---
 
-# xAI (Grok)
+# XAI (grok)
 
 The `xai` provider supports [xAI's Grok models](https://x.ai/) through an API interface compatible with OpenAI's format. The provider supports both text and vision capabilities depending on the model used.
 
@@ -16,18 +16,18 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-## Provider Format
+## Provider format
 
 The xAI provider includes support for the following model formats:
 
-### Grok-3 Models
+### Grok-3 models
 
 - `xai:grok-3-beta` - Latest flagship model for enterprise tasks (131K context)
 - `xai:grok-3-fast-beta` - Faster variant of grok-3-beta (131K context)
 - `xai:grok-3-mini-beta` - Lightweight reasoning model (131K context)
 - `xai:grok-3-mini-fast-beta` - Faster variant of grok-3-mini with reasoning (131K context)
 
-### Grok-2 and previous Models
+### Grok-2 and previous models
 
 - `xai:grok-2-latest` - Latest Grok-2 model (131K context)
 - `xai:grok-2-vision-latest` - Latest Grok-2 vision model (32K context)
@@ -55,7 +55,7 @@ providers:
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
 
-### Reasoning Support
+### Reasoning support
 
 Grok-3 introduces reasoning capabilities for specific models. The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
 
@@ -68,7 +68,7 @@ Reasoning is only available for the mini variants. The standard `grok-3-beta` an
 
 :::
 
-### Region Support
+### Region support
 
 You can specify a region to use a region-specific API endpoint:
 
@@ -81,7 +81,7 @@ providers:
 
 This is equivalent to setting `base_url="https://us-west-1.api.x.ai/v1"` in the Python client.
 
-### Live Search (Beta)
+### Live search (beta)
 
 You can optionally enable Grok's **Live Search** feature to let the model pull in real-time information from the web or X. Pass a `search_parameters` object in your provider config. The `mode` field controls how search is used:
 
@@ -104,7 +104,7 @@ providers:
 
 For a full list of options see the [xAI documentation](https://docs.x.ai/docs).
 
-### Vision Support
+### Vision support
 
 For models with vision capabilities, you can include images in your prompts using the same format as OpenAI. Create a `prompt.yaml` file:
 
@@ -119,7 +119,7 @@ For models with vision capabilities, you can include images in your prompts usin
       text: '{{question}}'
 ```
 
-Then reference it in your promptfoo config:
+Then reference it in your Promptfoo config:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -135,7 +135,7 @@ tests:
       question: "What's in this image?"
 ```
 
-### Image Generation
+### Image generation
 
 xAI also supports image generation through the Grok image model:
 
@@ -175,6 +175,6 @@ You can run this example with:
 npx promptfoo@latest init --example xai
 ```
 
-## See Also
+## See also
 
 - [OpenAI Provider](/docs/providers/openai)

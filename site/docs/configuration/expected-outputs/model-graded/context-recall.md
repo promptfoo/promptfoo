@@ -2,7 +2,7 @@
 sidebar_label: Context Recall
 ---
 
-# Context Recall
+# Context recall
 
 The `context-recall` assertion evaluates whether key information from a ground truth statement appears in the provided context. This is particularly useful for RAG (Retrieval-Augmented Generation) applications to ensure that important facts are being retrieved.
 
@@ -30,7 +30,7 @@ The context recall checker:
 
 A higher threshold requires more of the ground truth information to be present in the context.
 
-### Example Configuration
+### Example configuration
 
 Here's a complete example showing how to use context recall in a RAG system:
 
@@ -54,7 +54,7 @@ tests:
           Additional unpaid leave is available upon request.
 ```
 
-### Overriding the Grader
+### Overriding the grader
 
 Like other model-graded assertions, you can override the default grader:
 
@@ -81,7 +81,7 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-4.1-mini
    ```
 
-### Customizing the Prompt
+### Customizing the prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property:
 

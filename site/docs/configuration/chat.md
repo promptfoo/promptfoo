@@ -229,7 +229,7 @@ Try it yourself by using the [full example config](https://github.com/promptfoo/
 When the `_conversation` variable is present, the eval will run single-threaded (concurrency of 1).
 :::
 
-## Separating Chat Conversations
+## Separating chat conversations
 
 When running multiple test files or test sequences, you may want to maintain separate conversation histories in the same eval run. This can be achieved by adding a `conversationId` to the test metadata:
 
@@ -357,7 +357,7 @@ tests:
 
 Transforms can be Javascript snippets or they can be entire separate Python or Javascript files. See [docs on transform](/docs/configuration/guide/#transforming-outputs).
 
-## See Also
+## See also
 
 - [Prompt Parameters](/docs/configuration/parameters) - Learn about different ways to define prompts
 - [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations

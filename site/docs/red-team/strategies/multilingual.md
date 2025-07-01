@@ -4,11 +4,11 @@ description: Test AI systems across multiple languages to uncover safety vulnera
 sidebar_label: Multilingual
 ---
 
-# Multilingual Jailbreaking
+# Multilingual jailbreaking
 
 The Multilingual strategy tests AI systems in multiple languages to uncover inconsistencies and safety vulnerabilities in language processing. Recent [research](https://arxiv.org/abs/2307.02477) shows that many LLMs have weaker safety protections in non-English languages.
 
-## Quick Start
+## Quick start
 
 Add the multilingual strategy to your configuration:
 
@@ -33,7 +33,7 @@ strategies:
 
 We recommend using [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) or [IETF language tags](https://en.wikipedia.org/wiki/IETF_language_tag). You can also experiment with non-standard languages and cyphers like `pig-latin`, `ubbi-dubbi`, `reverse-speech`, `pirate`, or `klingon` with varying results.
 
-## How It Works
+## How it works
 
 The strategy:
 
@@ -50,9 +50,9 @@ This strategy translates all test cases from all active strategies. For example,
 
 :::
 
-## Advanced Usage
+## Advanced usage
 
-### Performance Configuration
+### Performance configuration
 
 Optimize performance for large-scale testing:
 
@@ -75,7 +75,7 @@ Options:
 - `batchSize`: Languages to process in a single translation request (default: 3)
 - `maxConcurrency`: Maximum concurrent test case translations
 
-### Developing in Your Native Language
+### Developing in your native language
 
 For applications in non-English languages, generate test cases directly in your target language:
 
@@ -104,7 +104,7 @@ Output translations:
 
 The strategy tests whether your model maintains consistent safety measures across all languages.
 
-## Research Background
+## Research background
 
 LLMs face significant safety challenges with multilingual inputs due to:
 
@@ -122,7 +122,7 @@ This strategy is valuable because it:
 2. Tests the robustness of content filtering and safety mechanisms across multiple languages
 3. Reveals potential biases or inconsistencies in AI responses to different languages
 
-## Related Concepts
+## Related concepts
 
 - [Basic Strategy](basic.md) - Control inclusion of original test cases
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities

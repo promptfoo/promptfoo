@@ -2,9 +2,9 @@
 sidebar_label: CircleCI
 ---
 
-# Setting up Promptfoo with CircleCI
+# Setting up Promptfoo with circleci
 
-This guide shows how to integrate promptfoo's LLM evaluation into your CircleCI pipeline. This allows you to automatically test your prompts and models whenever changes are made to your repository.
+integrate Promptfoo's LLM evaluation into your CircleCI pipeline. This allows you to automatically test your prompts and models whenever changes are made to your repository.
 
 ## Prerequisites
 
@@ -12,11 +12,11 @@ This guide shows how to integrate promptfoo's LLM evaluation into your CircleCI 
 - Your LLM provider's API keys (e.g., OpenAI API key)
 - Basic familiarity with CircleCI configuration
 
-## Configuration Steps
+## Configuration steps
 
-### 1. Create CircleCI Configuration
+### 1. create circleci configuration
 
-Create a `.circleci/config.yml` file in your repository. Here's a basic configuration that installs promptfoo and runs evaluations:
+Create a `.circleci/config.yml` file in your repository. Here's a basic configuration that installs Promptfoo and runs evaluations:
 
     ```yaml
     version: 2.1
@@ -63,14 +63,14 @@ Create a `.circleci/config.yml` file in your repository. Here's a basic configur
                   - prompts/**/*
     ```
 
-### 2. Set Up Environment Variables
+### 2. set up environment variables
 
 1. Go to your project settings in CircleCI
 2. Navigate to Environment Variables
 3. Add your LLM provider's API keys:
    - e.g. Add `OPENAI_API_KEY` if you're using OpenAI
 
-### 3. Configure Caching (Optional but Recommended)
+### 3. configure caching (optional but recommended)
 
 The configuration above includes caching to save time and API costs. The cache:
 
@@ -78,7 +78,7 @@ The configuration above includes caching to save time and API costs. The cache:
 - Is keyed by branch and content hash
 - Is saved in `~/.promptfoo/cache`
 
-### 4. Storing Results
+### 4. storing results
 
 The configuration stores the evaluation results as artifacts:
 
@@ -86,9 +86,9 @@ The configuration stores the evaluation results as artifacts:
 - CircleCI makes these available in the Artifacts tab
 - The `--share` flag creates a shareable web URL for results
 
-## Advanced Configuration
+## Advanced configuration
 
-### Adding Custom Test Steps
+### Adding custom test steps
 
 You can add custom steps to process the evaluation results:
 
@@ -102,7 +102,7 @@ You can add custom steps to process the evaluation results:
           fi
     ```
 
-### Parallel Evaluation
+### Parallel evaluation
 
 For large test suites, you can parallelize evaluations:
 
@@ -118,13 +118,13 @@ For large test suites, you can parallelize evaluations:
                 promptfoo eval -c promptfooconfig.yaml --prompts $prompts
     ```
 
-## Example Output
+## Example output
 
 After the evaluation runs, you'll see:
 
 - Test results in the CircleCI UI
 - Artifacts containing the full evaluation data
-- A shareable link to view results in the promptfoo web viewer
+- A shareable link to view results in the Promptfoo web viewer
 - Any test failures will cause the CircleCI job to fail
 
 ## Troubleshooting
@@ -145,4 +145,4 @@ Common issues and solutions:
    - Adjust the `no_output_timeout` setting in your job
    - Consider splitting tests into smaller batches
 
-For more details on promptfoo configuration, see the [configuration reference](/docs/configuration/reference).
+For more details on Promptfoo configuration, see the [configuration reference](/docs/configuration/reference).

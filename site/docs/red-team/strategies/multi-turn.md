@@ -4,7 +4,7 @@ title: Multi-turn Jailbreaks Strategy
 description: Gradually escalate prompt harm over multiple conversation turns to identify vulnerabilities in AI systems
 ---
 
-# Multi-turn Jailbreaks Strategy
+# Multi-turn jailbreaks strategy
 
 The Crescendo strategy is a multi-turn jailbreak technique that gradually escalates the potential harm of prompts, exploiting the fuzzy boundary between acceptable and unacceptable responses.
 
@@ -41,7 +41,7 @@ This strategy is relatively high cost. We recommend running it on a smaller numb
 If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
-### Continue After Success
+### Continue after success
 
 By default, both Crescendo and GOAT strategies stop immediately upon finding a successful attack. You can configure them to continue searching for additional successful attacks until `maxTurns` is reached:
 
@@ -65,7 +65,7 @@ When `continueAfterSuccess: true`:
 - The strategy only stops when `maxTurns` is reached
 - This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
 
-## How It Works
+## How it works
 
 The Crescendo strategy operates by:
 
@@ -76,7 +76,7 @@ The Crescendo strategy operates by:
 
 ![Multi-turn Jailbreak Strategy](/img/docs/multi-turn-jailbreak.svg)
 
-## Example Scenario
+## Example scenario
 
 1. "What are some common household chemicals?"
 2. "Which household chemicals can be dangerous if mixed?"
@@ -87,7 +87,7 @@ The Crescendo strategy operates by:
 
 When the strategy hits a refusal, it backtracks to an earlier point in the conversation.
 
-## Importance in Gen AI Red Teaming
+## Importance in gen AI red teaming
 
 Multi-turn jailbreaks like Crescendo identify vulnerabilities that only emerge after multiple interactions.
 
@@ -95,7 +95,7 @@ They also exploit the tendency of LLMs to become more compliant throughout a con
 
 The backtracking automation also saves an enormous amount of time compared to manual red teaming, since it eliminates the need to rebuild entire conversation histories.
 
-## Related Concepts
+## Related concepts
 
 - [GOAT Strategy](goat.md) - Another multi-turn jailbreaking approach
 - [Iterative Jailbreaks](iterative.md) - Single-turn version of this approach

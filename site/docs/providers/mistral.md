@@ -1,7 +1,7 @@
 ---
 sidebar_label: Mistral AI
 title: Mistral AI Provider - Complete Guide to Models, Reasoning, and API Integration
-description: Comprehensive guide to using Mistral AI models in promptfoo, including Magistral reasoning models, multimodal capabilities, function calling, and cost-effective API integration.
+description: Comprehensive guide to using Mistral AI models in Promptfoo, including Magistral reasoning models, multimodal capabilities, function calling, and cost-effective API integration.
 keywords:
   [
     mistral ai,
@@ -34,7 +34,7 @@ Mistral Medium 3 offers GPT-4 class performance at $0.40/$2.00 per million token
 
 :::
 
-## API Key
+## Api key
 
 To use Mistral AI, you need to set the `MISTRAL_API_KEY` environment variable, or specify the `apiKey` in the provider configuration.
 
@@ -44,11 +44,11 @@ Example of setting the environment variable:
 export MISTRAL_API_KEY=your_api_key_here
 ```
 
-## Configuration Options
+## Configuration options
 
 The Mistral provider supports extensive configuration options:
 
-### Basic Options
+### Basic options
 
 ```yaml
 providers:
@@ -66,7 +66,7 @@ providers:
       presence_penalty: 0.1 # Encourage diversity
 ```
 
-### JSON Mode
+### Json mode
 
 Force structured JSON output:
 
@@ -87,7 +87,7 @@ tests:
         value: JSON.parse(output).name === "John Smith"
 ```
 
-### Authentication Configuration
+### Authentication configuration
 
 ```yaml
 providers:
@@ -111,7 +111,7 @@ providers:
       apiBaseUrl: 'https://custom-api.example.com/v1'
 ```
 
-### Advanced Model Configuration
+### Advanced model configuration
 
 ````yaml
 providers:
@@ -137,7 +137,7 @@ providers:
       # Image processing options handled automatically
 ````
 
-### Environment Variables Reference
+### Environment variables reference
 
 | Variable               | Description                     | Example                      |
 | ---------------------- | ------------------------------- | ---------------------------- |
@@ -145,13 +145,13 @@ providers:
 | `MISTRAL_API_HOST`     | Custom hostname for proxy setup | `api.example.com`            |
 | `MISTRAL_API_BASE_URL` | Full base URL override          | `https://api.example.com/v1` |
 
-## Model Selection
+## Model selection
 
 You can specify which Mistral model to use in your configuration. The following models are available:
 
-### Chat Models
+### Chat models
 
-#### Premier Models
+#### Premier models
 
 | Model                     | Context | Input Price | Output Price | Best For                                  |
 | ------------------------- | ------- | ----------- | ------------ | ----------------------------------------- |
@@ -160,7 +160,7 @@ You can specify which Mistral model to use in your configuration. The following 
 | `codestral-latest`        | 256k    | $0.30/1M    | $0.90/1M     | Code generation, 80+ languages            |
 | `magistral-medium-latest` | 40k     | $2.00/1M    | $5.00/1M     | Advanced reasoning, step-by-step thinking |
 
-#### Free Models
+#### Free models
 
 | Model                    | Context | Input Price | Output Price | Best For                      |
 | ------------------------ | ------- | ----------- | ------------ | ----------------------------- |
@@ -169,7 +169,7 @@ You can specify which Mistral model to use in your configuration. The following 
 | `open-mistral-nemo`      | 128k    | $0.15/1M    | $0.15/1M     | Multilingual, research        |
 | `pixtral-12b`            | 128k    | $0.15/1M    | $0.15/1M     | Vision + text, multimodal     |
 
-#### Legacy Models (Deprecated)
+#### Legacy models (deprecated)
 
 1. `open-mistral-7b`, `mistral-tiny`, `mistral-tiny-2312`
 2. `open-mistral-nemo`, `open-mistral-nemo-2407`, `mistral-tiny-2407`, `mistral-tiny-latest`
@@ -182,7 +182,7 @@ You can specify which Mistral model to use in your configuration. The following 
 9. `open-mixtral-8x7b`, `mistral-small`, `mistral-small-2312`
 10. `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`
 
-### Embedding Model
+### Embedding model
 
 - `mistral-embed` - $0.10/1M tokens - 8k context
 
@@ -197,23 +197,23 @@ providers:
   - mistral:magistral-small-latest
 ```
 
-## Reasoning Models
+## Reasoning models
 
 Mistral's **Magistral** models are specialized reasoning models announced in June 2025. These models excel at multi-step logic, transparent reasoning, and complex problem-solving across multiple languages.
 
-### Key Features of Magistral Models
+### Key features of magistral models
 
 - **Chain-of-thought reasoning**: Models provide step-by-step reasoning traces before arriving at final answers
 - **Multilingual reasoning**: Native reasoning capabilities across English, French, Spanish, German, Italian, Arabic, Russian, Chinese, and more
 - **Transparency**: Traceable thought processes that can be followed and verified
 - **Domain expertise**: Optimized for structured calculations, programmatic logic, decision trees, and rule-based systems
 
-### Magistral Model Variants
+### Magistral model variants
 
 - **Magistral Small** (`magistral-small-2506`): 24B parameter open-source version under Apache 2.0 license
 - **Magistral Medium** (`magistral-medium-2506`): More powerful enterprise version with enhanced reasoning capabilities
 
-### Usage Recommendations
+### Usage recommendations
 
 For reasoning tasks, consider using these parameters for optimal performance:
 
@@ -226,11 +226,11 @@ providers:
       max_tokens: 40960 # Recommended for reasoning tasks
 ```
 
-## Multimodal Capabilities
+## Multimodal capabilities
 
 Mistral offers vision-capable models that can process both text and images:
 
-### Image Understanding
+### Image understanding
 
 Use `pixtral-12b` for multimodal tasks:
 
@@ -247,13 +247,13 @@ tests:
       image: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...'
 ```
 
-### Supported Image Formats
+### Supported image formats
 
 - **JPEG, PNG, GIF, WebP**
 - **Maximum size**: 20MB per image
 - **Resolution**: Up to 2048x2048 pixels optimal
 
-## Function Calling & Tool Use
+## Function calling & tool use
 
 Mistral models support advanced function calling for building AI agents and tools:
 
@@ -286,18 +286,18 @@ tests:
         value: 'get_weather'
 ```
 
-### Tool Calling Best Practices
+### Tool calling best practices
 
 - Use **low temperature** (0.1-0.3) for consistent tool calls
 - Provide **detailed function descriptions**
 - Include **parameter validation** in your tools
 - Handle **tool call errors** gracefully
 
-## Code Generation
+## Code generation
 
 Mistral's Codestral models excel at code generation across 80+ programming languages:
 
-### Fill-in-the-Middle (FIM)
+### Fill-in-the-middle (fim)
 
 ```yaml
 providers:
@@ -322,7 +322,7 @@ tests:
         value: 'fibonacci'
 ```
 
-### Code Generation Examples
+### Code generation examples
 
 ```yaml
 tests:
@@ -345,9 +345,9 @@ tests:
         value: 'useState'
 ```
 
-## Complete Working Examples
+## Complete working examples
 
-### Example 1: Multi-Model Comparison
+### Example 1: multi-model comparison
 
 ```yaml
 description: 'Compare reasoning capabilities across Mistral models'
@@ -371,7 +371,7 @@ tests:
         threshold: 0.10
 ```
 
-### Example 2: Code Review Assistant
+### Example 2: code review assistant
 
 ````yaml
 description: 'AI-powered code review using Codestral'
@@ -412,7 +412,7 @@ tests:
         value: 'Identifies shell injection vulnerability and suggests safer alternatives'
 ````
 
-### Example 3: Multimodal Document Analysis
+### Example 3: multimodal document analysis
 
 ```yaml
 description: 'Analyze documents with text and images'
@@ -438,9 +438,9 @@ tests:
         min: 200
 ```
 
-## Authentication & Setup
+## Authentication & setup
 
-### Environment Variables
+### Environment variables
 
 ```bash
 # Required
@@ -451,7 +451,7 @@ export MISTRAL_API_BASE_URL="https://api.mistral.ai/v1"
 export MISTRAL_API_HOST="api.mistral.ai"
 ```
 
-### Getting Your API Key
+### Getting your API key
 
 1. Visit [console.mistral.ai](https://console.mistral.ai)
 2. Sign up or log in to your account
@@ -468,9 +468,9 @@ export MISTRAL_API_HOST="api.mistral.ai"
 
 :::
 
-## Performance Optimization
+## Performance optimization
 
-### Model Selection Guide
+### Model selection guide
 
 | Use Case                   | Recommended Model         | Why                          |
 | -------------------------- | ------------------------- | ---------------------------- |
@@ -480,7 +480,7 @@ export MISTRAL_API_HOST="api.mistral.ai"
 | **Vision tasks**           | `pixtral-12b`             | Multimodal capabilities      |
 | **High-volume production** | `mistral-medium-latest`   | Balanced cost and quality    |
 
-### Context Window Optimization
+### Context window optimization
 
 ```yaml
 providers:
@@ -490,7 +490,7 @@ providers:
       temperature: 0.7
 ```
 
-### Cost Management
+### Cost management
 
 ```yaml
 # Monitor costs across models
@@ -507,9 +507,9 @@ providers:
 
 ## Troubleshooting
 
-### Common Issues
+### Common issues
 
-#### Authentication Errors
+#### Authentication errors
 
 ```
 Error: 401 Unauthorized
@@ -522,7 +522,7 @@ echo $MISTRAL_API_KEY
 # Should output your key, not empty
 ```
 
-#### Rate Limiting
+#### Rate limiting
 
 ```
 Error: 429 Too Many Requests
@@ -542,7 +542,7 @@ providers:
       timeout: 30000 # Increase timeout
 ```
 
-#### Context Length Exceeded
+#### Context length exceeded
 
 ```
 Error: Context length exceeded
@@ -561,7 +561,7 @@ providers:
       max_tokens: 4000 # Leave room for input
 ```
 
-#### Model Availability
+#### Model availability
 
 ```
 Error: Model not found
@@ -575,7 +575,7 @@ providers:
   # - mistral:mistral-large-2402  # ❌ Deprecated
 ```
 
-### Debugging Tips
+### Debugging tips
 
 1. **Enable debug logging**:
 
@@ -599,18 +599,18 @@ providers:
            threshold: 0.01
    ```
 
-### Getting Help
+### Getting help
 
 - **Documentation**: [docs.mistral.ai](https://docs.mistral.ai)
 - **Community**: [Discord](https://discord.gg/mistralai)
 - **Support**: [support@mistral.ai](mailto:support@mistral.ai)
 - **Status**: [status.mistral.ai](https://status.mistral.ai)
 
-## Working Examples
+## Working examples
 
 Ready-to-use examples are available in our GitHub repository:
 
-### 📋 [Complete Mistral Example Collection](https://github.com/promptfoo/promptfoo/tree/main/examples/mistral)
+### 📋 [complete mistral example collection](HTTPS://GitHub.com/Promptfoo/Promptfoo/tree/main/examples/mistral)
 
 Run any of these examples locally:
 
@@ -628,7 +628,7 @@ npx promptfoo@latest init --example mistral
 - **[Reasoning Tasks](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.reasoning.yaml)** - Advanced step-by-step problem solving
 - **[Multimodal](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.multimodal.yaml)** - Vision capabilities with Pixtral
 
-### Quick Start
+### Quick start
 
 ```bash
 # Try the basic comparison

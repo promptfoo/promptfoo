@@ -2,7 +2,7 @@
 sidebar_label: Echo
 ---
 
-# Echo Provider
+# Echo provider
 
 The Echo Provider is a simple utility provider that returns the input prompt as the output. It's particularly useful for testing, debugging, and validating pre-generated outputs without making any external API calls.
 
@@ -18,7 +18,7 @@ providers:
     label: pass through provider
 ```
 
-## Response Format
+## Response format
 
 The Echo Provider returns a complete `ProviderResponse` object with the following fields:
 
@@ -56,7 +56,7 @@ tests:
 
 In this example, the Echo Provider returns the exact input after variable substitution, while the OpenAI provider generates a summary.
 
-## Use Cases and Working with Pre-generated Outputs
+## Use cases and working with pre-generated outputs
 
 The Echo Provider is useful for:
 

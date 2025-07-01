@@ -4,7 +4,7 @@ sidebar_label: Intro
 title: LLM red teaming guide (open source)
 ---
 
-# LLM red teaming
+# Llm red teaming
 
 LLM red teaming is a way to find vulnerabilities in AI systems _before_ they're deployed by using simulated adversarial inputs.
 
@@ -175,7 +175,7 @@ And it's not just about wording inputs differently. In a [2024 paper](https://ar
   ![ASCII art prompt injection](/img/docs/artprompt.png)
 </div>
 
-### Generation of Unwanted Content
+### Generation of unwanted content
 
 Separate from jailbreaking, AI apps can sometimes generate unwanted or unsavory content simply due to the broad knowledge base of the foundation model, which may not be limited to the specific use case of the app.
 
@@ -197,7 +197,7 @@ And yes, someone did actually [eat the glue pizza](https://www.businessinsider.c
 
 Based on our experience as practitioners deploying LLMs, we recommend the following best practices for effective red teaming:
 
-### Step 1: Define your strategy
+### Step 1: define your strategy
 
 Before running a red team, define a systematic process that encompasses:
 
@@ -213,7 +213,7 @@ Before running a red team, define a systematic process that encompasses:
 
 4. **Regulatory compliance**: Consider any industry-specific or regional requirements (e.g., GDPR, HIPAA) as well as standards (e.g. NIST AI RMF, OWASP LLM).
 
-### Step 2: Implementation
+### Step 2: implementation
 
 Once you've defined your objectives, your process will probably look like this:
 
@@ -232,7 +232,7 @@ Once you've defined your objectives, your process will probably look like this:
 4. **Collect and organize results**:
    - Store outputs in a structured format that can be subsequently analyzed. Most evaluation frameworks will do this for you.
 
-### Step 3: Analysis and remediation
+### Step 3: analysis and remediation
 
 1. **Review flagged outputs**:
    - Set a regular cadence for reviewing test results. This could involve both the security and development teams in the review process.
@@ -251,7 +251,7 @@ Once you've defined your objectives, your process will probably look like this:
 5. **Continuous improvement**:
    - Regularly update your test suite with new adversarial inputs, and regenerate the redteam inputs to test variations and updated methods.
 
-## Case Study: Discord's Clyde AI
+## Case study: discord's clyde AI
 
 Discord's launch of Clyde AI in March 2023 is a perfect example of why thorough red teaming is important. Clyde, an OpenAI-powered chatbot, was meant to help users by answering questions and facilitating conversations. But its high-profile rollout also came with lessons learned.
 
@@ -283,7 +283,7 @@ This gave all stakeholders a quantitative, data-driven way to measure changes in
 
 In addition to red teaming, Discord deployed passive moderation and observability tools to detect trends in adversarial inputs, and developed dedicating reporting mecahnisms.
 
-### Key Takeaways
+### Key takeaways
 
 This case highlights several practical aspects of AI red teaming:
 

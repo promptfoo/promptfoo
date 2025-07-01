@@ -4,7 +4,7 @@ title: GOAT Jailbreaking Strategy
 description: Generative Offensive Agent Tester technique for dynamic multi-turn jailbreaking of LLMs
 ---
 
-# GOAT Technique for Jailbreaking LLMs
+# Goat technique for jailbreaking llms
 
 The GOAT (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate **multi-turn** conversations aimed at bypassing a target model's safety measures.
 
@@ -23,14 +23,14 @@ strategies:
 ```
 
 :::warning
-This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported.
+This is a remote-only strategy and requires an connection to Promptfoo's free grading API. Local grading is not supported.
 :::
 
 :::warning
 If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
-## How It Works
+## How it works
 
 ![GOAT LLM attack](/img/docs/goat.svg)
 
@@ -52,7 +52,7 @@ GOAT's effectiveness stems from its ability to simulate realistic user behavior 
 
 Instead of relying on brute-force approaches or static prompts, its dynamic conversation and reasoning make it particularly effective at identifying vulnerabilities in LLM applications.
 
-## Related Concepts
+## Related concepts
 
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [Tree-based Jailbreaks](tree.md)

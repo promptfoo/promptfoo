@@ -21,7 +21,7 @@ export CDP_DOMAIN=your-domain-here
 export CDP_TOKEN=your-token-here
 ```
 
-## Basic Usage
+## Basic usage
 
 Here's a basic example of how to use the Cloudera provider:
 
@@ -34,7 +34,7 @@ providers:
       endpoint: your-endpoint # Optional, defaults to model name
 ```
 
-## Configuration Options
+## Configuration options
 
 The Cloudera provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional Cloudera-specific options:
 
@@ -63,7 +63,7 @@ providers:
       presence_penalty: 0
 ```
 
-## Environment Variables
+## Environment variables
 
 The following environment variables are supported:
 
@@ -72,7 +72,7 @@ The following environment variables are supported:
 | `CDP_DOMAIN` | The Cloudera domain to use for API requests      |
 | `CDP_TOKEN`  | The authentication token for Cloudera API access |
 
-## API Compatibility
+## Api compatibility
 
 The Cloudera provider is built on top of the OpenAI protocol, which means it supports the same message format and most of the same parameters as the OpenAI Chat API. This includes:
 

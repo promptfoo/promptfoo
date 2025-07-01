@@ -2,7 +2,7 @@
 sidebar_label: Simulated User
 ---
 
-# Simulated User
+# Simulated user
 
 The Simulated User Provider enables testing of multi-turn conversations between an AI agent and a simulated user. This is particularly useful for testing chatbots, virtual assistants, and other conversational AI applications in realistic scenarios.
 
@@ -41,7 +41,7 @@ tests:
 
 The Simulated User Provider facilitates a back-and-forth conversation between:
 
-1. A simulated user (controlled by promptfoo)
+1. A simulated user (controlled by Promptfoo)
 2. Your AI agent (the provider being tested)
 
 For each turn:
@@ -53,7 +53,7 @@ For each turn:
    - The maximum number of turns is reached
    - The agent includes "###STOP###" in its response
 
-## Configuration Options
+## Configuration options
 
 | Option         | Type   | Description                                                                                 |
 | -------------- | ------ | ------------------------------------------------------------------------------------------- |
@@ -82,7 +82,7 @@ tests:
       instructions: You are a frustrated customer whose package was delivered to the wrong address. You want a refund but are willing to accept store credit if offered.
 ```
 
-### Advanced Function Calling
+### Advanced function calling
 
 For complex scenarios with function calling, you can define structured APIs with mock implementations:
 
@@ -115,7 +115,7 @@ Let me search for flights from New York to Seattle on May 20th...
 User: I prefer direct flights but one stop is okay if it's cheaper ###STOP###
 ```
 
-### Evaluation and Assertions
+### Evaluation and assertions
 
 You can add assertions to automatically evaluate conversation quality:
 
@@ -135,7 +135,7 @@ This enables automatic evaluation of whether your agent successfully handles dif
 
 For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/tau-simulated-user).
 
-### Using with Custom Providers
+### Using with custom providers
 
 The Simulated User Provider works seamlessly with custom providers (Python, JavaScript, etc.). All test-level `vars` are automatically passed to your custom provider's context, allowing you to access dynamic values like user IDs, session data, or routing information during conversations.
 
@@ -179,9 +179,9 @@ This enables sophisticated testing scenarios where your custom provider can:
 - Access user-specific data for personalized responses
 - Implement complex business logic while testing multi-turn conversations
 
-## Using as a Library
+## Using as a library
 
-When using promptfoo as a Node library, provide the equivalent configuration:
+When using Promptfoo as a Node library, provide the equivalent configuration:
 
 ```js
 {
@@ -197,7 +197,7 @@ When using promptfoo as a Node library, provide the equivalent configuration:
 }
 ```
 
-## Stop Conditions
+## Stop conditions
 
 The conversation will automatically stop when:
 

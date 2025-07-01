@@ -59,14 +59,14 @@ To investigate and fix this issue, there's a few possible solutions:
 1. Change Ollama server to use IPv6 addressing by running
    `export OLLAMA_HOST=":11434"` before starting the Ollama server.
    Note this IPv6 support requires Ollama version `0.0.20` or newer.
-2. Change promptfoo to directly use an IPv4 address by configuring
+2. Change Promptfoo to directly use an IPv4 address by configuring
    `export OLLAMA_BASE_URL="http://127.0.0.1:11434"`.
 3. Update your OS's [`hosts`](<https://en.wikipedia.org/wiki/Hosts_(file)>) file
    to bind `localhost` to IPv4.
 
 ## Evaluating models serially
 
-By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evaluations serially using the `-j 1` option:
+By default, Promptfoo evaluates all providers concurrently for each prompt. However, you can run evaluations serially using the `-j 1` option:
 
 ```bash
 promptfoo eval -j 1

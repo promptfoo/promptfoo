@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Evaluating factuality
-description: How to evaluate the factual accuracy of LLM outputs against reference information using promptfoo's factuality assertion
+description: How to evaluate the factual accuracy of LLM outputs against reference information using Promptfoo's factuality assertion
 ---
 
 # Evaluating factuality
@@ -30,9 +30,9 @@ As LLMs become increasingly integrated into critical applications, ensuring they
 
 - **Identifying hallucinations**: Factuality evaluation helps detect when models "make up" information. _For example, discovering that your product support chatbot fabricates non-existent troubleshooting steps 15% of the time would be a critical finding._
 
-promptfoo's factuality evaluation enables you to systematically measure how well your model outputs align with reference facts, helping you identify and address issues before they reach users.
+Promptfoo's factuality evaluation enables you to systematically measure how well your model outputs align with reference facts, helping you identify and address issues before they reach users.
 
-## Quick Start: Try it today
+## Quick start: try it today
 
 The fastest way to get started with factuality evaluation is to use our pre-built TruthfulQA example:
 
@@ -72,7 +72,7 @@ You can easily customize it by:
 
 ## How factuality evaluation works
 
-promptfoo implements a structured factuality evaluation methodology based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml), using the [`factuality`](/docs/configuration/expected-outputs#model-assisted-eval-metrics) assertion type.
+Promptfoo implements a structured factuality evaluation methodology based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml), using the [`factuality`](/docs/configuration/expected-outputs#model-assisted-eval-metrics) assertion type.
 
 The model-graded factuality check takes the following three inputs:
 
@@ -131,7 +131,7 @@ npx promptfoo view
 
 This will produce a report showing how factually accurate your model's responses are compared to the reference answers.
 
-## Comparing Multiple Models
+## Comparing multiple models
 
 Factuality evaluation is especially useful for comparing how different models perform on the same facts:
 
@@ -158,11 +158,11 @@ tests:
         value: Albany is the capital of New York
 ```
 
-## Evaluating On External Datasets
+## Evaluating on external datasets
 
 For comprehensive evaluation, you can run factuality tests against external datasets like TruthfulQA, which we covered in the Quick Start section.
 
-### Creating Your Own Dataset Integration
+### Creating your own dataset integration
 
 You can integrate any dataset by:
 
@@ -174,7 +174,7 @@ You can integrate any dataset by:
 tests: file://your_dataset_loader.ts:generate_tests
 ```
 
-## Crafting Effective Reference Answers
+## Crafting effective reference answers
 
 The quality of your reference answers is crucial for accurate factuality evaluation. Here are specific guidelines:
 
@@ -203,9 +203,9 @@ The quality of your reference answers is crucial for accurate factuality evaluat
 3. **Ambiguous wording**: Ensure there's only one way to interpret the statement
 4. **Unnecessary complexity**: Keep references simple enough for clear evaluation
 
-## Customizing the Evaluation
+## Customizing the evaluation
 
-### Selecting the Grading Provider
+### Selecting the grading provider
 
 By default, promptfoo uses `gpt-4.1-2025-04-14` for grading. To specify a different grading model:
 
@@ -231,7 +231,7 @@ Or via the command line:
 promptfoo eval --grader openai:gpt-4.1
 ```
 
-### Customizing Scoring Weights
+### Customizing scoring weights
 
 Tailor the factuality scoring to your specific requirements:
 
@@ -248,7 +248,7 @@ defaultTest:
 
 #### Understanding the default scoring weights
 
-By default, promptfoo uses a simple binary scoring system:
+By default, Promptfoo uses a simple binary scoring system:
 
 - Categories A, B, C, and E are assigned a score of 1.0 (pass)
 - Category D (disagree) is assigned a score of 0.0 (fail)
@@ -261,7 +261,7 @@ By default, promptfoo uses a simple binary scoring system:
 
 A score of 0 means fail, while any positive score is considered passing. The score values can be used for ranking and comparing model outputs.
 
-### Customizing the Evaluation Prompt
+### Customizing the evaluation prompt
 
 For complete control over how factuality is evaluated, customize the prompt:
 
@@ -290,9 +290,9 @@ You must implement the following template variables:
 
 - `{{input}}`: The original prompt/question
 - `{{ideal}}`: The reference answer (from the `value` field)
-- `{{completion}}`: The LLM's actual response (provided automatically by promptfoo)
+- `{{completion}}`: The LLM's actual response (provided automatically by Promptfoo)
 
-## Response Formats
+## Response formats
 
 The factuality checker supports two response formats:
 
@@ -311,7 +311,7 @@ The factuality checker supports two response formats:
    (A) The submitted answer is a subset of the expert answer and is fully consistent with it.
    ```
 
-## Best Practices
+## Best practices
 
 When setting up factuality evaluations:
 
@@ -321,7 +321,7 @@ When setting up factuality evaluations:
 4. **Use a strong grader**: More capable models generally provide more reliable factuality assessments
 5. **Test with known examples**: Validate your setup with questions where you know the correct answers
 
-## See Also
+## See also
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more evaluation options
 - [Factuality assertion reference](/docs/configuration/expected-outputs/model-graded/factuality)

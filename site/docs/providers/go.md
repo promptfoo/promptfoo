@@ -2,7 +2,7 @@
 sidebar_label: Custom Go (Golang)
 ---
 
-# Custom Go Provider
+# Custom go provider
 
 The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
 
@@ -10,7 +10,7 @@ The Go (`golang`) provider allows you to use Go code as an API provider for eval
 The golang provider currently experimental
 :::
 
-## Quick Start
+## Quick start
 
 You can initialize a new Go provider project using:
 
@@ -18,7 +18,7 @@ You can initialize a new Go provider project using:
 promptfoo init --example golang-provider
 ```
 
-## Provider Interface
+## Provider interface
 
 Your Go code must implement the `CallApi` function with this signature:
 
@@ -44,7 +44,7 @@ providers:
       additionalOption: 123
 ```
 
-## Example Implementation
+## Example implementation
 
 Here's a complete example using the OpenAI API:
 
@@ -94,9 +94,9 @@ func CallApi(prompt string, options map[string]interface{}, ctx map[string]inter
 }
 ```
 
-## Using the Provider
+## Using the provider
 
-To use the Go provider in your promptfoo configuration:
+To use the Go provider in your Promptfoo configuration:
 
 ```yaml
 providers:

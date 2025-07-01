@@ -4,11 +4,11 @@ title: Video Jailbreaking Strategy
 description: Test how AI systems handle video-encoded text inputs that may bypass content filters
 ---
 
-# Video Jailbreaking
+# Video jailbreaking
 
 The Video strategy converts prompt text into a video with text overlay and then encodes that video as a base64 string. This allows for testing how AI systems handle video-encoded text, which may potentially bypass text-based content filters or lead to different behaviors than when processing plain text.
 
-## Why Use This Strategy
+## Why use this strategy
 
 This strategy helps security researchers and AI developers:
 
@@ -17,7 +17,7 @@ This strategy helps security researchers and AI developers:
 3. **Assess multi-modal behavior**: Identify differences in how models respond to the same content in different formats
 4. **Discover inconsistencies**: Reveal potential vulnerabilities by comparing text-based and video-based processing pathways
 
-## How It Works
+## How it works
 
 The strategy performs the following operations:
 
@@ -28,7 +28,7 @@ The strategy performs the following operations:
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.
 
-## Example Transformation
+## Example transformation
 
 For instance, a harmful prompt that might normally be filtered is converted into a video with the text overlaid, then encoded as base64. The encoded video would start like:
 
@@ -88,7 +88,7 @@ You should update the prompt.json to match the prompt format of your LLM provide
 :::
 
 :::note
-The `{{video}}` syntax in the examples is a Nunjucks template variable. When promptfoo processes your prompt, it replaces `{{video}}` with the base64-encoded video data.
+The `{{video}}` syntax in the examples is a Nunjucks template variable. When Promptfoo processes your prompt, it replaces `{{video}}` with the base64-encoded video data.
 :::
 
 ## Requirements
@@ -120,7 +120,7 @@ Download from [ffmpeg.org](https://ffmpeg.org/download.html) or use package mana
 choco install ffmpeg
 ```
 
-## Technical Details
+## Technical details
 
 - **Video Format**: The strategy creates MP4 videos with H.264 encoding
 - **Duration**: Videos are 5 seconds long by default
@@ -142,7 +142,7 @@ This strategy is worth implementing because:
 4. Video modalities may have different thresholds or processing pipelines for harmful content
 5. It complements image and audio strategies to provide comprehensive multi-modal testing
 
-## Related Concepts
+## Related concepts
 
 - [Audio Jailbreaking](/docs/red-team/strategies/audio) - Similar approach using speech audio
 - [Image Jailbreaking](/docs/red-team/strategies/image) - Similar approach using images

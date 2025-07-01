@@ -2,10 +2,10 @@
 sidebar_position: 3
 sidebar_label: Overview
 title: Configuration Overview - Prompts, Tests, and Outputs
-description: Quick overview of promptfoo's core configuration concepts including prompts, test cases, outputs, and common patterns for LLM evaluation.
+description: Quick overview of Promptfoo's core configuration concepts including prompts, test cases, outputs, and common patterns for LLM evaluation.
 keywords:
   [
-    promptfoo overview,
+    Promptfoo overview,
     configuration basics,
     prompt setup,
     test cases,
@@ -18,9 +18,9 @@ pagination_next: configuration/prompts
 
 # Prompts, tests, and outputs
 
-Configure how promptfoo evaluates your LLM applications.
+Configure how Promptfoo evaluates your LLM applications.
 
-## Quick Start
+## Quick start
 
 ```yaml title="promptfooconfig.yaml"
 # Define your prompts
@@ -39,9 +39,9 @@ tests:
 # promptfoo eval
 ```
 
-## Core Concepts
+## Core concepts
 
-### 📝 [Prompts](/docs/configuration/prompts)
+### 📝 [prompts](/docs/configuration/prompts)
 
 Define what you send to your LLMs - from simple strings to complex conversations.
 
@@ -75,7 +75,7 @@ prompts:
 
 [Learn more about prompts →](/docs/configuration/prompts)
 
-### 🧪 [Test Cases](/docs/configuration/test-cases)
+### 🧪 [test cases](/docs/configuration/test-cases)
 
 Configure evaluation scenarios with variables and assertions.
 
@@ -115,7 +115,7 @@ tests: file://generate_tests.js
 
 [Learn more about test cases →](/docs/configuration/test-cases)
 
-### 📊 [Output Formats](/docs/configuration/outputs)
+### 📊 [output formats](/docs/configuration/outputs)
 
 Save and analyze your evaluation results.
 
@@ -137,7 +137,7 @@ promptfoo eval --output results.csv
 
 [Learn more about outputs →](/docs/configuration/outputs)
 
-## Complete Example
+## Complete example
 
 Here's a real-world example that combines multiple features:
 
@@ -176,9 +176,9 @@ tests:
 outputPath: evaluations/customer_service_results.html
 ```
 
-## Quick Reference
+## Quick reference
 
-### Supported File Formats
+### Supported file formats
 
 | Format               | Prompts | Tests | Use Case                            |
 | -------------------- | ------- | ----- | ----------------------------------- |
@@ -192,7 +192,7 @@ outputPath: evaluations/customer_service_results.html
 | `.j2`                | ✅      | ❌    | Jinja2 templates                    |
 | HuggingFace datasets | ❌      | ✅    | Import from existing datasets       |
 
-### Variable Syntax
+### Variable syntax
 
 Variables use [Nunjucks](https://mozilla.github.io/nunjucks/) templating:
 
@@ -207,7 +207,7 @@ prompt: "URGENT: {{message | upper}}"
 prompt: "{% if premium %}Premium support: {% endif %}{{query}}"
 ```
 
-### File References
+### File references
 
 All file paths are relative to the config file:
 
@@ -225,7 +225,7 @@ prompts:
   - file://generate.js:createPrompt
 ```
 
-## Next Steps
+## Next steps
 
 - **[Prompts](/docs/configuration/prompts)** - Deep dive into prompt configuration
 - **[Test Cases](/docs/configuration/test-cases)** - Learn about test scenarios and assertions

@@ -2,7 +2,7 @@
 sidebar_label: DoNotAnswer
 ---
 
-# DoNotAnswer Dataset
+# Donotanswer dataset
 
 ## Overview
 
@@ -87,7 +87,7 @@ The dataset includes:
 - Specific harms description
 - The query itself
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [CyberSecEval](./cyberseceval.md)

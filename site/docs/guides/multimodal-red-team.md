@@ -1,6 +1,6 @@
 ---
 title: Multi-Modal Red Teaming
-description: Learn how to use promptfoo to test the robustness of multi-modal LLMs against adversarial inputs involving text, images, and audio.
+description: Learn how to use Promptfoo to test the robustness of multi-modal LLMs against adversarial inputs involving text, images, and audio.
 keywords:
   [
     red teaming,
@@ -19,11 +19,11 @@ keywords:
   ]
 ---
 
-# Multi-Modal Red Teaming
+# Multi-modal red teaming
 
-Large language models with multi-modal capabilities (vision, audio, etc.) present unique security challenges compared to text-only models. This guide demonstrates how to use promptfoo to test multi-modal models against adversarial inputs using different approaches for vision and audio content.
+Large language models with multi-modal capabilities (vision, audio, etc.) present unique security challenges compared to text-only models. This guide demonstrates how to use Promptfoo to test multi-modal models against adversarial inputs using different approaches for vision and audio content.
 
-## Quick Start
+## Quick start
 
 To get started immediately with our example:
 
@@ -47,31 +47,31 @@ npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
 ```
 
-## Multi-Modal Red Teaming Approaches
+## Multi-modal red teaming approaches
 
-promptfoo supports multiple approaches for red teaming multi-modal models:
+Promptfoo supports multiple approaches for red teaming multi-modal models:
 
-### Visual Content Strategies
+### Visual content strategies
 
-#### 1. Static Image with Variable Text
+#### 1. static image with variable text
 
 This approach uses a fixed image while generating various potentially problematic text prompts. It tests how the model handles harmful or adversarial requests in the context of a specific image.
 
-#### 2. Text-to-Image Conversion (Image Strategy)
+#### 2. text-to-image conversion (image strategy)
 
 This approach converts potentially harmful text into images and then sends those images to the model. It tests whether harmful content embedded in images can bypass safety filters that would catch the same content in plain text. For more details, see [Image Jailbreaking](/docs/red-team/strategies/image).
 
-#### 3. UnsafeBench Dataset Testing
+#### 3. unsafebench dataset testing
 
 This approach uses real unsafe images from the [UnsafeBench](https://huggingface.co/datasets/yiting/UnsafeBench) dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
 
-### Audio Content Strategy
+### Audio content strategy
 
-#### Text-to-Audio Conversion (Audio Strategy)
+#### Text-to-audio conversion (audio strategy)
 
 This approach converts potentially harmful text into speech audio and then sends this audio to the model. It tests whether harmful content delivered via audio can bypass safety filters that would catch the same content in plain text. For more details, see [Audio Jailbreaking](/docs/red-team/strategies/audio).
 
-## Setting Up Your Environment
+## Setting up your environment
 
 Before running any of the examples, set up the necessary environment variables for your chosen provider:
 
@@ -91,7 +91,7 @@ export ANTHROPIC_API_KEY=your_api_key
 export HF_TOKEN=your_huggingface_token
 ```
 
-## Approach 1: Static Image with Variable Text
+## Approach 1: static image with variable text
 
 This approach keeps an image constant while varying text prompts to test different potential attack vectors.
 
@@ -143,11 +143,11 @@ Make sure your purpose statement relates to the image content you're using. This
 
 :::
 
-### Creating Effective Purpose Statements
+### Creating effective purpose statements
 
-For effective multi-modal red teaming, your `purpose` statement must specifically describe the image content (e.g., "You analyze this image of Barack Obama speaking at a podium during a press conference"), as promptfoo otherwise generates tests unrelated to what's actually in the image. Concrete, detailed descriptions enable targeted adversarial prompts that truly test how the model handles problematic requests about sensitive visual content.
+For effective multi-modal red teaming, your `purpose` statement must specifically describe the image content (e.g., "You analyze this image of Barack Obama speaking at a podium during a press conference"), as Promptfoo otherwise generates tests unrelated to what's actually in the image. Concrete, detailed descriptions enable targeted adversarial prompts that truly test how the model handles problematic requests about sensitive visual content.
 
-### Create the Prompt Template
+### Create the prompt template
 
 Create the prompt template for the Amazon Bedrock Nova model:
 
@@ -182,7 +182,7 @@ The prompt template format varies between providers. Adjust the template to matc
 
 :::
 
-### Run the Static Image Red Team
+### Run the static image red team
 
 Run your red team test with:
 
@@ -190,7 +190,7 @@ Run your red team test with:
 npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml
 ```
 
-## Approach 2: Text-to-Image Conversion (Image Strategy)
+## Approach 2: text-to-image conversion (image strategy)
 
 This approach converts potentially harmful text into images to test if the model processes text embedded in images differently than plain text.
 
@@ -243,7 +243,7 @@ The key elements in this configuration:
 - `redteam.strategies`: Configures the use of the image strategy
 - `redteam.plugins`: Lists the categories of harmful content to test
 
-### How the Image Strategy Works
+### How the image strategy works
 
 The image strategy:
 
@@ -252,7 +252,7 @@ The image strategy:
 3. Encodes the image as a base64 string
 4. Injects this image into the prompt instead of plain text
 
-### Run the Image Strategy Red Team
+### Run the image strategy red team
 
 Run your test with:
 
@@ -260,7 +260,7 @@ Run your test with:
 npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 ```
 
-## Approach 3: UnsafeBench Dataset Testing
+## Approach 3: unsafebench dataset testing
 
 This approach uses real unsafe images from the UnsafeBench dataset to test how models respond to potentially harmful visual content.
 
@@ -321,7 +321,7 @@ The key elements in this configuration:
 - `redteam.plugins`: Uses the unsafebench plugin with specific categories of unsafe images
 - `redteam.purpose`: Provides context for the model's role as an assistant with ethical boundaries
 
-### How the UnsafeBench Plugin Works
+### How the unsafebench plugin works
 
 The UnsafeBench plugin:
 
@@ -331,7 +331,7 @@ The UnsafeBench plugin:
 4. Injects these images into your prompts for testing
 5. Allows for automated evaluation of model responses
 
-#### Image Format Handling
+#### Image format handling
 
 Some providers like Amazon Bedrock Nova require special handling for image data:
 
@@ -339,7 +339,7 @@ Some providers like Amazon Bedrock Nova require special handling for image data:
 - This transformation is needed specifically for Nova models but generally not required for other providers like OpenAI or Anthropic
 - The function runs before the prompt template is filled with variables, ensuring the image data is in the correct format
 
-### Create the Prompt Template
+### Create the prompt template
 
 Create a prompt template suitable for your model. For example, for OpenAI:
 
@@ -367,7 +367,7 @@ Create a prompt template suitable for your model. For example, for OpenAI:
 ]
 ```
 
-### Run the UnsafeBench Red Team
+### Run the unsafebench red team
 
 First, set your Hugging Face token:
 
@@ -381,7 +381,7 @@ Then run your test:
 npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
 ```
 
-### Customizing UnsafeBench
+### Customizing unsafebench
 
 You can customize the configuration by:
 
@@ -413,7 +413,7 @@ redteam:
   numTests: 5 # Change to desired number
 ```
 
-## Audio Strategy Example
+## Audio strategy example
 
 To use the audio strategy for red teaming, create a configuration file:
 
@@ -488,7 +488,7 @@ Run the audio strategy red team:
 npx promptfoo@latest redteam run -c promptfooconfig.yaml
 ```
 
-## See Also
+## See also
 
 - [Red Team Strategies](/docs/red-team/strategies/)
 - [Image Inputs Strategy](/docs/red-team/strategies/image)

@@ -13,7 +13,7 @@ Perplexity follows OpenAI's chat completion API format - see our [OpenAI documen
 1. Get an API key from your [Perplexity Settings](https://www.perplexity.ai/settings/api)
 2. Set the `PERPLEXITY_API_KEY` environment variable or specify `apiKey` in your config
 
-## Supported Models
+## Supported models
 
 Perplexity offers several specialized models optimized for different tasks:
 
@@ -26,7 +26,7 @@ Perplexity offers several specialized models optimized for different tasks:
 | sonar-deep-research | 128k           | Expert-level research model                         | Comprehensive reports, exhaustive research       |
 | r1-1776             | 128k           | Offline chat model (no search)                      | Creative content, tasks without web search needs |
 
-## Basic Configuration
+## Basic configuration
 
 ```yaml
 providers:
@@ -45,7 +45,7 @@ providers:
 
 ## Features
 
-### Search and Citations
+### Search and citations
 
 Perplexity models automatically search the internet and cite sources. You can control this with:
 
@@ -65,7 +65,7 @@ providers:
         search_context_size: 'high'
 ```
 
-### Date Range Filters
+### Date range filters
 
 Control search results based on publication date:
 
@@ -78,7 +78,7 @@ providers:
       search_before_date_filter: '3/15/2025'
 ```
 
-### Location-Based Filtering
+### Location-based filtering
 
 Localize search results by specifying user location:
 
@@ -93,7 +93,7 @@ providers:
           country: 'US' # Optional: ISO country code
 ```
 
-### Structured Output
+### Structured output
 
 Get responses in specific formats using JSON Schema:
 
@@ -127,7 +127,7 @@ providers:
 
 **Note**: First request with a new schema may take 10-30 seconds to prepare. For reasoning models, the response will include a `<think>` section followed by the structured output.
 
-### Image Support
+### Image support
 
 Enable image retrieval in responses:
 
@@ -138,9 +138,9 @@ providers:
       return_images: true
 ```
 
-### Cost Tracking
+### Cost tracking
 
-promptfoo includes built-in cost calculation for Perplexity models based on their official pricing. You can specify the usage tier with the `usage_tier` parameter:
+Promptfoo includes built-in cost calculation for Perplexity models based on their official pricing. You can specify the usage tier with the `usage_tier` parameter:
 
 ```yaml
 providers:
@@ -155,9 +155,9 @@ The cost calculation includes:
 - Model-specific pricing (sonar, sonar-pro, sonar-reasoning, etc.)
 - Usage tier considerations (high, medium, low)
 
-## Advanced Use Cases
+## Advanced use cases
 
-### Comprehensive Research
+### Comprehensive research
 
 For in-depth research reports:
 
@@ -172,7 +172,7 @@ providers:
         search_context_size: 'high'
 ```
 
-### Step-by-Step Reasoning
+### Step-by-step reasoning
 
 For problems requiring explicit reasoning steps:
 
@@ -184,7 +184,7 @@ providers:
       max_tokens: 3000
 ```
 
-### Offline Creative Tasks
+### Offline creative tasks
 
 For creative content that doesn't require web search:
 
@@ -196,9 +196,9 @@ providers:
       max_tokens: 2000
 ```
 
-## Best Practices
+## Best practices
 
-### Model Selection
+### Model selection
 
 - **sonar-pro**: Use for complex queries requiring detailed responses with citations
 - **sonar**: Use for factual queries and cost efficiency
@@ -206,20 +206,20 @@ providers:
 - **sonar-deep-research**: Use for comprehensive reports (may take 30+ minutes)
 - **r1-1776**: Use for creative content not requiring search
 
-### Search Optimization
+### Search optimization
 
 - Set `search_domain_filter` to trusted domains for higher quality citations
 - Use `search_recency_filter` for time-sensitive topics
 - For cost optimization, set `web_search_options.search_context_size` to "low"
 - For comprehensive research, set `web_search_options.search_context_size` to "high"
 
-### Structured Output Tips
+### Structured output tips
 
 - When using structured outputs with reasoning models, responses will include a `<think>` section followed by the structured output
 - For regex patterns, ensure they follow the supported syntax
 - JSON schemas cannot include recursive structures or unconstrained objects
 
-## Example Configurations
+## Example configurations
 
 Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/main/examples/perplexity.ai-example) with multiple configurations showcasing Perplexity's capabilities:
 
@@ -234,7 +234,7 @@ You can initialize these examples with:
 npx promptfoo@latest init --example perplexity.ai-example
 ```
 
-## Pricing and Rate Limits
+## Pricing and rate limits
 
 Pricing varies by model and usage tier:
 

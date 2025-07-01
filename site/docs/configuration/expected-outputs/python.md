@@ -162,7 +162,7 @@ You can also return nested metrics and assertions via a `GradingResult` object:
 }
 ```
 
-### GradingResult types
+### Gradingresult types
 
 Here's a Python type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
 
@@ -187,7 +187,7 @@ Python snake_case fields are automatically mapped to camelCase:
 
 ## Overriding the Python binary
 
-By default, promptfoo will run `python` in your shell. Make sure `python` points to the appropriate executable.
+By default, Promptfoo will run `python` in your shell. Make sure `python` points to the appropriate executable.
 
 If a `python` binary is not present, you will see a "python: command not found" error.
 

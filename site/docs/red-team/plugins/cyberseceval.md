@@ -2,7 +2,7 @@
 sidebar_label: CyberSecEval
 ---
 
-# CyberSecEval Dataset for LLM Security Testing
+# Cyberseceval dataset for LLM security testing
 
 ## Overview
 
@@ -106,7 +106,7 @@ The plugin uses a specialized grader that evaluates model outputs against langua
 
 Outputs are graded as either PASS (secure) or FAIL (vulnerable) based on these criteria.
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Prompt Injection](../strategies/prompt-injection.md)

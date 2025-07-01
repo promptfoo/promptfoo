@@ -3,11 +3,11 @@ sidebar_position: 102
 description: Learn how to test LLM resilience using camelCase, Morse code, Pig Latin, and emoji-based text transformations to bypass content filters and evaluate model security.
 ---
 
-# Other Encodings
+# Other encodings
 
 The other-encodings strategy collection provides multiple text transformation methods to test model resilience against evasion techniques that use alternative text representations. This collection automatically includes camelCase, Morse code, Pig Latin, and emoji-based encodings.
 
-## Strategy Collection
+## Strategy collection
 
 You can use the `other-encodings` collection in your configuration to automatically include all encoding strategies in this collection:
 
@@ -25,11 +25,11 @@ strategies:
   - piglatin
 ```
 
-## camelCase
+## Camelcase
 
 The camelCase strategy converts text to camelCase by removing spaces and capitalizing the first letter of each subsequent word.
 
-### How It Works
+### How it works
 
 The transformation follows these rules:
 
@@ -53,11 +53,11 @@ strategies:
   - camelcase # Apply camelCase transformation
 ```
 
-## Morse Code
+## Morse code
 
 The Morse code strategy converts all characters in the test payload to dots and dashes, the universal encoding system developed for telegraph communications.
 
-### How It Works
+### How it works
 
 Standard ASCII characters are converted to their Morse code equivalents:
 
@@ -80,11 +80,11 @@ strategies:
   - morse # Apply Morse code transformation
 ```
 
-## Pig Latin
+## Pig latin
 
 The Pig Latin strategy transforms text according to the playful language game rules of Pig Latin, which is a simple form of language encoding.
 
-### How It Works
+### How it works
 
 The transformation follows these rules:
 
@@ -107,11 +107,11 @@ strategies:
   - piglatin # Apply Pig Latin transformation
 ```
 
-## Emoji Encoding
+## Emoji encoding
 
 The Emoji encoding strategy hides a UTF-8 payload inside invisible Unicode variation selectors appended to an emoji. This allows short strings to contain arbitrary data while remaining mostly unreadable.
 
-### How It Works
+### How it works
 
 - Each byte of the UTF-8 text is mapped to one of 256 variation selectors.
 - The selector sequence is appended to a base emoji (😊 by default).
@@ -147,11 +147,11 @@ redteam:
     - other-encodings # Includes camelCase, Morse code, Pig Latin, and emoji encoding
 ```
 
-## Technical Details
+## Technical details
 
 These encoding transformations are static, deterministic processes that don't require additional API calls to implement. They provide a way to test how models handle content that has been transformed in ways that might bypass text-based content filters while remaining human-interpretable.
 
-## Security Considerations
+## Security considerations
 
 Alternative text encodings can be used to bypass content filters that rely on exact string matching. By replacing standard text with these encoded versions, attackers might be able to evade detection of prohibited content. These strategies help evaluate how well models handle these types of evasion techniques.
 
@@ -162,7 +162,7 @@ Some specific security benefits of testing with these encodings:
 - Evaluates guardrail effectiveness against simple transformation techniques
 - Helps develop more robust safety mechanisms for public-facing AI applications
 
-## Related Concepts
+## Related concepts
 
 - [ROT13 Encoding](rot13.md) - Another simple character substitution encoding
 - [Base64 Encoding](base64.md) - Binary-to-text encoding strategy

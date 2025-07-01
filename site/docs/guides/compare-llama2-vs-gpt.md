@@ -2,9 +2,9 @@
 sidebar_label: Llama vs GPT benchmark
 ---
 
-# Llama 3.1 vs GPT: Benchmark on your own data
+# Llama 3.1 vs GPT: benchmark on your own data
 
-This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and GPT 4o-mini - using the `promptfoo` CLI.
+compare three models - Llama 3.1 405B, GPT 4o, and GPT 4o-mini - using the `promptfoo` CLI.
 
 LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
 
@@ -16,7 +16,7 @@ View the final example code [here](https://github.com/promptfoo/promptfoo/tree/m
 
 ## Requirements
 
-This guide assumes that you have promptfoo [installed](/docs/installation). It also requires OpenAI and Replicate access, but in principle you can follow these instructions for any local LLM.
+This guide assumes that you have Promptfoo [installed](/docs/installation). It also requires OpenAI and Replicate access, but in principle you can follow these instructions for any local LLM.
 
 ## Set up the config
 

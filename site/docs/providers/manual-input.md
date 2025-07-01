@@ -2,7 +2,7 @@
 sidebar_label: Manual Input
 ---
 
-# Manual Input Provider
+# Manual input provider
 
 The Manual Input Provider allows you to manually enter responses for each prompt during the evaluation process. This can be useful for testing, debugging, or when you want to provide custom responses without relying on an automated API.
 

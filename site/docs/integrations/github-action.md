@@ -2,9 +2,9 @@
 sidebar_label: GitHub Actions
 ---
 
-# Testing Prompts with GitHub Actions
+# Testing prompts with GitHub actions
 
-This guide describes how to automatically run a before vs. after evaluation of edited prompts using the [promptfoo GitHub Action](https://github.com/promptfoo/promptfoo-action/).
+automatically run a before vs. after evaluation of edited prompts using the [Promptfoo GitHub Action](https://github.com/promptfoo/promptfoo-action/).
 
 On every pull request that modifies a prompt, the action will automatically run a full comparison:
 
@@ -12,9 +12,9 @@ On every pull request that modifies a prompt, the action will automatically run 
 
 The provided link opens the [web viewer](/docs/usage/web-ui) interface, which allows you to interactively explore the before vs. after:
 
-![promptfoo web viewer](https://user-images.githubusercontent.com/310310/244891219-2b79e8f8-9b79-49e7-bffb-24cba18352f2.png)
+![Promptfoo web viewer](https://user-images.githubusercontent.com/310310/244891219-2b79e8f8-9b79-49e7-bffb-24cba18352f2.png)
 
-## Using the GitHub Action
+## Using the GitHub action
 
 Here's an example action that watches a PR for modifications. If any file in the `prompts/` directory is modified, we automatically run the eval and post a link to the results using the `promptfoo/promptfoo-action@v1`:
 
@@ -59,7 +59,7 @@ To make this GitHub Action work for your project, you'll need to do a few things
 
 1. **Set paths**: Replace `'prompts/**'` with the path to the files you want to monitor for changes. This could either be a list of paths to single files or a directory where your prompts are stored.
 
-   Don't forget to also update the paths in the "Run promptfoo evaluation" step to point to your prompts and `promptfooconfig.yaml` configuration file.
+   Don't forget to also update the paths in the "Run Promptfoo evaluation" step to point to your prompts and `promptfooconfig.yaml` configuration file.
 
 2. **Set OpenAI API key**: If you're using an OpenAI API, you need to set the `OPENAI_API_KEY` secret in your GitHub repository.
 
@@ -79,10 +79,10 @@ Here are the supported parameters:
 | `openai-api-key` | The API key for OpenAI. Used to authenticate requests to the OpenAI API.                                                  | No       |
 | `cache-path`     | The path to the cache. This is where the action stores temporary data.                                                    | No       |
 
-## How It Works
+## How it works
 
 1. **Caching**: We use caching to speed up subsequent runs. The cache stores LLM requests and outputs, which can be reused in future runs to save cost.
 
 2. **Run Promptfoo Evaluation**: This is where the magic happens. We run the evaluation, passing in the configuration file and the prompts we want to evaluate. The results of this step are automatically posted to the pull request.
 
-For more information on how to set up the promptfoo config, see the [Getting Started](/docs/getting-started) docs.
+For more information on how to set up the Promptfoo config, see the [Getting Started](/docs/getting-started) docs.

@@ -2,17 +2,17 @@
 sidebar_label: Bitbucket Pipelines
 ---
 
-# Bitbucket Pipelines Integration
+# Bitbucket pipelines integration
 
-This guide demonstrates how to set up promptfoo with Bitbucket Pipelines to run evaluations as part of your CI pipeline.
+This guide demonstrates how to set up Promptfoo with Bitbucket Pipelines to run evaluations as part of your CI pipeline.
 
 ## Prerequisites
 
-- A Bitbucket repository with a promptfoo project
+- A Bitbucket repository with a Promptfoo project
 - Bitbucket Pipelines enabled for your repository
 - API keys for your LLM providers stored as [Bitbucket repository variables](https://support.atlassian.com/bitbucket-cloud/docs/variables-and-secrets/)
 
-## Setting up Bitbucket Pipelines
+## Setting up bitbucket pipelines
 
 Create a new file named `bitbucket-pipelines.yml` in the root of your repository with the following configuration:
 
@@ -34,7 +34,7 @@ pipelines:
           - promptfoo-results.xml
 ```
 
-## Environment Variables
+## Environment variables
 
 Store your LLM provider API keys as repository variables in Bitbucket:
 
@@ -43,11 +43,11 @@ Store your LLM provider API keys as repository variables in Bitbucket:
 3. Add variables for each provider API key (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
 4. Mark them as "Secured" to ensure they're not displayed in logs
 
-## Advanced Configuration
+## Advanced configuration
 
-### Fail the Pipeline on Failed Assertions
+### Fail the pipeline on failed assertions
 
-You can configure the pipeline to fail when promptfoo assertions don't pass:
+You can configure the pipeline to fail when Promptfoo assertions don't pass:
 
 ```yaml
 script:
@@ -56,7 +56,7 @@ script:
   - npx promptfoo eval --fail-on-error
 ```
 
-### Custom Evaluation Configurations
+### Custom evaluation configurations
 
 Run evaluations with specific configuration files:
 
@@ -67,7 +67,7 @@ script:
   - npx promptfoo eval --config custom-config.yaml
 ```
 
-### Run on Pull Requests
+### Run on pull requests
 
 Configure different behavior for pull requests:
 
@@ -90,7 +90,7 @@ pipelines:
             - npx promptfoo eval --fail-on-error
 ```
 
-### Scheduled Evaluations
+### Scheduled evaluations
 
 Run evaluations on a schedule:
 
@@ -119,7 +119,7 @@ pipelines:
           - main
 ```
 
-### Parallel Testing
+### Parallel testing
 
 Test across multiple configurations in parallel:
 
@@ -147,7 +147,7 @@ pipelines:
               - promptfoo-results-claude.json
 ```
 
-### Using Pipes
+### Using pipes
 
 Leverage Bitbucket Pipes for a more concise configuration:
 

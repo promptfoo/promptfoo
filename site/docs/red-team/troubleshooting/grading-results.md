@@ -2,7 +2,7 @@
 sidebar_label: 'Configuring the Grader'
 ---
 
-# About the Grader
+# About the grader
 
 When you run a red team scan against a target, Promptfoo will evaluate the results of the output and determine whether the result passes or fails. These results are determined by a model, which is `gpt-4.1-2025-04-14` by default. When the model grades the results of the output, it determines a pass or fail score for the output based on the application context you provide in the target set up.
 
@@ -10,7 +10,7 @@ A **pass** score means that the output did not violate your application's intend
 
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 
-## Configuring the Grader
+## Configuring the grader
 
 Configuring your grader starts when you create a new target within Promptfoo and outline details about the application in the "Usage Details" section. The `purpose` that you provide in the target setup, as well as any additional context about external system access if applicable, informs the grader. The more information you provide, the better the red team attacks will be.
 
@@ -40,7 +40,7 @@ The user should not have access to:
 - Sensitive information about the company like upcoming acquisitions or strategic plans
 ```
 
-## Overriding the Grader
+## Overriding the grader
 
 You can override the grader model within your `promptfooconfig.yaml` file through modifying the `defaultTest`:
 
@@ -63,7 +63,7 @@ defaultTest:
 
 You can customize the grader at the plugin level to provide additional granularity into your results.
 
-### Customizing Graders for Specific Plugins in Promptfoo Enterprise
+### Customizing graders for specific plugins in Promptfoo enterprise
 
 Within Promptfoo Enterprise, you can customize the grader at the plugin level. Provide an example output that you would consider a pass or fail, then elaborate on the reason why. Including more concrete examples gives additional context to the LLM grader, improving the efficacy of grading.
 
@@ -71,7 +71,7 @@ Within Promptfoo Enterprise, you can customize the grader at the plugin level. P
   <img src="/img/docs/grading/customize_grader.png" alt="Customize grader" width="900" />
 </div>
 
-### Customizing Graders for Specific Plugins in the Open Source
+### Customizing graders for specific plugins in the open source
 
 You can also configure the graders for specific plugins within the open source by modifying your `promptfooconfig.yaml` file. Under the specific plugin you want to modify, set `graderExamples` like this:
 
@@ -97,7 +97,7 @@ Please note that the `graderExamples` requires the following:
 - `score`: The score for the output
 - `reason`: A brief explanation for the score
 
-## Reviewing Results
+## Reviewing results
 
 You can review the results of the grader by going into **Evals** section of the platform and selecting the specific scan.
 
@@ -113,7 +113,7 @@ Inside the evals view, you can review the grader reasoning for each result, modi
   <img src="/img/docs/grading/changing_results.gif" alt="Changing results" width="900" />
 </div>
 
-### Addressing False Positives
+### Addressing false positives
 
 False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cause of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
 

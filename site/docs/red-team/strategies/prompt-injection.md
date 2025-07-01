@@ -4,7 +4,7 @@ title: Prompt Injection Strategy
 description: Test common direct prompt injection vulnerabilities in LLMs using curated injection techniques
 ---
 
-# Prompt Injection Strategy
+# Prompt injection strategy
 
 The Prompt Injection strategy tests common direct prompt injection vulnerabilities in LLMs.
 
@@ -38,7 +38,7 @@ strategies:
       harmfulOnly: true
 ```
 
-## How It Works
+## How it works
 
 The prompt injection strategy:
 
@@ -46,17 +46,17 @@ The prompt injection strategy:
 2. Prepends or appends various injection techniques to each test case
 3. Tests if these modified prompts can bypass the AI system's safety controls
 
-## Example Injections
+## Example injections
 
 1. [OPPO](https://www.reddit.com/r/ChatGPTJailbreak/comments/113xsrq/introducing_oppo_a_complete_jailbreak_prompt_that/)
 2. [Skeleton key](https://www.microsoft.com/en-us/security/blog/2024/06/26/mitigating-skeleton-key-a-new-type-of-generative-ai-jailbreak-technique/)
 3. [DAN](https://github.com/0xk1h0/ChatGPT_DAN)
 
-## Importance in Gen AI Red Teaming
+## Importance in gen AI red teaming
 
 Prompt injection is a widely known attack vector. Although foundation labs are making efforts to mitigate injections at the model level, it's still necessary to test your application's handling of user-provided prompts.
 
-## Related Concepts
+## Related concepts
 
 - [Iterative Jailbreak](iterative.md)
 - [Tree Jailbreak](tree.md)

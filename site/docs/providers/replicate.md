@@ -101,7 +101,7 @@ tests:
       subject: fruit loops
 ```
 
-## Supported Parameters for Images
+## Supported parameters for images
 
 These parameters are supported for image generation models:
 

@@ -2,7 +2,7 @@
 sidebar_label: Aegis
 ---
 
-# Aegis: NVIDIA AI Content Safety Dataset
+# Aegis: nvidia AI content safety dataset
 
 The Aegis plugin uses NVIDIA's [Aegis AI Content Safety Dataset](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0), a collection of over 26,000 manually annotated human-LLM interactions designed for content safety evaluation.
 
@@ -24,7 +24,7 @@ The dataset covers 13 critical safety categories:
 
 The dataset also includes **Safe** content and **Needs Caution** examples for ambiguous cases requiring careful consideration.
 
-## How it Works
+## How it works
 
 The plugin:
 
@@ -61,7 +61,7 @@ The plugin evaluates model responses using the same methodology as NVIDIA's rese
 - Nuanced handling of ambiguous "Needs Caution" cases
 - Consistent safety responses across conversation turns
 
-## Dataset Information
+## Dataset information
 
 - **Size**: 26,000+ annotated examples (ongoing expansion)
 - **Annotation**: Professional team of 12 annotators with quality assurance
@@ -74,7 +74,7 @@ The plugin evaluates model responses using the same methodology as NVIDIA's rese
 - [NVIDIA Aegis Research Paper](https://arxiv.org/abs/2404.05993)
 - [Dataset v2.0 (33k examples)](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-2.0)
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Harmful Content Plugin](harmful.md)

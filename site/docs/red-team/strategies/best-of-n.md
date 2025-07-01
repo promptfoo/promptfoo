@@ -4,7 +4,7 @@ title: Best-of-N Jailbreaking Strategy
 description: Black-box jailbreaking technique that tests multiple prompt variations to bypass safety mechanisms
 ---
 
-# Best-of-N (BoN) Jailbreaking Strategy
+# Best-of-n (bon) jailbreaking strategy
 
 Best-of-N (BoN) is a simple but effective black-box jailbreaking algorithm that works by repeatedly sampling variations of a prompt with modality-specific augmentations until a harmful response is elicited.
 
@@ -26,7 +26,7 @@ strategies:
       maxCandidatesPerStep: 1 # Maximum candidates per batch (optional)
 ```
 
-## How It Works
+## How it works
 
 ![BoN Overview](/img/docs/best-of-n-cycle.svg)
 
@@ -43,9 +43,9 @@ BoN Jailbreaking works through a simple three-step process:
 
 The strategy's effectiveness comes from exploiting the stochastic nature of LLM outputs and their sensitivity to small input variations.
 
-## Configuration Parameters
+## Configuration parameters
 
-### useBasicRefusal
+### Usebasicrefusal
 
 **Type:** `boolean`  
 **Default:** `false`
@@ -54,21 +54,21 @@ When enabled, uses a simple refusal check instead of LLM-as-a-judge assertions. 
 
 We recommend using this setting whenever possible if the default response to your original prompts is a "Sorry, I can't do that"-style refusal.
 
-### maxConcurrency
+### Maxconcurrency
 
 **Type:** `number`  
 **Default:** `3`
 
 Maximum number of prompt variations to test simultaneously. Higher values increase throughput. We recommend setting this as high as your rate limits allow.
 
-### nSteps
+### Nsteps
 
 **Type:** `number`  
 **Default:** `undefined`
 
 Maximum number of total attempts before giving up. Each step generates `maxCandidatesPerStep` variations. Higher values increase success rate but also cost. The original paper achieved best results with 10,000 steps.
 
-### maxCandidatesPerStep
+### Maxcandidatesperstep
 
 **Type:** `number`  
 **Default:** `1`
@@ -91,14 +91,14 @@ BoN achieves impressive attack success rates across different models and modalit
 
 The attack success rate follows a power-law scaling with the number of samples, meaning it reliably improves as more variations are tested.
 
-## Key Features
+## Key features
 
 - **Simple Implementation**: No need for gradients or model internals
 - **Multi-modal Support**: Works across text, vision, and audio inputs
 - **Highly Parallelizable**: Can test multiple variations concurrently
 - **Predictable Scaling**: Success rate follows power-law behavior
 
-## Related Concepts
+## Related concepts
 
 - [GOAT Strategy](goat.md)
 - [Iterative Jailbreaks](iterative.md)

@@ -2,11 +2,11 @@
 sidebar_label: Webhook Integration
 ---
 
-# Webhook Integration
+# Webhook integration
 
 Promptfoo Enterprise provides webhooks to notify external systems when issues are created or updated.
 
-## Event Types
+## Event types
 
 The following webhook event types are available:
 
@@ -18,11 +18,11 @@ The following webhook event types are available:
 
 > Note: When multiple properties of an issue are updated simultaneously (for example, both status and severity), a single issue.updated event will be sent rather than separate issue.status_changed and issue.severity_changed events. This helps prevent webhook consumers from receiving multiple notifications for what is logically a single update operation.
 
-## Managing Webhooks
+## Managing webhooks
 
 Webhooks can be managed via the API. Each webhook is associated with an organization and can be configured to listen for specific event types.
 
-### Creating a Webhook
+### Creating a webhook
 
 ```
 POST /api/webhooks
@@ -41,7 +41,7 @@ Authorization: Bearer YOUR_API_TOKEN
 
 Upon creation, a secret is generated for the webhook. This secret is used to sign webhook payloads and should be stored securely.
 
-### Webhook Payload Structure
+### Webhook payload structure
 
 Webhook payloads are sent as JSON and have the following structure:
 
@@ -95,7 +95,7 @@ This structure allows you to:
 2. Understand what specific attributes changed
 3. Track who made the change (if applicable)
 
-## Verifying Webhook Signatures
+## Verifying webhook signatures
 
 To verify that a webhook is coming from Promptfoo Enterprise, the payload is signed using HMAC SHA-256. The signature is included in the `X-Promptfoo-Signature` header.
 
@@ -130,13 +130,13 @@ app.post('/webhook-endpoint', (req, res) => {
 });
 ```
 
-## Example Integration Scenarios
+## Example integration scenarios
 
-### SIEM Integration
+### Siem integration
 
 When integrating with a SIEM system, you might want to listen for `issue.created` and `issue.updated` events. This allows your security team to be notified of new security issues detected by Promptfoo Enterprise and track their resolution. The complete issue state provided with each webhook makes it easy to keep your SIEM system synchronized.
 
-### Task Tracking Integration
+### Task tracking integration
 
 For task tracking systems like JIRA, you can:
 
@@ -147,7 +147,7 @@ For task tracking systems like JIRA, you can:
 
 The `changes` array included with `issue.updated` events makes it easy to add appropriate comments to your task tracking system (e.g., "Status changed from open to fixed").
 
-### Custom Notification System
+### Custom notification system
 
 You could build a custom notification system that:
 

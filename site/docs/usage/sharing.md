@@ -1,14 +1,14 @@
 ---
 sidebar_position: 40
-description: Share your promptfoo evals with your team through cloud, enterprise, or self-hosted instances.
-keywords: [eval sharing, LLM testing, promptfoo sharing, collaboration, team sharing]
+description: Share your Promptfoo evals with your team through cloud, enterprise, or self-hosted instances.
+keywords: [eval sharing, LLM testing, Promptfoo sharing, collaboration, team sharing]
 ---
 
 # Sharing
 
 Share your eval results with others using the `share` command.
 
-## Quick Start (Cloud)
+## Quick start (cloud)
 
 Most users will share to promptfoo.app cloud:
 
@@ -26,7 +26,7 @@ promptfoo share
 Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
 :::
 
-## Sharing Specific Evals
+## Sharing specific evals
 
 ```sh
 # List available evals
@@ -36,7 +36,7 @@ promptfoo list
 promptfoo share my-eval-id
 ```
 
-## Enterprise Sharing
+## Enterprise sharing
 
 If you have a Promptfoo Enterprise account:
 
@@ -57,9 +57,9 @@ Enterprise sharing includes additional features:
 
 For more details on authentication and team management, see the [Enterprise documentation](/docs/enterprise/authentication.md).
 
-## CI/CD Integration
+## Ci/cd integration
 
-### Using API Tokens (Cloud/Enterprise)
+### Using API tokens (cloud/enterprise)
 
 ```sh
 # Authenticate with API token
@@ -71,7 +71,7 @@ promptfoo eval --share
 
 Get your API token from the "CLI Login Information" section in your account settings. For Enterprise users, you can also use [Service Accounts](/docs/enterprise/service-accounts.md) for CI/CD integration.
 
-## Advanced: Self-Hosted Sharing
+## Advanced: self-hosted sharing
 
 For users with self-hosted instances:
 
@@ -104,9 +104,9 @@ sharing:
 Self-hosted sharing doesn't require `promptfoo auth login` when these environment variables or config settings are present.
 :::
 
-### Troubleshooting Upload Issues
+### Troubleshooting upload issues
 
-#### Handling "413 Request Entity Too Large" Errors
+#### Handling "413 request entity too large" errors
 
 When sharing large evaluation results, you may encounter "413 Request Entity Too Large" errors from NGINX or other proxies. This happens when the request payload exceeds the server's configured limit.
 
@@ -128,7 +128,7 @@ You can solve this in two ways:
 
 For multi-tenant environments, reducing the chunk size on the client is usually safer than increasing server limits.
 
-## Disabling Sharing
+## Disabling sharing
 
 To disable sharing completely:
 
@@ -136,7 +136,7 @@ To disable sharing completely:
 sharing: false
 ```
 
-## See Also
+## See also
 
 - [Self-hosting](/docs/usage/self-hosting.md)
 - [Command Line Usage](/docs/usage/command-line.md)

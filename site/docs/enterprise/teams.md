@@ -6,11 +6,11 @@ description: Learn how to create teams, assign roles, and implement role-based a
 keywords: [roles, teams, permissions, users, organizations, rbac, access control]
 ---
 
-# Managing Roles and Teams
+# Managing roles and teams
 
 Promptfoo Enterprise supports a flexible role-based access control (RBAC) system that allows you to manage user access to your organization's resources.
 
-## Creating Teams
+## Creating teams
 
 Promptfoo Enterprise supports multiple teams within an organization. To create a team, navigate to the "Teams" tab in the sidebar and click the "New Team" button.
 
@@ -26,7 +26,7 @@ You can also create service accounts at the team level, which will allow you to 
 Only system admins can create service accounts.
 :::
 
-## Creating Roles
+## Creating roles
 
 Promptfoo allows you to create custom roles to manage user access to your organization's resources. To create a role, navigate to the "Roles" tab in the sidebar and click the "New Role" button.
 
@@ -44,7 +44,7 @@ Promptfoo Enterprise supports the following permissions:
 - **View Results**: View issues and evaluations
 - **Manage Results**: Edit and delete evaluations and issues
 
-## See Also
+## See also
 
 - [Authentication](./authentication.md)
 - [Service Accounts](./service-accounts.md)

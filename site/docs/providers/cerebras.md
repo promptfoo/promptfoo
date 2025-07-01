@@ -25,13 +25,13 @@ providers:
       apiKey: your_api_key_here
 ```
 
-## Provider Format
+## Provider format
 
 The Cerebras provider uses a simple format:
 
 - `cerebras:<model name>` - Using the chat completion interface for all models
 
-## Available Models
+## Available models
 
 The Cerebras Inference API officially supports these models:
 
@@ -58,9 +58,9 @@ The provider accepts standard OpenAI chat parameters:
 - `response_format` - Controls the format of the model response (e.g., for JSON output)
 - `logprobs` - Whether to return log probabilities of the output tokens
 
-## Advanced Capabilities
+## Advanced capabilities
 
-### Structured Outputs
+### Structured outputs
 
 Cerebras models support structured outputs with JSON schema enforcement to ensure your AI-generated responses follow a consistent, predictable format. This makes it easier to build reliable applications that can process AI outputs programmatically.
 
@@ -87,7 +87,7 @@ providers:
 
 Alternatively, you can use simple JSON mode by setting `response_format` to `{"type": "json_object"}`.
 
-### Tool Use
+### Tool use
 
 Cerebras models support tool use (function calling), enabling LLMs to programmatically execute specific tasks. To use this feature, define the tools the model can use:
 
@@ -112,7 +112,7 @@ providers:
 
 When using tool calling, you'll need to process the model's response and handle any tool calls it makes, then provide the results back to the model for the final response.
 
-## Example Configuration
+## Example configuration
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -143,7 +143,7 @@ tests:
         value: 'labeled data'
 ```
 
-## See Also
+## See also
 
 - [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Cerebras
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers

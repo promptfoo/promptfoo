@@ -2,7 +2,7 @@
 sidebar_label: Alibaba Cloud (Qwen)
 ---
 
-# Alibaba Cloud (Qwen)
+# Alibaba cloud (qwen)
 
 [Alibaba Cloud's DashScope API](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) provides OpenAI-compatible access to Qwen language models. Compatible with all [OpenAI provider](/docs/providers/openai/) options in promptfoo.
 
@@ -20,7 +20,7 @@ providers:
 
 ## Models
 
-### Commercial Models
+### Commercial models
 
 - `qwen-max` - 32K context (30,720 in, 8,192 out)
 - `qwen-plus` - 128K context (129,024 in, 8,192 out)
@@ -28,26 +28,26 @@ providers:
 
 Snapshots available with `-latest` or date suffix (e.g., `qwen-max-2025-01-25`)
 
-### Visual Models
+### Visual models
 
 - `qwen-vl-max` - 7.5K context, 1,280 tokens/image
 - `qwen-vl-plus` - High-res image support
 - Qwen 2.5 VL: `qwen2.5-vl-{72b,7b,3b}-instruct`
 
-### Qwen 2.5 Series
+### Qwen 2.5 series
 
 All support 131K context (129,024 in, 8,192 out)
 
 - `qwen2.5-{72b,32b,14b,7b}-instruct`
 - `qwen2.5-{7b,14b}-instruct-1m`
 
-### Qwen 2 Series
+### Qwen 2 series
 
 - `qwen2-72b-instruct` - 131K context
 - `qwen2-57b-a14b-instruct` - 65K context
 - `qwen2-7b-instruct` - 131K context
 
-### Qwen 1.5 Series
+### Qwen 1.5 series
 
 8K context (6K in, 2K out)
 
@@ -57,7 +57,7 @@ All support 131K context (129,024 in, 8,192 out)
 
 - `text-embedding-v3` - 1,024d vectors, 8,192 token limit, 50+ languages
 
-## Additional Configuration
+## Additional configuration
 
 - `vl_high_resolution_images`: bool - Increases image token limit from 1,280 to 16,384 (qwen-vl-max only)
 

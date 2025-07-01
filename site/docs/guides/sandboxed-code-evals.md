@@ -2,7 +2,7 @@
 sidebar_label: Sandboxed Evaluations of LLM-Generated Code
 ---
 
-# Sandboxed Evaluations of LLM-Generated Code
+# Sandboxed evaluations of LLM-generated code
 
 You're using LLMs to generate code snippets, functions, or even entire programs. Blindly trusting and executing this generated code in our production environments - or even in development environments - can be a severe security risk.
 
@@ -12,7 +12,7 @@ This is where sandboxed evaluations come in. By running LLM-generated code in a 
 2. Benchmark different LLMs or prompts to find which produce the most reliable code.
 3. Catch potential errors, infinite loops, or resource-intensive operations before they impact the host system.
 
-In this tutorial, we'll use promptfoo to set up an automated pipeline for generating Python code with an LLM, executing it in a secure sandbox using epicbox, and evaluating the results.
+In this tutorial, we'll use Promptfoo to set up an automated pipeline for generating Python code with an LLM, executing it in a secure sandbox using epicbox, and evaluating the results.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ docker pull python:3.9-alpine
 
 ## Configuration
 
-### Create the promptfoo configuration file
+### Create the Promptfoo configuration file
 
 Create a file named `promptfooconfig.yaml`:
 
@@ -69,7 +69,7 @@ defaultTest:
 
 This configuration does several important things:
 
-1. It tells promptfoo to use our prompt template
+1. It tells Promptfoo to use our prompt template
 1. We're testing GPT-4o and Llama 3 (you can replace this with a [provider](/docs/providers) of your choice. Promptfoo supports both local and commercial providers).
 1. It defines coding problems. For each problem, it specifies the function name, a test input, and the expected output.
 1. It sets up a Python-based assertion that will run for each test case, validating the generated code.
@@ -145,7 +145,7 @@ print(result)
         return {'pass': False, 'score': 0, 'reason': f"Incorrect output. Expected: {expected_output}, Got: {actual_output}"}
 ````
 
-## Running the Evaluation
+## Running the evaluation
 
 Execute the following command in your terminal:
 
@@ -160,7 +160,7 @@ This command will:
 - Run it in the Docker sandbox environment
 - Determine whether the output is correct or not
 
-## Analyzing Results
+## Analyzing results
 
 After running the evaluation, open the web viewer:
 
@@ -178,7 +178,7 @@ This will display a summary of the results. You can analyze:
 
 ## What's next
 
-To further explore promptfoo's capabilities, consider:
+To further explore Promptfoo's capabilities, consider:
 
 - Testing different LLM [providers](/docs/providers)
 - Modify your prompt

@@ -5,7 +5,7 @@ sidebar_label: Mocha/Chai
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Testing prompts with Mocha/Chai
+# Testing prompts with mocha/chai
 
 `promptfoo` can be integrated with test frameworks like [Mocha](https://mochajs.org/) and assertion libraries like [Chai](https://www.chaijs.com/) in order to evaluate prompts as part of existing testing and CI workflows.
 

@@ -25,7 +25,7 @@ strategies:
   - id: pandamonium
 ```
 
-## How It Works
+## How it works
 
 Pandamonium uses a specialized attack agent that:
 
@@ -36,7 +36,7 @@ Pandamonium uses a specialized attack agent that:
 
 Unlike other strategies, Pandamonium will continue running until it either successfully jailbreaks the model or is manually stopped.
 
-## Related Concepts
+## Related concepts
 
 - [GOAT Strategy](goat.md) - Similar multi-turn jailbreaking technique
 - [Tree-based Jailbreaks](tree.md) - Another approach to dynamic jailbreaking

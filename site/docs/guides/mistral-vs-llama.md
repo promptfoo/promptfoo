@@ -2,7 +2,7 @@
 sidebar_label: Mistral vs Llama
 ---
 
-# Mistral vs Llama: benchmark on your own data
+# Mistral vs llama: benchmark on your own data
 
 When Mistral was was released, it was the "best 7B model to date" based on a [number of evals](https://mistral.ai/news/announcing-mistral-7b/). Mixtral, a mixture-of-experts model based on Mistral, was recently [announced](https://mistral.ai/news/mixtral-of-experts/) with even more impressive eval performance.
 
@@ -16,7 +16,7 @@ View the final example code [here](https://github.com/promptfoo/promptfoo/tree/m
 
 ## Requirements
 
-This guide assumes that you have promptfoo [installed](/docs/installation). It also uses OpenRouter, but in principle you can follow these instructions for any [local LLM](/docs/providers/localai).
+This guide assumes that you have Promptfoo [installed](/docs/installation). It also uses OpenRouter, but in principle you can follow these instructions for any [local LLM](/docs/providers/localai).
 
 ## Set up the config
 

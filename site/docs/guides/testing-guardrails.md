@@ -18,7 +18,7 @@ sidebar_label: Testing Guardrails
 
 Guardrails are security filters that help protect your AI applications from misuse. This guide explains how to test and validate guardrails with Promptfoo to ensure they're working effectively.
 
-## Overview of Guardrails Testing
+## Overview of guardrails testing
 
 There are two primary approaches to testing guardrails:
 
@@ -27,9 +27,9 @@ There are two primary approaches to testing guardrails:
 
 Either way, Promptfoo provides powerful tools to validate that your guardrails are properly preventing harmful content, detecting PII, blocking prompt injections, and more.
 
-## Testing Application with Integrated Guardrails
+## Testing application with integrated guardrails
 
-### HTTP Provider Configuration
+### Http provider configuration
 
 If your application includes guardrails as part of its API, you can test it using the [HTTP provider](/docs/providers/http):
 
@@ -54,7 +54,7 @@ providers:
 
 The key is implementing a `transformResponse` that returns both the output and a `guardrails` object that indicates whether content was flagged.
 
-### Guardrails Assertion
+### Guardrails assertion
 
 Once your provider is configured, use the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) to test:
 
@@ -81,7 +81,7 @@ For standard testing, this assertion:
 
 :::
 
-## Testing Guardrails Services Directly
+## Testing guardrails services directly
 
 You can also test standalone guardrail services directly using [custom providers](/docs/providers/), such as:
 
@@ -91,7 +91,7 @@ You can also test standalone guardrail services directly using [custom providers
 - [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
 - [OpenAI moderation](https://platform.openai.com/docs/guides/moderation)
 
-### Testing Azure Content Filter
+### Testing Azure content filter
 
 Here's how to test Azure Content Filter using a [custom Python provider](/docs/providers/python):
 
@@ -185,7 +185,7 @@ redteam:
 
 For more information, see [red team setup](/docs/red-team/quickstart/).
 
-### Testing Prompt Shields
+### Testing prompt shields
 
 Testing Azure Prompt Shields is just a matter of changing the API:
 
@@ -225,7 +225,7 @@ def call_api(prompt, options, context):
         }
 ```
 
-## Testing AWS Bedrock Guardrails
+## Testing AWS bedrock guardrails
 
 AWS Bedrock offers guardrails for content filtering, topic detection, and contextual grounding.
 
@@ -312,7 +312,7 @@ redteam:
 
 For more information, see [red team setup](/docs/red-team/quickstart/).
 
-## Testing NVIDIA NeMo Guardrails
+## Testing nvidia nemo guardrails
 
 For NVIDIA NeMo Guardrails, you'd implement a similar approach. We implement `call_api` with a `{output, guardrails, error}` return dictionary:
 
@@ -365,7 +365,7 @@ redteam:
 
 For more information on running the red team, see [red team setup](/docs/red-team/quickstart/).
 
-## Comparing Guardrail Performance
+## Comparing guardrail performance
 
 You can set multiple guardrail targets using [red teaming](/docs/red-team/quickstart) to probe for vulnerabilities:
 

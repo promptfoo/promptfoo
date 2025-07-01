@@ -84,7 +84,7 @@ And view the results:
 npx promptfoo@latest redteam report
 ```
 
-## Step 1: Configure your prompts
+## Step 1: configure your prompts
 
 The easiest way to get started is to edit `promptfooconfig.yaml` to include your prompt(s).
 
@@ -152,11 +152,11 @@ function getPrompt(context) {
 }
 ```
 
-## Step 2: Configure your targets
+## Step 2: configure your targets
 
 LLMs are configured with the `targets` property in `promptfooconfig.yaml`. An LLM target can be a known LLM API (such as OpenAI, Anthropic, Ollama, etc.) or a custom RAG or agent flow you've built yourself.
 
-### LLM APIs
+### Llm apis
 
 Promptfoo supports [many LLM providers](/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
 
@@ -193,7 +193,7 @@ To learn more, see:
 - [Exec provider](/docs/providers/custom-script) (Used to run any executable from any programming language)
 - [Webhook provider](/docs/providers/webhook) (HTTP requests, useful for testing an app that is online or running locally)
 
-### HTTP endpoints
+### Http endpoints
 
 In order to pentest a live API endpoint, set the provider id to a URL. This will send an HTTP request to the endpoint. It expects that the LLM or agent output will be in the HTTP response.
 
@@ -246,7 +246,7 @@ defaultTest:
 
 For more information, see [Overriding the LLM grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
 
-## Step 3: Generate adversarial test cases
+## Step 3: generate adversarial test cases
 
 Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo redteam generate` command:
 
@@ -329,7 +329,7 @@ These additional plugins can be optionally enabled:
 
 The adversarial test cases will be written to `promptfooconfig.yaml`.
 
-## Step 4: Run the pentest
+## Step 4: run the pentest
 
 Now that all the red team tests are ready, run the eval:
 
@@ -339,7 +339,7 @@ npx promptfoo@latest redteam eval
 
 This will take a while, usually ~15 minutes or so depending on how many plugins you have chosen.
 
-## Step 5: Review results
+## Step 5: review results
 
 Use the web viewer to review the flagged outputs and understand the failure cases.
 

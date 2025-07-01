@@ -16,38 +16,38 @@ Example of setting the environment variable:
 export HYPERBOLIC_API_KEY=your_api_key_here
 ```
 
-## Provider Formats
+## Provider formats
 
-### Text Generation (LLM)
+### Text generation (LLM)
 
 ```
 hyperbolic:<model_name>
 ```
 
-### Image Generation
+### Image generation
 
 ```
 hyperbolic:image:<model_name>
 ```
 
-### Audio Generation (TTS)
+### Audio generation (tts)
 
 ```
 hyperbolic:audio:<model_name>
 ```
 
-## Available Models
+## Available models
 
-### Text Models (LLMs)
+### Text models (llms)
 
-#### DeepSeek Models
+#### Deepseek models
 
 - `hyperbolic:deepseek-ai/DeepSeek-R1` - Best open-source reasoning model
 - `hyperbolic:deepseek-ai/DeepSeek-R1-Zero` - Zero-shot variant of DeepSeek-R1
 - `hyperbolic:deepseek-ai/DeepSeek-V3` - Latest DeepSeek model
 - `hyperbolic:deepseek/DeepSeek-V2.5` - Previous generation model
 
-#### Qwen Models
+#### Qwen models
 
 - `hyperbolic:qwen/Qwen3-235B-A22B` - MoE model with strong reasoning ability
 - `hyperbolic:qwen/QwQ-32B` - Latest Qwen reasoning model
@@ -55,7 +55,7 @@ hyperbolic:audio:<model_name>
 - `hyperbolic:qwen/Qwen2.5-72B-Instruct` - Latest Qwen LLM with coding and math
 - `hyperbolic:qwen/Qwen2.5-Coder-32B` - Best coder from Qwen Team
 
-#### Meta Llama Models
+#### Meta llama models
 
 - `hyperbolic:meta-llama/Llama-3.3-70B-Instruct` - Performance comparable to Llama 3.1 405B
 - `hyperbolic:meta-llama/Llama-3.2-3B` - Latest small Llama model
@@ -65,17 +65,17 @@ hyperbolic:audio:<model_name>
 - `hyperbolic:meta-llama/Llama-3.1-8B` - Smallest and fastest Llama 3.1
 - `hyperbolic:meta-llama/Llama-3-70B` - Highly efficient and powerful
 
-#### Other Models
+#### Other models
 
 - `hyperbolic:hermes/Hermes-3-70B` - Latest flagship Hermes model
 
-### Vision-Language Models (VLMs)
+### Vision-language models (vlms)
 
 - `hyperbolic:qwen/Qwen2.5-VL-72B-Instruct` - Latest and biggest vision model from Qwen
 - `hyperbolic:qwen/Qwen2.5-VL-7B-Instruct` - Smaller vision model from Qwen
 - `hyperbolic:mistralai/Pixtral-12B` - Vision model from MistralAI
 
-### Image Generation Models
+### Image generation models
 
 - `hyperbolic:image:SDXL1.0-base` - High-resolution master (recommended)
 - `hyperbolic:image:SD1.5` - Reliable classic Stable Diffusion
@@ -85,13 +85,13 @@ hyperbolic:audio:<model_name>
 - `hyperbolic:image:SDXL-ControlNet` - SDXL with ControlNet
 - `hyperbolic:image:SD1.5-ControlNet` - SD1.5 with ControlNet
 
-### Audio Generation Models
+### Audio generation models
 
 - `hyperbolic:audio:Melo-TTS` - Natural narrator for high-quality speech
 
 ## Configuration
 
-Configure the provider in your promptfoo configuration file:
+Configure the provider in your Promptfoo configuration file:
 
 ```yaml
 providers:
@@ -102,9 +102,9 @@ providers:
       apiKey: ... # override the environment variable
 ```
 
-### Configuration Options
+### Configuration options
 
-#### Text Generation Options
+#### Text generation options
 
 | Parameter            | Description                                                               |
 | -------------------- | ------------------------------------------------------------------------- |
@@ -120,7 +120,7 @@ providers:
 | `stop`               | Array of strings that will stop generation when encountered               |
 | `seed`               | Random seed for reproducible results                                      |
 
-#### Image Generation Options
+#### Image generation options
 
 | Parameter          | Description                                         |
 | ------------------ | --------------------------------------------------- |
@@ -137,7 +137,7 @@ providers:
 | `controlnet_image` | Reference image for ControlNet                      |
 | `loras`            | LoRA weights as object (e.g., `{"Pixel_Art": 0.7}`) |
 
-#### Audio Generation Options
+#### Audio generation options
 
 | Parameter  | Description             |
 | ---------- | ----------------------- |
@@ -145,9 +145,9 @@ providers:
 | `speed`    | Speech speed multiplier |
 | `language` | Language for TTS        |
 
-## Example Usage
+## Example usage
 
-### Text Generation Example
+### Text generation example
 
 ```yaml
 prompts:
@@ -170,7 +170,7 @@ tests:
         value: 'dynamic programming'
 ```
 
-### Image Generation Example
+### Image generation example
 
 ```yaml
 prompts:
@@ -191,7 +191,7 @@ tests:
         value: 1920
 ```
 
-### Audio Generation Example
+### Audio generation example
 
 ```yaml
 prompts:
@@ -207,7 +207,7 @@ tests:
       - type: is-valid-audio
 ```
 
-### Vision-Language Model Example
+### Vision-language model example
 
 ```yaml
 prompts:
@@ -245,11 +245,11 @@ Example prompt template (`prompts/coding_assistant.json`):
 ]
 ```
 
-## Cost Information
+## Cost information
 
 Hyperbolic offers competitive pricing across all model types (rates as of January 2025):
 
-### Text Models
+### Text models
 
 - **DeepSeek-R1**: $2.00/M tokens
 - **DeepSeek-V3**: $0.25/M tokens
@@ -258,17 +258,17 @@ Hyperbolic offers competitive pricing across all model types (rates as of Januar
 - **Llama-3.1-70B**: $0.40/M tokens
 - **Llama-3.1-8B**: $0.10/M tokens
 
-### Image Models
+### Image models
 
 - **Flux.1-dev**: $0.01 per 1024x1024 image with 25 steps (scales with size/steps)
 - **SDXL models**: Similar pricing formula
 - **SD1.5/SD2**: Lower cost options
 
-### Audio Models
+### Audio models
 
 - **Melo-TTS**: $5.00 per 1M characters
 
-## Getting Started
+## Getting started
 
 Test your setup with working examples:
 

@@ -2,7 +2,7 @@
 sidebar_label: Cross-Session Leak
 ---
 
-# Cross-Session Leak Plugin
+# Cross-session leak plugin
 
 The Cross-Session Leak plugin tests an AI system's vulnerability to information leaks across different user sessions.
 
@@ -32,7 +32,7 @@ The Crescendo and GOAT multi-turn strategies are incompatible with this plugin.
 They are automatically skipped when generating tests.
 :::
 
-## Example Test Cases
+## Example test cases
 
 Here are some example test cases:
 
@@ -46,6 +46,6 @@ Here are some example test cases:
 
 These examples demonstrate how the plugin tests for information leaks across different user sessions.
 
-## Related Concepts
+## Related concepts
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

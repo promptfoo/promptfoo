@@ -1,16 +1,16 @@
 ---
-title: Contributing to promptfoo
+title: Contributing to Promptfoo
 sidebar_label: Contributing
-description: Learn how to contribute code, documentation, and providers to the promptfoo
+description: Learn how to contribute code, documentation, and providers to the Promptfoo
 ---
 
-We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
+We welcome contributions from the community to help make Promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
-## Project Overview
+## Project overview
 
-promptfoo is an MIT licensed tool for testing and evaluating LLM apps.
+Promptfoo is an MIT licensed tool for testing and evaluating LLM apps.
 
-### How to Contribute
+### How to contribute
 
 There are several ways to contribute to promptfoo:
 
@@ -25,11 +25,11 @@ We particularly welcome contributions in the following areas:
 - Bug fixes
 - Documentation updates, including examples and guides
 - Updates to providers including new models, new capabilities (tool use, function calling, JSON mode, file uploads, etc.)
-- Features that improve the user experience of promptfoo, especially relating to RAGs, Agents, and synthetic data generation.
+- Features that improve the user experience of Promptfoo, especially relating to RAGs, Agents, and synthetic data generation.
 
-## Getting Started
+## Getting started
 
-1. Fork the repository on GitHub by clicking the "Fork" button at the top right of the [promptfoo repository](https://github.com/promptfoo/promptfoo).
+1. Fork the repository on GitHub by clicking the "Fork" button at the top right of the [Promptfoo repository](https://github.com/promptfoo/promptfoo).
 2. Clone your fork locally:
 
    ```bash
@@ -86,7 +86,7 @@ We particularly welcome contributions in the following areas:
 
 If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
 
-## Development Workflow
+## Development workflow
 
 1. Create a new branch for your feature or bug fix:
 
@@ -108,7 +108,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git push origin your-branch-name
    ```
 
-4. [Open a pull request](https://github.com/promptfoo/promptfoo/compare) (PR) against the `main` branch of the promptfoo repository.
+4. [Open a pull request](https://github.com/promptfoo/promptfoo/compare) (PR) against the `main` branch of the Promptfoo repository.
 
 When opening a pull request:
 
@@ -128,7 +128,7 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 ## Tests
 
-### Running Tests
+### Running tests
 
 We use Jest for testing. To run the test suite:
 
@@ -152,7 +152,7 @@ npx jest [pattern]
 npx jest providers
 ```
 
-### Writing Tests
+### Writing tests
 
 When writing tests, please:
 
@@ -160,7 +160,7 @@ When writing tests, please:
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
 
-## Linting and Formatting
+## Linting and formatting
 
 We use ESLint and Prettier for code linting and formatting. Before submitting a pull request, please run:
 
@@ -171,7 +171,7 @@ npm run lint
 
 It's a good idea to run the lint command as `npm run lint -- --fix` to automatically fix some linting errors.
 
-## Building the Project
+## Building the project
 
 To build the project:
 
@@ -187,7 +187,7 @@ npm run build:watch
 
 ## Contributing to the CLI
 
-### Running the CLI During Development
+### Running the CLI during development
 
 We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` package:
 
@@ -222,11 +222,11 @@ tests:
       - type: new-assertion-type
 ```
 
-## Adding a New Provider
+## Adding a new provider
 
 Providers are defined in TypeScript. We also provide language bindings for Python and Go. To contribute a new provider:
 
-1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
+1. Ensure your provider doesn't already exist in Promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
 
 2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as a peer dependency with `npm install --save-peer`.
 
@@ -238,7 +238,7 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 6. Ensure all tests pass (`npm test`) and fix any linting issues (`npm run lint`).
 
-## Adding a New Assertion
+## Adding a new assertion
 
 Assertions define different ways to compare and validate the output of an LLM against expected results. To contribute a new assertion:
 
@@ -318,7 +318,7 @@ Assertions define different ways to compare and validate the output of an LLM ag
      - Schema validation (if applicable)
      - Backward compatibility (if refactoring existing assertions)
 
-## Contributing to the Web UI
+## Contributing to the web UI
 
 The web UI is written as a React app. It is exported as a static site and hosted by a local express server when bundled.
 
@@ -347,9 +347,9 @@ This will not update the web UI if you make further changes to the code. You hav
 
 :::
 
-## Python Contributions
+## Python contributions
 
-While promptfoo is primarily written in TypeScript, we support custom Python prompts, providers, asserts, and many examples in Python. We strive to keep our Python codebase simple and minimal, without external dependencies. Please adhere to these guidelines:
+While Promptfoo is primarily written in TypeScript, we support custom Python prompts, providers, asserts, and many examples in Python. We strive to keep our Python codebase simple and minimal, without external dependencies. Please adhere to these guidelines:
 
 - Use Python 3.9 or later
 - For linting and formatting, use `ruff`. Run `ruff check --fix` and `ruff format` before submitting changes
@@ -362,7 +362,7 @@ While promptfoo is primarily written in TypeScript, we support custom Python pro
 
 If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation. We strongly encourage examples and guides as well.
 
-### Documentation Standards
+### Documentation standards
 
 Our documentation follows several standards to ensure accessibility:
 
@@ -371,7 +371,7 @@ Our documentation follows several standards to ensure accessibility:
 - **Searchable**: Proper headings, tags, and cross-references
 - **Example-driven**: Real-world examples and use cases
 
-### Development Workflow
+### Development workflow
 
 To run the documentation in development mode:
 
@@ -391,13 +391,13 @@ npm run build
 
 This will generate static content in the `build` directory that can be served using any static content hosting service. Building the documentation may occasionally catch errors that do not surface when running `npm start`.
 
-## Advanced Topics
+## Advanced topics
 
 ### Database
 
 Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
 
-#### Main Tables
+#### Main tables
 
 - `evals`: Stores evaluation details including results and configuration.
 - `prompts`: Stores information about different prompts.
@@ -407,7 +407,7 @@ Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. 
 
 You can view the contents of each of these tables by running `npx drizzle-kit studio`, which will start a web server.
 
-#### Adding a Migration
+#### Adding a migration
 
 1. **Modify Schema**: Make changes to your schema in `src/database.ts`.
 2. **Generate Migration**: Run the command to create a new migration:
@@ -425,7 +425,7 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
    npm run db:migrate
    ```
 
-### Release Steps
+### Release steps
 
 Note: releases are only issued by maintainers. If you need to to release a new version quickly please send a message on [Discord](https://discord.gg/promptfoo).
 
@@ -461,13 +461,13 @@ As a maintainer, when you are ready to release a new version:
 
 4. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
-## Getting Help
+## Getting help
 
 If you need help or have questions, you can:
 
 - Open an issue on GitHub.
 - Join our [Discord community](https://discord.gg/promptfoo).
 
-## Code of Conduct
+## Code of conduct
 
 We follow the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/). Please read and adhere to it in all interactions within our community.

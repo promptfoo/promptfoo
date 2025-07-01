@@ -2,7 +2,7 @@
 sidebar_label: vllm
 ---
 
-# vllm
+# VLLM
 
 vllm's [OpenAI-compatible server](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server) offers access to many [supported models](https://docs.vllm.ai/en/latest/models/supported_models.html) for local inference from Huggingface Transformers.
 

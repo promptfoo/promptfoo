@@ -2,9 +2,9 @@
 description: Use the Helicone AI Gateway for unified LLM provider access and observability
 ---
 
-# Helicone AI Gateway
+# Helicone AI gateway
 
-[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted AI gateway that provides a unified OpenAI-compatible interface for 100+ LLM providers. The Helicone provider in promptfoo allows you to route requests through a locally running Helicone AI Gateway instance.
+[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted AI gateway that provides a unified OpenAI-compatible interface for 100+ LLM providers. The Helicone provider in Promptfoo allows you to route requests through a locally running Helicone AI Gateway instance.
 
 ## Benefits
 
@@ -17,7 +17,7 @@ description: Use the Helicone AI Gateway for unified LLM provider access and obs
 
 ## Setup
 
-### Start Helicone AI Gateway
+### Start helicone AI gateway
 
 First, start a local Helicone AI Gateway instance:
 
@@ -35,11 +35,11 @@ The gateway will start on `http://localhost:8080` by default.
 
 ### Installation
 
-No additional dependencies are required. The Helicone provider is built into promptfoo and works with any running Helicone AI Gateway instance.
+No additional dependencies are required. The Helicone provider is built into Promptfoo and works with any running Helicone AI Gateway instance.
 
 ## Usage
 
-### Basic Usage
+### Basic usage
 
 To route requests through your local Helicone AI Gateway:
 
@@ -52,7 +52,7 @@ providers:
 
 The model format is `provider/model` as supported by the Helicone AI Gateway.
 
-### Custom Configuration
+### Custom configuration
 
 For more advanced configuration:
 
@@ -70,7 +70,7 @@ providers:
         Custom-Header: 'custom-value'
 ```
 
-### Using Custom Router
+### Using custom router
 
 If your Helicone AI Gateway is configured with custom routers:
 
@@ -84,9 +84,9 @@ providers:
       router: development
 ```
 
-## Configuration Options
+## Configuration options
 
-### Provider Format
+### Provider format
 
 The Helicone provider uses the format: `helicone:provider/model`
 
@@ -96,7 +96,7 @@ Examples:
 - `helicone:anthropic/claude-3-5-sonnet`
 - `helicone:groq/llama-3.1-8b-instant`
 
-### Supported Models
+### Supported models
 
 The Helicone AI Gateway supports 100+ models from various providers. Some popular examples:
 
@@ -110,16 +110,16 @@ The Helicone AI Gateway supports 100+ models from various providers. Some popula
 
 For a complete list, see the [Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway).
 
-### Configuration Parameters
+### Configuration parameters
 
-#### Gateway Options
+#### Gateway options
 
 - `baseUrl` (string): Helicone AI Gateway URL (defaults to `http://localhost:8080`)
 - `router` (string): Custom router name (optional, uses `/ai` endpoint if not specified)
 - `model` (string): Override the model name from the provider specification
 - `apiKey` (string): Custom API key (defaults to `placeholder-api-key`)
 
-#### OpenAI-Compatible Options
+#### Openai-compatible options
 
 Since the provider extends OpenAI's chat completion provider, all standard OpenAI options are supported:
 
@@ -133,7 +133,7 @@ Since the provider extends OpenAI's chat completion provider, all standard OpenA
 
 ## Examples
 
-### Basic OpenAI Integration
+### Basic OpenAI integration
 
 ```yaml
 providers:
@@ -150,7 +150,7 @@ tests:
         value: 'Bonjour'
 ```
 
-### Multi-Provider Comparison with Observability
+### Multi-provider comparison with observability
 
 ```yaml
 providers:
@@ -174,7 +174,7 @@ tests:
       topic: 'a robot learning to paint'
 ```
 
-### Custom Provider with Full Configuration
+### Custom provider with full configuration
 
 ```yaml
 providers:
@@ -197,7 +197,7 @@ tests:
       question: 'What is artificial intelligence?'
 ```
 
-### Caching and Performance Optimization
+### Caching and performance optimization
 
 ```yaml
 providers:
@@ -221,7 +221,7 @@ tests:
 
 ## Features
 
-### Request Monitoring
+### Request monitoring
 
 All requests routed through Helicone are automatically logged with:
 
@@ -230,7 +230,7 @@ All requests routed through Helicone are automatically logged with:
 - Latency metrics
 - Custom properties and tags
 
-### Cost Analytics
+### Cost analytics
 
 Track costs across different providers and models:
 
@@ -246,7 +246,7 @@ Intelligent response caching:
 - Configurable cache duration
 - Cost reduction through cache hits
 
-### Rate Limiting
+### Rate limiting
 
 Built-in rate limiting:
 
@@ -254,7 +254,7 @@ Built-in rate limiting:
 - Per-session limits
 - Custom rate limiting rules
 
-## Best Practices
+## Best practices
 
 1. **Use Meaningful Tags**: Tag your requests with relevant metadata for better analytics
 2. **Track Sessions**: Use session IDs to track conversation flows
@@ -264,13 +264,13 @@ Built-in rate limiting:
 
 ## Troubleshooting
 
-### Common Issues
+### Common issues
 
 1. **Authentication Failed**: Ensure your `HELICONE_API_KEY` is set correctly
 2. **Unknown Provider**: Check that the provider is in the supported list or use a custom `targetUrl`
 3. **Request Timeout**: Check your network connection and target provider availability
 
-### Debug Mode
+### Debug mode
 
 Enable debug logging to see detailed request/response information:
 
@@ -278,9 +278,9 @@ Enable debug logging to see detailed request/response information:
 LOG_LEVEL=debug promptfoo eval
 ```
 
-## Related Links
+## Related links
 
 - [Helicone Documentation](https://docs.helicone.ai/)
 - [Helicone Dashboard](https://helicone.ai/dashboard)
 - [Helicone GitHub](https://github.com/Helicone/helicone)
-- [promptfoo Provider Guide](/docs/providers/)
+- [Promptfoo Provider Guide](/docs/providers/)

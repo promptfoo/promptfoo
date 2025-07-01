@@ -18,13 +18,13 @@ pagination_next: configuration/telemetry
 
 # Caching
 
-promptfoo caches the results of API calls to LLM providers to help save time and cost.
+Promptfoo caches the results of API calls to LLM providers to help save time and cost.
 
-The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-manager/) with the [`cache-manager-fs-hash`](https://www.npmjs.com/package/cache-manager-fs-hash) store for disk-based caching. By default, promptfoo uses disk-based storage (`~/.promptfoo/cache`).
+The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-manager/) with the [`cache-manager-fs-hash`](https://www.npmjs.com/package/cache-manager-fs-hash) store for disk-based caching. By default, Promptfoo uses disk-based storage (`~/.promptfoo/cache`).
 
-## How Caching Works
+## How caching works
 
-### Cache Keys
+### Cache keys
 
 Cache entries are stored using composite keys that include:
 
@@ -49,7 +49,7 @@ For example:
 })}`
 ```
 
-### Cache Behavior
+### Cache behavior
 
 - Successful API responses are cached with their complete response data
 - Error responses are not cached to allow for retry attempts
@@ -60,7 +60,7 @@ For example:
   - Cache is manually cleared
 - Memory storage is used automatically when `NODE_ENV=test`
 
-## Command Line
+## Command line
 
 If you're using the command line, call `promptfoo eval` with `--no-cache` to disable the cache, or set `{ evaluateOptions: { cache: false }}` in your config file.
 
@@ -98,15 +98,15 @@ The cache is configurable through environment variables:
 | PROMPTFOO_CACHE_TTL            | Time to live for cache entries in seconds | 14 days                                            |
 | PROMPTFOO_CACHE_MAX_SIZE       | Maximum size of the cache in bytes        | 10 MB                                              |
 
-#### Additional Cache Details
+#### Additional cache details
 
 - Rate limit responses (HTTP 429) are automatically handled with exponential backoff
 - Empty responses are not cached
 - HTTP 500 responses can be retried by setting `PROMPTFOO_RETRY_5XX=true`
 
-## Managing the Cache
+## Managing the cache
 
-### Clearing the Cache
+### Clearing the cache
 
 You can clear the cache in several ways:
 
@@ -129,7 +129,7 @@ await promptfoo.cache.clearCache();
 rm -rf ~/.promptfoo/cache
 ```
 
-### Cache Busting
+### Cache busting
 
 You can force a cache miss in two ways:
 

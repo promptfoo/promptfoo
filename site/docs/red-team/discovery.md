@@ -4,7 +4,7 @@ sidebar_label: Target Discovery
 title: Target Discovery Agent
 ---
 
-# Target Discovery
+# Target discovery
 
 Promptfoo's **Target Discovery Agent** automatically extracts useful information about generative AI systems that you want to red team. This information is used to craft adversarial inputs that are unique to the target system, improving attack efficacy and response evaluation quality.
 

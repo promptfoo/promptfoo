@@ -2,9 +2,9 @@
 sidebar_label: HuggingFace
 ---
 
-# HuggingFace
+# Huggingface
 
-promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
+Promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
 
 To run a model, specify the task type and model name. Supported models include:
 
@@ -58,7 +58,7 @@ These common HuggingFace config parameters are supported:
 
 Additionally, any other keys on the `config` object are passed through directly to HuggingFace. Be sure to check the specific parameters supported by the model you're using.
 
-The provider also supports these built-in promptfoo parameters:
+The provider also supports these built-in Promptfoo parameters:
 
 | Parameter     | Type   | Description                        |
 | ------------- | ------ | ---------------------------------- |
@@ -71,7 +71,7 @@ Supported environment variables:
 
 The provider can pass through configuration parameters to the API. See [text generation parameters](https://huggingface.co/docs/api-inference/detailed_parameters#text-generation-task) and [feature extraction parameters](https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task).
 
-Here's an example of how this provider might appear in your promptfoo config:
+Here's an example of how this provider might appear in your Promptfoo config:
 
 ```yaml
 providers:
@@ -91,7 +91,7 @@ Once the endpoint is created, take the `Endpoint URL` shown on the page:
 
 ![huggingface inference endpoint url](/img/docs/huggingface-inference-endpoint.png)
 
-Then set up your promptfoo config like this:
+Then set up your Promptfoo config like this:
 
 ```yaml
 description: 'HF private inference endpoint'

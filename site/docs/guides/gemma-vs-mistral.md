@@ -2,7 +2,7 @@
 sidebar_label: Gemma vs Mistral/Mixtral
 ---
 
-# Gemma vs Mistral: benchmark on your own data
+# Gemma vs mistral: benchmark on your own data
 
 When comparing the performance of LLMs, it's best not to rely on generic benchmarks. This guide shows you how to set up a comprehensive benchmark that compares Gemma vs Mistral vs Mixtral.
 
@@ -19,7 +19,7 @@ Ensure you have the following before starting:
 
 While this guide focuses on using Replicate, this method supports many other providers such as [Ollama](/docs/providers/ollama), [OpenRouter](/docs/providers/openrouter), etc.
 
-## Step 1: Configuration setup
+## Step 1: configuration setup
 
 Begin by creating a directory for your evaluation:
 
@@ -50,7 +50,7 @@ prompts:
 
 Next, specify the models you're comparing by setting up their configurations:
 
-#### Mistral Configuration
+#### Mistral configuration
 
 ```yaml
 - id: replicate:mistralai/mistral-7b-instruct-v0.2
@@ -62,7 +62,7 @@ Next, specify the models you're comparing by setting up their configurations:
       suffix: ' [/INST]'
 ```
 
-#### Mixtral Configuration
+#### Mixtral configuration
 
 ```yaml
 - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1
@@ -74,7 +74,7 @@ Next, specify the models you're comparing by setting up their configurations:
       suffix: ' [/INST]'
 ```
 
-#### Gemma Configuration
+#### Gemma configuration
 
 ```yaml
 - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
@@ -120,7 +120,7 @@ providers:
         suffix: "<end_of_turn>\n<start_of_turn>model"
 ```
 
-## Step 2: Build a test set
+## Step 2: build a test set
 
 Design test cases that reflect a variety of requests that are representative of your app's use case.
 
@@ -208,7 +208,7 @@ tests:
   # ...
 ```
 
-## Step 3: Running the benchmark
+## Step 3: running the benchmark
 
 Execute the comparison with:
 
@@ -226,7 +226,7 @@ This shows a view like this:
 
 ![gemma vs mistral vs mixtral](/img/docs/gemma-vs-mistral.png)
 
-## Step 4: Results analysis
+## Step 4: results analysis
 
 Upon completing the evaluation, look at the test results to identify which model performs best across your test cases. You should tailor the test evaluation to your application's needs specifically.
 
@@ -240,4 +240,4 @@ Here's what we noticed from our small riddle test set:
 
 When constructing your own test set, think about edge cases and unusual criteria that are specific to your app and may not be in model training data. Ideally, it's best to set up a feedback loop where real users of your app can flag failure cases. Use this to build your test set over time.
 
-To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).
+To learn more about setting up Promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).

@@ -2,13 +2,13 @@
 sidebar_label: LiteLLM
 ---
 
-# LiteLLM
+# Litellm
 
 The [LiteLLM](https://docs.litellm.ai/docs/) provides access to hundreds of LLMs.
 
-You can use LiteLLM with promptfoo in two ways:
+You can use LiteLLM with Promptfoo in two ways:
 
-## Using the dedicated LiteLLM provider
+## Using the dedicated litellm provider
 
 The simplest approach is to use the `litellm` provider directly:
 
@@ -39,7 +39,7 @@ providers:
       apiKey: your-api-key # Optional
 ```
 
-## Environment Variables
+## Environment variables
 
 You can also set the base URL via environment variables:
 

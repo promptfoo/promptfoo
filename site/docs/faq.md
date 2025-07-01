@@ -58,7 +58,7 @@ No, Promptfoo operates locally, and all data remains on your machine. The only e
 
 No, we do not collect any personally identifiable information (PII).
 
-### How do I use a proxy with Promptfoo?
+### How do i use a proxy with Promptfoo?
 
 Promptfoo proxy settings are configured through environment variables:
 
@@ -83,7 +83,7 @@ export NO_PROXY=localhost,127.0.0.1,internal.domain.com
 
 Note: Environment variables are specific to your terminal/shell instance. If you need them permanently, add them to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`).
 
-### How do I configure SSL certificates and security?
+### How do i configure SSL certificates and security?
 
 For environments with custom certificate authorities (like corporate environments), configure SSL/TLS settings using these environment variables:
 
@@ -108,7 +108,7 @@ Remember that like all environment variables, these settings are specific to you
 
 Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://github.com/promptfoo/promptfoo-action), used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process.
 
-### How can I use Promptfoo in a completely offline environment?
+### How can i use Promptfoo in a completely offline environment?
 
 Set the following environment variables before running the CLI to disable all outbound network requests:
 
@@ -122,16 +122,16 @@ export PROMPTFOO_SELF_HOSTED=1
 
 Only configure local or self-hosted LLM providers (e.g., Ollama) so the CLI does not attempt to reach external APIs.
 
-### Do you publish an LLMs.txt?
+### Do you publish an llms.txt?
 
 Yes. The documentation website follows the [LLMs.txt specification](https://llmspec.ai/) so automated tools can easily index our content. You can access the files at:
 
 - [llms.txt](https://www.promptfoo.dev/llms.txt) - Navigation and structure
 - [llms-full.txt](https://www.promptfoo.dev/llms-full.txt) - Complete documentation content
 
-**Usage with AI assistants:** Copy the llms-full.txt content into your AI assistant (ChatGPT, Claude, etc.) for comprehensive promptfoo context when working on LLM evaluations, red-teaming, or configuration questions.
+**Usage with AI assistants:** Copy the llms-full.txt content into your AI assistant (ChatGPT, Claude, etc.) for comprehensive Promptfoo context when working on LLM evaluations, red-teaming, or configuration questions.
 
-### Further Reading
+### Further reading
 
 - [General Troubleshooting Guide](/docs/usage/troubleshooting) - Memory optimization, API keys, timeouts, and debugging
 - [Red Team Troubleshooting Guide](/docs/red-team/troubleshooting/overview) - Common issues with LLM red teaming

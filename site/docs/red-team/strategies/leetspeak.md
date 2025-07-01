@@ -4,7 +4,7 @@ title: Leetspeak Strategy
 description: Test how AI systems handle text with character substitutions that may bypass content filters
 ---
 
-# Leetspeak Strategy
+# Leetspeak strategy
 
 The Leetspeak strategy tests an AI system's ability to resist encoded inputs that might bypass security controls by replacing letters with visually similar numbers or symbols (e.g., a→4, e→3, t→7), leveraging the fact that models frequently encounter this internet-native text transformation during pretraining but safety training often fails to catch these character substitutions.
 
@@ -17,7 +17,7 @@ strategies:
   - leetspeak
 ```
 
-## How It Works
+## How it works
 
 Leetspeak transforms text by:
 
@@ -26,7 +26,7 @@ Leetspeak transforms text by:
 3. Creating a variant that humans can generally read but may bypass automated filters
 4. Testing whether the model processes the leetspeak text differently than plain text
 
-## Example Scenarios
+## Example scenarios
 
 | Original                           | Encoded                            |
 | ---------------------------------- | ---------------------------------- |
@@ -40,7 +40,7 @@ The strategy helps identify:
 - Safety training gaps around common internet text patterns
 - Potential for natural-looking obfuscation
 
-## Related Concepts
+## Related concepts
 
 - [Base64 Encoding](base64.md) - More formal encoding scheme
 - [ROT13 Encoding](rot13.md) - More systematic substitution

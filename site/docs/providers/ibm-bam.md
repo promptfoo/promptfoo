@@ -44,7 +44,7 @@ To use the BAM provider, you need to set the `BAM_API_KEY` environment variable 
 export BAM_API_KEY='your-bam-api-key'
 ```
 
-## API Client Initialization
+## Api client initialization
 
 The BAM provider initializes an API client using the IBM Generative AI Node SDK. The endpoint for the BAM API is configured to `https://bam-api.res.ibm.com/`.
 
@@ -69,7 +69,7 @@ The BAM provider initializes an API client using the IBM Generative AI Node SDK.
 | `include_stop_sequence` | `boolean`  | Whether to include stop sequences in the output.                                           |
 | `truncate_input_tokens` | `number`   | Maximum number of tokens to consider from the input text.                                  |
 
-### Moderation Parameters
+### Moderation parameters
 
 Moderation settings can also be specified to manage content safety and compliance:
 

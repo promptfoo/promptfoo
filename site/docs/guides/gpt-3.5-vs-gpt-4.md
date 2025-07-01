@@ -2,7 +2,7 @@
 sidebar_label: GPT 3.5 vs GPT 4
 ---
 
-# GPT 3.5 vs GPT 4: benchmark on your own data
+# Gpt 3.5 vs GPT 4: benchmark on your own data
 
 This guide will walk you through how to compare OpenAI's GPT-3.5 and GPT-4 using promptfoo. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
 
@@ -16,10 +16,10 @@ The end result will be a side-by-side comparison that looks like this:
 
 Before we dive in, ensure you have the following ready:
 
-- promptfoo CLI installed. If not, refer to the [installation guide](/docs/installation).
+- Promptfoo CLI installed. If not, refer to the [installation guide](/docs/installation).
 - An active OpenAI API key set as the `OPENAI_API_KEY` environment variable. See [OpenAI configuration](/docs/providers/openai) for details.
 
-## Step 1: Setup
+## Step 1: setup
 
 Create a dedicated directory for your comparison project:
 
@@ -35,7 +35,7 @@ providers:
   - openai:gpt-4.1
 ```
 
-## Step 2: Crafting the prompts
+## Step 2: crafting the prompts
 
 For our comparison, we'll use a simple prompt:
 
@@ -46,7 +46,7 @@ prompts:
 
 Feel free to add multiple prompts and tailor to your use case.
 
-## Step 3: Create test cases
+## Step 3: create test cases
 
 Above, we have a `{{riddle}}` placeholder variable. Each test case runs the prompts with a different riddle:
 
@@ -60,7 +60,7 @@ tests:
       riddle: 'The more of this there is, the less you see. What is it?'
 ```
 
-## Step 4: Run the comparison
+## Step 4: run the comparison
 
 Execute the comparison with the following command:
 
@@ -74,7 +74,7 @@ This will process the riddles against both GPT-3.5 and GPT-4, providing you with
 npx promptfoo@latest view
 ```
 
-## Step 5: Automatic evaluation
+## Step 5: automatic evaluation
 
 To streamline the evaluation process, you can add various types of assertions to your test cases. Assertions verify if the model's output meets certain criteria, marking the test as pass or fail accordingly:
 

@@ -2,7 +2,7 @@
 sidebar_label: Qwen vs Llama vs GPT
 ---
 
-# Qwen vs Llama vs GPT: Run a Custom Benchmark
+# Qwen vs llama vs GPT: run a custom benchmark
 
 As a product developer using LLMs, you are likely focused on a specific use case. Generic benchmarks are easily gamed and often not applicable to specific product needs. The best way to improve quality in your LLM app is to construct your own benchmark.
 
@@ -10,7 +10,7 @@ In this guide, we'll walk through the steps to compare Qwen-2-72B, GPT-4o, and L
 
 ![qwen vs gpt vs llama](/img/docs/qwen-eval-webui.png)
 
-## Hypothetical Use Case: Customer Support Chatbot
+## Hypothetical use case: customer support chatbot
 
 We're going to imagine we're building a customer support chatbot, but you should modify these tests for whatever your application is doing.
 
@@ -22,7 +22,7 @@ The chatbot should provide accurate information, respond quickly, and handle com
 - Access to OpenRouter for Qwen and Llama (set environment variable `OPENROUTER_API_KEY`)
 - Access to OpenAI for GPT-4o (set environment variable `OPENAI_API_KEY`)
 
-## Step 1: Initial Setup
+## Step 1: initial setup
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
@@ -30,7 +30,7 @@ Create a new directory for your comparison project and initialize it with `promp
 npx promptfoo@latest init --no-interactive qwen-benchmark
 ```
 
-## Step 2: Configure the Models
+## Step 2: configure the models
 
 Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Qwen, GPT-4o, and Llama:
 
@@ -48,7 +48,7 @@ export OPENROUTER_API_KEY=your_openrouter_api_key
 export OPENAI_API_KEY=your_openai_api_key
 ```
 
-### Optional: Configure Model Parameters
+### Optional: configure model parameters
 
 Customize the behavior of each model by setting parameters such as `temperature` and `max_tokens` or `max_length`:
 
@@ -68,7 +68,7 @@ providers:
       max_tokens: 512
 ```
 
-## Step 3: Set Up Your Prompts
+## Step 3: set up your prompts
 
 Set up the prompts that you want to run for each model. In this case, we'll just use a single simple prompt, because we want to compare model performance.
 
@@ -79,7 +79,7 @@ prompts:
 
 If desired, you can test multiple prompts or different prompts for each model (see more in [Configuration](/docs/configuration/guide)).
 
-## Step 4: Add Test Cases
+## Step 4: add test cases
 
 Define the test cases that you want to use for the evaluation. In our example, we'll focus on typical customer support queries:
 
@@ -151,7 +151,7 @@ tests:
 
 To learn more, see [assertions and metrics](/docs/configuration/expected-outputs).
 
-## Step 5: Run the Comparison
+## Step 5: run the comparison
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 

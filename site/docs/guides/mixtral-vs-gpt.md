@@ -2,7 +2,7 @@
 sidebar_label: Mixtral vs GPT
 ---
 
-# Mixtral vs GPT: Run a benchmark with your own data
+# Mixtral vs GPT: run a benchmark with your own data
 
 In this guide, we'll walk through the steps to compare three large language models (LLMs): Mixtral, GPT-4o-mini, and GPT-4o. We will use `promptfoo`, a command-line interface (CLI) tool, to run evaluations and compare the performance of these models based on a set of prompts and test cases.
 
@@ -15,7 +15,7 @@ In this guide, we'll walk through the steps to compare three large language mode
 - Access to OpenAI for GPT-4o-mini and GPT-4o.
 - API keys for Replicate (`REPLICATE_API_TOKEN`) and OpenAI (`OPENAI_API_KEY`).
 
-## Step 1: Initial Setup
+## Step 1: initial setup
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
@@ -23,7 +23,7 @@ Create a new directory for your comparison project and initialize it with `promp
 npx promptfoo@latest init mixtral-gpt-comparison
 ```
 
-## Step 2: Configure the models
+## Step 2: configure the models
 
 Edit your `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Mixtral, GPT-4o-mini, and GPT-4o:
 
@@ -54,7 +54,7 @@ In this example, we're using Replicate, but you can also use providers like [Hug
 Local options such as [ollama](/docs/providers/ollama), [vllm](/docs/providers/vllm), and [localai](/docs/providers/localai) also exist. See [providers](/docs/providers) for all options.
 :::
 
-### Optional: Configure model parameters
+### Optional: configure model parameters
 
 Customize the behavior of each model by setting parameters such as `temperature` and `max_tokens` or `max_length`:
 
@@ -80,7 +80,7 @@ providers:
     // highlight-end
 ```
 
-## Step 3: Set up your prompts
+## Step 3: set up your prompts
 
 Set up the prompts that you want to run for each model. In this case, we'll just use a simple prompt, because we want to compare model performance.
 
@@ -91,7 +91,7 @@ prompts:
 
 If desired, you can test multiple prompts (just add more to the list), or test [different prompts for each model](/docs/configuration/prompts#model-specific-prompts).
 
-## Step 4: Add test cases
+## Step 4: add test cases
 
 Define the test cases that you want to use for the evaluation. This includes setting up variables that will be interpolated into the prompts:
 
@@ -132,7 +132,7 @@ tests:
 
 Optionally, you can set up assertions to automatically assess the output for correctness.
 
-## Step 5: Run the comparison
+## Step 5: run the comparison
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 

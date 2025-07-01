@@ -2,7 +2,7 @@
 sidebar_label: DBRX benchmarks
 ---
 
-# DBRX vs Mixtral vs GPT: create your own benchmark
+# Dbrx vs mixtral vs GPT: create your own benchmark
 
 There are many generic benchmarks that measure LLMs like DBRX, Mixtral, and others in a similar performance class. But public benchmarks are often gamed and don't always reflect real use cases.
 
@@ -20,7 +20,7 @@ The end result will be a custom benchmark that looks similar to this:
 - OpenAI API key for gpt-4.1-mini
 - Node 18+
 
-## Step 1: Initial Setup
+## Step 1: initial setup
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
@@ -28,9 +28,9 @@ Create a new directory for your comparison project and initialize it with `promp
 npx promptfoo@latest init dbrx-benchmark
 ```
 
-For more details on promptfoo setup, see [Installation](/docs/installation).
+For more details on Promptfoo setup, see [Installation](/docs/installation).
 
-## Step 2: Configure the models
+## Step 2: configure the models
 
 After entering the `dbrx-benchmark` directory, edit the `promptfooconfig.yaml` to include the models you want to compare.
 
@@ -58,7 +58,7 @@ export OPENROUTER_API_KEY=your_openrouter_api_key
 export OPENAI_API_KEY=your_openai_api_key
 ```
 
-### Optional: Configure model parameters
+### Optional: configure model parameters
 
 Customize the behavior of each model by setting parameters such as `temperature` and `max_tokens` or `max_length`:
 
@@ -85,13 +85,13 @@ providers:
     // highlight-end
 ```
 
-### Optional: Add more models
+### Optional: add more models
 
 If you're interested in comparing Llama-70B or Gemma, for example, add `meta-llama/llama-2-70b-chat` and `google/gemma-7b-it`.
 
 If you're locally hosting, you can use [ollama](/docs/providers/ollama/), [LocalAI](/docs/providers/localai), [vllm](/docs/providers/vllm), etc.
 
-## Step 3: Set up prompts
+## Step 3: set up prompts
 
 Set up the prompts that you want to run for each model. In this case, we'll just use a simple prompt, because we want to compare model performance.
 
@@ -102,7 +102,7 @@ prompts:
 
 If desired, you can test multiple prompts (just add more to the list), test [different prompts for each model](/docs/configuration/prompts#model-specific-prompts), send [custom JSON](/docs/providers/openai/#formatting-chat-messages), or [call your own application logic](/docs/configuration/prompts#dynamic-prompts-functions).
 
-## Step 4: Add test cases
+## Step 4: add test cases
 
 Define the test cases that you want to use for the evaluation. This includes setting up variables that will be interpolated into the prompts.
 
@@ -175,7 +175,7 @@ tests:
 
 Many types of assertions are supported, both deterministic and LLM-graded. See [Assertions and Metrics](/docs/configuration/expected-outputs/) to find assertions that match your needs.
 
-## Step 5: Run the comparison
+## Step 5: run the comparison
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 
@@ -219,4 +219,4 @@ Our benchmark for our custom use case rated DBRX at 66%, Mixtral at 100%, and GP
 
 ## Next steps
 
-promptfoo is a completely [open source](https://github.com/promptfoo/promptfoo) eval project. If you're interested in running your own evals, head over to [Getting Started](/docs/getting-started).
+Promptfoo is a completely [open source](https://github.com/promptfoo/promptfoo) eval project. If you're interested in running your own evals, head over to [Getting Started](/docs/getting-started).

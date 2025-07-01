@@ -2,7 +2,7 @@
 sidebar_label: Memory Poisoning
 ---
 
-# Memory Poisoning Plugin
+# Memory poisoning plugin
 
 ## Overview
 
@@ -19,7 +19,7 @@ Memory poisoning attacks attempt to inject malicious instructions into an agent'
 3. Manipulate the agent's decision-making process
 4. Bypass security controls in subsequent interactions
 
-## How it Works
+## How it works
 
 The Memory Poisoning plugin:
 
@@ -31,7 +31,7 @@ The Memory Poisoning plugin:
 
 ## Configuration
 
-Add the following to your promptfoo configuration:
+Add the following to your Promptfoo configuration:
 
 ```yaml
 redteam:
@@ -81,7 +81,7 @@ redteam:
       numTests: 30
 ```
 
-## Working With Results
+## Working with results
 
 The test results will show:
 
@@ -101,7 +101,7 @@ To protect against memory poisoning attacks:
 3. Segregate memory types - separate system instructions from user input memory.
 4. Apply memory attribution - track where memory content originated.
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Tool Discovery](/docs/red-team/plugins/tool-discovery)

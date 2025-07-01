@@ -2,13 +2,13 @@
 sidebar_label: Google Vertex
 ---
 
-# Google Vertex
+# Google vertex
 
 The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, PaLM (Bison), Llama, Claude, and specialized models for text, code, and embeddings.
 
-## Available Models
+## Available models
 
-### Latest Gemini Models
+### Latest gemini models
 
 - `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
@@ -24,7 +24,7 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
 - `vertex:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
 
-### Claude Models
+### Claude models
 
 Anthropic's Claude models are available with the following versions:
 
@@ -40,7 +40,7 @@ Claude models require explicit access enablement through the [Vertex AI Model Ga
 
 Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
 
-### Llama Models (Preview)
+### Llama models (preview)
 
 Meta's Llama models are available through Vertex AI with the following versions:
 
@@ -54,7 +54,7 @@ Meta's Llama models are available through Vertex AI with the following versions:
 
 Note: Llama models support built-in safety features through Llama Guard. Llama 4 models support up to 10M tokens context length (Scout) and 1M tokens (Maverick) and are natively multimodal, supporting both text and image inputs.
 
-#### Llama Configuration Example
+#### Llama configuration example
 
 ```yaml
 providers:
@@ -80,13 +80,13 @@ providers:
 
 By default, Llama models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
 
-### Gemma Models (Open Models)
+### Gemma models (open models)
 
 - `vertex:gemma` - Lightweight open text model for generation, summarization, and extraction
 - `vertex:codegemma` - Lightweight code generation and completion model
 - `vertex:paligemma` - Lightweight vision-language model for image tasks
 
-### PaLM 2 (Bison) Models
+### Palm 2 (bison) models
 
 Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/legacy/legacy-models) and it's recommended to migrate to the Gemini models.
 
@@ -99,7 +99,7 @@ Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)]
 - `vertex:code-bison[@001|@002]` - Code completion
 - `vertex:code-bison-32k[@001|@002]` - Extended context code completion
 
-### Embedding Models
+### Embedding models
 
 - `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
 - `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
@@ -110,9 +110,9 @@ Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)]
 - `vertex:text-multilingual-embedding-002` - Latest multilingual embeddings (2,048 tokens, ≤768d)
 - `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
 
-## Model Capabilities
+## Model capabilities
 
-### Gemini 2.0 Pro Specifications
+### Gemini 2.0 pro specifications
 
 - Max input tokens: 2,097,152
 - Max output tokens: 8,192
@@ -120,7 +120,7 @@ Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)]
 - Supports: Text, code, images, audio, video, PDF inputs
 - Features: System instructions, JSON support, grounding with Google Search
 
-### Language Support
+### Language support
 
 Gemini models support a wide range of languages including:
 
@@ -131,9 +131,9 @@ Gemini models support a wide range of languages including:
 If you're using Google AI Studio directly, see the [`google` provider](/docs/providers/google) documentation instead.
 :::
 
-## Setup and Authentication
+## Setup and authentication
 
-### 1. Install Dependencies
+### 1. install dependencies
 
 Install Google's official auth client:
 
@@ -141,7 +141,7 @@ Install Google's official auth client:
 npm install google-auth-library
 ```
 
-### 2. Enable API Access
+### 2. enable API access
 
 1. Enable the [Vertex AI API](https://console.cloud.google.com/apis/enableflow?apiid=aiplatform.googleapis.com) in your Google Cloud project
 2. For Claude models, request access through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers) by:
@@ -154,7 +154,7 @@ npm install google-auth-library
    gcloud config set project PROJECT_ID
    ```
 
-### 3. Authentication Methods
+### 3. authentication methods
 
 Choose one of these authentication methods:
 
@@ -178,7 +178,7 @@ Choose one of these authentication methods:
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 - `VERTEX_API_KEY` - GCloud API token (get via `gcloud auth print-access-token`)
 - `VERTEX_PROJECT_ID` - GCloud project ID
@@ -187,7 +187,7 @@ Choose one of these authentication methods:
 - `VERTEX_API_HOST` - Override API host (e.g., for LLM proxy)
 - `VERTEX_API_VERSION` - API version (defaults to `v1`)
 
-### Provider Configuration
+### Provider configuration
 
 Configure model behavior using the following options:
 
@@ -221,7 +221,7 @@ providers:
       max_tokens: 1024
 ```
 
-### Safety Settings
+### Safety settings
 
 Control AI safety filters:
 
@@ -237,18 +237,18 @@ Control AI safety filters:
 
 See [Google's SafetySetting API documentation](https://ai.google.dev/api/generate-content#safetysetting) for details.
 
-## Model-Specific Features
+## Model-specific features
 
-### Llama Model Features
+### Llama model features
 
 - Support for text and vision tasks (Llama 3.2 and all Llama 4 models)
 - Built-in safety with Llama Guard (enabled by default)
 - Available in `us-central1` region
 - Quota limits vary by model version
 - Requires specific endpoint format for API calls
-- Only supports unary (non-streaming) responses in promptfoo
+- Only supports unary (non-streaming) responses in Promptfoo
 
-#### Llama Model Considerations
+#### Llama model considerations
 
 - **Regional Availability**: Llama models are available only in `us-central1` region
 - **Guard Integration**: All Llama models use Llama Guard for content safety by default
@@ -256,16 +256,16 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - **Model Status**: Most models are in Preview state, with Llama 3.1 405B being Generally Available (GA)
 - **Vision Support**: Llama 3.2 90B and all Llama 4 models support image input
 
-### Claude Model Features
+### Claude model features
 
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
 - Available in multiple regions (us-east5, europe-west1, asia-southeast1)
 - Quota limits vary by model version (20-245 QPM)
 
-## Advanced Usage
+## Advanced usage
 
-### Default Grading Provider
+### Default grading provider
 
 When Google credentials are configured (and no OpenAI/Anthropic keys are present), Vertex AI becomes the default provider for:
 
@@ -285,7 +285,7 @@ defaultTest:
       embedding: vertex:embedding:text-embedding-004
 ```
 
-### Configuration Reference
+### Configuration reference
 
 | Option                             | Description                                      | Default                              |
 | ---------------------------------- | ------------------------------------------------ | ------------------------------------ |
@@ -312,7 +312,7 @@ Not all models support all parameters. See [Google's documentation](https://clou
 
 ## Troubleshooting
 
-### Authentication Errors
+### Authentication errors
 
 If you see an error like:
 
@@ -326,7 +326,7 @@ Re-authenticate using:
 gcloud auth application-default login
 ```
 
-### Claude Model Access Errors
+### Claude model access errors
 
 If you encounter errors like:
 
@@ -362,9 +362,9 @@ providers:
       max_tokens: 1024
 ```
 
-## Model Features and Capabilities
+## Model features and capabilities
 
-### Function Calling and Tools
+### Function calling and tools
 
 Gemini and Claude models support function calling and tool use. Configure tools in your provider:
 
@@ -400,7 +400,7 @@ providers:
 
 For practical examples of function calling with Vertex AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution.
 
-### System Instructions
+### System instructions
 
 Configure system-level instructions for the model:
 
@@ -417,7 +417,7 @@ providers:
 
 System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
 
-### Generation Configuration
+### Generation configuration
 
 Fine-tune model behavior with these parameters:
 
@@ -433,7 +433,7 @@ providers:
         stopSequences: ["\n"] # Stop generation at specific sequences
 ```
 
-### Context and Examples
+### Context and examples
 
 Provide context and few-shot examples:
 
@@ -447,7 +447,7 @@ providers:
           output: 'Regression is a statistical method...'
 ```
 
-### Safety Settings
+### Safety settings
 
 Configure content filtering with granular control:
 
@@ -464,7 +464,7 @@ providers:
           threshold: 'BLOCK_LOW_AND_ABOVE'
 ```
 
-### Thinking Configuration
+### Thinking configuration
 
 For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
 
@@ -492,11 +492,11 @@ When using thinking configuration:
 - The budget is counted towards your total token usage
 - The model will show its reasoning process in the response
 
-### Search Grounding
+### Search grounding
 
 Search grounding allows Gemini models to access the internet for up-to-date information, enhancing responses about recent events and real-time data.
 
-#### Basic Usage
+#### Basic usage
 
 Use the object format to enable Search grounding:
 
@@ -508,7 +508,7 @@ providers:
         - googleSearch: {}
 ```
 
-#### Combining with Other Features
+#### Combining with other features
 
 You can combine Search grounding with thinking capabilities for better reasoning:
 
@@ -523,7 +523,7 @@ providers:
         - googleSearch: {}
 ```
 
-#### Use Cases
+#### Use cases
 
 Search grounding is particularly valuable for:
 
@@ -533,7 +533,7 @@ Search grounding is particularly valuable for:
 - Sports results
 - Technical documentation updates
 
-#### Working with Response Metadata
+#### Working with response metadata
 
 When using Search grounding, the API response includes additional metadata:
 
@@ -541,7 +541,7 @@ When using Search grounding, the API response includes additional metadata:
 - `groundingChunks` - Web sources that informed the response
 - `webSearchQueries` - Queries used to retrieve information
 
-#### Requirements and Limitations
+#### Requirements and limitations
 
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 - Search results may vary by region and time

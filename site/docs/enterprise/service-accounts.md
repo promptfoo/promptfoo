@@ -6,7 +6,7 @@ description: Learn how to create and manage service accounts and API keys for pr
 keywords: [service accounts, api keys, programmatic access, ci/cd integration, automation]
 ---
 
-# Service Accounts
+# Service accounts
 
 Service accounts allow you to create API keys for programmatic access to Promptfoo Enterprise. These are useful for CI/CD pipelines and automated testing.
 
@@ -35,7 +35,7 @@ Make sure to copy your API key when it's first created. For security reasons, yo
 </div>
 6. Select the predefined role for the service account for that team.
 
-## See Also
+## See also
 
 - [Managing Roles and Teams](./teams.md)
 - [Authentication](./authentication.md)

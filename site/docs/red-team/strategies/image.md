@@ -4,11 +4,11 @@ title: Image Jailbreaking Strategy
 description: Test how AI systems handle image-encoded text inputs that may bypass content filters
 ---
 
-# Image Jailbreaking
+# Image jailbreaking
 
 The Image strategy converts prompt text into an image and then encodes that image as a base64 string. This approach enables testing how AI systems handle images of text, which may potentially bypass text-based guardrails / content filters or lead to different behaviors than when processing plain text.
 
-## Why Use This Strategy
+## Why use this strategy
 
 This strategy helps security researchers and AI developers:
 
@@ -17,7 +17,7 @@ This strategy helps security researchers and AI developers:
 3. **Assess multi-modal behavior**: Identify differences in how models respond to the same content in different formats
 4. **Discover inconsistencies**: Reveal potential vulnerabilities by comparing text-based and image-based processing pathways
 
-## How It Works
+## How it works
 
 The strategy performs the following operations:
 
@@ -28,7 +28,7 @@ The strategy performs the following operations:
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.
 
-## Text-to-Image Conversion Example
+## Text-to-image conversion example
 
 Below is an example of converting a text prompt into an image from our `harmful:hate` plugin.
 
@@ -92,7 +92,7 @@ You should update the prompt.json to match the prompt format of your LLM provide
 :::
 
 :::note
-The `{{image}}` syntax in the examples is a Nunjucks template variable. When promptfoo processes your prompt, it replaces `{{image}}` with the base64-encoded image data.
+The `{{image}}` syntax in the examples is a Nunjucks template variable. When Promptfoo processes your prompt, it replaces `{{image}}` with the base64-encoded image data.
 :::
 
 :::tip
@@ -104,7 +104,7 @@ npm i sharp
 
 :::
 
-## Related Concepts
+## Related concepts
 
 - [Audio Jailbreaking](audio.md) - Similar approach using speech audio instead of images
 - [Base64 Encoding](base64.md) - Similar encoding technique using text-to-base64 conversion

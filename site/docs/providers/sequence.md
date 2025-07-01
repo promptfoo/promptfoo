@@ -2,7 +2,7 @@
 sidebar_label: Sequence
 ---
 
-# Sequence Provider
+# Sequence provider
 
 The Sequence Provider allows you to send a series of prompts to another provider in sequence, collecting and combining all responses. This is useful for multi-step interactions, conversation flows, or breaking down complex prompts into smaller pieces.
 
@@ -21,7 +21,7 @@ providers:
       separator: "\n---\n" # Optional, defaults to "\n---\n"
 ```
 
-## How It Works
+## How it works
 
 The Sequence Provider:
 
@@ -31,7 +31,7 @@ The Sequence Provider:
 4. Collects all responses
 5. Joins them together using the specified separator
 
-## Usage Example
+## Usage example
 
 Here's a complete example showing how to use the Sequence Provider to create a multi-turn conversation:
 
@@ -59,7 +59,7 @@ tests:
         value: pros and cons
 ```
 
-## Variables and Templating
+## Variables and templating
 
 Each input string supports Nunjucks templating and has access to:
 
@@ -83,7 +83,7 @@ tests:
       prompt: What are the main applications?
 ```
 
-## Configuration Options
+## Configuration options
 
 | Option    | Type     | Required | Default   | Description                                    |
 | --------- | -------- | -------- | --------- | ---------------------------------------------- |

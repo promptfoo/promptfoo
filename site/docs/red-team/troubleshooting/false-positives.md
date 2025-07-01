@@ -2,13 +2,13 @@
 sidebar_label: False Positives
 ---
 
-# Preventing False Positives
+# Preventing false positives
 
 False positives occur when a test case is marked as passing when it should have been marked as failing or vice versa. These inaccuracies typically arise when the grader lacks sufficient context about your target application to make proper assessments.
 
 By providing comprehensive context to Promptfoo, you can ensure accurate results.
 
-## Understanding How the Grader Makes Decisions
+## Understanding how the grader makes decisions
 
 When you run a red team scan against a target, Promptfoo evaluates the results and determines whether the output passes or fails. These results are determined by a model, `gpt-4.1-2025-04-14` by default.
 
@@ -18,15 +18,15 @@ Pass and fail scores are separate from **errors**, where the output could not be
 
 Scores range from 0 to 1 and help guide the judge in agentic cases to distinguish outputs that are more impactful or higher risk. A score of `0` means there is a complete jailbreak or violation, whereas a score of `1` indicates the output fully passed without any compromise.
 
-## Your Role in Ensuring Accurate Results
+## Your role in ensuring accurate results
 
-### 1. Provide Detailed Target Purpose Information
+### 1. provide detailed target purpose information
 
 The accuracy of grading directly depends on how thoroughly you define your application's behavior. We strongly recommend that you provide detailed information in the `Purpose` property of your target setup.
 
 Without this crucial context, the grader cannot correctly interpret whether outputs comply with your intended application behavior.
 
-#### Example of Well-Defined Purpose (Leading to Accurate Results)
+#### Example of well-defined purpose (leading to accurate results)
 
 ```text
 The user is an employee at the company. The target system is a chatbot that provides access to company wide information.
@@ -46,7 +46,7 @@ The user should not have access to:
 - Sensitive information about the company like upcoming acquisitions or strategic plans
 ```
 
-#### Example of Insufficient Purpose (Likely to Cause False Positives)
+#### Example of insufficient purpose (likely to cause false positives)
 
 ```text
 This is a company chatbot for employees.
@@ -54,9 +54,9 @@ This is a company chatbot for employees.
 
 When you provide vague descriptions like the one above, the grader lacks the necessary context to properly evaluate whether an output should pass or fail, resulting in false positives.
 
-### 2. Calibrate Graders with Custom Examples
+### 2. calibrate graders with custom examples
 
-#### In Promptfoo Enterprise
+#### In Promptfoo enterprise
 
 Plugin-specific examples can be used for advanced grading. Without these examples, the grader lacks your specific interpretation of what constitutes acceptable vs. unacceptable outputs.
 
@@ -68,7 +68,7 @@ The more detailed your examples, the better the grader can align with your expec
   <img src="/img/docs/grading/customize_grader.png" alt="Customize grader" width="900" />
 </div>
 
-#### In Open Source
+#### In open source
 
 You can configure the graders for specific plugins within the open source by modifying your `promptfooconfig.yaml` file:
 
@@ -94,7 +94,7 @@ Each grader example requires:
 - `score`: The score for the output
 - `reason`: A brief explanation for the score
 
-### 3. Verify and Refine Results
+### 3. verify and refine results
 
 If grading is done with insufficient context or imprecise examples, you may need to manually correct results.
 
@@ -110,7 +110,7 @@ Inside the evals view, you can review the grader reasoning for each result, modi
   <img src="/img/docs/grading/changing_results.gif" alt="Changing results" width="900" />
 </div>
 
-## Best Practices to Minimize False Positives
+## Best practices to minimize false positives
 
 1. **Be exhaustively specific** about your application's purpose and intended behavior
 2. **Define clear boundaries** of what constitutes acceptable and unacceptable outputs

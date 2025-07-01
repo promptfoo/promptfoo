@@ -2,7 +2,7 @@
 sidebar_label: HarmBench
 ---
 
-# HarmBench Plugin
+# Harmbench plugin
 
 The HarmBench plugin uses the [HarmBench dataset](https://github.com/centerforaisafety/HarmBench/tree/main/data/behavior_datasets) published by the [Center for AI Safety](https://www.safe.ai/) to test LLM responses to harmful prompts. The dataset evaluates models across 400 key harmful behaviors including:
 
@@ -40,7 +40,7 @@ redteam:
 - [HarmBench Dataset](https://github.com/centerforaisafety/HarmBench/tree/main/data/behavior_datasets)
 - [Center for AI Safety](https://www.safe.ai/)
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Evaluating LLM safety with HarmBench](/docs/guides/evaling-with-harmbench)

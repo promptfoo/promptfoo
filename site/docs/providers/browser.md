@@ -2,7 +2,7 @@
 sidebar_label: Web Browser
 ---
 
-# Browser Provider
+# Browser provider
 
 The Browser Provider allows you to automate web browser interactions for testing and scraping purposes.
 
@@ -10,7 +10,7 @@ This provider uses Playwright to control a headless Chrome browser, enabling you
 
 ## Prerequisites
 
-Playwright is a peer dependency of promptfoo, so you will need to install it separately:
+Playwright is a peer dependency of Promptfoo, so you will need to install it separately:
 
 ```bash
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
@@ -42,7 +42,7 @@ providers:
       transformResponse: 'data.searchResults'
 ```
 
-## Supported Actions
+## Supported actions
 
 The Headless Browser Provider supports the following actions:
 
@@ -54,26 +54,26 @@ The Headless Browser Provider supports the following actions:
 6. `wait`: Wait for a specified amount of time
 7. `waitForNewChildren`: Wait for new children of an element
 
-### Action Details
+### Action details
 
-#### navigate
+#### Navigate
 
 - `url`: The URL to navigate to
 
-#### click
+#### Click
 
 - `selector`: The CSS selector of the element to click
 - `optional`: If true, then don't throw an error if the selector doesn't exist
 
-#### extract
+#### Extract
 
 - `selector`: The CSS selector of the element to extract text from
 
-#### screenshot
+#### Screenshot
 
 - `filename`: The filename to save the screenshot to
 
-#### type
+#### Type
 
 - `selector`: The CSS selector of the input element
 - `text`: The text to type into the input
@@ -84,24 +84,24 @@ Special characters can be sent using the following placeholders:
 - `<tab>`
 - `<escape>`
 
-#### wait
+#### Wait
 
 - `ms`: The number of milliseconds to wait
 
-#### waitForNewChildren
+#### Waitfornewchildren
 
 - `parentSelector`: The CSS selector of the parent element to wait for new children of
 - `delay`: The number of milliseconds to wait before checking for new children
 - `timeout`: The maximum number of milliseconds to wait for new children
 
-## Response Parsing
+## Response parsing
 
 Use the `transformResponse` config option to extract specific data from the results. The parser receives an object with two properties:
 
 - `extracted`: An object containing named results from `extract` actions
 - `finalHtml`: The final HTML content of the page after all actions are completed
 
-## Variables and Templating
+## Variables and templating
 
 You can use Nunjucks templating in your configuration, including the `{{prompt}}` variable and any other variables passed in the test context.
 
@@ -124,9 +124,9 @@ tests:
       prompt: 'What is the capital of France?'
 ```
 
-## Using as a Library
+## Using as a library
 
-If you are using promptfoo as a [node library](/docs/usage/node-package/), you can provide the equivalent provider config:
+If you are using Promptfoo as a [node library](/docs/usage/node-package/), you can provide the equivalent provider config:
 
 ```js
 {
@@ -160,7 +160,7 @@ Supported config options:
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
-### Supported Browser Actions
+### Supported browser actions
 
 The `steps` array in the configuration can include the following actions:
 
@@ -196,7 +196,7 @@ Steps are executed sequentially, enabling complex web interactions.
 
 All string values in `args` support Nunjucks templating, allowing use of variables like `{{prompt}}`.
 
-## Testing Streamlit applications
+## Testing streamlit applications
 
 Streamlit applications follow a common pattern where `data-testid` attributes are used to identify elements.
 

@@ -4,8 +4,8 @@ title: Promptfoo Enterprise - Secure LLM Application Testing
 description: Learn about Promptfoo's hosted cloud service and on-premises solutions for LLM security testing
 keywords:
   [
-    promptfoo enterprise,
-    promptfoo enterprise on-prem,
+    Promptfoo enterprise,
+    Promptfoo enterprise on-prem,
     llm security,
     llm testing,
     llm red teaming,
@@ -13,7 +13,7 @@ keywords:
   ]
 ---
 
-# Promptfoo Enterprise
+# Promptfoo enterprise
 
 Promptfoo offers two deployment options to meet your security needs:
 
@@ -34,7 +34,7 @@ Our platform works with any LLM application, agent, or foundation model that is 
 
 ![Promptfoo Dashboard (Enterprise interface shown)](/img/enterprise-docs/promptfoo-dashboard.png)
 
-## Deployment Options
+## Deployment options
 
 We offer two deployment models:
 
@@ -44,7 +44,7 @@ We offer two deployment models:
 
 ![Basic red team architecture](/img/docs/red-team-basic-architecture.png)
 
-## Product Comparison
+## Product comparison
 
 | Feature                                             | Community                       | Promptfoo Enterprise                         | Promptfoo Enterprise On-Prem                 |
 | --------------------------------------------------- | ------------------------------- | -------------------------------------------- | -------------------------------------------- |
@@ -70,7 +70,7 @@ We offer two deployment models:
 
 Both Enterprise products support [sharing results](/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Enterprise users can share within their organization, while Enterprise On-Prem users can configure self-hosted sharing for complete control over data.
 
-## Connection with Open-Source
+## Connection with open-source
 
 Both Promptfoo Enterprise and Promptfoo Enterprise On-Prem are fully compatible with the open-source version of Promptfoo. This means that you can use your existing open-source Promptfoo results with either solution.
 

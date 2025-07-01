@@ -46,7 +46,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
     Run:
     <CodeBlock language="bash">
-      promptfoo redteam setup
+      Promptfoo redteam setup
     </CodeBlock>
 
   </TabItem>
@@ -58,7 +58,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
     Run:
     <CodeBlock language="bash">
-      promptfoo redteam setup
+      Promptfoo redteam setup
     </CodeBlock>
 
   </TabItem>
@@ -137,12 +137,12 @@ Run this command in the same directory as your `promptfooconfig.yaml` file:
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo redteam run
+      Promptfoo redteam run
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo redteam run
+      Promptfoo redteam run
     </CodeBlock>
   </TabItem>
 </Tabs>
@@ -161,12 +161,12 @@ This command will generate several hundred adversarial inputs across many catego
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo redteam report
+      Promptfoo redteam report
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo redteam report
+      Promptfoo redteam report
     </CodeBlock>
   </TabItem>
 </Tabs>
@@ -221,7 +221,7 @@ Setting the `purpose` is optional, but it will significantly improve the quality
 For more information on configuring an HTTP target, see [HTTP requests](/docs/providers/http/).
 :::
 
-### Alternative: Test specific prompts and models
+### Alternative: test specific prompts and models
 
 If you don't have a live endpoint, you can edit the config to set the specific prompt(s) and the LLM model(s) to test:
 
@@ -238,7 +238,7 @@ targets:
 
 Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/prompts).
 
-### Alternative: Talking directly to your app
+### Alternative: talking directly to your app
 
 Promptfoo hooks directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
 

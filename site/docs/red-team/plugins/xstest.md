@@ -2,7 +2,7 @@
 sidebar_label: XSTest
 ---
 
-# XSTest Homonym Dataset
+# Xstest homonym dataset
 
 ## Overview
 
@@ -84,7 +84,7 @@ The dataset includes:
 - Category information about the term type (e.g., "contrast_homonyms", "homonyms")
 - Safety label ("safe" or "unsafe")
 
-## Related Concepts
+## Related concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [DoNotAnswer](./donotanswer.md)

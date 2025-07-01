@@ -2,17 +2,17 @@
 sidebar_label: Travis CI
 ---
 
-# Travis CI Integration
+# Travis ci integration
 
-This guide demonstrates how to set up promptfoo with Travis CI to run evaluations as part of your CI pipeline.
+This guide demonstrates how to set up Promptfoo with Travis CI to run evaluations as part of your CI pipeline.
 
 ## Prerequisites
 
-- A GitHub repository with a promptfoo project
+- A GitHub repository with a Promptfoo project
 - A Travis CI account connected to your repository
 - API keys for your LLM providers stored as [Travis CI environment variables](https://docs.travis-ci.com/user/environment-variables/)
 
-## Setting up Travis CI
+## Setting up travis ci
 
 Create a new file named `.travis.yml` in the root of your repository with the following configuration:
 
@@ -54,7 +54,7 @@ deploy:
     branch: main
 ```
 
-## Environment Variables
+## Environment variables
 
 Store your LLM provider API keys as environment variables in Travis CI:
 
@@ -63,18 +63,18 @@ Store your LLM provider API keys as environment variables in Travis CI:
 3. Add variables for each provider API key (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
 4. Make sure to mark them as secure to prevent them from being displayed in logs
 
-## Advanced Configuration
+## Advanced configuration
 
-### Fail the Build on Failed Assertions
+### Fail the build on failed assertions
 
-You can configure the pipeline to fail when promptfoo assertions don't pass:
+You can configure the pipeline to fail when Promptfoo assertions don't pass:
 
 ```yaml
 script:
   - npx promptfoo eval --fail-on-error
 ```
 
-### Testing on Multiple Node.js Versions
+### Testing on multiple node.js versions
 
 Test your evaluations across different Node.js versions:
 
@@ -88,7 +88,7 @@ script:
   - npx promptfoo eval
 ```
 
-### Running on Different Platforms
+### Running on different platforms
 
 Run evaluations on multiple operating systems:
 
@@ -105,7 +105,7 @@ script:
   - npx promptfoo eval
 ```
 
-### Conditional Builds
+### Conditional builds
 
 Run evaluations only on specific branches or conditions:
 
@@ -121,7 +121,7 @@ script:
   - npx promptfoo eval
 ```
 
-### Custom Build Stages
+### Custom build stages
 
 Set up different stages for your build process:
 

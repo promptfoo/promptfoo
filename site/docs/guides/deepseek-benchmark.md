@@ -2,7 +2,7 @@
 sidebar_label: Deepseek benchmark
 ---
 
-# Deepseek vs GPT vs O3 vs Llama: Run a Custom Benchmark
+# Deepseek vs GPT vs o3 vs llama: run a custom benchmark
 
 Deepseek is a new Mixture-of-Experts (MoE) model that's all the rage due to its impressive performance, especially in code tasks. Its MoE architecture has 671B total parameters, though only 37B are activated for each token. This allows for efficient inference while maintaining powerful capabilities.
 
@@ -16,7 +16,7 @@ In this guide, we'll create a practical comparison that results in a detailed si
 - OpenRouter API access for Deepseek and Llama (set `OPENROUTER_API_KEY`)
 - OpenAI API access for GPT-4o and o3-mini (set `OPENAI_API_KEY`)
 
-## Step 1: Project Setup
+## Step 1: project setup
 
 Create a new directory and initialize your benchmark project:
 
@@ -24,7 +24,7 @@ Create a new directory and initialize your benchmark project:
 npx promptfoo@latest init --no-interactive deepseek-benchmark
 ```
 
-## Step 2: Model Configuration
+## Step 2: model configuration
 
 Edit your `promptfooconfig.yaml` to include the three models:
 
@@ -60,7 +60,7 @@ export OPENROUTER_API_KEY=your_openrouter_api_key
 export OPENAI_API_KEY=your_openai_api_key
 ```
 
-## Step 3: Design Your Test Cases
+## Step 3: design your test cases
 
 Let's create a comprehensive test suite that evaluates the models across different dimensions:
 
@@ -114,7 +114,7 @@ tests:
               format: email
 ```
 
-## Step 4: Run Your Evaluation
+## Step 4: run your evaluation
 
 Execute the benchmark:
 
@@ -128,7 +128,7 @@ View the results in an interactive interface:
 npx promptfoo@latest view
 ```
 
-## Model Comparison
+## Model comparison
 
 Here's how these models compare based on public benchmarks:
 
@@ -141,7 +141,7 @@ Here's how these models compare based on public benchmarks:
 
 However, your custom benchmark results may differ significantly based on your specific use case.
 
-## Considerations for Model Selection
+## Considerations for model selection
 
 When choosing between these models, consider:
 

@@ -3,7 +3,7 @@ sidebar_label: 'Claude 3.7 vs GPT-4.1'
 description: 'Learn how to benchmark Claude 3.7 against GPT-4.1 using your own data with promptfoo. Discover which model performs best for your specific use case.'
 ---
 
-# Claude 3.7 vs GPT-4.1: Benchmark on Your Own Data
+# Claude 3.7 vs GPT-4.1: benchmark on your own data
 
 When evaluating the performance of LLMs, generic benchmarks will only get you so far. This is especially the case for Claude vs GPT, as there are many split evaluations (subjective and objective) on their efficacy.
 
@@ -20,7 +20,7 @@ Before getting started, make sure you have:
 - The `promptfoo` CLI installed ([installation instructions](/docs/getting-started))
 - API keys for Anthropic (`ANTHROPIC_API_KEY`) and OpenAI (`OPENAI_API_KEY`)
 
-## Step 1: Set Up Your Evaluation
+## Step 1: set up your evaluation
 
 Create a new directory for your comparison project:
 
@@ -31,7 +31,7 @@ cd claude3.7-vs-gpt4o
 
 Open the generated `promptfooconfig.yaml` file. This is where you'll configure the models to test, the prompts to use, and the test cases to run.
 
-### Configure the Models
+### Configure the models
 
 Specify the Claude 3.7 and GPT-4.1 model IDs under `providers`:
 
@@ -55,7 +55,7 @@ providers:
       max_tokens: 1024
 ```
 
-### Define Your Prompts
+### Define your prompts
 
 Next, define the prompt(s) you want to test the models on. For this example, we'll just use a simple prompt:
 
@@ -84,7 +84,7 @@ The contents of `prompt.yaml`:
 
 The `{{riddle}}` placeholder will be populated by test case variables.
 
-## Step 2: Create Test Cases
+## Step 2: create test cases
 
 Now it's time to create a set of test cases that represent the types of queries your application needs to handle.
 
@@ -120,7 +120,7 @@ The `assert` blocks allow you to automatically check the model outputs for expec
 [Learn more here](/docs/configuration/expected-outputs)
 :::
 
-## Step 3: Run the Evaluation
+## Step 3: run the evaluation
 
 With your configuration complete, you can kick off the evaluation:
 
@@ -146,7 +146,7 @@ You can also output the raw results data to a file:
 npx promptfoo@latest eval -o results.json
 ```
 
-## Step 4: Analyze the Results
+## Step 4: analyze the results
 
 With the evaluation complete, it's time to dig into the results and see how the models compared on your test cases.
 
