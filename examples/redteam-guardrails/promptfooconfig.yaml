@@ -5,14 +5,10 @@ targets:
 prompts:
   - '{{prompt}}'
 redteam:
-  purpose: You are a helpful assistant
   plugins:
-    - guardrails-evaluation
+    - guardrails-eval
   # Optional: Add strategies for enhanced testing
   # strategies:
   #   - jailbreak
   #   - prompt-injection
   #   - multilingual
-defaultTest:
-  metadata:
-    purpose: You are a helpful assistant

@@ -68,93 +68,76 @@ export const FOUNDATION_PLUGINS = [
 ] as const;
 
 export const GUARDRAILS_EVALUATION_PLUGINS = [
-  // === PROMPT INJECTION & JAILBREAKING (Core Requirement - 80% coverage) ===
-  'ascii-smuggling', // Unicode obfuscation attacks
-  'indirect-prompt-injection', // Context-based injection attacks
-  'cca', // Context compliance attacks
-  'hijacking', // Goal hijacking attempts
-  'system-prompt-override', // System prompt manipulation
-  'beavertails', // 330K jailbreak prompts dataset
-  'harmbench', // Academic jailbreak dataset
-  'pliny', // Curated jailbreak collection
-  'donotanswer', // Refusal testing dataset
-  'prompt-extraction', // System prompt disclosure
+  // === PROMPT INJECTION & JAILBREAKING ===
+  'ascii-smuggling',
+  'indirect-prompt-injection',
+  'cca',
+  'hijacking',
+  'system-prompt-override',
+  'beavertails',
+  'harmbench',
+  'pliny',
+  'donotanswer',
+  'prompt-extraction',
 
-  // === HARMFUL CONTENT (MITRE Framework - 90% block rate) ===
+  // === HARMFUL CONTENT ===
   // WMD & Weapons
-  'harmful:chemical-biological-weapons', // WMD content (CRITICAL!)
-  'harmful:indiscriminate-weapons', // Mass destruction weapons
-  'harmful:weapons:ied', // IED instructions (CRITICAL!)
+  'harmful:chemical-biological-weapons',
+  'harmful:indiscriminate-weapons',
+  'harmful:weapons:ied',
 
   // Violence & Crime
-  'harmful:violent-crime', // Violent criminal activities
-  'harmful:sex-crime', // Sexual crime content (CRITICAL!)
-  'harmful:non-violent-crime', // Non-violent crimes
-  'harmful:graphic-content', // Graphic/violent content
-  'harmful:unsafe-practices', // Dangerous instructions (CRITICAL!)
+  'harmful:violent-crime',
+  'harmful:sex-crime',
+  'harmful:non-violent-crime',
+  'harmful:graphic-content',
+  'harmful:unsafe-practices',
 
   // Exploitation & Abuse
-  'harmful:child-exploitation', // Child safety (CRITICAL!)
-  'harmful:harassment-bullying', // Harassment content (CRITICAL!)
-  'harmful:hate', // Hate speech
-  'harmful:self-harm', // Self-harm content
-  'harmful:sexual-content', // Sexual content
-  'harmful:insults', // Personal attacks
-  'harmful:profanity', // Profane language
+  'harmful:child-exploitation',
+  'harmful:harassment-bullying',
+  'harmful:hate',
+  'harmful:self-harm',
+  'harmful:sexual-content',
+  'harmful:insults',
+  'harmful:profanity',
 
   // Radicalization & Extremism
-  'harmful:radicalization', // Extremist content (CRITICAL!)
+  'harmful:radicalization',
 
   // Cybercrime & Security
-  'harmful:cybercrime', // General cybercrime
-  'harmful:cybercrime:malicious-code', // Malicious code (CRITICAL!)
+  'harmful:cybercrime',
+  'harmful:cybercrime:malicious-code',
 
   // Substances
-  'harmful:illegal-activities', // General illegal activities
-  'harmful:illegal-drugs', // Drug-related content
-  'harmful:illegal-drugs:meth', // Specific methamphetamine content
+  'harmful:illegal-activities',
+  'harmful:illegal-drugs',
+  'harmful:illegal-drugs:meth',
 
   // Information Integrity
-  'harmful:misinformation-disinformation', // False information
-  'harmful:specialized-advice', // Unqualified advice
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
 
   // Legal & IP
-  'harmful:copyright-violations', // Copyright infringement
-  'harmful:intellectual-property', // IP theft
+  'harmful:copyright-violations',
+  'harmful:intellectual-property',
 
   // === SYSTEM SECURITY & INTEGRITY ===
-  'cyberseceval', // Meta's cybersecurity dataset (CRITICAL!)
-  'excessive-agency', // Unauthorized actions (CRITICAL!)
-  'hallucination', // False information generation (CRITICAL!)
-  'overreliance', // Over-dependence issues (CRITICAL!)
-  'divergent-repetition', // Resource exhaustion
-  'reasoning-dos', // Reasoning DoS attacks
+  'cyberseceval',
+  'excessive-agency',
+  'hallucination',
+  'overreliance',
+  'divergent-repetition',
+  'reasoning-dos',
 
   // === PII & PRIVACY PROTECTION (UK/EU Compliance) ===
-  'pii:direct', // Direct PII disclosure
-  'pii:social', // Social engineering PII
-  'harmful:privacy', // Privacy violations
-
-  // === BIAS & FAIRNESS ===
-  'bias:gender', // Gender bias testing (CRITICAL!)
-
-  // === BUSINESS & COMPLIANCE ===
-  'contracts', // Unauthorized contractual commitments
-  'imitation', // Entity impersonation
-  'politics', // Political content/bias
-  'religion', // Religious content/bias
+  'harmful:privacy',
 ] as const;
 
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = [
-  'default',
-  'foundation',
-  'guardrails-evaluation',
-  'harmful',
-  'pii',
-] as const;
+export const COLLECTIONS = ['default', 'foundation', 'guardrails-eval', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
