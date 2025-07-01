@@ -105,7 +105,7 @@ You are a comprehensive travel planning assistant that helps users plan amazing 
 3. Consider user's specific priorities
 4. Provide definitive recommendation
 
-Remember: Your goal is to create excitement about the trip while providing practical, actionable information that helps users plan with confidence. Be enthusiastic but realistic, detailed but organized, and always focused on creating the best possible travel experience for each user's unique needs and preferences."""
+Remember: Your goal is to create excitement about the trip while providing practical, actionable information that helps users plan with confidence. Be enthusiastic but realistic, detailed but organized, and always focused on creating the best possible travel experience for each user's unique needs and preferences.""",
 )
 
 # Note: When ADK adds support for built-in tools, we can enhance with:

@@ -3,10 +3,12 @@ Activity planning specialist agent using Google ADK.
 """
 
 from datetime import datetime, timedelta
+
 from google.adk.agents import Agent
 from google.adk.tools import google_search
-from models import Activity, DayItinerary
 from tools.destination_tool import get_destination_info
+
+from models import Activity, DayItinerary
 
 
 def search_activities(

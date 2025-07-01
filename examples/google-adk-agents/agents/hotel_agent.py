@@ -2,11 +2,13 @@
 Hotel search specialist agent using Google ADK.
 """
 
+import random
 from datetime import datetime
+
 from google.adk.agents import Agent
 from google.adk.tools import google_search
+
 from models import Hotel
-import random
 
 
 def search_hotels(

@@ -3,13 +3,15 @@ Flight search specialist agent using Google ADK with OpenTelemetry tracing.
 """
 
 from datetime import datetime, timedelta
+
 from google.adk.agents import Agent
 from google.adk.tools import google_search
-from models import Flight
 
 # OpenTelemetry imports for tracing
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
+
+from models import Flight
 
 # Get tracer for this module
 tracer = trace.get_tracer("adk.flight_agent")
@@ -21,7 +23,7 @@ def create_mock_flights(origin: str, destination: str, date: datetime) -> list:
         span.set_attribute("origin", origin)
         span.set_attribute("destination", destination)
         span.set_attribute("date", date.isoformat())
-        
+
         # In production, this would call a real flight API
         airlines = ["United", "Delta", "American", "JetBlue", "Southwest"]
         base_price = 300
@@ -67,13 +69,15 @@ def search_flights(
     # NOTE: In a full ADK implementation with proper session management,
     # these traces would be linked to the parent coordinator span.
     # This demonstrates how sub-agents should be instrumented for observability.
-    
+
     with tracer.start_span("flight.search") as span:
         span.set_attribute("search.origin", origin)
         span.set_attribute("search.destination", destination)
         span.set_attribute("search.departure_date", departure_date)
-        span.set_attribute("search.trip_type", "round-trip" if return_date else "one-way")
-        
+        span.set_attribute(
+            "search.trip_type", "round-trip" if return_date else "one-way"
+        )
+
         try:
             # Parse dates
             with tracer.start_span("flight.parse_dates"):
@@ -90,7 +94,9 @@ def search_flights(
                     "departure_date": departure_date,
                     "trip_type": "round-trip" if return_date else "one-way",
                 },
-                "outbound_flights": [flight.model_dump() for flight in outbound_flights],
+                "outbound_flights": [
+                    flight.model_dump() for flight in outbound_flights
+                ],
                 "return_flights": [],
             }
 
@@ -112,7 +118,9 @@ def search_flights(
                     "currency": "USD",
                 }
                 price_span.set_attribute("price.lowest", min(outbound_prices))
-                price_span.set_attribute("price.average", sum(outbound_prices) / len(outbound_prices))
+                price_span.set_attribute(
+                    "price.average", sum(outbound_prices) / len(outbound_prices)
+                )
 
             span.set_attribute("result.flights_found", len(outbound_flights))
             span.set_status(Status(StatusCode.OK))

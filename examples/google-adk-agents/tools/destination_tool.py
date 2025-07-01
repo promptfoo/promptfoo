@@ -4,7 +4,6 @@ Destination information tool for travel planning.
 
 from typing import Dict
 
-
 DESTINATION_DATA = {
     "tokyo": {
         "country": "Japan",

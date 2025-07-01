@@ -4,6 +4,7 @@ Pydantic models for structured outputs in the travel planning system.
 
 from datetime import date, datetime
 from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
