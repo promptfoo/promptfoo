@@ -604,14 +604,14 @@ const defaultProviders: ProviderOptions[] = (
       config: { temperature: 0.7, max_tokens: 128000 },
     },
     {
-      id: 'aimlapi:anthropic/claude-3-5-sonnet-20240620',
-      label: 'aimlapi: Claude 3.5 Sonnet',
-      config: { temperature: 0.7, max_tokens: 8192 },
+      id: 'aimlapi:mistralai/Mixtral-8x7B-Instruct-v0.1',
+      label: 'aimlapi: Mixtral 8x7B Instruct v0.1',
+      config: { temperature: 0.7, max_tokens: 64000 },
     },
     {
-      id: 'aimlapi:google/gemini-pro-vision',
-      label: 'aimlapi: Gemini Pro Vision',
-      config: { temperature: 0.7, max_tokens: 1000000 },
+      id: 'aimlapi:google/gemini-2.5-pro-preview',
+      label: 'aimlapi: Gemini 2.5 Pro Preview',
+      config: { temperature: 0.7, max_tokens: 64000 },
     },
   ])
   .sort((a, b) => a.id.localeCompare(b.id));
