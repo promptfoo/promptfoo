@@ -618,6 +618,16 @@ def call_api(prompt, options, context):
     return {"output": f"Echo: {prompt}"}
 ```
 
+## Examples in the Repository
+
+Promptfoo includes several Python provider examples:
+
+- [Custom Python Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/python-provider) - Basic Python provider implementation
+- [Custom Python Assertions](https://github.com/promptfoo/promptfoo/tree/main/examples/python-assert) - Python-based custom assertions
+- [Google ADK Agents](https://github.com/promptfoo/promptfoo/tree/main/examples/google-adk-agents) - Multi-agent system using Google's Agent Development Kit
+- [LangChain Integration](https://github.com/promptfoo/promptfoo/tree/main/examples/langchain-python) - Using LangChain with Python providers
+- [Pydantic AI](https://github.com/promptfoo/promptfoo/tree/main/examples/pydantic-ai) - Integrating Pydantic AI agents
+
 ## Next Steps
 
 - Learn about [custom assertions](/docs/configuration/expected-outputs/)

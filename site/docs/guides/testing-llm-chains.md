@@ -169,3 +169,7 @@ For more detail on testing RAG pipelines, see [RAG evaluations](/docs/guides/eva
 ## Other tips
 
 To reference the outputs of previous test cases, use the built-in [`_conversation` variable](/docs/configuration/chat#using-the-conversation-variable).
+
+## Multi-Agent Systems
+
+For testing multi-agent systems where multiple LLMs work together with different roles, see the [google-adk-agents example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-adk-agents) which demonstrates testing a multi-agent travel planning system with Google's Agent Development Kit. The example shows how to test agent coordination, tool usage, and structured outputs.

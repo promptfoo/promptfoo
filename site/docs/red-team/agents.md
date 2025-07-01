@@ -270,6 +270,8 @@ def call_api(prompt, options, context):
 
 Then, in your `redteam.purpose` section, write out the restrictions around tool selection. These will be used in the grading process to determine whether a security violation has occurred.
 
+For a complete example of testing multi-agent systems like those built with Google's ADK, see the [google-adk-agents example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-adk-agents) which demonstrates testing agent architectures with delegated sub-agents.
+
 ```yaml
 redteam:
   purpose: |

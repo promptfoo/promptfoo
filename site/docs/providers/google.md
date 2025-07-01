@@ -496,3 +496,42 @@ promptfoo init --example google-live-tools
 - Maximum of 4M tokens per minute
 
 For more details, see the [Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+
+## Google ADK (Agent Development Kit)
+
+Google's Agent Development Kit (ADK) is an open-source Python framework for building, evaluating, and deploying AI agents. Promptfoo supports testing ADK agents through a Python provider integration.
+
+### Testing ADK Agents with Promptfoo
+
+The `google-adk-agents` example demonstrates how to evaluate multi-agent systems built with ADK:
+
+- **Multi-Agent Systems**: Test coordination between multiple specialized agents
+- **Tool Integration**: Evaluate agents using Google Search and custom tools
+- **Structured Outputs**: Validate type-safe responses using Pydantic models
+- **Gemini Integration**: Leverage the latest Gemini models with thinking capabilities
+
+### Getting Started
+
+```sh
+# Initialize the ADK agents example
+promptfoo init --example google-adk-agents
+
+# Navigate to the example directory
+cd google-adk-agents
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run the evaluation
+promptfoo eval
+```
+
+### Implementation
+
+ADK agents are integrated with Promptfoo through a custom Python provider. Since ADK agents are designed to run through CLI tools (`adk web` or `adk run`), the provider implementation uses the Gemini API directly with agent instructions to avoid session management complexities while maintaining the agent's capabilities.
+
+### Learn More
+
+- [google-adk-agents example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-adk-agents) - Complete working example
+- [Python Provider documentation](/docs/providers/python) - For implementing custom providers
+- [ADK GitHub Repository](https://github.com/google/adk-python) - Official ADK documentation
