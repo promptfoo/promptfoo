@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navigation from '@app/components/Navigation';
+import { PostHogProvider } from '@app/components/PostHogProvider';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
 const createAppTheme = (darkMode: boolean) =>
   createTheme({
@@ -271,10 +273,13 @@ export default function PageShell() {
 
   return (
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
-      <Layout>
-        <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
-        <Outlet />
-      </Layout>
+      <PostHogProvider>
+        <Layout>
+          <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+          <Outlet />
+          <PostHogPageViewTracker />
+        </Layout>
+      </PostHogProvider>
     </ThemeProvider>
   );
 }

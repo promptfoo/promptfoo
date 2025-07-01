@@ -1,31 +1,72 @@
 import { useCallback } from 'react';
-import { callApi } from '@app/utils/api';
-import type { EventProperties, TelemetryEventTypes } from '@promptfoo/telemetry';
+import { usePostHog } from '@app/components/PostHogProvider';
 
-export function useTelemetry() {
+/**
+ * Hook for tracking telemetry events, similar to the backend telemetry system
+ */
+export const useTelemetry = () => {
+  const { posthog, isInitialized } = usePostHog();
+
   const recordEvent = useCallback(
-    async (eventName: TelemetryEventTypes, properties: EventProperties) => {
-      if (!['0', 'false'].includes(import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY)) {
+    (eventName: string, properties: Record<string, any> = {}) => {
+      if (!isInitialized || !posthog) {
         return;
       }
 
-      try {
-        await callApi('/telemetry', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            event: eventName,
-            properties,
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to record telemetry event:', error);
-      }
+      // Add common metadata similar to backend telemetry
+      const propertiesWithMetadata = {
+        ...properties,
+        // Add common properties that might be useful
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        platform: 'web',
+        url: window.location.href,
+        pathname: window.location.pathname,
+      };
+
+      posthog.capture(eventName, propertiesWithMetadata);
     },
-    [],
+    [posthog, isInitialized],
   );
 
-  return { recordEvent };
-}
+  const identifyUser = useCallback(
+    (userId: string, userProperties: Record<string, any> = {}) => {
+      if (!isInitialized || !posthog) {
+        return;
+      }
+
+      posthog.identify(userId, userProperties);
+    },
+    [posthog, isInitialized],
+  );
+
+  const setUserProperty = useCallback(
+    (properties: Record<string, any>) => {
+      if (!isInitialized || !posthog) {
+        return;
+      }
+
+      posthog.setPersonProperties(properties);
+    },
+    [posthog, isInitialized],
+  );
+
+  const isFeatureEnabled = useCallback(
+    (flagKey: string) => {
+      if (!isInitialized || !posthog) {
+        return false;
+      }
+
+      return posthog.isFeatureEnabled(flagKey);
+    },
+    [posthog, isInitialized],
+  );
+
+  return {
+    recordEvent,
+    identifyUser,
+    setUserProperty,
+    isFeatureEnabled,
+    isInitialized,
+  };
+};
