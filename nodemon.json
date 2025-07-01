@@ -1,8 +1,6 @@
 {
   "legacyWatch": true,
-  "watch": [
-    "src"
-  ],
+  "watch": ["src"],
   "ignore": [
     "src/app/*",
     "dist/*",
