@@ -24,6 +24,7 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
+      { id: 'adv-noise' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -125,6 +126,27 @@ describe('loadStrategy', () => {
     await strategy.action(testCases, injectVar, config);
 
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding emoji encoding'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should load adv-noise strategy', async () => {
+    const strategy = await loadStrategy('adv-noise');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('adv-noise');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call adv-noise strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('adv-noise');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = { noise: 0.1 };
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding adversarial noise'));
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
