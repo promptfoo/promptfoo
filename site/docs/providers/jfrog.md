@@ -43,8 +43,8 @@ providers:
 
 The JFrog ML provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional JFrog ML-specific options:
 
-| Parameter | Description                                                                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parameter | Description                                                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `baseUrl` | Optional. The full URL to your model endpoint. If not provided, it will be constructed using the model name: `https://models.qwak.ai/v1 |
 
 Example with full configuration:

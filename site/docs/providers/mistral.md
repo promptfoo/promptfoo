@@ -139,10 +139,10 @@ providers:
 
 ### Environment Variables Reference
 
-| Variable               | Description                     | Example                      |
-| ---------------------- | ------------------------------- | ---------------------------- |
-| `MISTRAL_API_KEY`      | Your Mistral API key (required) | `sk-1234...`                 |
-| `MISTRAL_API_HOST`     | Custom hostname for proxy setup | `api.example.com`            |
+| Variable               | Description                     | Example                     |
+| ---------------------- | ------------------------------- | --------------------------- |
+| `MISTRAL_API_KEY`      | Your Mistral API key (required) | `sk-1234...`                |
+| `MISTRAL_API_HOST`     | Custom hostname for proxy setup | `api.example.com`           |
 | `MISTRAL_API_BASE_URL` | Full base URL override          | `https://api.example.com/v1 |
 
 ## Model Selection
