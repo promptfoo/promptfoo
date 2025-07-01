@@ -1,30 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useUserStore } from '@app/stores/userStore';
 import posthog from 'posthog-js';
+import { PostHogContext, type PostHogContextType } from './PostHotContext';
 
 // PostHog configuration - using the same key system as the backend
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY;
 const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST;
-
-// Use backend user ID for consistency with backend telemetry
-
-interface PostHogContextType {
-  posthog: typeof posthog | null;
-  isInitialized: boolean;
-}
-
-export const PostHogContext = createContext<PostHogContextType>({
-  posthog: null,
-  isInitialized: false,
-});
-
-export const usePostHog = () => {
-  const context = useContext(PostHogContext);
-  if (!context) {
-    throw new Error('usePostHog must be used within a PostHogProvider');
-  }
-  return context;
-};
 
 interface PostHogProviderProps {
   children: React.ReactNode;
