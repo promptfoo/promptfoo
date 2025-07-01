@@ -65,6 +65,34 @@ export async function fetchWithProxy(
     finalUrlString = url.url;
   }
 
+  if (finalUrlString) {
+    const blacklist = (getEnvString('PROMPTFOO_URL_BLACKLIST') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const allowlist = (getEnvString('PROMPTFOO_URL_ALLOWLIST') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const matches = (patterns: string[]): boolean =>
+      patterns.some((p) => {
+        try {
+          return new RegExp(p, 'i').test(finalUrlString as string);
+        } catch {
+          return finalUrlString!.includes(p);
+        }
+      });
+
+    if (allowlist.length > 0 && !matches(allowlist)) {
+      throw new Error(`URL blocked by allowlist: ${sanitizeUrl(finalUrlString)}`);
+    }
+
+    if (blacklist.length > 0 && matches(blacklist)) {
+      throw new Error(`URL blocked by blacklist: ${sanitizeUrl(finalUrlString)}`);
+    }
+  }
+
   const finalOptions: PromptfooRequestInit = {
     ...options,
     headers: {

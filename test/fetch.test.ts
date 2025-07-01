@@ -72,6 +72,12 @@ jest.mock('../src/envars', () => {
       if (key === 'no_proxy' && process.env.no_proxy) {
         return process.env.no_proxy;
       }
+      if (key === 'PROMPTFOO_URL_BLACKLIST' && process.env.PROMPTFOO_URL_BLACKLIST) {
+        return process.env.PROMPTFOO_URL_BLACKLIST;
+      }
+      if (key === 'PROMPTFOO_URL_ALLOWLIST' && process.env.PROMPTFOO_URL_ALLOWLIST) {
+        return process.env.PROMPTFOO_URL_ALLOWLIST;
+      }
       if (key === 'PROMPTFOO_CA_CERT_PATH' && process.env.PROMPTFOO_CA_CERT_PATH) {
         return process.env.PROMPTFOO_CA_CERT_PATH;
       }
@@ -1167,5 +1173,45 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
+  });
+});
+
+describe('URL filtering', () => {
+  beforeEach(() => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(createMockResponse());
+  });
+
+  afterEach(() => {
+    delete process.env.PROMPTFOO_URL_BLACKLIST;
+    delete process.env.PROMPTFOO_URL_ALLOWLIST;
+    jest.restoreAllMocks();
+  });
+
+  it('blocks blacklisted URLs', async () => {
+    process.env.PROMPTFOO_URL_BLACKLIST = 'bad.com';
+    await expect(fetchWithProxy('https://bad.com/api')).rejects.toThrow(
+      'URL blocked by blacklist: https://bad.com/api',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('requires allowlist when defined', async () => {
+    process.env.PROMPTFOO_URL_ALLOWLIST = 'good.com';
+    await expect(fetchWithProxy('https://other.com')).rejects.toThrow(
+      'URL blocked by allowlist: https://other.com',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    jest.mocked(global.fetch).mockResolvedValueOnce(createMockResponse());
+    await fetchWithProxy('https://good.com/data');
+    expect(global.fetch).toHaveBeenCalled();
+  });
+
+  it('allowlist overrides blacklist', async () => {
+    process.env.PROMPTFOO_URL_ALLOWLIST = 'good.com';
+    process.env.PROMPTFOO_URL_BLACKLIST = 'good.com';
+    jest.mocked(global.fetch).mockResolvedValueOnce(createMockResponse());
+    await fetchWithProxy('https://good.com/path');
+    expect(global.fetch).toHaveBeenCalled();
   });
 });

@@ -104,6 +104,22 @@ For environments with custom certificate authorities (like corporate environment
 
 Remember that like all environment variables, these settings are specific to your terminal/shell instance.
 
+### How do I restrict network connections?
+
+Use these environment variables to control which hosts Promptfoo can contact:
+
+1. `PROMPTFOO_URL_BLACKLIST`: Comma-separated list of URL patterns or hostnames to block.
+2. `PROMPTFOO_URL_ALLOWLIST`: Comma-separated list of allowed patterns. When set, all other URLs are blocked.
+
+Example:
+
+```bash
+export PROMPTFOO_URL_BLACKLIST=bad.com,*.malicious.org
+export PROMPTFOO_URL_ALLOWLIST=https://api.promptfoo.app
+```
+
+The allowlist takes precedence over the blacklist.
+
 ### How does Promptfoo integrate with existing development workflows?
 
 Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://github.com/promptfoo/promptfoo-action), used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process.

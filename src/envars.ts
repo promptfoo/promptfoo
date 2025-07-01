@@ -97,6 +97,9 @@ export type EnvVars = {
   NO_PROXY?: string;
   no_proxy?: string;
 
+  PROMPTFOO_URL_BLACKLIST?: string;
+  PROMPTFOO_URL_ALLOWLIST?: string;
+
   //=========================================================================
   // System and network settings
   //=========================================================================
