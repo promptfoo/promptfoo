@@ -1,5 +1,5 @@
 """
-Flight search specialist agent using Google ADK.
+Flight search specialist agent using Google ADK with OpenTelemetry tracing.
 """
 
 from datetime import datetime, timedelta
@@ -7,39 +7,53 @@ from google.adk.agents import Agent
 from google.adk.tools import google_search
 from models import Flight
 
+# OpenTelemetry imports for tracing
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
+# Get tracer for this module
+tracer = trace.get_tracer("adk.flight_agent")
+
 
 def create_mock_flights(origin: str, destination: str, date: datetime) -> list:
     """Create mock flight data for demonstration."""
-    # In production, this would call a real flight API
-    airlines = ["United", "Delta", "American", "JetBlue", "Southwest"]
-    base_price = 300
+    with tracer.start_span("flight.create_mock_data") as span:
+        span.set_attribute("origin", origin)
+        span.set_attribute("destination", destination)
+        span.set_attribute("date", date.isoformat())
+        
+        # In production, this would call a real flight API
+        airlines = ["United", "Delta", "American", "JetBlue", "Southwest"]
+        base_price = 300
 
-    flights = []
-    for i, airline in enumerate(airlines[:3]):  # Return 3 options
-        departure = date.replace(hour=6 + i * 4, minute=0)
-        duration = 2.5 + (i * 0.5)
-        arrival = departure + timedelta(hours=duration)
+        flights = []
+        for i, airline in enumerate(airlines[:3]):  # Return 3 options
+            departure = date.replace(hour=6 + i * 4, minute=0)
+            duration = 2.5 + (i * 0.5)
+            arrival = departure + timedelta(hours=duration)
 
-        flight = Flight(
-            airline=airline,
-            flight_number=f"{airline[:2]}{100 + i}",
-            departure_airport=origin.upper()[:3],
-            arrival_airport=destination.upper()[:3],
-            departure_time=departure,
-            arrival_time=arrival,
-            price=base_price + (i * 50),
-            duration_hours=duration,
-        )
-        flights.append(flight)
+            flight = Flight(
+                airline=airline,
+                flight_number=f"{airline[:2]}{100 + i}",
+                departure_airport=origin.upper()[:3],
+                arrival_airport=destination.upper()[:3],
+                departure_time=departure,
+                arrival_time=arrival,
+                price=base_price + (i * 50),
+                duration_hours=duration,
+            )
+            flights.append(flight)
 
-    return flights
+        span.set_attribute("flights.count", len(flights))
+        span.set_status(Status(StatusCode.OK))
+        return flights
 
 
 def search_flights(
     origin: str, destination: str, departure_date: str, return_date: str = None
 ) -> dict:
     """
-    Search for flights between two cities.
+    Search for flights between two cities with tracing.
 
     Args:
         origin: Origin city
@@ -50,49 +64,68 @@ def search_flights(
     Returns:
         Dictionary with flight options
     """
-    try:
-        # Parse dates
-        dep_date = datetime.strptime(departure_date, "%Y-%m-%d")
+    # NOTE: In a full ADK implementation with proper session management,
+    # these traces would be linked to the parent coordinator span.
+    # This demonstrates how sub-agents should be instrumented for observability.
+    
+    with tracer.start_span("flight.search") as span:
+        span.set_attribute("search.origin", origin)
+        span.set_attribute("search.destination", destination)
+        span.set_attribute("search.departure_date", departure_date)
+        span.set_attribute("search.trip_type", "round-trip" if return_date else "one-way")
+        
+        try:
+            # Parse dates
+            with tracer.start_span("flight.parse_dates"):
+                dep_date = datetime.strptime(departure_date, "%Y-%m-%d")
 
-        # Generate mock flights
-        outbound_flights = create_mock_flights(origin, destination, dep_date)
+            # Generate mock flights
+            outbound_flights = create_mock_flights(origin, destination, dep_date)
 
-        result = {
-            "status": "success",
-            "search_criteria": {
-                "origin": origin,
-                "destination": destination,
-                "departure_date": departure_date,
-                "trip_type": "round-trip" if return_date else "one-way",
-            },
-            "outbound_flights": [flight.model_dump() for flight in outbound_flights],
-            "return_flights": [],
-        }
+            result = {
+                "status": "success",
+                "search_criteria": {
+                    "origin": origin,
+                    "destination": destination,
+                    "departure_date": departure_date,
+                    "trip_type": "round-trip" if return_date else "one-way",
+                },
+                "outbound_flights": [flight.model_dump() for flight in outbound_flights],
+                "return_flights": [],
+            }
 
-        if return_date:
-            ret_date = datetime.strptime(return_date, "%Y-%m-%d")
-            return_flights = create_mock_flights(destination, origin, ret_date)
-            result["return_flights"] = [
-                flight.model_dump() for flight in return_flights
-            ]
-            result["search_criteria"]["return_date"] = return_date
+            if return_date:
+                with tracer.start_span("flight.search_return"):
+                    ret_date = datetime.strptime(return_date, "%Y-%m-%d")
+                    return_flights = create_mock_flights(destination, origin, ret_date)
+                    result["return_flights"] = [
+                        flight.model_dump() for flight in return_flights
+                    ]
+                    result["search_criteria"]["return_date"] = return_date
 
-        # Add pricing summary
-        outbound_prices = [f.price for f in outbound_flights]
-        result["price_summary"] = {
-            "lowest_outbound": min(outbound_prices),
-            "average_outbound": sum(outbound_prices) / len(outbound_prices),
-            "currency": "USD",
-        }
+            # Add pricing summary
+            with tracer.start_span("flight.calculate_pricing") as price_span:
+                outbound_prices = [f.price for f in outbound_flights]
+                result["price_summary"] = {
+                    "lowest_outbound": min(outbound_prices),
+                    "average_outbound": sum(outbound_prices) / len(outbound_prices),
+                    "currency": "USD",
+                }
+                price_span.set_attribute("price.lowest", min(outbound_prices))
+                price_span.set_attribute("price.average", sum(outbound_prices) / len(outbound_prices))
 
-        return result
+            span.set_attribute("result.flights_found", len(outbound_flights))
+            span.set_status(Status(StatusCode.OK))
+            return result
 
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": "Unable to search flights. Please check your input.",
-        }
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
+            return {
+                "status": "error",
+                "error": str(e),
+                "message": "Unable to search flights. Please check your input.",
+            }
 
 
 # Create the flight agent

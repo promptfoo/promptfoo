@@ -1,26 +1,23 @@
 """
 Promptfoo Python provider for Google ADK travel planning agents.
 
-This provider uses the Gemini API directly with agent instructions rather than
-the ADK InMemoryRunner, which has session management limitations when used
-programmatically outside of the ADK CLI tools.
+This is a simple provider that delegates the heavy lifting to agent_runner.py.
 """
 
 import os
 import sys
+import asyncio
 from typing import Any, Dict
 from dotenv import load_dotenv
 
 # Add parent directory to path to import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import the coordinator agent
-from agents.coordinator import travel_coordinator
-
+# Import the agent runner
+from agent_runner import execute_agent
 
 # Load environment variables from multiple possible locations
 import pathlib
-
 current_dir = pathlib.Path(__file__).parent
 # Try loading from parent directories (pf-codium root)
 load_dotenv(current_dir.parent.parent / ".env", override=True)
@@ -30,57 +27,29 @@ load_dotenv(current_dir.parent / ".env", override=True)
 load_dotenv(current_dir / ".env", override=True)
 
 
-def run_agent(prompt: str) -> Any:
-    """Run the ADK agent with the given prompt."""
+def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Main provider function for ADK travel planning agents.
+    
+    Args:
+        prompt: The user's travel planning request
+        options: Provider options (may contain config with apiKey)
+        context: Evaluation context (may contain session_id, user_id)
+        
+    Returns:
+        Dict with output containing the agent's response
+    """
     try:
-        # Use google.genai which is the correct module from ADK
-        from google import genai
+        # Get configuration
+        config = options.get("config", {})
         
-        # Configure the API
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            return {"error": "GOOGLE_API_KEY not set"}
-            
-        # Create a client
-        client = genai.Client(api_key=api_key)
-        
-        # Construct a prompt that includes the coordinator agent's instruction
-        full_prompt = f"""You are a travel planning coordinator with access to specialized agents.
-
-{travel_coordinator.instruction}
-
-User Request: {prompt}
-
-Please provide a comprehensive response as if you were coordinating with your team of flight, hotel, and activity agents."""
-
-        # Generate response using the Gemini model
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-preview-04-17",
-            contents=full_prompt
-        )
-        
-        if response.text:
-            return response.text
-        else:
-            return "I'll help you plan your trip. Let me gather some information..."
-            
-    except Exception as e:
-        # If there's an issue with the direct approach, return error
-        return f"Error: {str(e)}. Note: ADK agents are best run through 'adk web' or 'adk run' CLI tools."
-
-
-def call_api(
-    prompt: str, options: Dict[str, Any], context: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Main provider function for ADK travel planning agents."""
-    try:
-        # Check for API key from environment or options
-        api_key = os.getenv("GOOGLE_API_KEY") or options.get("config", {}).get("apiKey")
+        # Check for API key from environment or config
+        api_key = os.getenv("GOOGLE_API_KEY") or config.get("apiKey")
         if not api_key:
             return {
                 "output": {
                     "error": "GOOGLE_API_KEY not set",
-                    "message": "Please set the GOOGLE_API_KEY environment variable",
+                    "message": "Please set the GOOGLE_API_KEY environment variable or provide apiKey in config",
                 }
             }
 
@@ -88,26 +57,45 @@ def call_api(
         if not os.getenv("GOOGLE_API_KEY") and api_key:
             os.environ["GOOGLE_API_KEY"] = api_key
 
-        # Run the agent synchronously
-        result = run_agent(prompt)
+        # Extract session and user IDs from context if available
+        session_id = context.get("session_id")
+        user_id = context.get("user_id", "default_user")
+        
+        # Log configuration if in debug mode
+        if os.getenv("LOG_LEVEL") == "debug":
+            import sys
+            print(f"Provider config: {config}", file=sys.stderr)
+            print(f"Using model: {config.get('model', 'default')}", file=sys.stderr)
+            print(f"Temperature: {config.get('temperature', 'default')}", file=sys.stderr)
+
+        # Enhance prompt with configuration preferences if provided
+        defaults = config.get("defaults", {})
+        if defaults:
+            enhanced_prompt = f"{prompt}\n\nPreferences: "
+            if defaults.get("budget_level"):
+                enhanced_prompt += f"Budget level: {defaults['budget_level']}. "
+            if defaults.get("trip_style"):
+                enhanced_prompt += f"Trip style: {defaults['trip_style']}. "
+            prompt = enhanced_prompt
+
+        # Run the agent asynchronously
+        result = asyncio.run(execute_agent(prompt, session_id, user_id))
 
         # Format the output
-        if isinstance(result, dict):
-            # If result is already a dict (structured output), return as-is
-            return {"output": result}
-        else:
-            # If result is text, structure it
-            return {
-                "output": {
-                    "response": str(result),
-                    "agent": "travel_coordinator",
-                    "sub_agents_used": [
-                        "flight_agent",
-                        "hotel_agent",
-                        "activity_agent",
-                    ],
-                }
+        output = {
+            "output": {
+                "response": result["response"],
+                "agent": "travel_coordinator",
+                "session_id": result["session_id"],
+                "status": result["status"]
             }
+        }
+        
+        # Add error info if there was an error
+        if result["status"] == "error":
+            output["output"]["error_type"] = result.get("error_type", "Unknown")
+            
+        return output
 
     except Exception as e:
         return {
