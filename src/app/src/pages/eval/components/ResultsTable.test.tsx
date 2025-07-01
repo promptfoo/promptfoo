@@ -1,5 +1,4 @@
-import { render, screen } from '@testing-library/react';
-import { act } from 'react-dom/test-utils';
+import { render, screen, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -97,7 +96,7 @@ describe('ResultsTable Metrics Display', () => {
     setFilterMode: vi.fn(),
   };
 
-  const renderWithProviders = (ui: React.ReactElement) => {
+  const renderWithProviders = (ui: React.ReactElement<any>) => {
     return render(ui);
   };
 

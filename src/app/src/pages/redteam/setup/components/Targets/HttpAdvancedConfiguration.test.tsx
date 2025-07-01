@@ -28,7 +28,7 @@ vi.mock('prismjs/themes/prism.css', () => ({
 vi.mock('prismjs/components/prism-clike', () => ({}));
 vi.mock('prismjs/components/prism-javascript', () => ({}));
 
-const renderWithTheme = (ui: React.ReactElement) => {
+const renderWithTheme = (ui: React.ReactElement<any>) => {
   const theme = createTheme({ palette: { mode: 'light' } });
   return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
 };

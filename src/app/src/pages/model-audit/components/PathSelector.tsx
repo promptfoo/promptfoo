@@ -106,7 +106,7 @@ export default function PathSelector({
     setPathInput('');
   };
 
-  const tabIcon = (icon: React.ReactElement, isLocked: boolean = false) => {
+  const tabIcon = (icon: React.ReactElement<any>, isLocked: boolean = false) => {
     if (isLocked) {
       return (
         <Badge

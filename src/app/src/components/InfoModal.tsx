@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type JSX } from 'react';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ForumIcon from '@mui/icons-material/Forum';

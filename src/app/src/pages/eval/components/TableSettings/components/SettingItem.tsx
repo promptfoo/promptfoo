@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type JSX } from 'react';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import {
   Paper,

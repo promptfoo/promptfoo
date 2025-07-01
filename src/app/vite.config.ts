@@ -40,6 +40,18 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
     globals: true,
+    deps: {
+      optimizer: {
+        web: {
+          include: ['react', 'react-dom', '@mui/x-data-grid'],
+        },
+      },
+    },
+    server: {
+      deps: {
+        inline: ['@mui/x-data-grid'],
+      },
+    },
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
