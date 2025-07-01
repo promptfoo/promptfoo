@@ -205,82 +205,6 @@ Reasoning models "think before they answer," generating internal reasoning token
 
 Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
-### Deep Research Models (Responses API Only)
-
-Deep research models (`o3-deep-research` and `o4-mini-deep-research`) are specialized models designed for complex, multi-step research tasks that **only work with the Responses API**. These models can search and synthesize information from across the internet as well as from your own data through MCP connectors.
-
-:::important
-Deep research models are **Responses API only** and cannot be used with the regular Chat Completions API. They require specific tools like `web_search_preview` and/or `mcp` servers.
-:::
-
-Available deep research models:
-
-- `o3-deep-research` - Most powerful deep research model with highest reasoning capability
-- `o3-deep-research-2025-06-26` - Snapshot version of o3-deep-research
-- `o4-mini-deep-research` - Faster, more affordable deep research model
-- `o4-mini-deep-research-2025-06-26` - Snapshot version of o4-mini-deep-research
-
-All deep research models feature:
-
-- 200,000 token context window
-- 100,000 max output tokens
-- Reasoning token support
-- May 31, 2024 knowledge cutoff
-- **Must include at least one data source**: web search and/or remote MCP servers
-
-:::tip Token Limits for Deep Research
-Deep research models use significant tokens for reasoning and research before generating final responses. Consider using high `max_output_tokens` values (20,000-50,000) to avoid incomplete responses. The models will automatically notify you if the token limit is reached.
-:::
-
-#### Usage Examples
-
-Deep research models require the Responses API format and specific tools:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:o3-deep-research
-    config:
-      max_output_tokens: 50000
-      tools:
-        - type: web_search_preview
-        - type: code_interpreter
-          container:
-            type: auto
-
-  - id: openai:responses:o4-mini-deep-research
-    config:
-      max_output_tokens: 20000
-      tools:
-        - type: web_search_preview
-        - type: mcp
-          server_label: my_data_server
-          server_url: https://api.mycompany.com/mcp
-          require_approval: never
-```
-
-Specific snapshot versions:
-
-```yaml
-providers:
-  - id: openai:responses:o3-deep-research-2025-06-26
-  - id: openai:responses:o4-mini-deep-research-2025-06-26
-```
-
-#### Required Tools
-
-Deep research models require at least one of the following tools:
-
-- `web_search_preview` - For internet search capabilities
-- `mcp` - For accessing private data through Model Context Protocol servers
-- `code_interpreter` - For complex data analysis (optional)
-
-#### Pricing
-
-| Model                 | Input Price (per 1M tokens) | Output Price (per 1M tokens) |
-| --------------------- | --------------------------- | ---------------------------- |
-| o3-deep-research      | $10.00                      | $40.00                       |
-| o4-mini-deep-research | $2.00                       | $8.00                        |
-
 ### GPT-4.5 Models (Preview)
 
 GPT-4.5 is OpenAI's largest GPT model designed specifically for creative tasks and agentic planning, currently available in a research preview. It features a 128k token context length.
@@ -1216,6 +1140,38 @@ providers:
         effort: 'medium'
       max_output_tokens: 1000
 ```
+
+### Deep Research Models (Responses API Only)
+
+Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specialized reasoning models designed for complex research tasks that require web search capabilities.
+
+Available models:
+- `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
+- `o3-deep-research-2025-06-26` - Snapshot version
+- `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)  
+- `o4-mini-deep-research-2025-06-26` - Snapshot version
+
+All deep research models:
+- Require `web_search_preview` tool to be configured
+- Support 200,000 token context window
+- Support up to 100,000 output tokens
+- May take 2-10 minutes to complete research tasks
+- Use significant tokens for reasoning before generating output
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o4-mini-deep-research
+    config:
+      max_output_tokens: 50000  # High limit recommended
+      tools:
+        - type: web_search_preview  # Required
+```
+
+:::tip
+Deep research models require high `max_output_tokens` values (50,000+) and long timeouts. Set `PROMPTFOO_EVAL_TIMEOUT_MS=600000` for 10-minute timeouts.
+:::
 
 ### Sending Images in Prompts
 

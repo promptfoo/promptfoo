@@ -259,9 +259,8 @@ export const OPENAI_CHAT_MODELS = [
   })),
 ];
 
-// Responses API models for specialized tasks
-export const OPENAI_RESPONSES_MODELS = [
-  // Deep research models
+// Deep research models for Responses API
+export const OPENAI_DEEP_RESEARCH_MODELS = [
   ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
     id: model,
     cost: {
@@ -344,7 +343,7 @@ export function calculateOpenAICost(
       ...OPENAI_CHAT_MODELS,
       ...OPENAI_COMPLETION_MODELS,
       ...OPENAI_REALTIME_MODELS,
-      ...OPENAI_RESPONSES_MODELS,
+      ...OPENAI_DEEP_RESEARCH_MODELS,
     ]);
   }
 
@@ -366,7 +365,7 @@ export function calculateOpenAICost(
     ...OPENAI_CHAT_MODELS,
     ...OPENAI_COMPLETION_MODELS,
     ...OPENAI_REALTIME_MODELS,
-    ...OPENAI_RESPONSES_MODELS,
+    ...OPENAI_DEEP_RESEARCH_MODELS,
   ].find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;

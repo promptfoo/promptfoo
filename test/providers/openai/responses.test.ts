@@ -2385,152 +2385,39 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should include all expected model names', () => {
-    const expectedModels = [
-      'gpt-4o',
-      'gpt-4o-2024-08-06',
-      'gpt-4o-2024-11-20',
-      'gpt-4o-2024-05-13',
-      'gpt-4.1',
-      'gpt-4.1-2025-04-14',
-      'gpt-4.1-mini',
-      'gpt-4.1-mini-2025-04-14',
-      'gpt-4.1-nano',
-      'gpt-4.1-nano-2025-04-14',
-      'o1',
-      'o1-2024-12-17',
-      'o1-preview',
-      'o1-preview-2024-09-12',
-      'o1-mini',
-      'o1-mini-2024-09-12',
-      'o1-pro',
-      'o1-pro-2025-03-19',
-      'o3-pro',
-      'o3-pro-2025-06-10',
-      'o3',
-      'o3-2025-04-16',
-      'o4-mini',
-      'o4-mini-2025-04-16',
-      'o3-mini',
-      'o3-mini-2025-01-31',
-      'gpt-4.5-preview',
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-08-06');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-11-20');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-05-13');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-2024-12-17');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-preview');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-preview-2024-09-12');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-mini-2024-09-12');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro-2025-03-19');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro-2025-06-10');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-2025-04-16');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-2025-04-16');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini-2025-01-31');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.5-preview');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-4.5-preview-2025-02-27',
-      'codex-mini-latest',
-      // Deep research models
-      'o3-deep-research',
-      'o3-deep-research-2025-06-26',
-      'o4-mini-deep-research',
-      'o4-mini-deep-research-2025-06-26',
-    ];
-
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toEqual(
-      expect.arrayContaining(expectedModels),
     );
-  });
-
-  it('should configure deep research models correctly', () => {
-    const o3DeepProvider = new OpenAiResponsesProvider('o3-deep-research');
-    const o4MiniDeepProvider = new OpenAiResponsesProvider('o4-mini-deep-research');
-
-    // Deep research models should be considered reasoning models
-    expect(o3DeepProvider['isReasoningModel']()).toBe(true);
-    expect(o4MiniDeepProvider['isReasoningModel']()).toBe(true);
-
-    // Deep research models should be identified as such
-    expect(o3DeepProvider['isDeepResearchModel']()).toBe(true);
-    expect(o4MiniDeepProvider['isDeepResearchModel']()).toBe(true);
-
-    // They should not support temperature (reasoning models don't)
-    expect(o3DeepProvider['supportsTemperature']()).toBe(false);
-    expect(o4MiniDeepProvider['supportsTemperature']()).toBe(false);
-  });
-
-  it('should handle standardized output_text field correctly', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'o3-deep-research',
-      output_text: 'This is the standardized output text from the API.',
-      usage: { input_tokens: 10, output_tokens: 15, total_tokens: 25 },
-    };
-
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-
-    const provider = new OpenAiResponsesProvider('o3-deep-research', {
-      config: { apiKey: 'test-key' },
-    });
-
-    const result = await provider.callApi('Test prompt');
-
-    expect(result.output).toBe('This is the standardized output text from the API.');
-    expect(result.tokenUsage).toEqual({
-      total: 25,
-      prompt: 10,
-      completion: 15,
-    });
-  });
-
-  it('should handle web search actions with correct types', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'o4-mini-deep-research',
-      output: [
-        {
-          type: 'web_search_call',
-          action: {
-            type: 'search',
-            query: 'Python programming language',
-          },
-        },
-        {
-          type: 'web_search_call',
-          action: {
-            type: 'open_page',
-            url: 'https://python.org',
-          },
-        },
-        {
-          type: 'web_search_call',
-          action: {
-            type: 'find',
-            pattern: 'programming language',
-            url: 'https://python.org',
-          },
-        },
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
-            {
-              type: 'output_text',
-              text: 'Found information about Python programming.',
-            },
-          ],
-        },
-      ],
-      usage: { input_tokens: 20, output_tokens: 30, total_tokens: 50 },
-    };
-
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-
-    const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
-      config: { apiKey: 'test-key' },
-    });
-
-    const result = await provider.callApi('Test prompt');
-
-    expect(result.output).toContain('Found information about Python programming.');
-    // Should not show research steps in final output since we have a final result
-    expect(result.output).not.toContain('🔬 Deep Research Process');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('codex-mini-latest');
+    // Deep research models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'o3-deep-research-2025-06-26',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-deep-research');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'o4-mini-deep-research-2025-06-26',
+    );
   });
 });

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI Deep Research API demonstration
+description: OpenAI Deep Research API
 prompts:
   - 'Research and provide a comprehensive answer about {{topic}}'
 providers:
@@ -13,9 +13,9 @@ tests:
       topic: recent advancements in machine learning
     assert:
       - type: contains-any
-        value: [machine learning, ML, neural networks, deep learning, transformer]
+        value: [machine learning, ML, neural networks, deep learning]
   - vars:
       topic: current space exploration missions
     assert:
       - type: contains-any
-        value: [space, NASA, SpaceX, Mars, moon, satellite, rocket]
+        value: [space, NASA, SpaceX, Mars, moon]
