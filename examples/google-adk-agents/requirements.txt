@@ -1,4 +1,41 @@
-google-adk>=1.5.0
-google-generativeai>=0.8.0
-pydantic>=2.0.0
-python-dotenv 
+# Core ADK dependencies
+google-adk>=1.7.0  # Latest version with Gemini 2.5 Flash support
+google-generativeai>=0.9.0  # Latest Gemini SDK
+google-cloud-aiplatform>=1.25.0  # For Vertex AI integration
+
+# Data models and validation
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# Observability and tracing
+opentelemetry-api>=1.24.0
+opentelemetry-sdk>=1.24.0
+opentelemetry-exporter-otlp-proto-http>=1.24.0
+opentelemetry-instrumentation>=0.45b0
+
+# Third-party tool integrations (optional)
+langchain>=0.1.0  # For LangChain tool integration
+langchain-community>=0.0.10  # Community tools
+tavily-python>=0.3.0  # Advanced search tool
+serpapi>=0.1.5  # Google search results
+
+# MCP tools support (optional)
+mcp>=0.1.0  # Model Context Protocol
+
+# Performance and caching
+aiofiles>=23.0.0  # Async file operations
+aiocache>=0.12.0  # Async caching
+
+# Production dependencies
+httpx>=0.25.0  # Modern HTTP client
+tenacity>=8.2.0  # Retry logic
+structlog>=24.0.0  # Structured logging
+
+# Development dependencies (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+ruff>=0.1.0 

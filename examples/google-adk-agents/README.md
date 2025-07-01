@@ -1,192 +1,266 @@
-# Google ADK Agents Example
+# Google ADK Agents Example - Enhanced with Gemini 2.5 Flash
 
-This example demonstrates how to evaluate [Google's Agent Development Kit (ADK)](https://github.com/google/adk-python) agents using promptfoo. ADK is Google's open-source Python framework for building, evaluating, and deploying sophisticated AI agents with flexibility and control.
+This example demonstrates cutting-edge multi-agent development using Google's Agent Development Kit (ADK) with the latest **Gemini 2.5 Flash** model and 2025 best practices.
 
-**Model**: This example uses **Gemini 2.5 Flash** (preview), Google's latest hybrid reasoning model with thinking capabilities, offering an optimal balance between performance, cost, and reasoning depth.
+## 🚀 What's New in This Enhanced Version
 
-## Quick Start
+- **Gemini 2.5 Flash with Thinking Mode**: Leverages Google's latest reasoning model that can "think" through complex problems
+- **Advanced Tool Integration**: Built-in Google Search, code execution, and ready-to-use patterns for OpenAPI, MCP, and LangChain tools
+- **Smart Callbacks**: Implements guardrails, caching, and dynamic thinking budget allocation
+- **Production-Ready Features**: Session management, artifact handling, performance monitoring, and health checks
+- **65K Token Output**: Supports massive responses for comprehensive travel planning
+- **Auto-Thinking Mode**: Model automatically decides when deep reasoning is needed
 
-Run this example with:
+## Overview
 
-```bash
-npx promptfoo@latest init --example google-adk-agents
-```
+This enhanced travel planning system showcases:
+- **Gemini 2.5 Flash** - Google's first fully hybrid reasoning model (April 2025)
+- **Thinking Capabilities** - Controllable reasoning with budgets from 0 to 24,576 tokens
+- **Real-time Search** - Integrated Google Search for current prices and availability
+- **Smart Calculations** - Code execution for budget optimization and comparisons
+- **Advanced Patterns** - Callbacks for caching, state management, and policy enforcement
+- **OpenTelemetry Tracing** - Comprehensive debugging and performance monitoring
+- **Future-Ready Architecture** - Prepared for OpenAPI tools, MCP servers, and more
+
+## Key Features
+
+### 🧠 Thinking Mode
+- **Auto Mode**: Model decides when to think based on query complexity
+- **Controllable Budget**: Fine-tune thinking from 0 (instant) to 24K tokens (deep analysis)
+- **Optimized Performance**: Simple queries stay fast, complex ones get thorough analysis
+
+### 🛠️ Advanced Tool Ecosystem
+- **Built-in Tools**: Google Search and code execution ready to use
+- **OpenAPI Integration**: Convert any REST API to an ADK tool
+- **MCP Support**: Connect to Model Context Protocol servers
+- **LangChain Tools**: Use Tavily, SerpAPI, and more
+- **Caching Tools**: Smart caching to avoid redundant API calls
+
+### 📊 Production Features
+- **Session Management**: Context preservation across conversations
+- **Artifact Storage**: Save itineraries and travel plans
+- **Performance Monitoring**: Track response times and optimization
+- **Health Checks**: Monitor system status and error rates
+- **Graceful Degradation**: Fallback strategies for resilience
 
 ## Setup
 
-```bash
-cd google-adk-agents
-
-# Install Python dependencies (required!)
-pip install -r requirements.txt
-
-# Copy and configure environment variables
-cp .env.example .env
-# Edit .env and add your API key
-
-# Or set environment variables directly
-export GOOGLE_API_KEY=your_google_ai_studio_api_key_here
-export GOOGLE_GENAI_USE_VERTEXAI=FALSE
-
-# Verify setup
-python test_example.py
-
-# Run the agent with ADK Web UI
-adk web
-
-# Or run evaluation with promptfoo
-npx promptfoo@latest eval
-npx promptfoo@latest view
-```
-
-**Important**: You must have a valid Google API key to run this example. Get one from [Google AI Studio](https://makersuite.google.com/app/apikey).
-
-## What This Shows
-
-This example demonstrates a multi-agent travel planning system with:
-
-- **Multi-Agent Architecture**: A coordinator agent that delegates to specialized agents
-- **Tool Integration**: Built-in tools (Google Search) and custom tools (weather, destination info)
-- **Structured Outputs**: Pydantic models for type-safe agent responses
-- **Mock Data**: Example implementations that can be replaced with real APIs
-
-### Agent Hierarchy
-
-```
-Travel Coordinator (Root Agent)
-├── Flight Agent - Searches for flights
-├── Hotel Agent - Finds accommodations
-└── Activity Agent - Plans daily itineraries
-```
-
-## Running the Agent
-
-ADK agents are designed to be run through the ADK command-line tools:
-
-### Interactive Web UI
-
-```bash
-adk web
-```
-
-Then open http://localhost:8000 and select "travel_coordinator" from the dropdown.
-
-### Command Line
-
-```bash
-adk run .
-```
-
-### With Promptfoo
-
-```bash
-npx promptfoo@latest eval
-npx promptfoo@latest view
-```
-
-**Note**: The promptfoo evaluation uses the real ADK provider (`provider.py`). However, keep in mind:
-
-- ADK agents are primarily designed to run through the `adk` CLI tool (`adk web` or `adk run`)
-- Due to ADK session management limitations, the provider uses the Gemini API directly with agent instructions
-- This approach provides meaningful responses while avoiding InMemoryRunner session issues
-- For best interactive agent testing with full ADK features, use `adk web` or `adk run`
-- The promptfoo evaluation requires a valid GOOGLE_API_KEY to function
-
-## Test Scenarios
-
-The example includes tests for:
-
-- Weather inquiries
-- Flight searches
-- Hotel recommendations
-- Activity planning
-- Complete trip planning
-- Budget-conscious travel
-- Specific date requests
-- Multi-destination trips
-
-## Extending the Example
-
-To customize this example:
-
-1. **Replace Mock Data**: Update the tool implementations in the `tools/` directory
-2. **Add New Agents**: Create new specialized agents in the `agents/` directory
-3. **Modify Prompts**: Adjust agent instructions for different behaviors
-4. **Add Real APIs**: Integrate with actual travel APIs (flights, hotels, etc.)
-
-## Troubleshooting
-
-### "Module not found" errors
-
-Make sure you've installed dependencies:
+1. **Install Dependencies**
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### "GOOGLE_API_KEY not set" error
+2. **Set up Google AI API Key**
 
-Set your Google AI Studio API key:
+Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey) and set it:
 
 ```bash
-export GOOGLE_API_KEY=your_key_here
-export GOOGLE_GENAI_USE_VERTEXAI=FALSE
+export GOOGLE_API_KEY=your_api_key_here
 ```
 
-### Agent not appearing in ADK web
+Or create a `.env` file:
 
-Make sure you're running `adk web` from the example directory and that `__init__.py` properly exports the root agent.
+```bash
+GOOGLE_API_KEY=your_api_key_here
+GOOGLE_CLOUD_PROJECT=your-project-id  # Optional: for advanced features
+```
 
-## How It Works
+## Running Tests
 
-1. **Coordinator Agent**: Receives user requests and analyzes what type of help is needed
-2. **Delegation**: Routes requests to appropriate sub-agents based on the task
-3. **Tool Usage**: Agents use tools to fetch weather, destination info, and search for options
-4. **Response Synthesis**: Coordinator combines sub-agent responses into a comprehensive plan
+### Quick Start with Promptfoo
 
-## Gemini 2.5 Flash with Thinking Mode
+```bash
+# Run comprehensive test suite
+npx promptfoo@latest eval
 
-This example uses **Gemini 2.5 Flash** (gemini-2.5-flash-preview-04-17), which is Google's first fully hybrid reasoning model. Key features:
+# View results in web UI
+npx promptfoo@latest view
+```
 
-- **Hybrid Reasoning**: Can toggle thinking mode on/off for optimal performance
-- **Thinking Budget**: Configurable token budget for reasoning (0-24,576 tokens)
-- **Smart Adaptation**: Automatically adjusts thinking based on task complexity
-- **Cost Efficiency**: Best price-to-performance ratio among reasoning models
+### Test Thinking Mode Demo
 
-### Thinking Mode Configuration
+See how thinking improves responses:
 
-While ADK doesn't yet directly expose thinking configuration, you can control reasoning behavior:
+```bash
+python test_thinking_demo.py
+```
 
-- **Complex Tasks**: The model automatically applies more reasoning for multi-step problems
-- **Simple Queries**: Minimal reasoning overhead for straightforward requests
-- **Future Support**: ADK may add explicit thinking_budget configuration in future releases
+This demonstrates:
+- Simple queries (no thinking needed)
+- Medium complexity (moderate thinking)  
+- High complexity (deep reasoning with optimization)
+- Comparison with/without thinking mode
 
-For direct Gemini API usage with thinking configuration, see `thinking_mode_example.py`:
+### Production Testing
+
+```bash
+# Run with full monitoring
+python -m agent_runner
+
+# Check health status
+curl http://localhost:8080/health
+```
+
+## Architecture
+
+```
+google-adk-agents/
+├── agents/
+│   └── coordinator.py    # Enhanced with Gemini 2.5 Flash + callbacks
+├── tools/
+│   ├── weather_tool.py   # Basic tool example
+│   ├── destination_tool.py
+│   └── advanced_tools.py # OpenAPI, MCP, LangChain, caching examples
+├── agent_runner.py       # Production-ready runner with monitoring
+├── provider.py          # Clean Promptfoo interface
+├── test_thinking_demo.py # Thinking mode demonstration
+└── promptfooconfig.yaml # Advanced test scenarios
+```
+
+## Example: Thinking Mode in Action
+
+### Simple Query (No Thinking)
+```python
+"What's the weather in Paris?"
+# → Quick, direct response in <1 second
+```
+
+### Complex Query (Deep Thinking)
+```python
+"""Plan a 14-day Europe trip for $3000. 
+   Optimize route through Paris, Rome, Barcelona, Amsterdam.
+   Calculate all costs and minimize travel time."""
+# → Deep analysis with route optimization, cost breakdowns
+```
+
+## Advanced Usage
+
+### 1. Enable Thinking Mode
 
 ```python
-# Example for direct Gemini API (not ADK)
-from google import genai
+from google.adk.agents import Agent
 
-response = client.models.generate_content(
-    model="gemini-2.5-flash-preview-04-17",
-    contents="Plan a complex multi-city trip...",
-    config=genai.types.GenerateContentConfig(
-        thinking_config=genai.types.ThinkingConfig(
-            thinking_budget=1024  # Tokens for reasoning
-        )
-    )
+agent = Agent(
+    model="gemini-2.5-flash-preview-05-20",
+    config={
+        "thinking_mode": "auto",  # or set specific budget
+        "max_output_tokens": 65000
+    }
 )
 ```
 
-Run the example:
+### 2. Add Callbacks for Smart Behavior
 
-```bash
-python thinking_mode_example.py
+```python
+@callbacks.before_model_callback
+def enhance_with_thinking(llm_request, context):
+    """Dynamically set thinking budget based on complexity"""
+    if "optimize" in llm_request.contents[0].text:
+        llm_request.config.thinking_config = {
+            "thinking_budget": 8192
+        }
 ```
 
-## Learn More
+### 3. Integrate Advanced Tools
 
-- [ADK Documentation](https://github.com/google/adk-python)
+```python
+# OpenAPI Tools
+flight_tools = OpenAPIToolset(
+    spec_path="https://api.airline.com/openapi.json"
+)
+
+# MCP Tools  
+maps_client = McpClient("npx", ["@modelcontextprotocol/server-googlemaps"])
+maps_tools = McpToolset(maps_client)
+
+# Add to agent
+agent.tools.extend(flight_tools.get_tools())
+agent.tools.extend(maps_tools.get_tools())
+```
+
+### 4. Production Monitoring
+
+```python
+# Use the production runner
+from agent_runner import production_runner
+
+result = await production_runner.run_with_monitoring(
+    prompt="Plan my trip",
+    enable_caching=True,
+    save_artifacts=True
+)
+
+# Check health
+health = await production_runner.health_check()
+```
+
+## Test Scenarios
+
+The enhanced test suite includes:
+
+1. **Simple Queries** - Test fast responses without thinking
+2. **Complex Optimization** - Multi-city routes with budget constraints
+3. **Real-time Search** - Current prices and availability
+4. **Budget Calculations** - Math with currency conversions
+5. **Comparative Analysis** - Destination comparisons with pros/cons
+6. **Context Retention** - Follow-up questions using session state
+7. **Error Handling** - Graceful handling of impossible requests
+8. **Structured Output** - JSON responses for integration
+9. **Large Outputs** - 30-day comprehensive travel plans
+10. **Tool Integration** - Multiple tools working together
+
+## Performance Optimization
+
+- **Thinking Budget**: Automatically adjusted based on query complexity
+- **Response Caching**: Avoid redundant API calls for similar queries
+- **Session Management**: Preserve context across conversations
+- **Parallel Tool Execution**: Run multiple tools simultaneously
+- **Streaming Responses**: Real-time output for better UX
+
+## Best Practices Implemented
+
+1. **Dynamic Thinking Allocation**: Simple queries stay fast, complex ones get deep analysis
+2. **Smart Caching**: Cache responses and API calls with TTL
+3. **Graceful Degradation**: Fallback strategies for errors
+4. **Comprehensive Tracing**: Debug every step of agent execution
+5. **Modular Architecture**: Clean separation of concerns
+6. **Type Safety**: Pydantic models for structured data
+7. **Error Recovery**: Retry logic with exponential backoff
+
+## Troubleshooting
+
+### Thinking Mode Issues
+- Ensure you're using `gemini-2.5-flash-preview-05-20` or later
+- Check thinking budget is within limits (0-24576)
+- Verify API key has access to preview models
+
+### Tool Integration
+- Built-in tools require explicit enabling in agent config
+- Third-party tools need additional API keys (see `.env.example`)
+- MCP tools require Node.js for MCP servers
+
+### Performance
+- Use caching for repeated queries
+- Monitor with OpenTelemetry for bottlenecks
+- Adjust thinking budgets based on needs
+
+## Further Reading
+
+- [Gemini 2.5 Flash Announcement](https://blog.google/technology/google-deepmind/gemini-2-5-flash)
+- [Google ADK Documentation](https://github.com/google/adk-python)
+- [ADK Callback Patterns](https://google.github.io/adk-docs/callbacks/design-patterns-and-best-practices/)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
 - [Promptfoo Documentation](https://promptfoo.dev)
-- [Google AI Studio](https://makersuite.google.com)
-- [Gemini 2.5 Flash Documentation](https://developers.googleblog.com/en/start-building-with-gemini-25-flash/)
+
+## Contributing
+
+This example showcases best practices as of 2025. Contributions welcome:
+- Additional tool integrations
+- Performance optimizations
+- New test scenarios
+- Documentation improvements
+
+---
+
+Built with ❤️ using Google ADK and Gemini 2.5 Flash

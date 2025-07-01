@@ -1,166 +1,247 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Google ADK multi-agent travel planning system evaluation
+description: Google ADK Travel Planning System with Gemini 2.5 Flash
+
+# Enable comprehensive tracing for debugging
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats:
+        - json
+      metadata:
+        service.name: adk-travel-assistant
+        service.version: '2.0'
 
 prompts:
   - '{{query}}'
 
 providers:
   - id: file://provider.py
-    label: ADK Travel Coordinator
+    label: ADK Travel System (Gemini 2.5 Flash)
+    config:
+      # Model configuration
+      apiKey: ${GOOGLE_API_KEY}
+      model: gemini-2.5-flash-preview-05-20
+      temperature: 0.7
+      maxOutputTokens: 65000  # Leverage Gemini 2.5's massive output capacity
+      
+      # Enable thinking mode for complex queries
+      thinking:
+        enabled: true
+        mode: auto  # Let model decide when to think
+        maxBudget: 8192  # High budget for complex planning
+      
+      # Travel agent specific settings
+      defaults:
+        budget_level: mid-range
+        trip_style: balanced
+        include_tips: true
+        enable_search: true  # Use Google Search tool
+        enable_calculations: true  # Use code execution
+      
+      # Response formatting
+      response_format:
+        include_budget_breakdown: true
+        include_weather: true
+        max_itinerary_days: 14
+        format: structured  # Request structured output
 
 tests:
-  # Basic trip planning
-  - description: 'Complete trip planning request'
+  # Test 1: Simple query (low thinking)
+  - description: 'Simple weather query'
     vars:
-      query: 'Plan a 3-day trip to Tokyo leaving December 15, 2024'
+      query: 'What is the weather like in Hawaii?'
     assert:
+      - type: contains
+        value: 'Hawaii'
+      - type: javascript
+        value: |
+          // Should be a quick response without extensive thinking
+          const response = output.response || output;
+          return response.length < 2000;  // Simple queries should be concise
+
+  # Test 2: Complex multi-city optimization (high thinking)
+  - description: 'Complex multi-city budget optimization'
+    vars:
+      query: 'Plan a 14-day trip through Europe visiting Paris, Rome, Barcelona, and Amsterdam with a $3000 budget. Optimize the route to minimize travel costs and maximize time in each city. Include specific flight options and calculate total costs.'
+    assert:
+      - type: contains-all
+        value: ['Paris', 'Rome', 'Barcelona', 'Amsterdam', 'budget', '$3000']
       - type: javascript
         value: |
           const response = output.response || output;
-          return typeof response === 'string' && 
-                 response.toLowerCase().includes('tokyo') &&
-                 response.toLowerCase().includes('december');
+          // Check for route optimization
+          return response.includes('route') || response.includes('optimal') || response.includes('optimize');
       - type: llm-rubric
         value: |
-          The response should include:
-          1. Flight recommendations
-          2. Hotel suggestions  
-          3. A daily itinerary
-          4. Weather information
-          Pass if at least 3 of these elements are present.
+          The response should demonstrate deep thinking by:
+          1. Analyzing different route permutations
+          2. Calculating specific costs for each option
+          3. Providing a clear recommendation with reasoning
+          4. Including a detailed day-by-day itinerary
+          Pass if at least 3 of these elements show thoughtful analysis.
 
-  # Weather-specific query
-  - description: 'Weather information request'
+  # Test 3: Real-time search integration
+  - description: 'Current flight prices with search tool'
     vars:
-      query: 'What is the weather like in Paris in April?'
+      query: 'Find the cheapest flights from San Francisco to Tokyo next month. Search for current prices and show me the best options.'
     assert:
       - type: javascript
         value: |
           const response = output.response || output;
-          return typeof response === 'string' && 
-                 response.toLowerCase().includes('paris') &&
-                 response.toLowerCase().includes('april');
+          // Should mention searching or current prices
+          return response.includes('search') || response.includes('current') || response.includes('found');
+      - type: contains-any
+        value: ['price', 'cost', '$', 'USD']
 
-  # Flight search
-  - description: 'Flight search request'
+  # Test 4: Budget calculation with code execution
+  - description: 'Detailed budget breakdown with calculations'
     vars:
-      query: 'Find flights from New York to London for Christmas week'
+      query: 'Calculate a detailed budget for a 7-day trip to Japan for 2 people. Include flights ($800/person), hotels, meals, transportation, and activities. Show the math and give me totals in USD and JPY.'
     assert:
       - type: javascript
         value: |
           const response = output.response || output;
-          return typeof response === 'string' &&
-                 response.toLowerCase().includes('flight') &&
-                 response.toLowerCase().includes('new york') &&
-                 response.toLowerCase().includes('london');
-
-  # Hotel search
-  - description: 'Hotel search with budget'
-    vars:
-      query: 'Find budget hotels in Barcelona under $100 per night'
-    assert:
-      - type: javascript
-        value: |
-          const response = output.response || output;
-          return typeof response === 'string' &&
-                 (response.toLowerCase().includes('budget') || response.toLowerCase().includes('affordable')) &&
-                 response.toLowerCase().includes('barcelona') &&
-                 response.toLowerCase().includes('hotel');
-
-  # Activity planning
-  - description: 'Activity planning request'
-    vars:
-      query: 'What are the top things to do in Rome for art lovers?'
-    assert:
-      - type: javascript
-        value: |
-          const response = output.response || output;
-          return typeof response === 'string' &&
-                 response.toLowerCase().includes('rome') &&
-                 response.toLowerCase().includes('art');
-
-  # Complex multi-city trip
-  - description: 'Multi-city trip planning'
-    vars:
-      query: 'Plan a 10-day trip visiting Paris, Rome, and Barcelona with a $3000 budget'
-    assert:
-      - type: javascript
-        value: |
-          const response = output.response || output;
-          const text = typeof response === 'string' ? response : '';
-          return text.toLowerCase().includes('paris') &&
-                 text.toLowerCase().includes('rome') &&
-                 text.toLowerCase().includes('barcelona');
+          // Check for calculations
+          return response.includes('$800') && 
+                 (response.includes('total') || response.includes('Total')) &&
+                 response.includes('JPY');
       - type: llm-rubric
-        value: |
-          The response should address the multi-city nature of the trip and mention all three cities.
+        value: 'Response should show actual calculations and conversions between USD and JPY'
 
-  # Date-specific request
-  - description: 'Specific date availability'
+  # Test 5: Comparative analysis (medium thinking)
+  - description: 'Destination comparison with pros/cons'
     vars:
-      query: 'Are there any flights from San Francisco to Tokyo on March 15, 2024?'
+      query: 'Compare Thailand vs Vietnam for a 2-week backpacking trip in terms of cost, safety, food, and experiences. Which would you recommend for a first-time solo traveler?'
+    assert:
+      - type: contains-all
+        value: ['Thailand', 'Vietnam', 'cost', 'safety', 'food']
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          // Should have comparison structure
+          return (response.includes('pros') || response.includes('Pros')) &&
+                 (response.includes('cons') || response.includes('Cons'));
+      - type: llm-rubric
+        value: 'Should provide a structured comparison with clear recommendation and reasoning'
+
+  # Test 6: Context retention (session management)
+  - description: 'Follow-up question using context'
+    vars:
+      query: 'What about vegetarian food options there?'
+      # This assumes previous context about a destination
     assert:
       - type: javascript
         value: |
           const response = output.response || output;
-          return typeof response === 'string' &&
-                 response.toLowerCase().includes('march') &&
-                 response.toLowerCase().includes('tokyo');
+          return response.includes('vegetarian') || response.includes('veg');
+      - type: not-contains
+        value: "I don't have enough context"
 
-  # Family travel
-  - description: 'Family travel planning'
+  # Test 7: Error handling for impossible requests
+  - description: 'Graceful handling of impossible request'
     vars:
-      query: 'Plan a family-friendly weekend in Orlando with 2 kids ages 8 and 10'
-    assert:
-      - type: javascript
-        value: |
-          const response = output.response || output;
-          return typeof response === 'string' &&
-                 response.toLowerCase().includes('orlando') &&
-                 (response.toLowerCase().includes('family') || response.toLowerCase().includes('kids'));
-
-  # Business travel
-  - description: 'Business travel request'
-    vars:
-      query: 'I need a hotel near Times Square for a business trip next Tuesday'
-    assert:
-      - type: javascript
-        value: |
-          const response = output.response || output;
-          return typeof response === 'string' &&
-                 response.toLowerCase().includes('times square') &&
-                 response.toLowerCase().includes('hotel');
-
-  # Last-minute travel
-  - description: 'Last-minute travel planning'
-    vars:
-      query: 'I need to fly to Chicago tomorrow for an emergency. What are my options?'
-    assert:
-      - type: javascript
-        value: |
-          const response = output.response || output;
-          return typeof response === 'string' &&
-                 response.toLowerCase().includes('chicago') &&
-                 (response.toLowerCase().includes('tomorrow') || response.toLowerCase().includes('flight'));
-
-  # Weekend getaway
-  - description: 'Weekend getaway suggestions'
-    vars:
-      query: 'Suggest a romantic weekend getaway near San Francisco'
-    assert:
-      - type: javascript
-        value: |
-          const response = output.response || output;
-          return typeof response === 'string' &&
-                 response.toLowerCase().includes('san francisco') &&
-                 (response.toLowerCase().includes('romantic') || response.toLowerCase().includes('weekend'));
-
-  # Error handling
-  - description: 'Handling unavailable destination'
-    vars:
-      query: 'Plan a trip to Atlantis next week'
+      query: 'Book me a flight to Mars leaving tomorrow'
     assert:
       - type: javascript
         value: |
           // Should handle gracefully without errors
-          return output !== null && output !== undefined;
+          return output !== null && output !== undefined && !output.error;
+      - type: llm-rubric
+        value: 'Should politely explain why the request cannot be fulfilled'
+
+  # Test 8: Structured output test
+  - description: 'Request for structured JSON output'
+    vars:
+      query: 'Give me a structured JSON response with flight options from NYC to London next week. Include airline, price, duration, and departure times.'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          try {
+            // Check if response contains valid JSON
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              JSON.parse(jsonMatch[0]);
+              return true;
+            }
+            return false;
+          } catch {
+            return false;
+          }
+
+  # Test 9: Tool authentication scenario
+  - description: 'Booking request requiring authentication'
+    vars:
+      query: 'Book the Hilton hotel in Tokyo for December 20-25'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          // Should mention booking process or authentication
+          return response.includes('book') || response.includes('Book') || 
+                 response.includes('reservation') || response.includes('authentication');
+
+  # Test 10: Performance test - large output
+  - description: 'Comprehensive 30-day world tour plan'
+    vars:
+      query: 'Plan a detailed 30-day around-the-world trip visiting 10 countries across 5 continents. Include daily activities, all transportation, accommodations, and a complete budget breakdown.'
+    assert:
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          // Should produce a long, detailed response
+          return response.length > 5000;
+      - type: contains-any
+        value: ['Day 1', 'Day 2', 'Day 3', 'itinerary', 'Itinerary']
+      - type: javascript
+        value: |
+          // Check performance metrics if available
+          if (output.performance) {
+            // Response should complete within reasonable time (30s)
+            return output.performance.total_duration < 30;
+          }
+          return true;
+
+  # Test 11: Caching behavior
+  - description: 'Repeated query to test caching'
+    vars:
+      query: 'What are the top attractions in Paris?'
+    assert:
+      - type: contains
+        value: 'Paris'
+      - type: javascript
+        value: |
+          // On second run, this might be cached
+          // Just ensure response is valid
+          return output.response && output.response.length > 100;
+
+  # Test 12: Advanced tool integration
+  - description: 'Query requiring multiple tools'
+    vars:
+      query: 'Search for the best-rated restaurants in Kyoto, calculate the average meal cost in USD, and recommend a food tour itinerary for 3 days.'
+    assert:
+      - type: contains-all
+        value: ['Kyoto', 'restaurant', 'USD']
+      - type: javascript
+        value: |
+          const response = output.response || output;
+          // Should show evidence of search and calculation
+          return (response.includes('search') || response.includes('found')) &&
+                 (response.includes('average') || response.includes('cost'));
+
+# Output configuration for better reporting
+outputs:
+  - file://output/results.json
+  - file://output/results.html
+
+# Scoring configuration
+scoring:
+  # Weigh complex queries more heavily
+  weights:
+    'Complex multi-city budget optimization': 2.0
+    'Detailed budget breakdown with calculations': 1.5
+    'Comprehensive 30-day world tour plan': 2.0
+    'Query requiring multiple tools': 1.5
