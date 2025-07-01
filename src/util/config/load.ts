@@ -474,7 +474,7 @@ export async function resolveConfigs(
   }
   // Standalone assertion mode
   if (cmdObj.assertions) {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'standalone assertions mode',
     });
     if (!cmdObj.modelOutputs) {
@@ -543,11 +543,11 @@ export async function resolveConfigs(
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
 
       ${chalk.white('Try running with:')}
-  
+
       ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
-  
+
       ${chalk.white('Or create a config with:')}
-  
+
       ${chalk.green(`${runCommand} init`)}
     `);
     process.exit(1);
