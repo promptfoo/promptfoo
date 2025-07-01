@@ -33,6 +33,7 @@ promptfoo eval
 ```
 
 For local development:
+
 ```bash
 PROMPTFOO_EVAL_TIMEOUT_MS=600000 npm run local -- eval -c examples/openai-deep-research/promptfooconfig.yaml
 ```
@@ -54,9 +55,9 @@ The model automatically decides when to use web search to provide comprehensive,
 providers:
   - id: openai:responses:o4-mini-deep-research
     config:
-      max_output_tokens: 50000  # Required for complete research responses
+      max_output_tokens: 50000 # Required for complete research responses
       tools:
-        - type: web_search_preview  # Required for deep research models
+        - type: web_search_preview # Required for deep research models
 ```
 
 ## Available Models

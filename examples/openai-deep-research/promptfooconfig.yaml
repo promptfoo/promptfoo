@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: OpenAI Deep Research API demonstration
 prompts:
-  - "Research and provide a comprehensive answer about {{topic}}"
+  - 'Research and provide a comprehensive answer about {{topic}}'
 providers:
   - id: openai:responses:o4-mini-deep-research
     config:
-      max_output_tokens: 50000  # Deep research models need high token limits
+      max_output_tokens: 50000 # Deep research models need high token limits
       tools:
         - type: web_search_preview
 tests:
