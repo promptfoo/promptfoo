@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
@@ -195,12 +196,10 @@ export default function Eval({ fetchId }: EvalOptions) {
     setComparisonEvalIds,
   ]);
 
-  /**
-   * Set the document title to the eval description or eval id.
-   */
-  useEffect(() => {
-    document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
-  }, [config, evalId]);
+  usePageMeta({
+    title: config?.description || evalId || 'Eval',
+    description: 'View evaluation results',
+  });
 
   /**
    * If and when a table is available, set loaded to true.

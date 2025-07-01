@@ -31,7 +31,6 @@ import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bed
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
-import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
@@ -41,6 +40,7 @@ import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
+import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
   HuggingfaceFeatureExtractionProvider,
@@ -383,32 +383,11 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      // Load Cloudflare AI
-      const splits = providerPath.split(':');
-      const modelType = splits[1];
-      const deploymentName = splits[2];
-
-      if (modelType === 'chat') {
-        return new CloudflareAiProviders.CloudflareAiChatCompletionProvider(
-          deploymentName,
-          providerOptions,
-        );
-      }
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CloudflareAiProviders.CloudflareAiEmbeddingProvider(
-          deploymentName,
-          providerOptions,
-        );
-      }
-      if (modelType === 'completion') {
-        return new CloudflareAiProviders.CloudflareAiCompletionProvider(
-          deploymentName,
-          providerOptions,
-        );
-      }
-      throw new Error(
-        `Unknown Cloudflare AI model type: ${modelType}. Use one of the following providers: cloudflare-ai:chat:<model name>, cloudflare-ai:completion:<model name>, cloudflare-ai:embedding:`,
-      );
+      const { createCloudflareAiProvider } = await import('./cloudflare-ai');
+      return createCloudflareAiProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -564,6 +543,25 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const modelName = providerPath.split(':')[1];
       return new GroqProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('helicone:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      // Parse helicone:model format (e.g., helicone:openai/gpt-4o)
+      const model = providerPath.substring('helicone:'.length);
+
+      if (!model) {
+        throw new Error(
+          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-3-5-sonnet)',
+        );
+      }
+
+      return new HeliconeGatewayProvider(model, providerOptions);
     },
   },
   {

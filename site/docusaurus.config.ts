@@ -8,7 +8,7 @@ const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
 
 const config: Config = {
-  title: 'promptfoo',
+  title: 'Promptfoo',
   tagline: 'Test your prompts',
   favicon: '/favicon.ico',
 
@@ -171,7 +171,7 @@ const config: Config = {
               label: 'Docs',
             },
             {
-              to: 'https://www.promptfoo.dev/docs/api-reference/',
+              to: '/docs/api-reference/',
               label: 'API Reference',
             },
             {

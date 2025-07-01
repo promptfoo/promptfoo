@@ -68,7 +68,6 @@ defaultTest:
 :::important Configuration Notes
 
 1. Configure both the `transformRequest` and `transformResponse` for your chatbot:
-
    - `transformRequest`: Formats the request as OpenAI-compatible messages
    - `transformResponse`: Extracts the response text from the JSON body
 

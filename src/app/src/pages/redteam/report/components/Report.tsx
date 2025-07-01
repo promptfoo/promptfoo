@@ -1,5 +1,7 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
@@ -39,6 +41,7 @@ import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {
+  const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
@@ -224,9 +227,10 @@ const App: React.FC = () => {
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
 
-  React.useEffect(() => {
-    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
-  }, [evalData, evalId]);
+  usePageMeta({
+    title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
+    description: 'Red team evaluation report',
+  });
 
   if (!evalData || !evalId) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
@@ -304,7 +308,7 @@ const App: React.FC = () => {
                   if (event.ctrlKey || event.metaKey) {
                     window.open(url, '_blank');
                   } else {
-                    window.location.href = url;
+                    navigate(url);
                   }
                 }}
               >

@@ -33,7 +33,6 @@ This example demonstrates how to use [Vertex AI models](https://www.promptfoo.de
    ```
 
 4. Set up authentication using one of these methods:
-
    - Authenticate with your Google account:
 
      ```sh
@@ -42,7 +41,6 @@ This example demonstrates how to use [Vertex AI models](https://www.promptfoo.de
 
    - Use a machine with an authorized service account
    - Use service account credentials file:
-
      1. Download your service account JSON
      2. Set the credentials path:
 
