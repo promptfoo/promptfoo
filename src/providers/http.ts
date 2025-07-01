@@ -359,7 +359,12 @@ export function processJsonBody(
   if (typeof rendered === 'string') {
     try {
       return JSON.parse(rendered);
-    } catch {
+    } catch (err) {
+      // JSON.parse failed, return the string as-is
+      // This string will be used directly as the request body without further JSON.stringify()
+      logger.debug(
+        `[HTTP Provider] Body is a string that failed JSON parsing, using as-is: ${String(err)}`,
+      );
       return rendered;
     }
   }
@@ -855,7 +860,9 @@ export class HttpProvider implements ApiProvider {
         headers: renderedConfig.headers,
         ...(method !== 'GET' && {
           body: contentTypeIsJson(headers)
-            ? JSON.stringify(renderedConfig.body)
+            ? typeof renderedConfig.body === 'string'
+              ? renderedConfig.body // Already a JSON string, use as-is
+              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
             : String(renderedConfig.body)?.trim(),
         }),
       },
