@@ -37,6 +37,11 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
+vi.mock('react-router-dom', () => ({
+  ...vi.importActual('react-router-dom'),
+  useNavigate: vi.fn(() => vi.fn()),
+}));
+
 vi.mock('./EvalOutputCell', () => {
   const MockEvalOutputCell = vi.fn(({ onRating }: { onRating: any }) => {
     return (
