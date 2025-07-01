@@ -181,4 +181,88 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(screen.getByText('10')).toBeInTheDocument(); // total (8 + 2)
     expect(screen.getByText('80%')).toBeInTheDocument(); // pass rate
   });
+
+  it('displays malformed JSON prompts without crashing', () => {
+    const malformedJsonPrompt = '{"key": "value"';
+    const propsWithMalformedJson = {
+      ...defaultProps,
+      failures: [
+        {
+          prompt: malformedJsonPrompt,
+          output: 'Test output',
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'Failed test',
+          },
+          result: createMockEvaluateResult({ pluginId: 'test-plugin' }),
+        },
+      ],
+    };
+
+    render(<RiskCategoryDrawer {...propsWithMalformedJson} />);
+
+    expect(screen.getByText(malformedJsonPrompt)).toBeInTheDocument();
+  });
+
+  it('should render complex object outputs without crashing', () => {
+    const complexOutput = {
+      level1: {
+        level2: {
+          level3: 'deep value',
+          level4: [1, 2, { a: 'b' }],
+        },
+      },
+    };
+
+    const stringifySpy = vi.spyOn(JSON, 'stringify');
+
+    const props = {
+      ...defaultProps,
+      failures: [
+        {
+          prompt: 'Test prompt',
+          output: JSON.stringify(complexOutput),
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'Failed test',
+          },
+          result: createMockEvaluateResult({}),
+        },
+      ],
+    };
+
+    render(<RiskCategoryDrawer {...props} />);
+
+    expect(stringifySpy).toHaveBeenCalledWith(complexOutput);
+    expect(screen.getByText(JSON.stringify(complexOutput))).toBeInTheDocument();
+  });
+});
+
+describe('RiskCategoryDrawer Component Invalid Category', () => {
+  it('should log an error and return null when an invalid category is provided', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const props = {
+      open: true,
+      onClose: vi.fn(),
+      category: 'invalid-category',
+      failures: [],
+      passes: [],
+      evalId: 'test-eval-123',
+      numPassed: 0,
+      numFailed: 0,
+      strategyStats: {},
+    };
+
+    const { container } = render(<RiskCategoryDrawer {...props} />);
+
+    expect(container.firstChild).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[RiskCategoryDrawer] Could not load category',
+      'invalid-category',
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
 });
