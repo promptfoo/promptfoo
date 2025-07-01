@@ -53,7 +53,7 @@ class Activity(BaseModel):
 class DayItinerary(BaseModel):
     """Itinerary for a single day"""
     day: int = Field(description="Day number of the trip")
-    date: date = Field(description="Date")
+    day_date: date = Field(description="Date")
     morning_activity: Optional[Activity] = Field(None, description="Morning activity")
     afternoon_activity: Optional[Activity] = Field(None, description="Afternoon activity")
     evening_activity: Optional[Activity] = Field(None, description="Evening activity")

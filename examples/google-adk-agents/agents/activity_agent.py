@@ -162,7 +162,7 @@ def create_itinerary(city: str, start_date: str, end_date: str,
             # Create day itinerary
             day_plan = DayItinerary(
                 day=day_num + 1,
-                date=current_date.date(),
+                day_date=current_date.date(),
                 morning_activity=morning,
                 afternoon_activity=afternoon,
                 evening_activity=evening,

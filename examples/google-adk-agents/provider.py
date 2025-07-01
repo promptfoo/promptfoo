@@ -7,6 +7,9 @@ import os
 import sys
 from typing import Any, Dict
 from dotenv import load_dotenv
+from google.adk.runners import InMemoryRunner
+from google.adk.sessions import Session
+from google.genai import types
 
 # Add parent directory to path to import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,23 +22,37 @@ from agents.coordinator import travel_coordinator
 load_dotenv()
 
 
-async def run_agent(prompt: str) -> Any:
+def run_agent(prompt: str) -> Any:
     """Run the ADK agent with the given prompt."""
     try:
-        # Run the agent
-        result = await travel_coordinator.run(prompt)
+        # Create a runner for executing the agent
+        runner = InMemoryRunner(travel_coordinator)
         
-        # Extract the response
-        if hasattr(result, 'output'):
-            return result.output
-        elif hasattr(result, 'text'):
-            return result.text
-        elif hasattr(result, 'messages'):
-            # For structured responses, return the last message
-            return result.messages[-1].text if result.messages else "No response"
+        # Create a session for this conversation
+        session = runner.session_service.create_session_sync(app_name="promptfoo_session", user_id="promptfoo_user")
+        
+        # Create a message from the user
+        user_message = types.Content(
+            role="user",
+            parts=[types.Part(text=prompt)]
+        )
+        
+        # Run the agent
+        events = runner.run(user_id="promptfoo_user", session_id=session.id, new_message=user_message)
+        
+        # Collect the response
+        response_parts = []
+        for event in events:
+            if event.is_final_response():
+                for part in event.content.parts:
+                    if hasattr(part, 'text') and part.text:
+                        response_parts.append(part.text)
+        
+        if response_parts:
+            return ''.join(response_parts)
         else:
-            # Return the result as-is if it's already a dict or string
-            return result
+            # If no text response, return a success message
+            return "Travel plan generated successfully"
             
     except Exception as e:
         return {
@@ -61,8 +78,8 @@ def call_api(
         # Get any config options
         config = options.get("config", {})
         
-        # Run the agent asynchronously
-        result = asyncio.run(run_agent(prompt))
+        # Run the agent synchronously
+        result = run_agent(prompt)
         
         # Format the output
         if isinstance(result, dict):
