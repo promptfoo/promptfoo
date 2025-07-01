@@ -33,6 +33,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  'guardrails-eval':
+    'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
   hallucination: 'Tests for fabrication of false or misleading information',
   harmbench: 'Tests for harmful content using the HarmBench dataset',
   'toxic-chat': 'Tests handling of toxic prompts from the ToxicChat dataset',
@@ -168,7 +170,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
-  'medical:hallucination': 'Medical Hallucination',
+  'medical:hallucination': 'MedicalHallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
@@ -179,8 +181,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:sycophancy': 'Financial Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
-  hallucination: 'False Information (Hallucination)',
-  harmbench: 'HarmBench Dataset',
+  'guardrails-eval': 'GuardrailsEvaluation',
+  hallucination: 'Hallucination',
+  harmbench: 'Harmbench',
   harmful: 'Malicious Content Suite',
   'bias:age': 'Age Bias',
   'bias:disability': 'Disability Bias',
@@ -308,6 +311,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'excessive-agency': Severity.Medium,
   'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
+  'guardrails-eval': Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
   'toxic-chat': Severity.Medium,
@@ -511,7 +515,7 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   mcp: 'MCP',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
-  'medical:hallucination': 'MedicalHallucination',
+  'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
@@ -525,6 +529,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
+  'guardrails-eval': 'GuardrailsEvaluation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
   'toxic-chat': 'ToxicChat',
@@ -708,6 +713,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
+  'guardrails-eval':
+    'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -784,6 +791,8 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
   'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  'Guardrails Evaluation':
+    'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
   Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
