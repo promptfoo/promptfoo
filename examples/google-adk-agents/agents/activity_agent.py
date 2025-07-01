@@ -167,7 +167,7 @@ def create_itinerary(city: str, start_date: str, end_date: str,
                 afternoon_activity=afternoon,
                 evening_activity=evening,
                 meals_recommendations=[
-                    f"Breakfast: Local cafe near your hotel",
+                    "Breakfast: Local cafe near your hotel",
                     f"Lunch: Restaurant in {morning.name.split(' in ')[0] if morning else 'city center'}",
                     f"Dinner: {city} specialty restaurant"
                 ]

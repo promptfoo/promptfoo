@@ -2,7 +2,7 @@
 Destination information tool for travel planning.
 """
 
-from typing import Dict, List
+from typing import Dict
 
 
 DESTINATION_DATA = {

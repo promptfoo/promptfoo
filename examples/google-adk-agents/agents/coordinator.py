@@ -2,8 +2,7 @@
 Travel coordinator agent - the main orchestrator of the travel planning system.
 """
 
-import os
-from datetime import datetime, date
+from datetime import datetime
 from google.adk.agents import Agent
 from google.adk.tools import google_search
 from tools.weather_tool import get_weather_forecast

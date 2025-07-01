@@ -41,7 +41,7 @@ This example demonstrates a multi-agent travel planning system with:
 
 - **Multi-Agent Architecture**: A coordinator agent that delegates to specialized agents
 - **Tool Integration**: Built-in tools (Google Search) and custom tools (weather, destination info)
-- **Structured Outputs**: Pydantic models for type-safe agent responses  
+- **Structured Outputs**: Pydantic models for type-safe agent responses
 - **Mock Data**: Example implementations that can be replaced with real APIs
 
 ### Agent Hierarchy
@@ -58,27 +58,34 @@ Travel Coordinator (Root Agent)
 ADK agents are designed to be run through the ADK command-line tools:
 
 ### Interactive Web UI
+
 ```bash
 adk web
 ```
+
 Then open http://localhost:8000 and select "travel_coordinator" from the dropdown.
 
 ### Command Line
+
 ```bash
 adk run .
 ```
 
 ### With Promptfoo
+
 ```bash
 npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
+**Note**: The promptfoo evaluation uses a mock provider (`mock_provider.py`) that simulates ADK agent responses, since ADK agents are designed to run through the `adk` CLI tool. For actual agent execution, use `adk web` or `adk run`.
+
 ## Test Scenarios
 
 The example includes tests for:
+
 - Weather inquiries
-- Flight searches  
+- Flight searches
 - Hotel recommendations
 - Activity planning
 - Complete trip planning
@@ -98,19 +105,24 @@ To customize this example:
 ## Troubleshooting
 
 ### "Module not found" errors
+
 Make sure you've installed dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### "GOOGLE_API_KEY not set" error
+
 Set your Google AI Studio API key:
+
 ```bash
 export GOOGLE_API_KEY=your_key_here
 export GOOGLE_GENAI_USE_VERTEXAI=FALSE
 ```
 
 ### Agent not appearing in ADK web
+
 Make sure you're running `adk web` from the example directory and that `__init__.py` properly exports the root agent.
 
 ## How It Works

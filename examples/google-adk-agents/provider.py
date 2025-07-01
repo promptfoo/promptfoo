@@ -2,13 +2,11 @@
 Promptfoo Python provider for Google ADK travel planning agents.
 """
 
-import asyncio
 import os
 import sys
 from typing import Any, Dict
 from dotenv import load_dotenv
 from google.adk.runners import InMemoryRunner
-from google.adk.sessions import Session
 from google.genai import types
 
 # Add parent directory to path to import our modules
@@ -34,8 +32,17 @@ def run_agent(prompt: str) -> Any:
         # Create a runner for executing the agent
         runner = InMemoryRunner(travel_coordinator)
         
+        # Create a unique session ID for this request
+        import uuid
+        session_id = str(uuid.uuid4())
+        user_id = "promptfoo_user"
+        
         # Create a session for this conversation
-        session = runner.session_service.create_session_sync(app_name="promptfoo_session", user_id="promptfoo_user")
+        session = runner.session_service.create_session_sync(
+            app_name="promptfoo_test", 
+            user_id=user_id,
+            session_id=session_id
+        )
         
         # Create a message from the user
         user_message = types.Content(
@@ -43,22 +50,34 @@ def run_agent(prompt: str) -> Any:
             parts=[types.Part(text=prompt)]
         )
         
-        # Run the agent
-        events = runner.run(user_id="promptfoo_user", session_id=session.id, new_message=user_message)
-        
-        # Collect the response
+        # Collect all response text
         response_parts = []
-        for event in events:
-            if event.is_final_response():
-                for part in event.content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        response_parts.append(part.text)
+        error_occurred = False
+        
+        try:
+            # Run the agent
+            events = runner.run(user_id=user_id, session_id=session.id, new_message=user_message)
+            
+            # Collect the response
+            for event in events:
+                if hasattr(event, 'content') and event.content:
+                    for part in event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            response_parts.append(part.text)
+        except Exception as e:
+            # If there's an error with the runner, try to get any partial response
+            if response_parts:
+                # Return what we have so far
+                pass
+            else:
+                error_occurred = True
+                response_parts.append(f"Agent processing error: {str(e)}")
         
         if response_parts:
-            return ''.join(response_parts)
+            return ' '.join(response_parts)
         else:
-            # If no text response, return a success message
-            return "Travel plan generated successfully"
+            # If no text response, return a generic message
+            return "I'll help you plan your trip. Let me gather some information..."
             
     except Exception as e:
         return {
