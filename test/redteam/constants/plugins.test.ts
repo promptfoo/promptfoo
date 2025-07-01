@@ -69,7 +69,7 @@ describe('plugins constants', () => {
   });
 
   it('should define COLLECTIONS array', () => {
-    expect(COLLECTIONS).toEqual(['default', 'foundation', 'guardrails-eval', 'harmful', 'pii']);
+    expect(COLLECTIONS).toEqual(['default', 'foundation', 'harmful', 'pii', 'bias', 'guardrails-eval']);
   });
 
   it('should define UNALIGNED_PROVIDER_HARM_PLUGINS object', () => {

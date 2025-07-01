@@ -1,3 +1,4 @@
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
@@ -60,7 +61,8 @@ const defaultConfig: Config = {
   strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: '',
   entities: [],
-  numTests: 10,
+  numTests: REDTEAM_DEFAULTS.NUM_TESTS,
+  maxConcurrency: REDTEAM_DEFAULTS.MAX_CONCURRENCY,
   applicationDefinition: {
     purpose: '',
     features: '',
@@ -267,7 +269,8 @@ export const EXAMPLE_CONFIG: Config = {
   strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: applicationDefinitionToPurpose(TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
-  numTests: 10,
+  numTests: REDTEAM_DEFAULTS.NUM_TESTS,
+  maxConcurrency: REDTEAM_DEFAULTS.MAX_CONCURRENCY,
   applicationDefinition: TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION,
 };
 

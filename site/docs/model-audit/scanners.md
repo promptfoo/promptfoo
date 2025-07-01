@@ -357,6 +357,22 @@ ModelAudit includes comprehensive file format detection for ambiguous file exten
 
 This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied instead of assuming it's a raw binary file.
 
+## HuggingFace URL Support
+
+ModelAudit can scan models directly from HuggingFace URLs without manual downloading. When a HuggingFace URL is provided, ModelAudit:
+
+1. **Downloads the model**: Uses the `huggingface-hub` library to download all model files to a temporary directory
+2. **Scans all files**: Applies appropriate scanners to each file based on its format (config.json, pytorch_model.bin, model.safetensors, etc.)
+3. **Cleans up**: Automatically removes downloaded files after scanning
+
+**Supported URL formats:**
+
+- `https://huggingface.co/user/model`
+- `https://hf.co/user/model`
+- `hf://user/model`
+
+This feature requires the `huggingface-hub` package to be installed.
+
 ## See Also
 
 - [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats

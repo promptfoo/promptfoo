@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { Container } from '@mui/material';
 import EvalsDataGrid from './components/EvalsDataGrid';
 
@@ -7,9 +8,7 @@ export default function EvalsIndexPage() {
   const navigate = useNavigate();
   const [offsetTop, setOffsetTop] = useState(0);
 
-  useEffect(() => {
-    document.title = 'Evals | promptfoo';
-  }, []);
+  usePageMeta({ title: 'Evals', description: 'Browse evaluation runs' });
 
   /**
    * Calculate the offset top of the container once it's mounted.

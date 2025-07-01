@@ -17,6 +17,7 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { isPromptfooSampleTarget } from './providers/shared';
 import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -735,7 +736,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.recordAndSendOnce('feature_used', {
+      telemetry.record('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {
@@ -1573,8 +1574,20 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
-      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
-      // isRedteam: Boolean(testSuite.redteam),
+      numPasses: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testPassCount || 0),
+        0,
+      ),
+      numFails: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testFailCount || 0),
+        0,
+      ),
+      numErrors: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testErrorCount || 0),
+        0,
+      ),
+      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+      isRedteam: Boolean(options.isRedteam),
     });
 
     // Update database signal file after all results are written

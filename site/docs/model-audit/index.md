@@ -49,6 +49,11 @@ promptfoo scan-model [OPTIONS] PATH...
 # Scan a single model file
 promptfoo scan-model model.pkl
 
+# Scan a model directly from HuggingFace without downloading
+promptfoo scan-model https://huggingface.co/bert-base-uncased
+promptfoo scan-model hf://microsoft/resnet-50
+promptfoo scan-model https://hf.co/gpt2
+
 # Scan multiple models and directories
 promptfoo scan-model model.pkl model2.h5 models_directory
 
@@ -57,11 +62,19 @@ promptfoo scan-model model.pkl --format json --output results.json
 
 # Add custom blacklist patterns
 promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious_net"
+
+# Enable verbose output
+promptfoo scan-model model.pkl --verbose
+
+# Set file size limits
+promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709120
 ```
 
-:::info
-You can also install the modelaudit binary directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
-:::
+:::info Alternative Installation and Usage
+
+- **Standalone**: Install modelaudit directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
+- **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
+  :::
 
 ### Options
 
@@ -74,6 +87,19 @@ You can also install the modelaudit binary directly using `pip install modelaudi
 | `--verbose`, `-v`   | Enable verbose output                                            |
 | `--max-file-size`   | Maximum file size to scan in bytes [default: unlimited]          |
 | `--max-total-size`  | Maximum total bytes to scan before stopping [default: unlimited] |
+
+## Web Interface
+
+Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual path selection, real-time progress tracking, and detailed results visualization.
+
+**Access:** Run `promptfoo view` and navigate to `http://localhost:15500/model-audit`
+
+**Key Features:**
+
+- Visual file/directory selection with current working directory context
+- GUI configuration for all scan options (blacklist patterns, timeouts, file limits)
+- Live scanning progress and tabbed results display with severity color coding
+- Scan history and automatic installation detection
 
 ## Supported Model Formats
 
@@ -99,6 +125,10 @@ ModelAudit can scan:
   - Raw PyTorch tensor files
   - Embedded executables (PE, ELF, Mach-O)
 - **Model configuration files** (`.json`, `.yaml`, etc.)
+- **HuggingFace URLs** - scan models directly from HuggingFace without downloading:
+  - `https://huggingface.co/user/model`
+  - `https://hf.co/user/model`
+  - `hf://user/model`
 
 ## Security Checks Performed
 
@@ -141,6 +171,18 @@ if [ $? -ne 0 ]; then
 fi
 ```
 
+### Exit Codes
+
+ModelAudit returns specific exit codes for automation:
+
+- **0**: No security issues found ✅
+- **1**: Security issues detected (warnings or critical) 🟡
+- **2**: Scan errors occurred (installation, file access, etc.) 🔴
+
+:::tip CI/CD Best Practice
+In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but don't necessarily block deployment. Only exit code 2 represents actual scan failures.
+:::
+
 ## Requirements
 
 ModelAudit is included with Promptfoo, but specific model formats may require additional dependencies:
@@ -160,4 +202,7 @@ pip install pyyaml
 
 # For SafeTensors support
 pip install safetensors
+
+# For HuggingFace URL scanning
+pip install huggingface-hub
 ```
