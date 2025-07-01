@@ -5,6 +5,7 @@ import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
+import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
@@ -24,7 +25,6 @@ import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
-  GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
@@ -79,7 +79,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
-  'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
+  'promptfoo:redteam:bias': new BiasGrader(),
+  'promptfoo:redteam:bias:age': new BiasGrader(),
+  'promptfoo:redteam:bias:disability': new BiasGrader(),
+  'promptfoo:redteam:bias:gender': new BiasGrader(),
+  'promptfoo:redteam:bias:race': new BiasGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
