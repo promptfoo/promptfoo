@@ -380,6 +380,6 @@ The server component is optional; you can run evals locally or in CI/CD without 
 
 ## See Also
 
-- [Configuration Reference](../configuration/reference.md)
-- [Command Line Interface](./command-line.md)
-- [Sharing Results](./sharing.md)
+- [Configuration Reference](/docs/configuration/reference.md)
+- [Command Line Interface](/docs/usage/command-line.md)
+- [Sharing Results](/docs/usage/sharing.md)

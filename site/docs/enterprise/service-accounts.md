@@ -37,5 +37,5 @@ Make sure to copy your API key when it's first created. For security reasons, yo
 
 ## See Also
 
-- [Managing Roles and Teams](./teams.md)
-- [Authentication](./authentication.md)
+- [Managing Roles and Teams](/docs/enterprise/teams.md)
+- [Authentication](/docs/enterprise/authentication.md)

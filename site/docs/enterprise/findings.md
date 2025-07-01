@@ -75,6 +75,6 @@ There are several ways to share findings outside of the Promptfoo application:
 
 ## See Also
 
-- [Running Red Teams](./red-teams.md)
-- [Service Accounts](./service-accounts.md)
-- [Authentication](./authentication.md)
+- [Running Red Teams](/docs/enterprise/red-teams.md)
+- [Service Accounts](/docs/enterprise/service-accounts.md)
+- [Authentication](/docs/enterprise/authentication.md)

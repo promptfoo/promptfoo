@@ -76,7 +76,7 @@ The plugin evaluates model responses using the same methodology as NVIDIA's rese
 
 ## Related Concepts
 
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types.md)
 - [Harmful Content Plugin](harmful.md)
 - [BeaverTails Plugin](beavertails.md)
 - [HarmBench Plugin](harmbench.md)

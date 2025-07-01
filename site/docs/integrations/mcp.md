@@ -170,7 +170,7 @@ In addition to the general MCP integration described above, OpenAI's Responses A
 - Authentication header support for secured MCP servers
 - Tool filtering capabilities
 
-For detailed information about using MCP with OpenAI's Responses API, see the [OpenAI Provider MCP documentation](../providers/openai.md#mcp-model-context-protocol-support).
+For detailed information about using MCP with OpenAI's Responses API, see the [OpenAI Provider MCP documentation](/docs/providers/openai.md#mcp-model-context-protocol-support).
 
 ## Troubleshooting
 
@@ -180,5 +180,5 @@ For detailed information about using MCP with OpenAI's Responses API, see the [O
 
 ## See Also
 
-- [Configuration Reference](../configuration/reference.md)
-- [Provider Configuration](../providers/index.md)
+- [Configuration Reference](/docs/configuration/reference.md)
+- [Provider Configuration](/docs/providers/index.md)

@@ -14,7 +14,7 @@ Promptfoo supports both basic authentication and SSO through SAML 2.0 and OIDC. 
 
 ## Basic Authentication
 
-Promptfoo supports basic authentication into the application through `auth.promptfoo.app`. When an organization is created, the global admin will receive an email from Promptfoo to login. Users, teams, and roles will be created in the Organization Settings of the Promptfoo application, which is detailed further in the [Teams documentation](./teams.md).
+Promptfoo supports basic authentication into the application through `auth.promptfoo.app`. When an organization is created, the global admin will receive an email from Promptfoo to login. Users, teams, and roles will be created in the Organization Settings of the Promptfoo application, which is detailed further in the [Teams documentation](/docs/enterprise/teams.md).
 
 You can also authenticate into the application using a magic link. To do this, navigate to `auth.promptfoo.app` and click the "Login with a magic link" button. You will receive an email with a link to login. If you do not receive an email, please be sure to check your spam folder.
 

@@ -261,6 +261,6 @@ Promptfoo provides HLE eval capabilities through automated dataset integration, 
 
 ### Promptfoo Integration
 
-- [HuggingFace Provider Guide](../providers/huggingface.md) - Set up dataset access
-- [Model Grading Setup](../../configuration/expected-outputs/model-graded/) - Configure automated grading
-- [Anthropic Provider](../providers/anthropic.md) - Configure Claude 4
+- [HuggingFace Provider Guide](/docs/providers/huggingface.md) - Set up dataset access
+- [Model Grading Setup](/docs/configuration/expected-outputs/model-graded) - Configure automated grading
+- [Anthropic Provider](/docs/providers/anthropic.md) - Configure Claude 4

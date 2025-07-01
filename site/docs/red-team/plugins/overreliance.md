@@ -75,6 +75,6 @@ By incorporating the Overreliance plugin in your LLM red teaming strategy, you c
 
 - [Hallucination in LLMs](hallucination.md)
 - [Excessive Agency in AI Systems](excessive-agency.md)
-- [Misinformation Handling](../llm-vulnerability-types.md#misinformation-and-misuse)
+- [Misinformation Handling](/docs/red-team/llm-vulnerability-types.md#misinformation-and-misuse)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

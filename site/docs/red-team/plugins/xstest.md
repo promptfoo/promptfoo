@@ -86,6 +86,6 @@ The dataset includes:
 
 ## Related Concepts
 
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [DoNotAnswer](./donotanswer.md)
-- [BeaverTails](./beavertails.md)
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types.md)
+- [DoNotAnswer](/docs/red-team/plugins/donotanswer.md)
+- [BeaverTails](/docs/red-team/plugins/beavertails.md)

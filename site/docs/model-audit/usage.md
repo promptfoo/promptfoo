@@ -249,7 +249,7 @@ promptfoo scan-model --verbose --max-file-size 1000000 path/to/models/
 
 When using ModelAudit through Promptfoo, you get additional benefits:
 
-- **Web Interface**: Access via `promptfoo view` at `/model-audit` (see [overview](./index.md#web-interface) for details)
+- **Web Interface**: Access via `promptfoo view` at `/model-audit` (see [overview](/docs/model-audit/index.md#web-interface) for details)
 - **Integrated Workflows**: Seamless integration with Promptfoo evaluation pipelines
 - **Unified Installation**: Single `npm install` gets both Promptfoo and ModelAudit integration
 

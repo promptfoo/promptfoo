@@ -375,6 +375,6 @@ This feature requires the `huggingface-hub` package to be installed.
 
 ## See Also
 
-- [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
-- [Installation & Usage](./usage.md) - How to install and use ModelAudit
-- [Command Line Reference](./usage.md#command-line-interface) - CLI options and examples
+- [ModelAudit Overview](/docs/model-audit/index.md) - Introduction to ModelAudit and supported formats
+- [Installation & Usage](/docs/model-audit/usage.md) - How to install and use ModelAudit
+- [Command Line Reference](/docs/model-audit/usage.md#command-line-interface) - CLI options and examples

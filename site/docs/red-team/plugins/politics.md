@@ -83,7 +83,7 @@ By incorporating the Politics plugin in your LLM red teaming strategy, you can i
 
 ## Related Concepts
 
-- [Misinformation and Disinformation](../llm-vulnerability-types.md#misinformation-and-misuse)
+- [Misinformation and Disinformation](/docs/red-team/llm-vulnerability-types.md#misinformation-and-misuse)
 - [Excessive Agency](excessive-agency.md)
 - [Overreliance](overreliance.md)
 

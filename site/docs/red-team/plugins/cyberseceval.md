@@ -108,6 +108,6 @@ Outputs are graded as either PASS (secure) or FAIL (vulnerable) based on these c
 
 ## Related Concepts
 
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [Prompt Injection](../strategies/prompt-injection.md)
-- [Multilingual Attacks](../strategies/multilingual.md)
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types.md)
+- [Prompt Injection](/docs/red-team/strategies/prompt-injection.md)
+- [Multilingual Attacks](/docs/red-team/strategies/multilingual.md)

@@ -113,4 +113,4 @@ providers:
 - [Model gallery](https://fal.ai/models)
 - [API documentation](https://docs.fal.ai/)
 - [fal.ai Discord community](https://discord.gg/fal-ai)
-- [Configuration Reference](../configuration/reference.md)
+- [Configuration Reference](/docs/configuration/reference.md)

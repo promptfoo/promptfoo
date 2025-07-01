@@ -46,5 +46,5 @@ Promptfoo Enterprise supports the following permissions:
 
 ## See Also
 
-- [Authentication](./authentication.md)
-- [Service Accounts](./service-accounts.md)
+- [Authentication](/docs/enterprise/authentication.md)
+- [Service Accounts](/docs/enterprise/service-accounts.md)

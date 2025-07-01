@@ -114,6 +114,6 @@ By incorporating the Policy plugin in your LLM red teaming strategy, you can ens
 
 - [RBAC (Role-Based Access Control)](rbac.md)
 - [Excessive Agency](excessive-agency.md)
-- [Misinformation and Misuse](../llm-vulnerability-types.md#misinformation-and-misuse)
+- [Misinformation and Misuse](/docs/red-team/llm-vulnerability-types.md#misinformation-and-misuse)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

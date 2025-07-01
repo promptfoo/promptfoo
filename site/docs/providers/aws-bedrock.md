@@ -663,8 +663,8 @@ When using the Knowledge Base provider, the response will include:
 
 ## See Also
 
-- [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
-- [Configuration Reference](../configuration/reference.md) - Complete configuration options for promptfoo
-- [Command Line Interface](../usage/command-line.md) - How to use promptfoo from the command line
-- [Provider Options](../providers/index.md) - Overview of all supported providers
+- [Amazon SageMaker Provider](/docs/providers/sagemaker.md) - For custom-deployed or fine-tuned models on AWS
+- [Configuration Reference](/docs/configuration/reference.md) - Complete configuration options for promptfoo
+- [Command Line Interface](/docs/usage/command-line.md) - How to use promptfoo from the command line
+- [Provider Options](/docs/providers/index.md) - Overview of all supported providers
 - [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Runnable examples of Bedrock integration, including Knowledge Base examples

@@ -68,7 +68,7 @@ By incorporating the Competitors plugin in your LLM red teaming strategy, you ca
 
 ## Related Concepts
 
-- [Brand Protection](../llm-vulnerability-types.md#misinformation-and-misuse)
+- [Brand Protection](/docs/red-team/llm-vulnerability-types.md#misinformation-and-misuse)
 - [Excessive Agency](excessive-agency.md)
 - [Overreliance](overreliance.md)
 

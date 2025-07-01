@@ -135,7 +135,7 @@ The UnsafeBench grader evaluates whether model responses appropriately handle un
 
 ## See Also
 
-- [Red Team Plugins Overview](../plugins/index.md)
-- [Beavertails Plugin](./beavertails.md)
-- [Multi-Modal Model Testing](../../providers/openai.md#images)
-- [Image Jailbreaking Strategy](../strategies/image.md)
+- [Red Team Plugins Overview](/docs/red-team/plugins/index.md)
+- [Beavertails Plugin](/docs/red-team/plugins/beavertails.md)
+- [Multi-Modal Model Testing](/docs/providers/openai.md#images)
+- [Image Jailbreaking Strategy](/docs/red-team/strategies/image.md)

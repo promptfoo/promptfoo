@@ -1215,7 +1215,7 @@ To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY
 
 ## Agents SDK Integration
 
-Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
+Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](/docs/providers/python.md).
 
 ```yaml title="promptfooconfig.yaml"
 providers:

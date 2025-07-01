@@ -41,9 +41,9 @@ redteam:
 
 ## Related Concepts
 
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [Prompt Injection](../strategies/prompt-injection.md)
-- [Jailbreak strategies](../strategies/composite-jailbreaks.md)
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types.md)
+- [Prompt Injection](/docs/red-team/strategies/prompt-injection.md)
+- [Jailbreak strategies](/docs/red-team/strategies/composite-jailbreaks.md)
 
 ## License
 

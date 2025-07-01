@@ -180,5 +180,5 @@ providers:
 
 - [Cloudflare Workers AI Models](https://developers.cloudflare.com/workers-ai/models/) - Complete model catalog
 - [Cloudflare Workers AI OpenAI Compatibility](https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/) - OpenAI-compatible endpoints
-- [OpenAI Provider](./openai.md) - For comparison with OpenAI models
-- [Getting Started with Promptfoo](../getting-started.md) - Basic setup guide
+- [OpenAI Provider](/docs/providers/openai.md) - For comparison with OpenAI models
+- [Getting Started with Promptfoo](/docs/getting-started.md) - Basic setup guide

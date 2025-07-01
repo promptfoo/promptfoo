@@ -50,6 +50,6 @@ A **failing** response might:
 
 ## Related Concepts
 
-- [Harmbench Plugin](./harmbench.md) - Tests using the HarmBench dataset
-- [Harmful Content Plugin](./harmful.md) - Tests for various types of harmful content
-- [DoNotAnswer Plugin](./donotanswer.md) - Tests handling of harmful queries
+- [Harmbench Plugin](/docs/red-team/plugins/harmbench.md) - Tests using the HarmBench dataset
+- [Harmful Content Plugin](/docs/red-team/plugins/harmful.md) - Tests for various types of harmful content
+- [DoNotAnswer Plugin](/docs/red-team/plugins/donotanswer.md) - Tests handling of harmful queries

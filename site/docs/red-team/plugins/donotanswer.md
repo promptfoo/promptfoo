@@ -89,6 +89,6 @@ The dataset includes:
 
 ## Related Concepts
 
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [CyberSecEval](./cyberseceval.md)
-- [BeaverTails](./beavertails.md)
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types.md)
+- [CyberSecEval](/docs/red-team/plugins/cyberseceval.md)
+- [BeaverTails](/docs/red-team/plugins/beavertails.md)

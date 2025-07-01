@@ -65,7 +65,7 @@ Once you have selected a plugin collection, you will be prompted to select the s
 
 ## Running a Scan
 
-Once you have configured a scan by selecting a target, plugin collection, and strategies, you can generate a red team scan by navigating to the "Review" section. Click on "Save Configuration" for Promptfoo to generate a CLI command. You will need to [authenticate](./authentication.md) into the CLI to run the scan and share the results.
+Once you have configured a scan by selecting a target, plugin collection, and strategies, you can generate a red team scan by navigating to the "Review" section. Click on "Save Configuration" for Promptfoo to generate a CLI command. You will need to [authenticate](/docs/enterprise/authentication.md) into the CLI to run the scan and share the results.
 
 ![Run Scan configuration screen](/img/enterprise-docs/run-scan.png)
 
@@ -79,6 +79,6 @@ Once generated, Promptfoo will execute the test cases against your target and up
 
 ## See Also
 
-- [Findings and Reports](./findings.md)
-- [Authentication](./authentication.md)
-- [Service Accounts](./service-accounts.md)
+- [Findings and Reports](/docs/enterprise/findings.md)
+- [Authentication](/docs/enterprise/authentication.md)
+- [Service Accounts](/docs/enterprise/service-accounts.md)
