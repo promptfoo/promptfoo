@@ -144,6 +144,8 @@ export async function runPython(
     mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
+    // Inherit stdio to allow interactive debugging with tools like `pdb`.
+    stdio: 'inherit',
   };
 
   try {
@@ -154,11 +156,11 @@ export async function runPython(
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
 
-        pyshell.stdout.on('data', (chunk: Buffer) => {
+        pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());
         });
 
-        pyshell.stderr.on('data', (chunk: Buffer) => {
+        pyshell.stderr?.on('data', (chunk: Buffer) => {
           logger.error(chunk.toString('utf-8').trim());
         });
 
