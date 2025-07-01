@@ -14,12 +14,22 @@ npx promptfoo@latest init --example google-adk-agents
 
 ```bash
 cd google-adk-agents
+
+# Install Python dependencies (required!)
 pip install -r requirements.txt
+
+# Set environment variables
 export GOOGLE_API_KEY=your_google_ai_studio_api_key_here
 export GOOGLE_GENAI_USE_VERTEXAI=FALSE
+
+# Run evaluation
 npx promptfoo@latest eval
+
+# View results
 npx promptfoo@latest view
 ```
+
+**Note**: Make sure to install the Python dependencies (`pip install -r requirements.txt`) before running the evaluation, as this example requires the `google-adk` package.
 
 ## What This Shows
 
@@ -46,6 +56,7 @@ Each agent has specific tools and responsibilities, working together to create c
 ## Example Usage
 
 Ask the coordinator to:
+
 - "Plan a 3-day trip to Tokyo for next month"
 - "Find flights from NYC to London in December"
 - "Suggest family-friendly hotels in Paris under $200/night"
@@ -69,17 +80,20 @@ Ask the coordinator to:
 ## Key Features Demonstrated
 
 ### Multi-Agent Coordination
+
 ```python
 # Coordinator delegates to specialized agents
 sub_agents=[flight_agent, hotel_agent, activity_agent]
 ```
 
 ### Tool Integration
+
 - Built-in Google Search for real-time data
 - Custom weather and destination tools
 - Function tools with proper error handling
 
 ### Structured Outputs
+
 ```python
 class TravelPlan(BaseModel):
     destination: str
@@ -91,6 +105,7 @@ class TravelPlan(BaseModel):
 ```
 
 ### Comprehensive Testing
+
 - Multiple assertion types (JSON schema, Python, LLM rubric)
 - Edge case handling
 - Multi-turn conversations
@@ -99,8 +114,16 @@ class TravelPlan(BaseModel):
 ## Running Tests
 
 The evaluation tests various scenarios:
+
 - Basic trip planning requests
 - Budget constraints
 - Date availability
 - Multi-city trips
-- Error handling 
+- Error handling
+
+## Troubleshooting
+
+If you encounter `ModuleNotFoundError: No module named 'google.adk'`:
+1. Make sure you're in the example directory: `cd google-adk-agents`
+2. Install the requirements: `pip install -r requirements.txt`
+3. Consider using a virtual environment to avoid conflicts

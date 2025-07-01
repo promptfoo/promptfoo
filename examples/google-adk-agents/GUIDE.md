@@ -35,6 +35,7 @@ travel_coordinator = Agent(
 ```
 
 Each sub-agent has its own:
+
 - **Specialized knowledge domain**
 - **Custom tools**
 - **Focused instructions**
@@ -44,11 +45,13 @@ Each sub-agent has its own:
 The example demonstrates various tool types:
 
 #### Built-in Tools
+
 ```python
 from google.adk.tools import google_search
 ```
 
 #### Custom Function Tools
+
 ```python
 def search_flights(origin: str, destination: str, departure_date: str) -> dict:
     """Custom tool for flight search"""
@@ -56,7 +59,9 @@ def search_flights(origin: str, destination: str, departure_date: str) -> dict:
 ```
 
 #### Tool Composition
+
 Agents can use multiple tools together:
+
 ```python
 tools=[search_flights, google_search]
 ```
@@ -187,23 +192,27 @@ session.state["user_preferences"] = {
 ## Best Practices
 
 ### 1. Agent Specialization
+
 - Keep agents focused on specific domains
 - Use clear, descriptive names
 - Document agent capabilities in descriptions
 
 ### 2. Tool Design
+
 - Make tools atomic and reusable
 - Use clear parameter names and types
 - Include comprehensive docstrings
 - Handle errors gracefully
 
 ### 3. Prompt Engineering
+
 - Be specific in instructions
 - Include examples when needed
 - Set clear boundaries and constraints
 - Guide output format
 
 ### 4. Testing
+
 - Test each agent independently
 - Test agent coordination
 - Include edge cases
@@ -212,6 +221,7 @@ session.state["user_preferences"] = {
 ## Common Patterns
 
 ### Delegation Pattern
+
 The coordinator delegates to specialists based on request type:
 
 ```python
@@ -222,6 +232,7 @@ elif "hotel" in user_request:
 ```
 
 ### Sequential Processing
+
 Process information in logical order:
 
 ```python
@@ -232,6 +243,7 @@ Process information in logical order:
 ```
 
 ### Information Aggregation
+
 Combine outputs from multiple agents:
 
 ```python
@@ -260,18 +272,21 @@ combined_plan = merge_results(flight_results, hotel_results)
 ### Debug Tips
 
 1. Enable verbose logging:
+
 ```python
 import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
 
 2. Test tools independently:
+
 ```python
 result = search_flights("NYC", "LON", "2024-12-25")
 print(result)
 ```
 
 3. Use the test script:
+
 ```bash
 python test_example.py
 ```
@@ -290,4 +305,4 @@ python test_example.py
 - [Promptfoo Documentation](https://promptfoo.dev)
 - [Google AI Studio](https://aistudio.google.com)
 
-Happy building with ADK! 🚀 
+Happy building with ADK! 🚀
