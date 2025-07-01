@@ -807,8 +807,15 @@ export const TestSuiteSchema = z.object({
   // scenarios
   scenarios: z.array(ScenarioSchema).optional(),
 
-  // Default test case config
-  defaultTest: TestCaseSchema.partial().optional(),
+  // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
+  defaultTest: z
+    .union([
+      z.string().refine((val) => val.startsWith('file://'), {
+        message: 'defaultTest string must start with file://',
+      }),
+      TestCaseSchema.partial().omit({ description: true }),
+    ])
+    .optional(),
 
   // Nunjucks filters
   nunjucksFilters: NunjucksFilterMapSchema.optional(),
@@ -938,7 +945,14 @@ export const TestSuiteConfigSchema = z.object({
   scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
-  defaultTest: TestCaseSchema.partial().omit({ description: true }).optional(),
+  defaultTest: z
+    .union([
+      z.string().refine((val) => val.startsWith('file://'), {
+        message: 'defaultTest string must start with file://',
+      }),
+      TestCaseSchema.partial().omit({ description: true }),
+    ])
+    .optional(),
 
   // Path to write output. Writes to console/web viewer if not set.
   outputPath: z.union([z.string(), z.array(z.string())]).optional(),

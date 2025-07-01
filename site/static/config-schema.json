@@ -895,34 +895,41 @@
           }
         },
         "defaultTest": {
-          "type": "object",
-          "properties": {
-            "vars": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "provider": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
-            },
-            "providerOutput": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
-            },
-            "assert": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
-            },
-            "assertScoringFunction": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
-            },
-            "options": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
-            },
-            "threshold": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
-            },
-            "metadata": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+            {
+              "type": "object",
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
+                },
+                "provider": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
+                },
+                "providerOutput": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
+                },
+                "assert": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+                },
+                "assertScoringFunction": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                },
+                "options": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
+                },
+                "threshold": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
+                },
+                "metadata": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+                }
+              },
+              "additionalProperties": false
             }
-          },
-          "additionalProperties": false
+          ]
         },
         "outputPath": {
           "anyOf": [

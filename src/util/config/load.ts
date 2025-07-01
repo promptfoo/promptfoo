@@ -511,7 +511,22 @@ export async function resolveConfigs(
 
   cliState.basePath = basePath;
 
-  const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
+  // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
+  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
+
+  // Load defaultTest from file:// reference if needed
+  let processedDefaultTest: Partial<TestCase> | undefined;
+  if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
+    // Set basePath in cliState temporarily for file resolution
+    const originalBasePath = cliState.basePath;
+    cliState.basePath = basePath;
+    const loaded = maybeLoadFromExternalFile(defaultTestRaw);
+    cliState.basePath = originalBasePath;
+    processedDefaultTest = loaded as Partial<TestCase>;
+  } else if (defaultTestRaw) {
+    processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+  }
+
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
@@ -523,7 +538,7 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
-    defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
+    defaultTest: processedDefaultTest ? await readTest(processedDefaultTest, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: fileConfig.extensions || defaultConfig.extensions || [],

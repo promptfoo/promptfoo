@@ -6,21 +6,8 @@ providers:
 prompts:
   - 'Translate the following text to {{language}}: {{text}}.  IMPORTANT: Ensure the response is less than 100 characters'
 
-defaultTest:
-  assert:
-    - type: llm-rubric
-      value: Rate the accuracy of the translation of {{text}} from English to {{language}}
-      metric: accuracy
-    - type: llm-rubric
-      value: Rate the fluency of the translation of {{text}} from English to {{language}}
-      metric: fluency
-    - type: llm-rubric
-      value: Rate the grammar of the translation of {{text}} from English to {{language}}
-      metric: grammar
-  options:
-    provider:
-      text: openai:gpt-4.1-mini
-      embedding: openai:embedding:text-embedding-3-small
+# Load default test configuration from external file
+defaultTest: file://shared/defaultTest.yaml
 
 tests:
   - description: Default scoring function (geometric mean)
