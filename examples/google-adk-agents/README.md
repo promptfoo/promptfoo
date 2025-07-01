@@ -20,7 +20,11 @@ cd google-adk-agents
 # Install Python dependencies (required!)
 pip install -r requirements.txt
 
-# Set environment variables
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env and add your API key
+
+# Or set environment variables directly
 export GOOGLE_API_KEY=your_google_ai_studio_api_key_here
 export GOOGLE_GENAI_USE_VERTEXAI=FALSE
 
@@ -35,7 +39,7 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
-**Note**: Make sure to install the Python dependencies and set up your Google API key before running.
+**Important**: You must have a valid Google API key to run this example. Get one from [Google AI Studio](https://makersuite.google.com/app/apikey).
 
 ## What This Shows
 
@@ -80,7 +84,13 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
-**Note**: The promptfoo evaluation uses a mock provider (`mock_provider.py`) that simulates ADK agent responses, since ADK agents are designed to run through the `adk` CLI tool. For actual agent execution, use `adk web` or `adk run`.
+**Note**: The promptfoo evaluation uses the real ADK provider (`provider.py`). However, keep in mind:
+
+- ADK agents are primarily designed to run through the `adk` CLI tool (`adk web` or `adk run`)
+- Due to ADK session management limitations, the provider uses the Gemini API directly with agent instructions
+- This approach provides meaningful responses while avoiding InMemoryRunner session issues
+- For best interactive agent testing with full ADK features, use `adk web` or `adk run`
+- The promptfoo evaluation requires a valid GOOGLE_API_KEY to function
 
 ## Test Scenarios
 

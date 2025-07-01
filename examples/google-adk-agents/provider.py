@@ -1,13 +1,15 @@
 """
 Promptfoo Python provider for Google ADK travel planning agents.
+
+This provider uses the Gemini API directly with agent instructions rather than
+the ADK InMemoryRunner, which has session management limitations when used
+programmatically outside of the ADK CLI tools.
 """
 
 import os
 import sys
 from typing import Any, Dict
 from dotenv import load_dotenv
-from google.adk.runners import InMemoryRunner
-from google.genai import types
 
 # Add parent directory to path to import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -20,61 +22,51 @@ from agents.coordinator import travel_coordinator
 import pathlib
 
 current_dir = pathlib.Path(__file__).parent
-# Try loading from current directory first
-load_dotenv(current_dir / ".env")
-# Try loading from parent directories
-load_dotenv(current_dir.parent / ".env")
-load_dotenv(current_dir.parent.parent / ".env")
+# Try loading from parent directories (pf-codium root)
+load_dotenv(current_dir.parent.parent / ".env", override=True)
+# Then try parent directory
+load_dotenv(current_dir.parent / ".env", override=True)
+# Finally try current directory
+load_dotenv(current_dir / ".env", override=True)
 
 
 def run_agent(prompt: str) -> Any:
     """Run the ADK agent with the given prompt."""
     try:
-        # Create a runner for executing the agent
-        runner = InMemoryRunner(travel_coordinator)
+        # Use google.genai which is the correct module from ADK
+        from google import genai
+        
+        # Configure the API
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            return {"error": "GOOGLE_API_KEY not set"}
+            
+        # Create a client
+        client = genai.Client(api_key=api_key)
+        
+        # Construct a prompt that includes the coordinator agent's instruction
+        full_prompt = f"""You are a travel planning coordinator with access to specialized agents.
 
-        # Create a unique session ID for this request
-        import uuid
+{travel_coordinator.instruction}
 
-        session_id = str(uuid.uuid4())
-        user_id = "promptfoo_user"
+User Request: {prompt}
 
-        # Create a session for this conversation
-        session = runner.session_service.create_session_sync(
-            app_name="promptfoo_test", user_id=user_id, session_id=session_id
+Please provide a comprehensive response as if you were coordinating with your team of flight, hotel, and activity agents."""
+
+        # Generate response using the Gemini model
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-preview-04-17",
+            contents=full_prompt
         )
-
-        # Create a message from the user
-        user_message = types.Content(role="user", parts=[types.Part(text=prompt)])
-
-        # Collect all response text
-        response_parts = []
-
-        try:
-            # Run the agent
-            events = runner.run(
-                user_id=user_id, session_id=session.id, new_message=user_message
-            )
-
-            # Collect the response
-            for event in events:
-                if hasattr(event, "content") and event.content:
-                    for part in event.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            response_parts.append(part.text)
-        except Exception as e:
-            # If there's an error with the runner, try to get any partial response
-            if not response_parts:
-                response_parts.append(f"Agent processing error: {str(e)}")
-
-        if response_parts:
-            return " ".join(response_parts)
+        
+        if response.text:
+            return response.text
         else:
-            # If no text response, return a generic message
             return "I'll help you plan your trip. Let me gather some information..."
-
+            
     except Exception as e:
-        return {"error": str(e), "error_type": type(e).__name__}
+        # If there's an issue with the direct approach, return error
+        return f"Error: {str(e)}. Note: ADK agents are best run through 'adk web' or 'adk run' CLI tools."
 
 
 def call_api(

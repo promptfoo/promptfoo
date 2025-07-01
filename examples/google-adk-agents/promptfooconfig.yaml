@@ -5,9 +5,8 @@ prompts:
   - '{{query}}'
 
 providers:
-  # Use mock provider for testing (real ADK agents run through CLI)
-  - id: file://mock_provider.py
-    label: ADK Travel Coordinator (Mock)
+  - id: file://provider.py
+    label: ADK Travel Coordinator
 
 tests:
   # Basic trip planning
