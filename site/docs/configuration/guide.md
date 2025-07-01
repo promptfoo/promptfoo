@@ -336,6 +336,7 @@ tests:
 ### Loading defaultTest from external files
 
 You can load `defaultTest` configuration from external files using the `file://` syntax. This is useful for:
+
 - Sharing test configurations across multiple projects
 - Keeping your main config file cleaner
 - Managing complex test configurations separately

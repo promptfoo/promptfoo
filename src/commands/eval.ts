@@ -225,11 +225,17 @@ export async function doEval(
     };
 
     if (cmdObj.grader) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
     }
     if (cmdObj.var) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }

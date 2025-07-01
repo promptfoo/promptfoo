@@ -408,16 +408,27 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests,
     scenarios: configs.flatMap((config) => config.scenarios || []),
-    defaultTest: configs.reduce((prev: Partial<TestCase> | undefined, curr) => {
+    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+      // If any config has a string defaultTest (file reference), preserve it
+      if (typeof curr.defaultTest === 'string') {
+        return curr.defaultTest;
+      }
+      // If prev is already a string (file reference), keep it
+      if (typeof prev === 'string') {
+        return prev;
+      }
+      // Otherwise merge objects
+      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const prevObj = typeof prev === 'object' ? prev : {};
       return {
-        ...prev,
-        ...curr.defaultTest,
-        vars: { ...prev?.vars, ...curr.defaultTest?.vars },
-        assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
-        options: { ...prev?.options, ...curr.defaultTest?.options },
-        metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
+        ...prevObj,
+        ...currDefaultTest,
+        vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
+        assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
+        options: { ...prevObj?.options, ...currDefaultTest?.options },
+        metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
       };
-    }, {}),
+    }, undefined) as UnifiedConfig['defaultTest'],
     derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
       if (curr.derivedMetrics) {
         return [...(prev ?? []), ...curr.derivedMetrics];
@@ -643,9 +654,9 @@ export async function resolveConfigs(
       suffix: cmdObj.promptSuffix,
       provider: cmdObj.grader,
       // rubricPrompt
-      ...(config.defaultTest?.options || {}),
+      ...(processedDefaultTest?.options || {}),
     },
-    ...config.defaultTest,
+    ...(processedDefaultTest || {}),
   };
 
   const testSuite: TestSuite = {

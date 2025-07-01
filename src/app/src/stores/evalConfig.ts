@@ -17,7 +17,7 @@ export interface State {
   description: string;
   providers: ProviderOptions[];
   prompts: any[];
-  defaultTest: TestCase;
+  defaultTest: TestCase | string;
   derivedMetrics: DerivedMetric[];
   evaluateOptions: EvaluateOptions;
   scenarios: Scenario[];
@@ -27,7 +27,7 @@ export interface State {
   setDescription: (description: string) => void;
   setProviders: (providers: ProviderOptions[]) => void;
   setPrompts: (prompts: any[]) => void;
-  setDefaultTest: (testCase: TestCase) => void;
+  setDefaultTest: (testCase: TestCase | string) => void;
   setDerivedMetrics: (derivedMetrics: DerivedMetric[]) => void;
   setEvaluateOptions: (options: EvaluateOptions) => void;
   setScenarios: (scenarios: Scenario[]) => void;
