@@ -9,53 +9,85 @@ from models import Activity, DayItinerary
 from tools.destination_tool import get_destination_info
 
 
-def search_activities(city: str, interests: list = None, duration_days: int = 1) -> dict:
+def search_activities(
+    city: str, interests: list = None, duration_days: int = 1
+) -> dict:
     """
     Search for activities and attractions in a city.
-    
+
     Args:
         city: City name
         interests: List of interests (e.g., ["museums", "food", "adventure"])
         duration_days: Number of days to plan activities for
-        
+
     Returns:
         Dictionary with activity options
     """
     # Get destination info for must-see attractions
     dest_info = get_destination_info(city)
-    
+
     # Define activity categories and examples
     activity_templates = {
         "sightseeing": [
-            {"name": "City Walking Tour", "duration": 3, "price": 25, "time": "morning"},
+            {
+                "name": "City Walking Tour",
+                "duration": 3,
+                "price": 25,
+                "time": "morning",
+            },
             {"name": "Hop-on Hop-off Bus", "duration": 4, "price": 45, "time": "any"},
-            {"name": "Photography Tour", "duration": 2.5, "price": 60, "time": "morning"}
+            {
+                "name": "Photography Tour",
+                "duration": 2.5,
+                "price": 60,
+                "time": "morning",
+            },
         ],
         "museums": [
             {"name": "Art Museum Visit", "duration": 3, "price": 20, "time": "any"},
             {"name": "History Museum", "duration": 2, "price": 15, "time": "afternoon"},
-            {"name": "Science Center", "duration": 3.5, "price": 25, "time": "any"}
+            {"name": "Science Center", "duration": 3.5, "price": 25, "time": "any"},
         ],
         "food": [
-            {"name": "Food Market Tour", "duration": 2.5, "price": 55, "time": "morning"},
+            {
+                "name": "Food Market Tour",
+                "duration": 2.5,
+                "price": 55,
+                "time": "morning",
+            },
             {"name": "Cooking Class", "duration": 3, "price": 85, "time": "afternoon"},
-            {"name": "Wine Tasting", "duration": 2, "price": 65, "time": "evening"}
+            {"name": "Wine Tasting", "duration": 2, "price": 65, "time": "evening"},
         ],
         "adventure": [
             {"name": "Bike Tour", "duration": 3, "price": 40, "time": "morning"},
-            {"name": "Kayaking Experience", "duration": 2.5, "price": 75, "time": "afternoon"},
-            {"name": "Hiking Excursion", "duration": 4, "price": 50, "time": "morning"}
+            {
+                "name": "Kayaking Experience",
+                "duration": 2.5,
+                "price": 75,
+                "time": "afternoon",
+            },
+            {"name": "Hiking Excursion", "duration": 4, "price": 50, "time": "morning"},
         ],
         "cultural": [
             {"name": "Traditional Show", "duration": 2, "price": 45, "time": "evening"},
-            {"name": "Temple/Church Visit", "duration": 1.5, "price": 10, "time": "morning"},
-            {"name": "Local Workshop", "duration": 2.5, "price": 70, "time": "afternoon"}
-        ]
+            {
+                "name": "Temple/Church Visit",
+                "duration": 1.5,
+                "price": 10,
+                "time": "morning",
+            },
+            {
+                "name": "Local Workshop",
+                "duration": 2.5,
+                "price": 70,
+                "time": "afternoon",
+            },
+        ],
     }
-    
+
     # Create activities based on interests or default selection
     activities = []
-    
+
     # Add must-see attractions from destination info
     if dest_info.get("status") == "success":
         for i, attraction in enumerate(dest_info.get("must_see_attractions", [])[:3]):
@@ -65,10 +97,10 @@ def search_activities(city: str, interests: list = None, duration_days: int = 1)
                 duration_hours=2.5,
                 price_per_person=20 + (i * 5),
                 category="must-see",
-                recommended_time="any"
+                recommended_time="any",
             )
             activities.append(activity)
-    
+
     # Add activities based on interests
     categories = interests if interests else ["sightseeing", "food", "cultural"]
     for category in categories:
@@ -80,31 +112,36 @@ def search_activities(city: str, interests: list = None, duration_days: int = 1)
                     duration_hours=template["duration"],
                     price_per_person=template["price"],
                     category=category,
-                    recommended_time=template["time"]
+                    recommended_time=template["time"],
                 )
                 activities.append(activity)
-    
+
     return {
         "status": "success",
         "city": city,
         "activities": [activity.model_dump() for activity in activities],
         "total_activities": len(activities),
-        "categories": list(set(a.category for a in activities))
+        "categories": list(set(a.category for a in activities)),
     }
 
 
-def create_itinerary(city: str, start_date: str, end_date: str, 
-                    activities: list = None, preferences: list = None) -> dict:
+def create_itinerary(
+    city: str,
+    start_date: str,
+    end_date: str,
+    activities: list = None,
+    preferences: list = None,
+) -> dict:
     """
     Create a day-by-day itinerary for a trip.
-    
+
     Args:
         city: City name
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
         activities: Optional list of specific activities to include
         preferences: Travel preferences
-        
+
     Returns:
         Dictionary with daily itinerary
     """
@@ -113,38 +150,41 @@ def create_itinerary(city: str, start_date: str, end_date: str,
         start = datetime.strptime(start_date, "%Y-%m-%d")
         end = datetime.strptime(end_date, "%Y-%m-%d")
         num_days = (end - start).days + 1
-        
+
         if num_days <= 0:
             return {
                 "status": "error",
-                "message": "End date must be after or equal to start date"
+                "message": "End date must be after or equal to start date",
             }
-        
+
         # Get activities if not provided
         if not activities:
             activity_data = search_activities(city, preferences, num_days)
             activities = activity_data.get("activities", [])
-        
+
         # Create daily itineraries
         daily_plans = []
         activity_index = 0
-        
+
         for day_num in range(num_days):
             current_date = start + timedelta(days=day_num)
-            
+
             # Assign activities to time slots
             morning = None
             afternoon = None
             evening = None
-            
+
             # Assign activities based on recommended times
             for _ in range(3):  # Try to fill 3 slots per day
                 if activity_index < len(activities):
                     activity = activities[activity_index]
-                    
+
                     if activity.get("recommended_time") == "morning" and not morning:
                         morning = Activity(**activity)
-                    elif activity.get("recommended_time") == "afternoon" and not afternoon:
+                    elif (
+                        activity.get("recommended_time") == "afternoon"
+                        and not afternoon
+                    ):
                         afternoon = Activity(**activity)
                     elif activity.get("recommended_time") == "evening" and not evening:
                         evening = Activity(**activity)
@@ -156,9 +196,9 @@ def create_itinerary(city: str, start_date: str, end_date: str,
                             afternoon = Activity(**activity)
                         elif not evening:
                             evening = Activity(**activity)
-                    
+
                     activity_index += 1
-            
+
             # Create day itinerary
             day_plan = DayItinerary(
                 day=day_num + 1,
@@ -169,11 +209,11 @@ def create_itinerary(city: str, start_date: str, end_date: str,
                 meals_recommendations=[
                     "Breakfast: Local cafe near your hotel",
                     f"Lunch: Restaurant in {morning.name.split(' in ')[0] if morning else 'city center'}",
-                    f"Dinner: {city} specialty restaurant"
-                ]
+                    f"Dinner: {city} specialty restaurant",
+                ],
             )
             daily_plans.append(day_plan)
-        
+
         return {
             "status": "success",
             "destination": city,
@@ -185,15 +225,15 @@ def create_itinerary(city: str, start_date: str, end_date: str,
                 "Book popular attractions in advance",
                 "Check opening hours before visiting",
                 "Keep some flexibility for spontaneous discoveries",
-                "Consider travel time between activities"
-            ]
+                "Consider travel time between activities",
+            ],
         }
-        
+
     except Exception as e:
         return {
             "status": "error",
             "error": str(e),
-            "message": "Unable to create itinerary. Please check your input."
+            "message": "Unable to create itinerary. Please check your input.",
         }
 
 
@@ -232,5 +272,5 @@ Always consider:
 - Physical requirements of activities
 - Weather and seasonal factors
 - Local events or festivals during the travel dates""",
-    tools=[search_activities, create_itinerary, google_search]
-) 
+    tools=[search_activities, create_itinerary, google_search],
+)

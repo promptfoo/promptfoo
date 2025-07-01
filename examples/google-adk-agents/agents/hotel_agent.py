@@ -9,18 +9,23 @@ from models import Hotel
 import random
 
 
-def search_hotels(city: str, check_in_date: str, check_out_date: str, 
-                 budget_per_night: float = None, num_guests: int = 1) -> dict:
+def search_hotels(
+    city: str,
+    check_in_date: str,
+    check_out_date: str,
+    budget_per_night: float = None,
+    num_guests: int = 1,
+) -> dict:
     """
     Search for hotels in a city.
-    
+
     Args:
         city: City name
         check_in_date: Check-in date (YYYY-MM-DD)
         check_out_date: Check-out date (YYYY-MM-DD)
         budget_per_night: Optional maximum price per night
         num_guests: Number of guests
-        
+
     Returns:
         Dictionary with hotel options
     """
@@ -29,13 +34,13 @@ def search_hotels(city: str, check_in_date: str, check_out_date: str,
         check_in = datetime.strptime(check_in_date, "%Y-%m-%d")
         check_out = datetime.strptime(check_out_date, "%Y-%m-%d")
         nights = (check_out - check_in).days
-        
+
         if nights <= 0:
             return {
                 "status": "error",
-                "message": "Check-out date must be after check-in date"
+                "message": "Check-out date must be after check-in date",
             }
-        
+
         # Generate mock hotels
         hotel_data = [
             {
@@ -43,48 +48,48 @@ def search_hotels(city: str, check_in_date: str, check_out_date: str,
                 "rating": 4.8,
                 "price": 250,
                 "amenities": ["WiFi", "Pool", "Spa", "Restaurant", "Gym"],
-                "distance": "0.5 miles from city center"
+                "distance": "0.5 miles from city center",
             },
             {
                 "name": f"{city.title()} Plaza Inn",
                 "rating": 4.5,
                 "price": 180,
                 "amenities": ["WiFi", "Restaurant", "Business Center", "Bar"],
-                "distance": "1.2 miles from city center"
+                "distance": "1.2 miles from city center",
             },
             {
                 "name": f"Budget Stay {city.title()}",
                 "rating": 4.2,
                 "price": 95,
                 "amenities": ["WiFi", "Breakfast", "24-hour Front Desk"],
-                "distance": "2.0 miles from city center"
+                "distance": "2.0 miles from city center",
             },
             {
                 "name": f"Boutique {city.title()}",
                 "rating": 4.6,
                 "price": 195,
                 "amenities": ["WiFi", "Restaurant", "Rooftop Bar", "Concierge"],
-                "distance": "0.8 miles from city center"
+                "distance": "0.8 miles from city center",
             },
             {
                 "name": f"{city.title()} Hostel & Suites",
                 "rating": 4.0,
                 "price": 65,
                 "amenities": ["WiFi", "Shared Kitchen", "Laundry", "Lockers"],
-                "distance": "1.5 miles from city center"
-            }
+                "distance": "1.5 miles from city center",
+            },
         ]
-        
+
         # Filter by budget if specified
         if budget_per_night:
             hotel_data = [h for h in hotel_data if h["price"] <= budget_per_night]
-        
+
         # Create Hotel objects
         hotels = []
         for data in hotel_data:
             # Add some price variation
             price = data["price"] * (0.9 + random.random() * 0.2)
-            
+
             hotel = Hotel(
                 name=data["name"],
                 address=f"{random.randint(100, 999)} {city.title()} Street",
@@ -92,13 +97,13 @@ def search_hotels(city: str, check_in_date: str, check_out_date: str,
                 price_per_night=round(price, 2),
                 amenities=data["amenities"],
                 distance_to_center=data["distance"],
-                available=random.random() > 0.1  # 90% availability
+                available=random.random() > 0.1,  # 90% availability
             )
             hotels.append(hotel)
-        
+
         # Sort by rating
         hotels.sort(key=lambda x: x.rating, reverse=True)
-        
+
         return {
             "status": "success",
             "search_criteria": {
@@ -107,22 +112,22 @@ def search_hotels(city: str, check_in_date: str, check_out_date: str,
                 "check_out": check_out_date,
                 "nights": nights,
                 "guests": num_guests,
-                "budget_per_night": budget_per_night
+                "budget_per_night": budget_per_night,
             },
             "hotels": [hotel.model_dump() for hotel in hotels],
             "total_results": len(hotels),
             "price_range": {
                 "min": min(h.price_per_night for h in hotels) if hotels else 0,
                 "max": max(h.price_per_night for h in hotels) if hotels else 0,
-                "currency": "USD"
-            }
+                "currency": "USD",
+            },
         }
-        
+
     except Exception as e:
         return {
             "status": "error",
             "error": str(e),
-            "message": "Unable to search hotels. Please check your input."
+            "message": "Unable to search hotels. Please check your input.",
         }
 
 
@@ -164,5 +169,5 @@ Always present hotel options clearly with:
 - Pros and cons of each option
 
 If the user has specific needs (e.g., gym, pool, pet-friendly), prioritize hotels that meet these requirements.""",
-    tools=[search_hotels, google_search]
-) 
+    tools=[search_hotels, google_search],
+)

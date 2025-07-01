@@ -18,17 +18,17 @@ DESTINATION_DATA = {
             "Tokyo Skytree",
             "Meiji Shrine",
             "Shibuya Crossing",
-            "Tsukiji Outer Market"
+            "Tsukiji Outer Market",
         ],
         "local_tips": [
             "Learn basic Japanese phrases - locals appreciate the effort",
             "Remove shoes when entering homes, some restaurants, and temples",
             "Tipping is not customary and can be considered rude",
             "Get a JR Pass for convenient train travel",
-            "Try convenience store food - it's surprisingly good!"
+            "Try convenience store food - it's surprisingly good!",
         ],
         "transportation": "Excellent public transport via JR lines and Tokyo Metro",
-        "avg_daily_budget": {"budget": 80, "mid": 150, "luxury": 300}
+        "avg_daily_budget": {"budget": 80, "mid": 150, "luxury": 300},
     },
     "paris": {
         "country": "France",
@@ -42,17 +42,17 @@ DESTINATION_DATA = {
             "Louvre Museum",
             "Notre-Dame Cathedral",
             "Arc de Triomphe",
-            "Versailles Palace"
+            "Versailles Palace",
         ],
         "local_tips": [
             "Always greet with 'Bonjour' before asking for help",
             "Many museums are free on the first Sunday of each month",
             "Avoid tourist trap restaurants near major attractions",
             "Get a Paris Museum Pass for skip-the-line access",
-            "Bakeries (boulangeries) have the best croissants in the morning"
+            "Bakeries (boulangeries) have the best croissants in the morning",
         ],
         "transportation": "Metro is efficient and covers most areas",
-        "avg_daily_budget": {"budget": 100, "mid": 200, "luxury": 400}
+        "avg_daily_budget": {"budget": 100, "mid": 200, "luxury": 400},
     },
     "new york": {
         "country": "United States",
@@ -66,17 +66,17 @@ DESTINATION_DATA = {
             "Central Park",
             "Times Square",
             "Brooklyn Bridge",
-            "Metropolitan Museum of Art"
+            "Metropolitan Museum of Art",
         ],
         "local_tips": [
             "Walk fast or move to the side on sidewalks",
             "Subway is the fastest way to get around",
             "Many attractions require advance booking",
             "Pizza by the slice is a NYC staple",
-            "Broadway shows often have same-day discount tickets"
+            "Broadway shows often have same-day discount tickets",
         ],
         "transportation": "Subway system covers all boroughs",
-        "avg_daily_budget": {"budget": 120, "mid": 250, "luxury": 500}
+        "avg_daily_budget": {"budget": 120, "mid": 250, "luxury": 500},
     },
     "london": {
         "country": "United Kingdom",
@@ -90,33 +90,33 @@ DESTINATION_DATA = {
             "Tower of London",
             "British Museum",
             "Buckingham Palace",
-            "London Eye"
+            "London Eye",
         ],
         "local_tips": [
             "Stand right on escalators in the Underground",
             "Many museums are free entry",
             "Get an Oyster Card for public transport",
             "Pubs close early (11 PM)",
-            "Mind the gap on the Tube!"
+            "Mind the gap on the Tube!",
         ],
         "transportation": "Extensive Underground (Tube) and bus network",
-        "avg_daily_budget": {"budget": 90, "mid": 180, "luxury": 350}
-    }
+        "avg_daily_budget": {"budget": 90, "mid": 180, "luxury": 350},
+    },
 }
 
 
 def get_destination_info(city: str) -> Dict[str, any]:
     """
     Get comprehensive information about a travel destination.
-    
+
     Args:
         city: City name
-        
+
     Returns:
         Dictionary with destination information
     """
     city_lower = city.lower()
-    
+
     if city_lower in DESTINATION_DATA:
         data = DESTINATION_DATA[city_lower]
         return {
@@ -131,7 +131,7 @@ def get_destination_info(city: str) -> Dict[str, any]:
             "must_see_attractions": data["must_see_attractions"],
             "local_tips": data["local_tips"],
             "transportation": data["transportation"],
-            "average_daily_budget": data["avg_daily_budget"]
+            "average_daily_budget": data["avg_daily_budget"],
         }
     else:
         return {
@@ -143,36 +143,40 @@ def get_destination_info(city: str) -> Dict[str, any]:
                 "Check if you need any vaccinations",
                 "Learn basic phrases in the local language",
                 "Research local customs and etiquette",
-                "Check the best time to visit for weather"
-            ]
+                "Check the best time to visit for weather",
+            ],
         }
 
 
-def get_budget_estimate(city: str, days: int, budget_level: str = "mid") -> Dict[str, any]:
+def get_budget_estimate(
+    city: str, days: int, budget_level: str = "mid"
+) -> Dict[str, any]:
     """
     Estimate travel budget for a destination.
-    
+
     Args:
         city: City name
         days: Number of days
         budget_level: "budget", "mid", or "luxury"
-        
+
     Returns:
         Budget breakdown
     """
     city_lower = city.lower()
-    
+
     if city_lower in DESTINATION_DATA:
-        daily_budget = DESTINATION_DATA[city_lower]["avg_daily_budget"].get(budget_level, 150)
+        daily_budget = DESTINATION_DATA[city_lower]["avg_daily_budget"].get(
+            budget_level, 150
+        )
     else:
         # Default estimates
         daily_budget = {"budget": 100, "mid": 200, "luxury": 400}.get(budget_level, 200)
-    
+
     accommodation = daily_budget * 0.4
     food = daily_budget * 0.3
     activities = daily_budget * 0.2
     transport = daily_budget * 0.1
-    
+
     return {
         "city": city,
         "days": days,
@@ -187,12 +191,12 @@ def get_budget_estimate(city: str, days: int, budget_level: str = "mid") -> Dict
             "total_accommodation": accommodation * days,
             "total_food": food * days,
             "total_activities": activities * days,
-            "total_transport": transport * days
+            "total_transport": transport * days,
         },
         "tips": [
             "Book accommodation in advance for better rates",
             "Consider apartment rentals for longer stays",
             "Eat where locals eat for authentic and affordable meals",
-            "Many cities offer tourist passes for attractions and transport"
-        ]
-    } 
+            "Many cities offer tourist passes for attractions and transport",
+        ],
+    }

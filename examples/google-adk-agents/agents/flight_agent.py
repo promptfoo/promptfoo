@@ -13,13 +13,13 @@ def create_mock_flights(origin: str, destination: str, date: datetime) -> list:
     # In production, this would call a real flight API
     airlines = ["United", "Delta", "American", "JetBlue", "Southwest"]
     base_price = 300
-    
+
     flights = []
     for i, airline in enumerate(airlines[:3]):  # Return 3 options
-        departure = date.replace(hour=6 + i*4, minute=0)
+        departure = date.replace(hour=6 + i * 4, minute=0)
         duration = 2.5 + (i * 0.5)
         arrival = departure + timedelta(hours=duration)
-        
+
         flight = Flight(
             airline=airline,
             flight_number=f"{airline[:2]}{100 + i}",
@@ -28,66 +28,70 @@ def create_mock_flights(origin: str, destination: str, date: datetime) -> list:
             departure_time=departure,
             arrival_time=arrival,
             price=base_price + (i * 50),
-            duration_hours=duration
+            duration_hours=duration,
         )
         flights.append(flight)
-    
+
     return flights
 
 
-def search_flights(origin: str, destination: str, departure_date: str, return_date: str = None) -> dict:
+def search_flights(
+    origin: str, destination: str, departure_date: str, return_date: str = None
+) -> dict:
     """
     Search for flights between two cities.
-    
+
     Args:
         origin: Origin city
         destination: Destination city
         departure_date: Departure date (YYYY-MM-DD)
         return_date: Optional return date for round trips
-        
+
     Returns:
         Dictionary with flight options
     """
     try:
         # Parse dates
         dep_date = datetime.strptime(departure_date, "%Y-%m-%d")
-        
+
         # Generate mock flights
         outbound_flights = create_mock_flights(origin, destination, dep_date)
-        
+
         result = {
             "status": "success",
             "search_criteria": {
                 "origin": origin,
                 "destination": destination,
                 "departure_date": departure_date,
-                "trip_type": "round-trip" if return_date else "one-way"
+                "trip_type": "round-trip" if return_date else "one-way",
             },
             "outbound_flights": [flight.model_dump() for flight in outbound_flights],
-            "return_flights": []
+            "return_flights": [],
         }
-        
+
         if return_date:
             ret_date = datetime.strptime(return_date, "%Y-%m-%d")
             return_flights = create_mock_flights(destination, origin, ret_date)
-            result["return_flights"] = [flight.model_dump() for flight in return_flights]
+            result["return_flights"] = [
+                flight.model_dump() for flight in return_flights
+            ]
             result["search_criteria"]["return_date"] = return_date
-        
+
         # Add pricing summary
         outbound_prices = [f.price for f in outbound_flights]
         result["price_summary"] = {
             "lowest_outbound": min(outbound_prices),
             "average_outbound": sum(outbound_prices) / len(outbound_prices),
-            "currency": "USD"
+            "currency": "USD",
         }
-        
+
         return result
-        
+
     except Exception as e:
         return {
             "status": "error",
             "error": str(e),
-            "message": "Unable to search flights. Please check your input."
+            "message": "Unable to search flights. Please check your input.",
         }
 
 
@@ -119,5 +123,5 @@ Always present flight options in a clear, organized manner with:
 - Any relevant notes (direct vs connecting, etc.)
 
 If dates are flexible, suggest checking nearby dates for better prices.""",
-    tools=[search_flights, google_search]
-) 
+    tools=[search_flights, google_search],
+)

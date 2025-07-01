@@ -10,7 +10,7 @@ from tools.destination_tool import get_destination_info, get_budget_estimate
 
 # Import sub-agents
 from agents.flight_agent import flight_agent
-from agents.hotel_agent import hotel_agent  
+from agents.hotel_agent import hotel_agent
 from agents.activity_agent import activity_agent
 
 
@@ -19,7 +19,7 @@ def check_weather(city: str, travel_date: str) -> dict:
     try:
         date_obj = datetime.strptime(travel_date, "%Y-%m-%d").date()
         return get_weather_forecast(city, date_obj)
-    except:
+    except Exception:
         return {"status": "error", "message": "Invalid date format"}
 
 
@@ -28,7 +28,9 @@ def get_destination_overview(city: str) -> dict:
     return get_destination_info(city)
 
 
-def estimate_trip_budget(city: str, days: int, budget_level: str = "mid", travelers: int = 1) -> dict:
+def estimate_trip_budget(
+    city: str, days: int, budget_level: str = "mid", travelers: int = 1
+) -> dict:
     """Estimate total trip budget."""
     budget = get_budget_estimate(city, days, budget_level)
     if travelers > 1:
@@ -86,7 +88,7 @@ Remember: You're not just listing options - you're crafting a complete, actionab
         check_weather,
         get_destination_overview,
         estimate_trip_budget,
-        google_search
+        google_search,
     ],
-    sub_agents=[flight_agent, hotel_agent, activity_agent]
-) 
+    sub_agents=[flight_agent, hotel_agent, activity_agent],
+)
