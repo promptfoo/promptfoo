@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
-import { usePostHog } from '@app/components/PostHogProvider';
+import { usePostHog } from '@app/components/PostHogContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';

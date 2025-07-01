@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { usePostHog } from '@app/components/PostHogProvider';
+import { usePostHog } from '@app/components/PostHogContext';
 
 /**
  * Hook for tracking telemetry events, similar to the backend telemetry system
