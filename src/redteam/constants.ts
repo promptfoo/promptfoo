@@ -70,7 +70,7 @@ export const FOUNDATION_PLUGINS = [
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
+export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii', 'bias'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
@@ -143,6 +143,7 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
+  'dataset:aegis',
   'dataset:beavertails',
   'bfla',
   'bola',
@@ -184,7 +185,7 @@ export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
-  'tool-discovery:multi-turn',
+  'agentic:memory-poisoning',
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
@@ -831,6 +832,7 @@ export const AGENTIC_STRATEGIES = [
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const DATASET_PLUGINS = [
+  'dataset:aegis',
   'dataset:beavertails',
   'dataset:cyberseceval',
   'dataset:donotanswer',
@@ -843,6 +845,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const DATASET_PLUGIN_ALIASES: Record<string, DatasetPlugin> = {
+  aegis: 'dataset:aegis',
   beavertails: 'dataset:beavertails',
   cyberseceval: 'dataset:cyberseceval',
   donotanswer: 'dataset:donotanswer',
@@ -899,6 +902,7 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
+  aegis: 'Tests handling of malicious prompts from the NVIDIA Aegis dataset',
   audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
@@ -1012,6 +1016,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
   'ascii-smuggling': 'ASCII Smuggling',
+  aegis: 'Aegis Dataset',
   audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -1051,17 +1056,18 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:hate': 'Hate Speech',
   'harmful:illegal-activities': 'Illegal Activity',
   'harmful:illegal-drugs': 'Drug-Related Content',
-  'harmful:illegal-drugs:meth': 'Methamphetamine Content',
+  'harmful:illegal-drugs:meth': 'Methamphetamine',
   'harmful:indiscriminate-weapons': 'Weapons Content',
   'harmful:insults': 'Personal Attacks',
   'harmful:intellectual-property': 'IP Theft',
-  'harmful:misinformation-disinformation': 'Disinformation Campaigns',
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:non-violent-crime': 'Non-Violent Crime',
   'harmful:privacy': 'Privacy Violation',
   'harmful:profanity': 'Profanity',
   'harmful:radicalization': 'Extremist Content',
   'harmful:self-harm': 'Self-Harm',
-  'harmful:sex-crime': 'Sexual Crime Content',
+  'harmful:sex-crime': 'Sex Crime Content',
   'harmful:sexual-content': 'Explicit Content',
   'harmful:specialized-advice': 'Unauthorized Advice',
   'harmful:unsafe-practices': 'Dangerous Activity Content',
@@ -1085,33 +1091,28 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
-  piglatin: 'Pig Latin Encoding',
+  piglatin:
+    'Tests detection and handling of text transformed into Pig Latin, a language game where initial consonant clusters are moved to the end of words with "ay" added',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
   'pii:direct': 'PII via Direct Exposure',
   'pii:session': 'PII via Session Data',
   'pii:social': 'PII via Social Engineering',
-  pliny: 'Pliny Prompt Injections',
+  pliny: 'Pliny',
   policy: 'Policy Compliance',
   politics: 'Political Bias',
-  'prompt-extraction': 'System Prompt Disclosure',
-  'prompt-injection': 'Direct Prompt Injection',
+  'prompt-extraction': 'PromptExtraction',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
-  rbac: 'RBAC Implementation',
+  rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
-  religion: 'Religious Bias',
-  retry: 'Regression Testing',
-  rot13: 'ROT13 Payload Encoding',
-  'shell-injection': 'Command Injection',
-  'sql-injection': 'SQL Injection',
-  ssrf: 'SSRF Vulnerability',
+  religion: 'Religion',
+  'shell-injection': 'ShellInjection',
+  'sql-injection': 'SqlInjection',
+  ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
-  'tool-discovery': 'Tool Discovery',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
-  unsafebench: 'UnsafeBench Dataset',
-  xstest: 'XSTest Dataset',
-  video: 'Video Content',
+  unsafebench: 'UnsafeBench',
+  xstest: 'XSTest',
 };
 
 export enum Severity {
@@ -1134,6 +1135,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   [MEMORY_POISONING_PLUGIN_ID]: Severity.High,
+  aegis: Severity.Medium,
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
   bfla: Severity.High,
@@ -1288,6 +1290,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
 
   Datasets: [
+    'aegis',
     'beavertails',
     'cyberseceval',
     'donotanswer',
@@ -1324,6 +1327,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
+  aegis: 'Aegis',
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
@@ -1363,7 +1367,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
-  'harmful:non-violent-crime': 'Non-Violent Crimes',
+  'harmful:non-violent-crime': 'Non-Violent Crime',
   'harmful:privacy': 'Privacy violations',
   'harmful:profanity': 'Requests containing profanity',
   'harmful:radicalization': 'Radicalization',
@@ -1483,8 +1487,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
   rbac: 'Tests implementation of role-based access control mechanisms',
-  'reasoning-dos':
-    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  'reasoning-dos': 'Reasoning DoS',
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',

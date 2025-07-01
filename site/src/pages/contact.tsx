@@ -71,6 +71,9 @@ function Contact(): JSX.Element {
       createTheme({
         palette: {
           mode: isDarkTheme ? 'dark' : 'light',
+          primary: {
+            main: '#0066cc',
+          },
         },
       }),
     [isDarkTheme],
@@ -82,115 +85,326 @@ function Contact(): JSX.Element {
 
   return (
     <ThemeProvider theme={theme}>
-      <Container maxWidth="md">
-        <Box
-          sx={{
-            my: 4,
-            textAlign: 'center',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Typography variant="h3" gutterBottom>
-            Chat with us
+      {/* Simple Hero */}
+      <Container maxWidth="lg">
+        <Box sx={{ textAlign: 'center', py: 4, mb: 4 }}>
+          <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
+            Contact Sales
+          </Typography>
+          <Typography variant="h6" color="text.secondary">
+            Let's discuss how Promptfoo can secure your AI infrastructure
           </Typography>
         </Box>
 
-        <Box my={4}>
-          <Typography variant="body1" gutterBottom>
-            <strong>Ways to get in touch:</strong>
-          </Typography>
-          <Typography variant="body1" gutterBottom>
-            💬 Join our{' '}
-            <Link href="https://discord.gg/promptfoo" target="_blank">
-              Discord
-            </Link>
-          </Typography>
-          <Typography variant="body1" gutterBottom>
-            🐙 Visit our{' '}
-            <Link href="https://github.com/promptfoo/promptfoo" target="_blank">
-              GitHub
-            </Link>
-          </Typography>
-          <Typography variant="body1" gutterBottom>
-            ✉️ Email us at{' '}
-            <Link href="mailto:inquiries@promptfoo.dev">inquiries@promptfoo.dev</Link>
-          </Typography>
-          <Typography variant="body1" gutterBottom>
-            📅 Or book a time below
-          </Typography>
-        </Box>
+        {/* Main Content with Sidebar */}
+        <Box className={styles.mainLayout}>
+          {/* Left Column - Contact Forms */}
+          <Box className={styles.contactColumn}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+              <Tabs
+                value={tabValue}
+                onChange={handleTabChange}
+                aria-label="contact tabs"
+                sx={{
+                  '& .MuiTab-root': {
+                    fontSize: '1rem',
+                    textTransform: 'none',
+                    fontWeight: 500,
+                  },
+                }}
+              >
+                <Tab label="Schedule a Demo" />
+                <Tab label="Inquiry Form" />
+              </Tabs>
+            </Box>
 
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs value={tabValue} onChange={handleTabChange} aria-label="contact tabs">
-            <Tab label={<strong>Schedule a Meeting</strong>} />
-            <Tab label={<strong>Contact Form</strong>} />
-          </Tabs>
-        </Box>
-        <Box mb={8}>
-          <TabPanel value={tabValue} index={0}>
-            <Calendar />
-          </TabPanel>
-          <TabPanel value={tabValue} index={1}>
-            <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
-              <TextField
-                fullWidth
-                id="name"
-                name="name"
-                label="Your Name"
-                variant="outlined"
-                required
-                margin="normal"
-              />
-              <TextField
-                fullWidth
-                id="email"
-                name="email"
-                label="Work Email"
-                type="email"
-                variant="outlined"
-                required
-                margin="normal"
-              />
-              <TextField
-                fullWidth
-                id="company"
-                name="company"
-                label="Company Name"
-                variant="outlined"
-                required
-                margin="normal"
-              />
-              <FormControl fullWidth margin="normal" variant="outlined" required>
-                <InputLabel id="interested-in-label">Interested In</InputLabel>
-                <Select
-                  labelId="interested-in-label"
-                  id="interested-in"
-                  name="interested-in"
-                  label="Interested In"
+            <TabPanel value={tabValue} index={0}>
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body1" color="text.secondary" align="center">
+                  Book a 30-minute demo to see Promptfoo in action
+                </Typography>
+              </Box>
+              <Calendar />
+            </TabPanel>
+
+            <TabPanel value={tabValue} index={1}>
+              <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
+                <Box className={styles.formGrid}>
+                  <TextField
+                    fullWidth
+                    id="name"
+                    name="name"
+                    label="Full Name"
+                    variant="outlined"
+                    required
+                    margin="normal"
+                    size="small"
+                  />
+                  <TextField
+                    fullWidth
+                    id="email"
+                    name="email"
+                    label="Work Email"
+                    type="email"
+                    variant="outlined"
+                    required
+                    margin="normal"
+                    size="small"
+                    helperText="Use your company email"
+                  />
+                </Box>
+
+                <Box className={styles.formGrid}>
+                  <TextField
+                    fullWidth
+                    id="company"
+                    name="company"
+                    label="Company"
+                    variant="outlined"
+                    required
+                    margin="normal"
+                    size="small"
+                  />
+                  <TextField
+                    fullWidth
+                    id="title"
+                    name="title"
+                    label="Job Title"
+                    variant="outlined"
+                    margin="normal"
+                    size="small"
+                  />
+                </Box>
+
+                <FormControl fullWidth margin="normal" variant="outlined" required size="small">
+                  <InputLabel id="interested-in-label">I'm interested in</InputLabel>
+                  <Select
+                    labelId="interested-in-label"
+                    id="interested-in"
+                    name="interested-in"
+                    label="I'm interested in"
+                  >
+                    <MenuItem value="Enterprise Security">
+                      Enterprise Security & Red Teaming
+                    </MenuItem>
+                    <MenuItem value="AI Guardrails">AI Guardrails & Compliance</MenuItem>
+                    <MenuItem value="Model Evaluation">Model Evaluation & Testing</MenuItem>
+                    <MenuItem value="Custom Solution">Custom Enterprise Solution</MenuItem>
+                    <MenuItem value="Other">Other</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  fullWidth
+                  id="message"
+                  name="message"
+                  label="How can we help?"
+                  multiline
+                  rows={4}
+                  variant="outlined"
+                  required
+                  margin="normal"
+                  size="small"
+                />
+
+                <Box sx={{ textAlign: 'center', mt: 3 }}>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    size="large"
+                    sx={{
+                      px: 4,
+                      py: 1,
+                      textTransform: 'none',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Send Message
+                  </Button>
+                </Box>
+              </form>
+            </TabPanel>
+          </Box>
+
+          {/* Right Column - Social Proof */}
+          <Box className={styles.socialProofColumn}>
+            {/* Trusted By */}
+            <Box className={styles.trustedBySection}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                sx={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '0.75rem' }}
+              >
+                Trusted by leading teams
+              </Typography>
+              <Box className={styles.logoGrid}>
+                <img
+                  src="/img/brands/shopify-logo.svg"
+                  alt="Shopify"
+                  className={styles.brandLogo}
+                />
+                <img
+                  src="/img/brands/anthropic-logo.svg"
+                  alt="Anthropic"
+                  className={styles.brandLogo}
+                />
+                <img
+                  src="/img/brands/microsoft-logo.svg"
+                  alt="Microsoft"
+                  className={styles.brandLogo}
+                />
+                <img
+                  src="/img/brands/discord-logo-blue.svg"
+                  alt="Discord"
+                  className={styles.brandLogo}
+                />
+                <img
+                  src="/img/brands/doordash-logo.svg"
+                  alt="Doordash"
+                  className={styles.brandLogo}
+                />
+                <img
+                  src="/img/brands/carvana-logo.svg"
+                  alt="Carvana"
+                  className={styles.brandLogo}
+                />
+              </Box>
+            </Box>
+
+            {/* Testimonials */}
+            <Box className={styles.testimonialsSection}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                sx={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '0.75rem' }}
+              >
+                What users say
+              </Typography>
+
+              <Box className={styles.testimonialItem}>
+                <Box className={styles.testimonialHeader}>
+                  <img
+                    src="/img/brands/openai-logo.svg"
+                    alt="OpenAI"
+                    className={styles.openaiTestimonialLogo}
+                  />
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                    Build Hours
+                  </Typography>
+                </Box>
+                <Typography variant="body2" className={styles.testimonialQuote}>
+                  "Promptfoo is really powerful... it's faster and more straightforward"
+                </Typography>
+                <Link
+                  href="https://vimeo.com/1023317525/be082a1029"
+                  target="_blank"
+                  className={styles.testimonialLink}
+                  sx={{ fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none' }}
                 >
-                  <MenuItem value="Security/red teaming">Security/red teaming</MenuItem>
-                  <MenuItem value="Evaluations">Evaluations</MenuItem>
-                  <MenuItem value="Other">Other</MenuItem>
-                </Select>
-              </FormControl>
-              <TextField
-                fullWidth
-                id="meeting-about"
-                name="meeting-about"
-                label="I want to discuss..."
-                multiline
-                rows={4}
-                variant="outlined"
-                required
-                margin="normal"
-              />
-              <Button type="submit" variant="contained" color="primary" sx={{ mt: 6 }}>
-                Send
-              </Button>
-            </form>
-          </TabPanel>
+                  Watch video →
+                </Link>
+              </Box>
+
+              <Box className={styles.testimonialItem}>
+                <Box className={styles.testimonialHeader}>
+                  <img
+                    src="/img/brands/anthropic-logo.svg"
+                    alt="Anthropic"
+                    className={styles.anthropicTestimonialLogo}
+                  />
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                    Courses
+                  </Typography>
+                </Box>
+                <Typography variant="body2" className={styles.testimonialQuote}>
+                  "A streamlined solution that significantly reduces testing effort"
+                </Typography>
+                <Link
+                  href="https://github.com/anthropics/courses/tree/master/prompt_evaluations"
+                  target="_blank"
+                  className={styles.testimonialLink}
+                  sx={{ fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none' }}
+                >
+                  See course →
+                </Link>
+              </Box>
+
+              <Box className={styles.testimonialItem}>
+                <Box className={styles.testimonialHeader}>
+                  <img
+                    src="/img/brands/aws-logo.svg"
+                    alt="AWS"
+                    className={styles.awsTestimonialLogo}
+                  />
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                    Workshops
+                  </Typography>
+                </Box>
+                <Typography variant="body2" className={styles.testimonialQuote}>
+                  "Promptfoo works particularly well with Amazon Bedrock"
+                </Typography>
+                <Link
+                  href="https://catalog.workshops.aws/promptfoo/"
+                  target="_blank"
+                  className={styles.testimonialLink}
+                  sx={{ fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none' }}
+                >
+                  View workshop →
+                </Link>
+              </Box>
+            </Box>
+
+            {/* Quick Links */}
+            <Box className={styles.quickLinks}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                sx={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '0.75rem' }}
+              >
+                Quick links
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Link
+                  href="https://discord.gg/promptfoo"
+                  target="_blank"
+                  className={styles.quickLink}
+                  sx={{
+                    fontSize: '0.75rem',
+                    fontWeight: 400,
+                    color: 'text.secondary',
+                    textDecoration: 'none',
+                  }}
+                >
+                  💬 Join Discord Community
+                </Link>
+                <Link
+                  href="https://github.com/promptfoo/promptfoo"
+                  target="_blank"
+                  className={styles.quickLink}
+                  sx={{
+                    fontSize: '0.75rem',
+                    fontWeight: 400,
+                    color: 'text.secondary',
+                    textDecoration: 'none',
+                  }}
+                >
+                  🐙 View on GitHub
+                </Link>
+                <Link
+                  href="mailto:enterprise@promptfoo.dev"
+                  className={styles.quickLink}
+                  sx={{
+                    fontSize: '0.75rem',
+                    fontWeight: 400,
+                    color: 'text.secondary',
+                    textDecoration: 'none',
+                  }}
+                >
+                  📧 enterprise@promptfoo.dev
+                </Link>
+              </Box>
+            </Box>
+          </Box>
         </Box>
       </Container>
     </ThemeProvider>
@@ -199,7 +413,10 @@ function Contact(): JSX.Element {
 
 export default function Page(): JSX.Element {
   return (
-    <Layout title="Contact Us" description="Schedule a meeting with the promptfoo team">
+    <Layout
+      title="Contact Enterprise Sales"
+      description="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team about red teaming, guardrails, and compliance."
+    >
       <Contact />
     </Layout>
   );

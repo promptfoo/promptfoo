@@ -1,7 +1,22 @@
 ---
+title: 'Leveraging Promptfoo for EU AI Act Compliance'
 sidebar_label: Leveraging Promptfoo for EU AI Act Compliance
+description: 'The EU AI Act bans specific AI behaviors starting February 2025. Discover which systems are prohibited and how to test for compliance before you deploy.'
 image: /img/blog/eu-ai-act/panda-in-eu.jpeg
+keywords:
+  [
+    EU AI Act,
+    AI compliance,
+    GDPR for AI,
+    AI regulation,
+    AI red teaming,
+    prohibited AI systems,
+    AI governance,
+    European AI law,
+    compliance testing,
+  ]
 date: 2024-12-10
+authors: [vanessa]
 ---
 
 # Leveraging Promptfoo for EU AI Act Compliance
@@ -33,17 +48,17 @@ So what AI systems does the EU specifically ban? [Article 5 of the EU AI Act](ht
 - Evaluation or classification of people based on their personal traits or social behavior, similar to how [China enforces social scoring](https://sccei.fsi.stanford.edu/china-briefs/chinas-corporate-social-credit-system-and-its-implications)
 - Social profiling of humans to assess or predict the likelihood of that person committing a crime based on their personality traits or characteristics
 - AI systems intended to infer emotions in the workplace or education institutions
-- The use of biometric data to categorize or deduce a person’s race, political opinions, trade union membership, religious or philosophical beliefs, sex life or sexual orientation
+- The use of biometric data to categorize or deduce a person's race, political opinions, trade union membership, religious or philosophical beliefs, sex life or sexual orientation
 
 From a deployment perspective, there are a number of use cases that could trespass into the hazard zone of prohibited AI systems in the EU:
 
 - Using LLMs for social engineering to phish for sensitive information such as bank account details, credit card numbers, date of birth, or social security numbers
-- Skewing LLM responses in a children’s app for extreme or violent points of view
-- Asking an LLM to generate a “risk score” of a person committing fraud based on their speech patterns or physical appearance
-- Instructing an LLM to determine a person’s sexual orientation based on the way they speak
+- Skewing LLM responses in a children's app for extreme or violent points of view
+- Asking an LLM to generate a "risk score" of a person committing fraud based on their speech patterns or physical appearance
+- Instructing an LLM to determine a person's sexual orientation based on the way they speak
 - Generating insights on employee workplace satisfaction or their personality traits based on their writing or communication
 
-Even if an LLM is not intended to behave in prohibited ways, it could unintentionally be vulnerable to harmful behavior through misconfigurations at the system prompt level or guardrail level. Additionally, LLMs could be vulnerable to insiders who may manipulate LLMs to behave in malicious ways. LLMs desire to be helpful and cannot meaningfully determine what is “wrong” or harmful by human regulatory standards. It is up to LLM developers to enforce the appropriate controls to ensure that LLMs do not cause harm.
+Even if an LLM is not intended to behave in prohibited ways, it could unintentionally be vulnerable to harmful behavior through misconfigurations at the system prompt level or guardrail level. Additionally, LLMs could be vulnerable to insiders who may manipulate LLMs to behave in malicious ways. LLMs desire to be helpful and cannot meaningfully determine what is "wrong" or harmful by human regulatory standards. It is up to LLM developers to enforce the appropriate controls to ensure that LLMs do not cause harm.
 
 Promptfoo helps solve this through its [harmful generation plugin](https://www.promptfoo.dev/docs/red-team/plugins/harmful/). You can test against prohibited behavior such as violent crimes, sex crimes, child exploitation, indiscriminate weapons, chemical and biological weapons, hate, self-harm, and more.
 
@@ -85,6 +100,6 @@ policy: >
 
 Using a combination of harmful content plugins and custom policies, you can test against prohibited behaviors listed in the EU AI Act.
 
-Although requirements for high-risk AI systems won’t go into full effect until August 2026, you can still use Promptfoo to test against the EU AI Act’s [cybersecurity, accuracy, and robustness controls](https://artificialintelligenceact.eu/article/15/). These requirements ensure high-risk AI systems are resistant to vulnerabilities, hijacking, bias, and hallucination.
+Although requirements for high-risk AI systems won't go into full effect until August 2026, you can still use Promptfoo to test against the EU AI Act's [cybersecurity, accuracy, and robustness controls](https://artificialintelligenceact.eu/article/15/). These requirements ensure high-risk AI systems are resistant to vulnerabilities, hijacking, bias, and hallucination.
 
 Interested in learning more? [Contact us](https://www.promptfoo.dev/contact/) for a demo of Promptfoo.

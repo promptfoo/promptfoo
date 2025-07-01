@@ -11,10 +11,6 @@ import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
-export type AgentSubproviderConfig = {
-  id: string;
-};
-
 export type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -56,23 +52,25 @@ export class SimulatedUser implements ApiProvider {
 
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
     logger.debug(`User: ${response.output}`);
-    return [...messages, { role: 'user', content: response.output }];
+    return [...messages, { role: 'user', content: String(response.output || '') }];
   }
 
   private async sendMessageToAgent(
     messages: Message[],
     targetProvider: ApiProvider,
     prompt: string,
+    context?: CallApiContextParams,
   ): Promise<Message[]> {
     const response = await targetProvider.callApi(
       JSON.stringify([{ role: 'system', content: prompt }, ...messages]),
+      context,
     );
     if (targetProvider.delay) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
       await sleep(targetProvider.delay);
     }
     logger.debug(`Agent: ${response.output}`);
-    return [...messages, { role: 'assistant', content: response.output }];
+    return [...messages, { role: 'assistant', content: String(response.output || '') }];
   }
 
   async callApi(
@@ -94,7 +92,11 @@ export class SimulatedUser implements ApiProvider {
     for (let i = 0; i < maxTurns; i++) {
       const messagesToUser = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
-      if (lastMessage.content.includes('###STOP###')) {
+      if (
+        lastMessage.content &&
+        typeof lastMessage.content === 'string' &&
+        lastMessage.content.includes('###STOP###')
+      ) {
         break;
       }
 
@@ -102,6 +104,7 @@ export class SimulatedUser implements ApiProvider {
         messagesToUser,
         context.originalProvider,
         prompt,
+        context,
       );
       messages = messagesToAgent;
       numRequests += 1; // Only count the request to the agent.

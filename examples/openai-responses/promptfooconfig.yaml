@@ -17,6 +17,7 @@ providers:
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format:
         type: 'json_object'
+      store: true
 
   - id: openai:responses:gpt-4.5-preview
     label: json-schema

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -31,12 +32,14 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
+import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 
@@ -58,13 +61,16 @@ export default function Review() {
   const { recordEvent } = useTelemetry();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
-  const [maxConcurrency, setMaxConcurrency] = React.useState('1');
+  const [maxConcurrency, setMaxConcurrency] = React.useState(
+    String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
+  );
   const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
@@ -73,6 +79,8 @@ export default function Review() {
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
+  const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
+  const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -81,6 +89,11 @@ export default function Review() {
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
+
+  // Sync local maxConcurrency state with config
+  useEffect(() => {
+    setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
+  }, [config.maxConcurrency]);
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -548,16 +561,89 @@ export default function Review() {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                <Typography
+                  variant="body2"
+                  onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    padding: 1,
+                    borderRadius: 1,
+                    backgroundColor: 'background.paper',
+                    cursor: 'pointer',
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
+                >
                   {config.purpose || 'Not specified'}
                 </Typography>
+                {config.purpose && config.purpose.split('\n').length > 6 && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'primary.main',
+                      cursor: 'pointer',
+                      mt: 0.5,
+                      display: 'block',
+                    }}
+                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                  >
+                    {isPurposeExpanded ? 'Show less' : 'Show more'}
+                  </Typography>
+                )}
               </Grid>
+              {config.testGenerationInstructions && (
+                <Grid item xs={12} sm={12}>
+                  <Typography variant="subtitle2">Test Generation Instructions</Typography>
+                  <Typography
+                    variant="body2"
+                    onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                    sx={{
+                      whiteSpace: 'pre-wrap',
+                      padding: 1,
+                      borderRadius: 1,
+                      backgroundColor: 'background.paper',
+                      cursor: 'pointer',
+                      display: '-webkit-box',
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                      },
+                    }}
+                  >
+                    {config.testGenerationInstructions}
+                  </Typography>
+                  {config.testGenerationInstructions &&
+                    config.testGenerationInstructions.split('\n').length > 6 && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          mt: 0.5,
+                          display: 'block',
+                        }}
+                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                      >
+                        {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                      </Typography>
+                    )}
+                </Grid>
+              )}
             </Grid>
           </Paper>
         </Grid>
       </Grid>
 
       <Divider sx={{ my: 4 }} />
+
+      <DefaultTestVariables />
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
         Running Your Configuration
@@ -572,19 +658,7 @@ export default function Review() {
             Save your configuration and run it from the command line. Full control over the
             evaluation process, good for larger scans:
           </Typography>
-          <Box
-            component="pre"
-            sx={{
-              p: 2,
-              mb: 2,
-              backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-              borderRadius: 1,
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-            }}
-          >
-            promptfoo redteam run
-          </Box>
+          <Code>promptfoo redteam run</Code>
           <Stack spacing={2}>
             <Box>
               <Button
@@ -809,6 +883,7 @@ export default function Review() {
                       // Ensure non-negative numbers only
                       if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
                         setMaxConcurrency(value);
+                        updateConfig('maxConcurrency', Number(value));
                         // If concurrency > 1, disable delay by setting it to 0
                         if (Number(value) > 1) {
                           setDelayMs('0');
@@ -825,6 +900,7 @@ export default function Review() {
                 </span>
               </Tooltip>
             </Box>
+
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
             </Box>

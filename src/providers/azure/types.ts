@@ -1,6 +1,7 @@
 import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
+import type { AssistantFunctionCallback } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -40,6 +41,7 @@ export interface AzureCompletionOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
   apiVersion?: string;
+  headers?: { [key: string]: string };
 
   // OpenAI params
   max_tokens?: number;
@@ -101,7 +103,7 @@ export type AzureAssistantOptions = AzureCompletionOptions &
      * If set, automatically call these functions when the assistant activates
      * these function tools.
      */
-    functionToolCallbacks?: Record<FunctionDefinition['name'], (arg: string) => Promise<string>>;
+    functionToolCallbacks?: Record<FunctionDefinition['name'], AssistantFunctionCallback | string>;
     /**
      * Model to use for the assistant.
      */

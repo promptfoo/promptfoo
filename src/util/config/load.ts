@@ -36,6 +36,13 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
 
+/**
+ * Type guard to check if a test case has vars property
+ */
+function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
+  return typeof test === 'object' && test !== null && 'vars' in test;
+}
+
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
@@ -208,7 +215,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       // Check the array for `prompt` vars
       (Array.isArray(ret.tests) &&
         ret.tests.some(
-          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
+          (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
 
     if (!hasAnyPrompt) {
@@ -273,12 +280,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  for (const config of configs) {
+  for (let i = 0; i < configs.length; i++) {
+    const config = configs[i];
+    const configPath = configPaths[i];
     if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
+    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
+      // Handle TestGeneratorConfig object
+      const newTests = await readTests(config.tests, path.dirname(configPath));
+      tests.push(...newTests);
     }
   }
 
@@ -436,6 +449,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
       return sharingConfig ? sharingConfig.sharing : true;
     })(),
+    tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
   return combinedConfig;
@@ -448,7 +462,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
-  type?: 'DatasetGeneration',
+  type?: 'DatasetGeneration' | 'AssertionGeneration',
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -515,6 +529,7 @@ export async function resolveConfigs(
     extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
+    tracing: fileConfig.tracing || defaultConfig.tracing,
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
@@ -537,7 +552,6 @@ export async function resolveConfigs(
     `);
     process.exit(1);
   }
-
   if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
     process.exit(1);
@@ -546,6 +560,7 @@ export async function resolveConfigs(
   if (
     // Dataset configs don't require providers
     type !== 'DatasetGeneration' &&
+    type !== 'AssertionGeneration' &&
     !hasProviders
   ) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
@@ -633,6 +648,7 @@ export async function resolveConfigs(
       basePath,
     ),
     extensions: config.extensions,
+    tracing: config.tracing,
   };
 
   if (testSuite.tests) {
