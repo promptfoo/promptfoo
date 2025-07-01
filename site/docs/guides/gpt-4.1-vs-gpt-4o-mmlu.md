@@ -8,7 +8,7 @@ sidebar_label: GPT-4.1 vs GPT-4o MMLU
 
 # GPT-4.1 vs GPT-4o: MMLU Benchmark Comparison
 
-OpenAI's [GPT-4.1](https://openai.com/index/introducing-gpt-4-1-in-the-api/) scores **90.2% on MMLU** vs GPT-4o's 85.7% - a **4.5 point improvement** on academic reasoning.
+OpenAI's [GPT-4.1](https://openai.com/index/introducing-gpt-4-turbo/) scores **90.2% on MMLU** vs GPT-4o's 85.7% - a **4.5 point improvement** on academic reasoning.
 
 **MMLU** (Massive Multitask Language Understanding) tests language models across 57 academic subjects including mathematics, physics, history, law, and medicine using multiple-choice questions.
 

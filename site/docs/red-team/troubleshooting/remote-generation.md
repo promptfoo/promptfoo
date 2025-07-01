@@ -22,7 +22,7 @@ You should receive a response like:
 }
 ```
 
-If this request fails or times out, it likely means your network is blocking access to our API. You can also try opening `https://api.promptfoo.app/version` in your browser to see if you can reach the page.
+If this request fails or times out, it likely means your network is blocking access to our API. You can also try opening `https://api.promptfoo.app/version in your browser to see if you can reach the page.
 
 ## Common Solutions
 

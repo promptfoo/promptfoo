@@ -48,7 +48,7 @@ In this example, we're using Replicate, but you can also use providers like [Hug
 - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
 - id: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
   config:
-    apiBaseUrl: https://api.together.xyz/v1
+    apiBaseUrl: https://api.together.xyz
 ```
 
 Local options such as [ollama](/docs/providers/ollama), [vllm](/docs/providers/vllm), and [localai](/docs/providers/localai) also exist. See [providers](/docs/providers) for all options.
@@ -162,7 +162,7 @@ npx promptfoo@latest eval -o results.csv
 
 The comparison will provide you with a side-by-side performance view of Mixtral, GPT-4o-mini, and GPT-4o based on your test cases. Use this data to make informed decisions about which LLM best suits your application.
 
-Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai/) leaderboard:
+Contrast this with public benchmarks from the [Chatbot Arena](https://chat.lmsys.org/) leaderboard:
 
 | Model                      | Arena rating | MT-bench score |
 | -------------------------- | ------------ | -------------- |

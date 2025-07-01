@@ -261,7 +261,7 @@ def call_api(prompt, options, context):
     # Initialize client
     client = OpenAI(
         api_key=os.getenv('OPENAI_API_KEY'),
-        base_url=config.get('base_url', 'https://api.openai.com/v1')
+        base_url=config.get('base_url', 'https://api.openai.com')
     )
 
     # Parse messages if needed

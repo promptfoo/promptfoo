@@ -105,7 +105,7 @@ To install the WatsonX provider, use the following steps:
          # apiBearerToken: your-ibm-cloud-bearer-token
 
          projectId: your-ibm-project-id
-         serviceUrl: https://us-south.ml.cloud.ibm.com
+         serviceUrl: https://us-south.ml.cloud.ibm.com/ml/v1
    ```
 
 ### Usage Examples

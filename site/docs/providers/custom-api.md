@@ -48,7 +48,7 @@ module.exports = class OpenAIProvider {
 
   async callApi(prompt, context, options) {
     const { data } = await promptfoo.cache.fetchWithCache(
-      'https://api.openai.com/v1/chat/completions',
+      'https://api.openai.com/chat/completions',
       {
         method: 'POST',
         headers: {
@@ -140,7 +140,7 @@ module.exports = class TwoStageProvider {
 
   async callLLM(prompt) {
     const { data } = await promptfoo.cache.fetchWithCache(
-      'https://api.openai.com/v1/chat/completions',
+      'https://api.openai.com/chat/completions',
       {
         method: 'POST',
         headers: {
@@ -206,7 +206,7 @@ export default class TypedProvider implements ApiProvider {
 
 ```javascript title="embeddingProvider.js"
 async callEmbeddingApi(text) {
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
+  const response = await fetch('https://api.openai.com/embeddings', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

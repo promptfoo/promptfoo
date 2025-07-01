@@ -143,7 +143,7 @@ providers:
 | ---------------------- | ------------------------------- | ---------------------------- |
 | `MISTRAL_API_KEY`      | Your Mistral API key (required) | `sk-1234...`                 |
 | `MISTRAL_API_HOST`     | Custom hostname for proxy setup | `api.example.com`            |
-| `MISTRAL_API_BASE_URL` | Full base URL override          | `https://api.example.com/v1` |
+| `MISTRAL_API_BASE_URL` | Full base URL override          | `https://api.example.com/v1 |
 
 ## Model Selection
 
@@ -447,7 +447,7 @@ tests:
 export MISTRAL_API_KEY="your-api-key-here"
 
 # Optional - for custom endpoints
-export MISTRAL_API_BASE_URL="https://api.mistral.ai/v1"
+export MISTRAL_API_BASE_URL="https://api.mistral.ai"
 export MISTRAL_API_HOST="api.mistral.ai"
 ```
 

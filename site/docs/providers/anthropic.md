@@ -12,7 +12,7 @@ This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) 
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
 
-Create Anthropic API keys [here](https://console.anthropic.com/settings/keys).
+Create Anthropic API keys [here](https://console.anthropic.com/account/keys).
 
 Example of setting the environment variable:
 

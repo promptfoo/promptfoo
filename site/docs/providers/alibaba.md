@@ -15,7 +15,7 @@ providers:
     config:
       temperature: 0.7
       apiKeyEnvar: 01234567890123456789012345678901 # or set `DASHSCOPE_API_KEY` to your Alibaba Cloud API key
-      API_BASE_URL: https://dashscope-intl.aliyuncs.com/compatible-mode/v1 # Optional: Override default API base URL
+      API_BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1 # Optional: Override default API base URL
 ```
 
 ## Models
@@ -61,6 +61,6 @@ All support 131K context (129,024 in, 8,192 out)
 
 - `vl_high_resolution_images`: bool - Increases image token limit from 1,280 to 16,384 (qwen-vl-max only)
 
-Standard [OpenAI parameters](/docs/providers/openai/#configuring-parameters) (temperature, max_tokens) are supported. Base URL: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
+Standard [OpenAI parameters](/docs/providers/openai/#configuring-parameters) (temperature, max_tokens) are supported. Base URL: `https://dashscope.aliyuncs.com/compatible-mode/v1
 
 For API usage details, see [Alibaba Cloud documentation](https://www.alibabacloud.com/help/en/model-studio/getting-started/models).

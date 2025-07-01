@@ -6,7 +6,7 @@ sidebar_label: CyberSecEval
 
 ## Overview
 
-The CyberSecEval plugin uses Meta's [Purple Llama CyberSecEval dataset](https://meta-llama.github.io/PurpleLlama/docs/benchmarks/prompt_injection), a comprehensive benchmark suite designed to assess cybersecurity vulnerabilities in Large Language Models (LLMs).
+The CyberSecEval plugin uses Meta's [Purple Llama CyberSecEval dataset](https://github.com/meta-llama/PurpleLlama/tree/main/CybersecurityBenchmarks), a comprehensive benchmark suite designed to assess cybersecurity vulnerabilities in Large Language Models (LLMs).
 
 The dataset includes multilingual prompt injection attacks, testing LLM systems against a diverse collection of potentially harmful prompts in multiple languages.
 

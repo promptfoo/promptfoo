@@ -124,7 +124,7 @@ Only configure local or self-hosted LLM providers (e.g., Ollama) so the CLI does
 
 ### Do you publish an LLMs.txt?
 
-Yes. The documentation website follows the [LLMs.txt specification](https://llmspec.ai/) so automated tools can easily index our content. You can access the files at:
+Yes. The documentation website follows the [LLMs.txt specification](https://github.com/jph00/llms-txt) so automated tools can easily index our content. You can access the files at:
 
 - [llms.txt](https://www.promptfoo.dev/llms.txt) - Navigation and structure
 - [llms-full.txt](https://www.promptfoo.dev/llms-full.txt) - Complete documentation content

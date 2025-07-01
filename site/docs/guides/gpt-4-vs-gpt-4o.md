@@ -4,7 +4,7 @@ sidebar_label: GPT-4o vs GPT-4o-mini
 
 # GPT-4o vs GPT-4o-mini: Benchmark on Your Own Data
 
-OpenAI released [gpt-4o-mini](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
+OpenAI released [gpt-4o-mini](https://platform.openai.com/docs/models/gpt-4o-mini), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
 
 This guide will walk you through how to compare OpenAI's GPT-4o and GPT-4o-mini using promptfoo. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
 

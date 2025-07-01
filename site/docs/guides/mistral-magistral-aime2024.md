@@ -254,4 +254,4 @@ npx promptfoo@latest eval -c promptfooconfig.aime2024.yaml
 - [AIME2024 Dataset](https://huggingface.co/datasets/sea-snell/aime-2024)
 - [Mistral Magistral Announcement](https://mistral.ai/news/magistral/)
 - [Mistral Provider Documentation](/docs/providers/mistral)
-- [AIME Official Website](https://aime.maa.org/) - Mathematical Association of America
+- [AIME Official Website](https://www.maa.org/math-competitions/american-invitational-mathematics-examination-aime) - Mathematical Association of America

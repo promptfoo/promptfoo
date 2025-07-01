@@ -39,5 +39,5 @@ provider:
   config:
     apiKey: XXX
     apiKeyEnvar: VOYAGE_API_KEY # if set, will fetch API key from this environment variable
-    apiBaseUrl: https://api.voyageai.com/v1
+    apiBaseUrl: https://api.voyageai.com
 ```

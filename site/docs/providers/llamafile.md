@@ -6,7 +6,7 @@ sidebar_label: llamafile
 
 Llamafile has an [OpenAI-compatible HTTP endpoint](https://github.com/Mozilla-Ocho/llamafile?tab=readme-ov-file#json-api-quickstart), so you can override the [OpenAI provider](/docs/providers/openai/) to talk to your llamafile server.
 
-In order to use llamafile in your eval, set the `apiBaseUrl` variable to `http://localhost:8080` (or wherever you're hosting llamafile).
+In order to use llamafile in your eval, set the `apiBaseUrl` variable to `http://localhost:8080 (or wherever you're hosting llamafile).
 
 Here's an example config that uses LLaMA_CPP for text completions:
 

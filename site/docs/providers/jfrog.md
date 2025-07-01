@@ -45,7 +45,7 @@ The JFrog ML provider supports all the standard [OpenAI configuration options](/
 
 | Parameter | Description                                                                                                                                        |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl` | Optional. The full URL to your model endpoint. If not provided, it will be constructed using the model name: `https://models.qwak-prod.qwak.ai/v1` |
+| `baseUrl` | Optional. The full URL to your model endpoint. If not provided, it will be constructed using the model name: `https://models.qwak.ai/v1 |
 
 Example with full configuration:
 
@@ -54,7 +54,7 @@ providers:
   - id: jfrog:llama_3_8b_instruct
     config:
       # JFrog ML-specific options
-      baseUrl: https://models.qwak-prod.qwak.ai/v1
+      baseUrl: https://models.qwak.ai/v1
 
       # Standard OpenAI options
       temperature: 1.2

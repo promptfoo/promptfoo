@@ -92,7 +92,7 @@ promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709
 
 Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual path selection, real-time progress tracking, and detailed results visualization.
 
-**Access:** Run `promptfoo view` and navigate to `http://localhost:15500/model-audit`
+**Access:** Run `promptfoo view` and navigate to `http://localhost:15500/model-audit
 
 **Key Features:**
 
@@ -126,8 +126,8 @@ ModelAudit can scan:
   - Embedded executables (PE, ELF, Mach-O)
 - **Model configuration files** (`.json`, `.yaml`, etc.)
 - **HuggingFace URLs** - scan models directly from HuggingFace without downloading:
-  - `https://huggingface.co/user/model`
-  - `https://hf.co/user/model`
+  - `https://huggingface.co/user/model
+  - `https://hf.co/user/model
   - `hf://user/model`
 
 ## Security Checks Performed

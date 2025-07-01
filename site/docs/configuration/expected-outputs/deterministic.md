@@ -482,7 +482,7 @@ providers:
       tools:
         - type: mcp
           server_label: deepwiki
-          server_url: https://mcp.deepwiki.com/mcp
+          server_url: https://github.com/DeepWiki/mcp-server
           require_approval: never
 
 tests:

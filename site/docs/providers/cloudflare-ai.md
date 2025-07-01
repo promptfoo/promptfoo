@@ -54,9 +54,9 @@ providers:
 
 This provider leverages Cloudflare's OpenAI-compatible endpoints:
 
-- **Chat completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
-- **Text completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/completions`
-- **Embeddings**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/embeddings`
+- **Chat completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions
+- **Text completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/completions
+- **Embeddings**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/embeddings
 
 All standard OpenAI parameters work with Cloudflare AI models: `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, and `presence_penalty`.
 
@@ -173,7 +173,7 @@ providers:
   - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
     config:
       accountId: your_account_id_here
-      apiBaseUrl: https://api.cloudflare.com/client/v4/accounts/your_account_id/ai/v1
+      apiBaseUrl: https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1
 ```
 
 ## See Also

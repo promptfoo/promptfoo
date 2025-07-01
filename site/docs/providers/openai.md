@@ -30,7 +30,7 @@ or if you have a custom model.
 For example, if OpenAI releases `gpt-5` chat completion,
 you could begin using it immediately with `openai:chat:gpt-5`.
 
-The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
+The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -48,7 +48,7 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 ## Configuring parameters
 
-The `providers` list takes a `config` key that allows you to set parameters like `temperature`, `max_tokens`, and [others](https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature). For example:
+The `providers` list takes a `config` key that allows you to set parameters like `temperature`, `max_tokens`, and [others](https://platform.openai.com/docs/api-reference/chat/create). For example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -84,8 +84,8 @@ Supported parameters include:
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
 | `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
 | `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
-| `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
-| `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
+| `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/guides/function-calling)                                                                                                                                         |
+| `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/guides/function-calling)                                                                                                                                                 |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
 | `user`                  | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                |
 | `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                                                     |
@@ -427,7 +427,7 @@ They can also include functions that dynamically reference vars:
 
 ### Using functions
 
-> `functions` and `function_call` is deprecated in favor of `tools` and `tool_choice`, see detail in [OpenAI API reference](https://platform.openai.com/docs/api-reference/chat/create#chat-create-function_call).
+> `functions` and `function_call` is deprecated in favor of `tools` and `tool_choice`, see detail in [OpenAI API reference](https://platform.openai.com/docs/guides/function-calling).
 
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
@@ -633,7 +633,7 @@ These OpenAI-related environment variables are supported:
 
 ## Evaluating assistants
 
-To test out an Assistant via OpenAI's Assistants API, first create an Assistant in the [API playground](https://platform.openai.com/playground).
+To test out an Assistant via OpenAI's Assistants API, first create an Assistant in the [API playground](https://platform.openai.com/).
 
 Set functions, code interpreter, and files for retrieval as necessary.
 
@@ -656,12 +656,12 @@ The following properties can be overwritten in provider config:
 
 - `model` - OpenAI model to use
 - `instructions` - System prompt
-- `tools` - Enabled [tools](https://platform.openai.com/docs/api-reference/runs/createRun)
+- `tools` - Enabled [tools](https://platform.openai.com/docs/api-reference/runs/create)
 - `thread.messages` - A list of message objects that the thread is created with.
 - `temperature` - Temperature for the model
 - `toolChoice` - Controls whether the AI should use a tool
-- `tool_resources` - Tool resources to include in the thread - see [Assistant v2 tool resources](https://platform.openai.com/docs/assistants/migration)
-- `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/migration)
+- `tool_resources` - Tool resources to include in the thread - see [Assistant v2 tool resources](https://platform.openai.com/docs/assistants/whats-new)
+- `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/whats-new)
 
 Here's an example of a more detailed config:
 
@@ -984,7 +984,7 @@ providers:
       tools:
         - type: mcp
           server_label: deepwiki
-          server_url: https://mcp.deepwiki.com/mcp
+          server_url: https://github.com/DeepWiki/mcp-server
           require_approval: never
 ```
 
@@ -1010,7 +1010,7 @@ providers:
       tools:
         - type: mcp
           server_label: stripe
-          server_url: https://mcp.stripe.com
+          server_url: https://github.com/stripe/mcp-server-stripe
           headers:
             Authorization: 'Bearer sk-test_...'
           require_approval: never
@@ -1027,7 +1027,7 @@ providers:
       tools:
         - type: mcp
           server_label: deepwiki
-          server_url: https://mcp.deepwiki.com/mcp
+          server_url: https://github.com/DeepWiki/mcp-server
           allowed_tools: ['ask_question']
           require_approval: never
 ```
@@ -1044,7 +1044,7 @@ providers:
       tools:
         - type: mcp
           server_label: deepwiki
-          server_url: https://mcp.deepwiki.com/mcp
+          server_url: https://github.com/DeepWiki/mcp-server
           require_approval: never
 
 # Never require approval for specific tools only
@@ -1054,7 +1054,7 @@ providers:
       tools:
         - type: mcp
           server_label: deepwiki
-          server_url: https://mcp.deepwiki.com/mcp
+          server_url: https://github.com/DeepWiki/mcp-server
           require_approval:
             never:
               tool_names: ["ask_question", "read_wiki_structure"]
@@ -1073,7 +1073,7 @@ providers:
       tools:
         - type: mcp
           server_label: deepwiki
-          server_url: https://mcp.deepwiki.com/mcp
+          server_url: https://github.com/DeepWiki/mcp-server
           require_approval: never
           allowed_tools: ['ask_question']
 
@@ -1122,7 +1122,7 @@ Both models feature:
 - Large context window (200,000 tokens)
 - High maximum output tokens (100,000 tokens)
 
-For current specifications and pricing information, refer to [OpenAI's pricing page](https://openai.com/pricing).
+For current specifications and pricing information, refer to [OpenAI's pricing page](https://openai.com/api/pricing/).
 
 Example configuration:
 

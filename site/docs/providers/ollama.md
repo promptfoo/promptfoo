@@ -32,7 +32,7 @@ We also support the `/api/embeddings` endpoint via `ollama:embeddings:<model nam
 
 Supported environment variables:
 
-- `OLLAMA_BASE_URL` - protocol, host name, and port (defaults to `http://localhost:11434`)
+- `OLLAMA_BASE_URL` - protocol, host name, and port (defaults to `http://localhost:11434)
 - `OLLAMA_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API
 - `REQUEST_TIMEOUT_MS` - request timeout in milliseconds
 
@@ -61,7 +61,7 @@ To investigate and fix this issue, there's a few possible solutions:
    Note this IPv6 support requires Ollama version `0.0.20` or newer.
 2. Change promptfoo to directly use an IPv4 address by configuring
    `export OLLAMA_BASE_URL="http://127.0.0.1:11434"`.
-3. Update your OS's [`hosts`](<https://en.wikipedia.org/wiki/Hosts_(file)>) file
+3. Update your OS's [`hosts`](<https://en.wikipedia.org/wiki/Hosts_(file))>) file
    to bind `localhost` to IPv4.
 
 ## Evaluating models serially

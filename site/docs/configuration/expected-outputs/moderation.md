@@ -7,7 +7,7 @@ sidebar_label: Moderation
 
 Use the `moderation` assert type to ensure that LLM outputs are safe.
 
-Currently, this supports [OpenAI's moderation model](https://platform.openai.com/docs/guides/moderation), [Meta's LlamaGuard 3 model](https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-3/) via [Replicate](https://replicate.com/meta/llama-guard-3-8b), and [Azure Content Safety API](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview).
+Currently, this supports [OpenAI's moderation model](https://platform.openai.com/docs/guides/moderation/overview), [Meta's LlamaGuard 3 model](https://github.com/meta-llama/llama-models/blob/main/models/llama_guard/MODEL_CARD.md) via [Replicate](https://replicate.com/meta/llama-guard-3-8b), and [Azure Content Safety API](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview).
 
 In general, we encourage the use of Meta's LlamaGuard as it substantially outperforms OpenAI's moderation API as well as GPT-4. [See benchmarks](https://github.com/meta-llama/PurpleLlama/blob/main/Llama-Guard2/MODEL_CARD.md#model-performance).
 

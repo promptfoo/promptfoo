@@ -46,7 +46,7 @@ export BAM_API_KEY='your-bam-api-key'
 
 ## API Client Initialization
 
-The BAM provider initializes an API client using the IBM Generative AI Node SDK. The endpoint for the BAM API is configured to `https://bam-api.res.ibm.com/`.
+The BAM provider initializes an API client using the IBM Generative AI Node SDK. The endpoint for the BAM API is configured to `https://bam.res.ibm.com/.
 
 ## Configuration
 

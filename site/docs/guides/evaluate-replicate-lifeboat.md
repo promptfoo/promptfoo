@@ -4,7 +4,7 @@ sidebar_label: Evaluating Replicate Lifeboat
 
 # How to evaluate GPT 3.5 vs Llama2-70b with Replicate Lifeboat
 
-Replicate put together a ["Lifeboat" OpenAI proxy](https://lifeboat.replicate.dev/) that allows you to swap to their hosted Llama2-70b instances. They are generously providing this API for free for a week.
+Replicate put together a ["Lifeboat" OpenAI proxy](https://replicate.com/docs) that allows you to swap to their hosted Llama2-70b instances. They are generously providing this API for free for a week.
 
 I noticed some claims that Llama2-70b outperforms GPT 3.5. While perhaps that is true generally, I've always found it useful to check such claims against my own specific data and use cases.
 

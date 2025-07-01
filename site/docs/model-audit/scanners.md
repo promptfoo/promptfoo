@@ -367,8 +367,8 @@ ModelAudit can scan models directly from HuggingFace URLs without manual downloa
 
 **Supported URL formats:**
 
-- `https://huggingface.co/user/model`
-- `https://hf.co/user/model`
+- `https://huggingface.co/user/model
+- `https://hf.co/user/model
 - `hf://user/model`
 
 This feature requires the `huggingface-hub` package to be installed.

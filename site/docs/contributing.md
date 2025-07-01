@@ -33,7 +33,7 @@ We particularly welcome contributions in the following areas:
 2. Clone your fork locally:
 
    ```bash
-   git clone https://github.com/[your-username]/promptfoo.git
+   git clone https://github.com/[your-username]]/promptfoo.git
    cd promptfoo
    ```
 
@@ -444,7 +444,7 @@ As a maintainer, when you are ready to release a new version:
    To determine the appropriate release type, review the changes between the latest release and main branch by visiting ([example](https://github.com/promptfoo/promptfoo/compare/0.103.13...main)):
 
    ```
-   https://github.com/promptfoo/promptfoo/compare/[latest-version]...main
+   https://github.com/promptfoo/promptfoo/compare/[latest-version]]...main
    ```
 
 2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.

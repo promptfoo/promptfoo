@@ -6,7 +6,7 @@ sidebar_label: vllm
 
 vllm's [OpenAI-compatible server](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server) offers access to many [supported models](https://docs.vllm.ai/en/latest/models/supported_models.html) for local inference from Huggingface Transformers.
 
-In order to use vllm in your eval, set the `apiBaseUrl` variable to `http://localhost:8080` (or wherever you're hosting vllm).
+In order to use vllm in your eval, set the `apiBaseUrl` variable to `http://localhost:8080 (or wherever you're hosting vllm).
 
 Here's an example config that uses Mixtral-8x7b for text completions:
 

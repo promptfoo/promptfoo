@@ -83,7 +83,7 @@ providers:
 
 ## Inference endpoints
 
-HuggingFace provides the ability to pay for private hosted inference endpoints. First, go the [Create a new Endpoint](https://ui.endpoints.huggingface.co/new) and select a model and hosting setup.
+HuggingFace provides the ability to pay for private hosted inference endpoints. First, go the [Create a new Endpoint](https://huggingface.co/inference-endpoints) and select a model and hosting setup.
 
 ![huggingface inference endpoint creation](/img/docs/huggingface-create-endpoint.png)
 
@@ -102,7 +102,7 @@ prompts:
 providers:
   - id: huggingface:text-generation:gemma-7b-it
     config:
-      apiEndpoint: https://v9igsezez4ei3cq4.us-east-1.aws.endpoints.huggingface.cloud
+      apiEndpoint: https://api-inference.huggingface.co
       # apiKey: abc123   # Or set HF_API_TOKEN environment variable
 
 tests:
@@ -120,7 +120,7 @@ If you're running the [Huggingface Text Generation Inference](https://github.com
 providers:
   - id: huggingface:text-generation:my-local-model
     config:
-      apiEndpoint: http://127.0.0.1:8080/generate
+      apiEndpoint: http://localhost:8080/generate
 ```
 
 ## Authentication

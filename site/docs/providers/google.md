@@ -42,7 +42,7 @@ If you are using Google Vertex, see the [`vertex` provider](/docs/providers/vert
 
 - `GOOGLE_API_KEY` (required) - Google AI Studio API key
 - `GOOGLE_API_HOST` - used to override the Google API host, defaults to `generativelanguage.googleapis.com`
-- `GOOGLE_API_BASE_URL` - used to override the Google API base url, defaults to `https://generativelanguage.googleapis.com`
+- `GOOGLE_API_BASE_URL` - used to override the Google API base url, defaults to `https://generativelanguage.googleapis.com
 
 ### Basic Configuration
 
@@ -383,9 +383,9 @@ When using Search grounding, the API response includes additional metadata:
 
 #### Example and Resources
 
-For a complete working example, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
+For a complete working example, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-gemini).
 
-For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/gemini-api/docs/grounding).
 
 ## Google Live API
 

@@ -86,7 +86,7 @@ docker run -d \
 - **`-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo`**: **Crucial for persistence.** Maps the container's data directory (`/home/promptfoo/.promptfoo`, containing `promptfoo.db`) to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred host path (e.g., `./promptfoo_data`). **Data will be lost if this volume mapping is omitted.**
 - **`-e OPENAI_API_KEY=sk-abc123`**: Example of setting an environment variable. Add necessary API keys here so users can run evals directly from the web UI. Replace `sk-abc123` with your actual key.
 
-Access the UI at `http://localhost:3000`.
+Access the UI at `http://localhost:3000.
 
 ## Method 2: Using Docker Compose
 
@@ -296,7 +296,7 @@ export PROMPTFOO_REMOTE_API_BASE_URL=http://your-server-address:3000
 export PROMPTFOO_REMOTE_APP_BASE_URL=http://your-server-address:3000
 ```
 
-Replace `http://your-server-address:3000` with the actual URL of your self-hosted instance (e.g., `http://localhost:3000` if running locally).
+Replace `http://your-server-address:3000 with the actual URL of your self-hosted instance (e.g., `http://localhost:3000 if running locally).
 
 Alternatively, configure these URLs permanently in your `promptfooconfig.yaml`:
 
@@ -322,8 +322,8 @@ promptfoo resolves the sharing target URL in this order (highest priority first)
 
 When configured correctly, your self-hosted server handles requests like:
 
-- **API Endpoint**: `http://your-server:3000/api/eval`
-- **Web UI Link**: `http://your-server:3000/eval/{evalId}`
+- **API Endpoint**: `http://your-server:3000/api/eval
+- **Web UI Link**: `http://your-server:3000/eval/{evalId}
 
 ## Advanced Configuration
 

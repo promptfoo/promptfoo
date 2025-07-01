@@ -174,5 +174,5 @@ If you encounter issues with your Bitbucket Pipelines integration:
 
 - **Check logs**: Review detailed logs in Bitbucket to identify errors
 - **Verify repository variables**: Ensure your API keys are correctly set
-- **Pipeline timeouts**: Bitbucket Pipelines has timeout limits. For long-running evaluations, consider breaking them down or [increasing the timeout](https://support.atlassian.com/bitbucket-cloud/docs/build-timeouts/)
-- **Debug with SSH**: For complex issues, use [enabling SSH access](https://support.atlassian.com/bitbucket-cloud/docs/debug-your-pipelines-with-ssh/) to debug the pipeline environment directly
+- **Pipeline timeouts**: Bitbucket Pipelines has timeout limits. For long-running evaluations, consider breaking them down or [increasing the timeout](https://support.atlassian.com/bitbucket-cloud/docs/set-a-pipeline-time-limit/)
+- **Debug with SSH**: For complex issues, use [enabling SSH access](https://support.atlassian.com/bitbucket-cloud/docs/debug-pipelines-with-ssh/) to debug the pipeline environment directly

@@ -24,6 +24,6 @@ Alternatively, you can set the `FIREWORKS_API_KEY` environment variable to use y
 
 ## API Details
 
-- **Base URL**: `https://api.fireworks.ai/inference/v1`
+- **Base URL**: `https://api.fireworks.ai/inference/v1
 - **API format**: OpenAI-compatible
 - Full [API documentation](https://docs.fireworks.ai)

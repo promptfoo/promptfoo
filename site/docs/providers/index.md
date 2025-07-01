@@ -27,7 +27,7 @@ providers:
 | ----------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
 | [OpenAI](/docs/providers/openai.md)                               | GPT models including GPT-4.1 and reasoning models  | `openai:gpt-4.1` or `openai:o4-mini`                             |
 | [Anthropic](/docs/providers/anthropic.md)                         | Claude models                                      | `anthropic:messages:claude-sonnet-4-20250514`                    |
-| [HTTP](/docs/providers/http.md)                                   | Generic HTTP-based providers                       | `https://api.example.com/v1/chat/completions`                    |
+| [HTTP](/docs/providers/http.md)                                   | Generic HTTP-based providers                       | `https://api.example.com/v1/chat/completions                    |
 | [Javascript](/docs/providers/custom-api.md)                       | Custom - JavaScript file                           | `file://path/to/custom_provider.js`                              |
 | [Python](/docs/providers/python.md)                               | Custom - Python file                               | `file://path/to/custom_provider.py`                              |
 | [Shell Command](/docs/providers/custom-script.md)                 | Custom - script-based providers                    | `exec: python chain.py`                                          |
@@ -68,7 +68,7 @@ providers:
 | [llama.cpp](/docs/providers/llama.cpp.md)                         | Local                                              | `llama:7b`                                                       |
 | [Text Generation WebUI](/docs/providers/text-generation-webui.md) | Gradio WebUI                                       | Compatible with OpenAI syntax                                    |
 | [WebSocket](/docs/providers/websocket.md)                         | WebSocket-based providers                          | `ws://example.com/ws`                                            |
-| [Webhook](/docs/providers/webhook.md)                             | Custom - Webhook integration                       | `webhook:http://example.com/webhook`                             |
+| [Webhook](/docs/providers/webhook.md)                             | Custom - Webhook integration                       | `webhook:http://example.com/webhook                             |
 | [Echo](/docs/providers/echo.md)                                   | Custom - For testing purposes                      | `echo`                                                           |
 | [Manual Input](/docs/providers/manual-input.md)                   | Custom - CLI manual entry                          | `promptfoo:manual-input`                                         |
 | [Go](/docs/providers/go.md)                                       | Custom - Go file                                   | `file://path/to/your/script.go`                                  |

@@ -31,7 +31,7 @@ export GROQ_API_KEY=your_groq_key
 npx @helicone/ai-gateway@latest
 ```
 
-The gateway will start on `http://localhost:8080` by default.
+The gateway will start on `http://localhost:8080 by default.
 
 ### Installation
 
@@ -114,7 +114,7 @@ For a complete list, see the [Helicone AI Gateway documentation](https://github.
 
 #### Gateway Options
 
-- `baseUrl` (string): Helicone AI Gateway URL (defaults to `http://localhost:8080`)
+- `baseUrl` (string): Helicone AI Gateway URL (defaults to `http://localhost:8080)
 - `router` (string): Custom router name (optional, uses `/ai` endpoint if not specified)
 - `model` (string): Override the model name from the provider specification
 - `apiKey` (string): Custom API key (defaults to `placeholder-api-key`)

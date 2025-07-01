@@ -18,7 +18,7 @@ Before starting, ensure you have the following:
 
 - `promptfoo` installed (see [installation guide](/docs/installation))
 - Ollama set up and running (see [Ollama documentation](/docs/providers/ollama))
-- Your Ollama API base URL and port (default is `http://localhost:11434`)
+- Your Ollama API base URL and port (default is `http://localhost:11434)
 
 ## Step 1: Initialize
 

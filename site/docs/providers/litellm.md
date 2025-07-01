@@ -29,7 +29,7 @@ Or to use Anthropic's Claude:
 - id: litellm:claude-3-5-sonnet-20240620
 ```
 
-By default, the provider will connect to `http://0.0.0.0:4000`. You can customize the API base URL:
+By default, the provider will connect to `http://0.0.0.0:4000. You can customize the API base URL:
 
 ```yaml
 providers:

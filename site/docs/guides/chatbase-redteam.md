@@ -45,7 +45,7 @@ targets:
   - id: 'http'
     config:
       method: 'POST'
-      url: 'https://www.chatbase.co/api/v1/chat'
+      url: 'https://www.chatbase.co/api/v1/chat/send-message'
       headers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer YOUR_API_TOKEN'

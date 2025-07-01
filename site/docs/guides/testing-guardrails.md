@@ -87,9 +87,9 @@ You can also test standalone guardrail services directly using [custom providers
 
 - [Azure Content Filter](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/)
 - [AWS Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html)
-- [Google's AI Guardrails](https://cloud.google.com/vertex-ai/docs/generative-ai/guardrails/guardrails-overview)
+- [Google's AI Guardrails](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/configure-safety-attributes)
 - [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
-- [OpenAI moderation](https://platform.openai.com/docs/guides/moderation)
+- [OpenAI moderation](https://platform.openai.com/docs/guides/moderation/overview)
 
 ### Testing Azure Content Filter
 

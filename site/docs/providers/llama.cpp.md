@@ -12,6 +12,6 @@ To use the `llama` provider, specify `llama` as the provider in your `promptfooc
 
 Supported environment variables:
 
-- `LLAMA_BASE_URL` - Scheme, hostname, and port (defaults to `http://localhost:8080`)
+- `LLAMA_BASE_URL` - Scheme, hostname, and port (defaults to `http://localhost:8080)
 
 For a detailed example of how to use Promptfoo with `llama.cpp`, including configuration and setup, refer to the [example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/llama-cpp).

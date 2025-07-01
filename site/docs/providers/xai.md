@@ -6,7 +6,7 @@ keywords: [xai, grok, grok-3, grok-2, reasoning, vision, llm]
 
 # xAI (Grok)
 
-The `xai` provider supports [xAI's Grok models](https://x.ai/) through an API interface compatible with OpenAI's format. The provider supports both text and vision capabilities depending on the model used.
+The `xai` provider supports [xAI's Grok models](https://x.ai) through an API interface compatible with OpenAI's format. The provider supports both text and vision capabilities depending on the model used.
 
 ## Setup
 
@@ -76,10 +76,10 @@ You can specify a region to use a region-specific API endpoint:
 providers:
   - id: xai:grok-2-latest
     config:
-      region: us-west-1 # Will use https://us-west-1.api.x.ai/v1
+      region: us-west-1 # Will use https://api.x.ai
 ```
 
-This is equivalent to setting `base_url="https://us-west-1.api.x.ai/v1"` in the Python client.
+This is equivalent to setting `base_url="https://api.x.ai" in the Python client.
 
 ### Live Search (Beta)
 
@@ -102,7 +102,7 @@ providers:
           - type: web
 ```
 
-For a full list of options see the [xAI documentation](https://docs.x.ai/docs).
+For a full list of options see the [xAI documentation](https://docs.x.ai/).
 
 ### Vision Support
 
@@ -163,7 +163,7 @@ tests:
       subject: 'sunset over mountains'
 ```
 
-For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
+For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/).
 
 ## Examples
 

@@ -57,7 +57,7 @@ The Lambda Labs Inference API officially supports these models:
 To get the current list of available models, use the `/models` endpoint:
 
 ```bash
-curl https://api.lambda.ai/v1/models -H "Authorization: Bearer your_api_key_here"
+curl https://docs.lambda.ai/api-reference/models -H "Authorization: Bearer your_api_key_here"
 ```
 
 ## Parameters

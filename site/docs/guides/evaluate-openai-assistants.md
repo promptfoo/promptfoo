@@ -4,7 +4,7 @@ sidebar_label: Evaluating OpenAI Assistants
 
 # How to evaluate OpenAI Assistants
 
-OpenAI recently released an [Assistants API](https://platform.openai.com/docs/assistants/overview) that offers simplified handling for message state and tool usage. It also enables code interpreter and knowledge retrieval features, abstracting away some of the dirty work for implementing RAG architecture.
+OpenAI recently released an [Assistants API](https://platform.openai.com/docs/assistants) that offers simplified handling for message state and tool usage. It also enables code interpreter and knowledge retrieval features, abstracting away some of the dirty work for implementing RAG architecture.
 
 [Test-driven development](/docs/intro#workflow-and-philosophy) allows you to compare prompts, models, and tools while measuring improvement and avoiding unexplained regressions. It's an example of [systematic iteration vs. trial and error](https://ianww.com/blog/2023/05/21/prompt-engineering-framework).
 
@@ -12,7 +12,7 @@ This guide walks you through using promptfoo to select the best prompt, model, a
 
 ## Step 1: Create an assistant
 
-Use the [OpenAI playground](https://platform.openai.com/playground) to an assistant. The eval will use this assistant with different instructions and models.
+Use the [OpenAI playground](https://platform.openai.com/) to an assistant. The eval will use this assistant with different instructions and models.
 
 Add your desired functions and enable the code interpreter and retrieval as desired.
 

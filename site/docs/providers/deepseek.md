@@ -4,11 +4,11 @@ sidebar_label: DeepSeek
 
 # DeepSeek
 
-[DeepSeek](https://platform.deepseek.com/) provides an OpenAI-compatible API for their language models, with specialized models for both general chat and advanced reasoning tasks. The DeepSeek provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
+[DeepSeek](https://platform.deepseek.com) provides an OpenAI-compatible API for their language models, with specialized models for both general chat and advanced reasoning tasks. The DeepSeek provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
 
 ## Setup
 
-1. Get an API key from the [DeepSeek Platform](https://platform.deepseek.com/)
+1. Get an API key from the [DeepSeek Platform](https://platform.deepseek.com)
 2. Set `DEEPSEEK_API_KEY` environment variable or specify `apiKey` in your config
 
 ## Configuration
@@ -112,9 +112,9 @@ See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/exam
 
 ## API Details
 
-- Base URL: `https://api.deepseek.com/v1`
+- Base URL: `https://api.deepseek.com/v1
 - OpenAI-compatible API format
-- Full [API documentation](https://platform.deepseek.com/docs)
+- Full [API documentation](https://api-docs.deepseek.com/)
 
 ## See Also
 

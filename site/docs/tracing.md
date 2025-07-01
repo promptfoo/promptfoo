@@ -340,7 +340,7 @@ const extractedContext = trace.propagation.extract(context.active(), request.hea
 ### Traces Not Appearing
 
 1. **Check tracing is enabled**: Verify `tracing.enabled: true` in config
-2. **Verify OTLP endpoint**: Ensure providers are sending to `http://localhost:4318/v1/traces`
+2. **Verify OTLP endpoint**: Ensure providers are sending to `http://localhost:4318/v1/traces
 3. **Check trace context**: Log the `traceparent` value to ensure it's being passed
 4. **Review provider logs**: Look for connection errors or failed exports
 

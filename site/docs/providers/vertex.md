@@ -88,7 +88,7 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### PaLM 2 (Bison) Models
 
-Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/legacy/legacy-models) and it's recommended to migrate to the Gemini models.
+Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/deprecations) and it's recommended to migrate to the Gemini models.
 
 - `vertex:chat-bison[@001|@002]` - Chat model
 - `vertex:chat-bison-32k[@001|@002]` - Extended context chat
@@ -548,4 +548,4 @@ When using Search grounding, the API response includes additional metadata:
 - Results may be subject to Google Search rate limits
 - Search will only be performed when the model determines it's necessary
 
-For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/gemini-api/docs/grounding).

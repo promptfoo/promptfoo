@@ -250,7 +250,7 @@ Here is an example of `tools` used by adaline:
 ];
 ```
 
-The `schema` property supports OpenAI's `tools.function` type, reference: https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools
+The `schema` property supports OpenAI's `tools.function` type, reference: https://platform.openai.com/docs/guides/function-calling
 
 Here is an example of a model response involving tool call:
 
