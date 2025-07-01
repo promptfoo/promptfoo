@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
+import type { EvaluateResult, AtomicTestCase, ResultFailureReason } from '@promptfoo/types';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 
@@ -33,6 +34,35 @@ vi.mock('./SuggestionsDialog', () => ({
 describe('RiskCategoryDrawer Component Navigation', () => {
   const mockNavigate = vi.fn();
 
+  // Create a mock test case
+  const mockTestCase: AtomicTestCase = {
+    vars: {},
+  };
+
+  // Create a complete mock EvaluateResult
+  const createMockEvaluateResult = (metadata?: Record<string, any>): EvaluateResult => ({
+    promptIdx: 0,
+    testIdx: 0,
+    testCase: mockTestCase,
+    promptId: 'test-prompt-id',
+    provider: {
+      id: 'test-provider',
+      label: 'Test Provider',
+    },
+    prompt: {
+      raw: 'Test prompt',
+      display: 'Test prompt',
+      label: 'Test label',
+    },
+    vars: {},
+    failureReason: 0 as ResultFailureReason,
+    success: false,
+    score: 0,
+    latencyMs: 100,
+    namedScores: {},
+    metadata: metadata || { pluginId: 'test-plugin' },
+  });
+
   const defaultProps = {
     open: true,
     onClose: vi.fn(),
@@ -46,11 +76,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
           score: 0,
           reason: 'Failed test',
         },
-        result: {
-          metadata: {
-            pluginId: 'test-plugin',
-          },
-        },
+        result: createMockEvaluateResult({ pluginId: 'test-plugin' }),
       },
     ],
     passes: [],
@@ -121,9 +147,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
             score: 0,
             reason: 'Failed test',
           },
-          result: {
-            metadata: {},
-          },
+          result: createMockEvaluateResult({}),
         },
       ],
     };
