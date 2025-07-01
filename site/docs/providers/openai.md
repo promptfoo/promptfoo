@@ -1146,12 +1146,14 @@ providers:
 Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specialized reasoning models designed for complex research tasks that require web search capabilities.
 
 Available models:
+
 - `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
 - `o3-deep-research-2025-06-26` - Snapshot version
-- `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)  
+- `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
 - `o4-mini-deep-research-2025-06-26` - Snapshot version
 
 All deep research models:
+
 - Require `web_search_preview` tool to be configured
 - Support 200,000 token context window
 - Support up to 100,000 output tokens
@@ -1164,9 +1166,9 @@ Example configuration:
 providers:
   - id: openai:responses:o4-mini-deep-research
     config:
-      max_output_tokens: 50000  # High limit recommended
+      max_output_tokens: 50000 # High limit recommended
       tools:
-        - type: web_search_preview  # Required
+        - type: web_search_preview # Required
 ```
 
 :::tip
