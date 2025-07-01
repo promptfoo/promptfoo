@@ -18,8 +18,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents.coordinator import travel_coordinator
 
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from multiple possible locations
+import pathlib
+current_dir = pathlib.Path(__file__).parent
+# Try loading from current directory first
+load_dotenv(current_dir / '.env')
+# Try loading from parent directories
+load_dotenv(current_dir.parent / '.env')
+load_dotenv(current_dir.parent.parent / '.env')
 
 
 def run_agent(prompt: str) -> Any:
@@ -66,14 +72,19 @@ def call_api(
 ) -> Dict[str, Any]:
     """Main provider function for ADK travel planning agents."""
     try:
-        # Check for API key
-        if not os.getenv("GOOGLE_API_KEY"):
+        # Check for API key from environment or options
+        api_key = os.getenv("GOOGLE_API_KEY") or options.get("config", {}).get("apiKey")
+        if not api_key:
             return {
                 "output": {
                     "error": "GOOGLE_API_KEY not set",
                     "message": "Please set the GOOGLE_API_KEY environment variable"
                 }
             }
+        
+        # Set the API key in environment if it was provided through options
+        if not os.getenv("GOOGLE_API_KEY") and api_key:
+            os.environ["GOOGLE_API_KEY"] = api_key
         
         # Get any config options
         config = options.get("config", {})

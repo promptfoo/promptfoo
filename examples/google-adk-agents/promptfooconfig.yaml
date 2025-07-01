@@ -7,6 +7,8 @@ prompts:
 providers:
   - id: file://provider.py
     label: ADK Travel Coordinator
+    config:
+      apiKey: ${GOOGLE_API_KEY}
 
 tests:
   # Basic trip planning
