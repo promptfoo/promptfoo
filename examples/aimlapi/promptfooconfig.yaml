@@ -1,0 +1,4 @@
+providers:
+  - aimlapi:gpt-3.5-turbo
+prompts:
+  - What is the capital of France?

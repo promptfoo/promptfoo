@@ -32,6 +32,7 @@ providers:
 | [Python](./python.md)                               | Custom - Python file                               | `file://path/to/custom_provider.py`                              |
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                    | `exec: python chain.py`                                          |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                          | `ai21:jamba-1.5-mini`                                            |
+| [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API | `aimlapi:chat:gpt-3.5-turbo`            |
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers           | `bedrock:us.meta.llama3-2-90b-instruct-v1:0`                     |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints             | `sagemaker:my-endpoint-name`                                     |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                         | `azureopenai:gpt-4o-custom-deployment-name`                      |
