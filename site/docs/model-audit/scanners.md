@@ -157,7 +157,7 @@ This scanner validates GGUF (GPT-Generated Unified Format) and GGML model files 
 - **Header validation**: Verifies file format integrity and header structure
 - **Metadata security**: Scans JSON metadata for suspicious content and path traversal attempts
 - **Tensor integrity**: Validates tensor dimensions, types, and data alignment
-- **Resource limits**: Enforces security limits to prevent denial of service attacks
+- **Resource limits**: Enforces security limits to prevent denial-of-service attacks
 - **Compression validation**: Checks for reasonable tensor sizes and prevents decompression bombs
 
 **Why it matters:**
@@ -194,7 +194,7 @@ This scanner analyzes Flax/JAX model files serialized in MessagePack format and 
 - Unusual data types that might indicate tampering
 
 **Why it matters:**
-Flax models serialized as msgpack files can potentially contain embedded code or malicious data structures. While MessagePack is generally safer than pickle, it can still be exploited through carefully crafted payloads that target specific deserializer vulnerabilities or cause denial of service through resource exhaustion.
+Flax models serialized as msgpack files can potentially contain embedded code or malicious data structures. While MessagePack is generally safer than pickle, it can still be exploited through carefully crafted payloads that target specific deserializer vulnerabilities or cause denial-of-service attacks through resource exhaustion.
 
 ## JAX Checkpoint Scanner
 
@@ -208,7 +208,7 @@ This scanner analyzes JAX checkpoint files in various serialization formats, inc
 - **Orbax metadata analysis**: Custom restore functions and suspicious patterns in checkpoint metadata
 - **Pickle-based checkpoints**: Dangerous pickle opcodes when JAX models are saved as pickle files
 - **Directory-based checkpoints**: Validates Orbax checkpoint directory structure and metadata files
-- **Resource limits**: Enforces size limits to prevent denial of service attacks from oversized checkpoints
+- **Resource limits**: Enforces size limits to prevent denial-of-service attacks from oversized checkpoints
 - **JAX compilation threats**: Detects patterns that might abuse JAX compilation for system access
 
 **Features:**
@@ -236,7 +236,7 @@ This scanner validates NumPy binary array files for integrity issues and potenti
 - **Dimension limits**: Enforces reasonable limits on array dimensions to prevent DoS attacks
 
 **Why it matters:**
-While NumPy files are generally safer than pickle files, they can still be crafted maliciously. Object arrays can contain arbitrary Python objects (including code), and extremely large arrays can cause denial of service. The scanner ensures arrays are safe to load and don't contain hidden threats.
+While NumPy files are generally safer than pickle files, they can still be crafted maliciously. Object arrays can contain arbitrary Python objects (including code), and extremely large arrays can cause denial-of-service attacks. The scanner ensures arrays are safe to load and don't contain hidden threats.
 
 ## OCI Layer Scanner
 
@@ -304,7 +304,7 @@ This scanner examines ZIP archives and their contents recursively.
 - **Zip bombs:** Identifies files with suspicious compression ratios (>100x) that could cause resource exhaustion
 - **Nested archives:** Scans ZIP files within ZIP files up to a configurable depth to prevent infinite recursion attacks
 - **Malicious content:** Each file within the archive is scanned with its appropriate scanner (e.g., pickle files with PickleScanner)
-- **Resource limits:** Enforces maximum number of entries and file sizes to prevent denial of service
+- **Resource limits:** Enforces maximum number of entries and file sizes to prevent denial-of-service attacks
 
 **Why it matters:**
 ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
@@ -412,7 +412,7 @@ ModelAudit includes comprehensive license detection and compliance checking capa
 
 Detects AGPL (Affero General Public License) components that may trigger network copyleft obligations:
 
-```
+```text
 ⚠️ AGPL license detected: Component is under AGPL-3.0
    This may require source code disclosure if used in network services
 ```
@@ -421,7 +421,7 @@ Detects AGPL (Affero General Public License) components that may trigger network
 
 Identifies licenses that restrict commercial use:
 
-```
+```text
 🚨 Non-commercial license detected: Creative Commons NonCommercial
    This component cannot be used for commercial purposes
 ```
@@ -430,7 +430,7 @@ Identifies licenses that restrict commercial use:
 
 Flags datasets and data files without clear licensing:
 
-```
+```text
 ⚠️ Large dataset with unspecified licenses detected
    Files: 1,247 data files (45.2 MB) may need license review
 ```
@@ -532,7 +532,7 @@ license_checker:
 ```
 
 **Why this matters:**
-Open source AI/ML projects often combine components with different licenses. AGPL components require source code disclosure when used in network services. Non-commercial licenses can block commercial deployment. Large datasets may lack clear licensing, creating legal risks. The license checker helps identify these issues early in the development process.
+Open-source AI/ML projects often combine components with different licenses. AGPL components require source code disclosure when used in network services. Non-commercial licenses can block commercial deployment. Large datasets may lack clear licensing, creating legal risks. The license checker helps identify these issues early in the development process.
 
 ## HuggingFace URL Support
 

@@ -24,20 +24,20 @@ Install ModelAudit and scan your first model in 5 minutes, then configure detail
 
 Choose your preferred installation method:
 
-**Option 1: Via Promptfoo (Recommended)**
+#### Option 1: Via Promptfoo (Recommended)
 
 ```bash
 npm install -g promptfoo
 pip install modelaudit
 ```
 
-**Option 2: Standalone**
+#### Option 2: Standalone
 
 ```bash
 pip install modelaudit
 ```
 
-**Option 3: Homebrew (macOS/Linux)**
+#### Option 3: Homebrew (macOS/Linux)
 
 ```bash
 # Install Promptfoo via Homebrew
@@ -267,7 +267,7 @@ modelaudit doctor --show-failed
 
 **NumPy 2.x Notes:**
 
-While ModelAudit fully supports NumPy 2.x, some ML framework scanners may not load due to downstream compatibility issues. However, core scanning functionality works perfectly, and you can use `modelaudit doctor` to see which scanners loaded successfully.
+While ModelAudit fully supports NumPy 2.x, some ML framework scanners may not load due to downstream compatibility issues. However, the core scanning functionality works perfectly, and you can use `modelaudit doctor` to see which scanners loaded successfully.
 
 ## Development Installation
 

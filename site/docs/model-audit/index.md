@@ -36,9 +36,17 @@ And displays the results:
 
 ## Purpose
 
-AI/ML models can introduce significant security risks that traditional security tools miss. These threats include malicious code embedded in pickled models, suspicious TensorFlow operations, potentially unsafe Keras Lambda layers, encoded payloads hidden in model structures, risky configurations in model architectures, malicious content in ZIP archives, and embedded executables in binary model files.
+AI/ML models can introduce security risks through:
 
-ModelAudit addresses these unique AI security challenges by providing specialized scanning capabilities designed specifically for machine learning artifacts. This ensures threats are identified before models reach production environments, maintaining the integrity of your AI pipeline.
+- Malicious code embedded in pickled models
+- Suspicious TensorFlow operations
+- Potentially unsafe Keras Lambda layers
+- Encoded payloads hidden in model structures
+- Risky configurations in model architectures
+- Malicious content in ZIP archives and compressed model files
+- Embedded executables in binary model files
+
+ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
 
 ## Usage
 
