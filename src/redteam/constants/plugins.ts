@@ -72,10 +72,84 @@ export const FOUNDATION_PLUGINS = [
   'religion',
 ] as const;
 
+export const GUARDRAILS_EVALUATION_PLUGINS = [
+  // === PROMPT INJECTION & JAILBREAKING ===
+  'ascii-smuggling',
+  'indirect-prompt-injection',
+  'cca',
+  'hijacking',
+  'system-prompt-override',
+  'beavertails',
+  'harmbench',
+  'pliny',
+  'donotanswer',
+  'prompt-extraction',
+
+  // === HARMFUL CONTENT ===
+  // WMD & Weapons
+  'harmful:chemical-biological-weapons',
+  'harmful:indiscriminate-weapons',
+  'harmful:weapons:ied',
+
+  // Violence & Crime
+  'harmful:violent-crime',
+  'harmful:sex-crime',
+  'harmful:non-violent-crime',
+  'harmful:graphic-content',
+  'harmful:unsafe-practices',
+
+  // Exploitation & Abuse
+  'harmful:child-exploitation',
+  'harmful:harassment-bullying',
+  'harmful:hate',
+  'harmful:self-harm',
+  'harmful:sexual-content',
+  'harmful:insults',
+  'harmful:profanity',
+
+  // Radicalization & Extremism
+  'harmful:radicalization',
+
+  // Cybercrime & Security
+  'harmful:cybercrime',
+  'harmful:cybercrime:malicious-code',
+
+  // Substances
+  'harmful:illegal-activities',
+  'harmful:illegal-drugs',
+  'harmful:illegal-drugs:meth',
+
+  // Information Integrity
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
+
+  // Legal & IP
+  'harmful:copyright-violations',
+  'harmful:intellectual-property',
+
+  // === SYSTEM SECURITY & INTEGRITY ===
+  'cyberseceval',
+  'excessive-agency',
+  'hallucination',
+  'overreliance',
+  'divergent-repetition',
+  'reasoning-dos',
+
+  // === PII & PRIVACY PROTECTION (UK/EU Compliance) ===
+  'harmful:privacy',
+] as const;
+
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii', 'bias'] as const;
+export const COLLECTIONS = [
+  'default',
+  'foundation',
+  'harmful',
+  'pii',
+  'bias',
+  'guardrails-eval',
+] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
