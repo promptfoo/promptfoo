@@ -1,21 +1,21 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI Responses API demonstration
+description: OpenAI Deep Research API demonstration
 prompts:
-  - Tell me about {{topic}}
+  - "Research and provide a comprehensive answer about {{topic}}"
 providers:
   - id: openai:responses:o4-mini-deep-research
     config:
-      max_output_tokens: 20000
+      max_output_tokens: 50000  # Deep research models need high token limits
       tools:
         - type: web_search_preview
 tests:
   - vars:
-      topic: machine learning
+      topic: recent advancements in machine learning
     assert:
       - type: contains-any
-        value: [machine learning, ML, algorithms, data]
+        value: [machine learning, ML, neural networks, deep learning, transformer]
   - vars:
-      topic: space exploration
+      topic: current space exploration missions
     assert:
       - type: contains-any
-        value: [space, NASA, rocket, planet, astronomy]
+        value: [space, NASA, SpaceX, Mars, moon, satellite, rocket]
