@@ -144,6 +144,7 @@ export async function runPython(
     mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
+    // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     stdio: getEnvBool('PROMPTFOO_PYTHON_PDB_TRACING_ENABLED') ? 'inherit' : undefined,
   };
 
