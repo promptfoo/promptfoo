@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
@@ -144,8 +144,8 @@ export async function runPython(
     mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
-    // Inherit stdio to allow interactive debugging with tools like `pdb`.
-    stdio: 'inherit',
+    // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
+    stdio: getEnvBool('PROMPTFOO_PYTHON_PDB_TRACING_ENABLED') ? 'inherit' : undefined,
   };
 
   try {
