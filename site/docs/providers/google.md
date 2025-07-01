@@ -247,30 +247,6 @@ tests:
         value: The answer is 4
 ```
 
-### Audio Generation
-
-Evaluate audio generation with the Google Live provider by specifying different configuration options:
-
-1. Basic audio generation:
-
-```yaml
-providers:
-  - id: 'google:live:gemini-2.0-flash-live-001'
-    config:
-      generationConfig:
-        response_modalities: ['audio']
-        outputAudioTranscription: {}
-      speechConfig:
-        voiceConfig:
-          prebuiltVoiceConfig:
-            voiceName: 'Charon'
-      timeoutMs: 30000
-```
-
-Read more about the Google AI Speech Generation in the [Google AI Speech Generation documentation](https://ai.google.dev/gemini-api/docs/speech-generation).
-
-For a practical example, see the [google-live-audio example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-live-audio).
-
 ### Function Calling
 
 Enable your model to interact with external systems through defined functions:
@@ -500,6 +476,41 @@ The Live API includes several built-in tools:
    }
    ```
 
+### Audio Generation
+
+Evaluate audio generation with the Google Live provider:
+
+1. Basic audio generation:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.0-flash-live-001'
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {} # Enable transcription
+      speechConfig:
+        voiceConfig:
+          prebuiltVoiceConfig:
+            voiceName: 'Charon'
+      timeoutMs: 30000
+```
+
+2. Specifying additional options, such as enabling affective dialog:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.5-flash-exp-native-audio-thinking-dialog'
+    config:
+      apiVersion: 'v1alpha' # Required for affective dialog
+      generationConfig:
+        response_modalities: ['audio']
+        enableAffectiveDialog: true
+```
+
+Other configuration options are available, such as setting proactive audio, setting the language code, and more. Read more about the sending and receiving audio for Gemini in the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#send-receive-audio).
+
+
 ### Getting Started
 
 Try the examples:
@@ -510,6 +521,9 @@ promptfoo init --example google-live
 
 # Function calling and tools example
 promptfoo init --example google-live-tools
+
+# Audio generation example
+promptfoo init --example google-live-audio
 ```
 
 ### Limitations
