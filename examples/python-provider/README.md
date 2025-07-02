@@ -93,16 +93,6 @@ Run the example with:
 npx promptfoo@latest evaluate -c examples/python-provider/promptfooconfig.yaml
 ```
 
-## Debugging
-
-To debug the Python code interactively:
-
-```bash
-export PROMPTFOO_PYTHON_PDB_TRACING_ENABLED=true
-```
-
-Then add `import pdb; pdb.set_trace()` anywhere in the Python code to set a breakpoint.
-
 ## Learn More
 
 For more information on creating custom providers, see the [promptfoo documentation](https://promptfoo.dev/docs/providers/python/).
