@@ -298,14 +298,25 @@ export PROMPTFOO_REMOTE_APP_BASE_URL=http://your-server-address:3000
 
 Replace `http://your-server-address:3000` with the actual URL of your self-hosted instance (e.g., `http://localhost:3000` if running locally).
 
+After configuring the CLI, you need to explicitly upload eval results to your self-hosted instance:
+
+1. Run `promptfoo eval` to execute your eval
+2. Run `promptfoo share` to upload the results
+3. Or use `promptfoo eval --share` to do both in one command
+
 Alternatively, configure these URLs permanently in your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
-# ... other config ...
-
+# Configure sharing to your self-hosted instance
 sharing:
   apiBaseUrl: http://your-server-address:3000
   appBaseUrl: http://your-server-address:3000
+
+prompts:
+  - 'Tell me about {{topic}}'
+
+providers:
+  - openai:o4-mini
 # ... rest of config ...
 ```
 
@@ -377,6 +388,45 @@ The server component is optional; you can run evals locally or in CI/CD without 
 **Problem**: Evals disappear after `docker compose down` or container restarts.
 
 **Solution**: This indicates missing or incorrect volume mapping. Ensure your `docker run` command or `docker-compose.yml` correctly maps a host directory or named volume to `/home/promptfoo/.promptfoo` (or your `PROMPTFOO_CONFIG_DIR` if set) inside the container. Review the `volumes:` section in the examples above.
+
+### Results Not Appearing in Self-Hosted UI
+
+**Problem**: Running `promptfoo eval` opens results at `localhost:15500` instead of showing them in the self-hosted UI.
+
+**Solution**:
+
+1. The local viewer (`localhost:15500`) is the default behavior when running `promptfoo eval`
+2. To upload results to your self-hosted instance, run `promptfoo share` after eval
+3. Configure your self-hosted instance using ONE of these methods:
+
+   **Option A: Environment Variables (temporary)**
+
+   ```bash
+   export PROMPTFOO_REMOTE_API_BASE_URL=http://your-server:3000
+   export PROMPTFOO_REMOTE_APP_BASE_URL=http://your-server:3000
+   ```
+
+   **Option B: Config File (permanent - recommended)**
+
+   ```yaml title="promptfooconfig.yaml"
+   sharing:
+     apiBaseUrl: http://your-server:3000
+     appBaseUrl: http://your-server:3000
+   ```
+
+   Replace `your-server` with your actual server address (e.g., `192.168.1.100`, `promptfoo.internal.company.com`, etc.)
+
+4. Then run: `promptfoo eval` followed by `promptfoo share`
+
+:::tip What to Expect
+After running `promptfoo share`, you should see output like:
+
+```
+View results: http://192.168.1.100:3000/eval/abc-123-def
+```
+
+This URL points to your self-hosted instance, not the local viewer.
+:::
 
 ## See Also
 
