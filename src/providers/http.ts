@@ -324,9 +324,9 @@ export async function createTransformResponse(
  * @returns A new object or array with all template expressions replaced
  */
 export function processJsonBody(
-  body: Record<string, any> | any[],
+  body: Record<string, any> | any[] | string,
   vars: Record<string, any>,
-): Record<string, any> | any[] {
+): Record<string, any> | any[] | string {
   // First apply the standard variable rendering
   const rendered = renderVarsInObject(body, vars);
 
