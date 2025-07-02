@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, TextField } from '@mui/material';
+import { Box, Typography, TextField, Button } from '@mui/material';
 import Link from '@mui/material/Link';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
+import SettingsIcon from '@mui/icons-material/Settings';
 import type { ProviderOptions } from '../../types';
+import ProviderConfigDialog from '@app/pages/eval-creator/components/ProviderConfigDialog';
 
 interface CustomTargetConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -20,6 +21,7 @@ const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
   bodyError,
 }) => {
   const [targetId, setTargetId] = useState(selectedTarget.id || '');
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   useEffect(() => {
     setTargetId(selectedTarget.id || '');
@@ -29,6 +31,12 @@ const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
     const newId = e.target.value;
     setTargetId(newId);
     updateCustomTarget('id', newId);
+  };
+
+  const handleConfigSave = (providerId: string, config: Record<string, any>) => {
+    updateCustomTarget('config', config);
+    setRawConfigJson(JSON.stringify(config, null, 2));
+    setConfigDialogOpen(false);
   };
 
   return (
@@ -56,33 +64,53 @@ const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
           }
         />
 
-        <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-          Custom Configuration
-        </Typography>
-        <TextField
-          fullWidth
-          label="Configuration (JSON)"
-          value={rawConfigJson}
-          onChange={(e) => {
-            setRawConfigJson(e.target.value);
-            try {
-              const config = JSON.parse(e.target.value);
-              updateCustomTarget('config', config);
-            } catch (error) {
-              console.error('Invalid JSON configuration:', error);
-            }
-          }}
-          margin="normal"
-          multiline
-          minRows={4}
-          maxRows={10}
-          error={!!bodyError}
-          helperText={bodyError || 'Enter your custom configuration as JSON'}
-          InputProps={{
-            inputComponent: TextareaAutosize,
-          }}
-        />
+        <Box sx={{ mt: 3, mb: 2 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Provider Configuration
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Configure authentication, API endpoints, and other provider-specific settings.
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<SettingsIcon />}
+            onClick={() => setConfigDialogOpen(true)}
+            fullWidth
+          >
+            Configure Provider Settings
+          </Button>
+        </Box>
+
+        {selectedTarget.config && Object.keys(selectedTarget.config).length > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              Current Configuration:
+            </Typography>
+            <Box
+              sx={{
+                mt: 1,
+                p: 1,
+                bgcolor: 'grey.100',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {JSON.stringify(selectedTarget.config, null, 2)}
+            </Box>
+          </Box>
+        )}
       </Box>
+
+      <ProviderConfigDialog
+        open={configDialogOpen}
+        providerId={targetId || 'custom'}
+        config={selectedTarget.config || {}}
+        onClose={() => setConfigDialogOpen(false)}
+        onSave={handleConfigSave}
+      />
     </Box>
   );
 };

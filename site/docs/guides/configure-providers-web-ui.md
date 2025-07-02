@@ -89,4 +89,14 @@ If you're migrating from CLI-based configuration, you can:
 4. Paste your configuration
 5. Click Save
 
-The web UI will parse and apply all your existing configuration parameters. 
+The web UI will parse and apply all your existing configuration parameters.
+
+## Red Team Configuration
+
+The same provider configuration capabilities are available in the Red Team setup interface:
+
+1. **Custom Targets**: When selecting a custom target, click "Configure Provider Settings" to open the comprehensive configuration dialog
+2. **HTTP Endpoints**: The HTTP endpoint configuration includes its own specialized interface for configuring headers, request body, and transformations
+3. **All Configuration Options**: The same common fields (apiKey, apiBaseUrl, etc.) and custom field capabilities are available
+
+This ensures consistency across both evaluation creation and red team configuration workflows. 
