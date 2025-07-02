@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
-import { usePostHog } from '@app/components/PostHogContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -266,8 +265,6 @@ export default function RedTeamSetupPage() {
     return hash ? Number.parseInt(hash, 10) : 0;
   });
 
-  const { posthog, isInitialized } = usePostHog();
-
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
@@ -286,12 +283,6 @@ export default function RedTeamSetupPage() {
   const [configDate, setConfigDate] = useState<string | null>(null);
 
   const lastSavedConfig = useRef<string>('');
-
-  useEffect(() => {
-    if (isInitialized && posthog) {
-      posthog.startSessionRecording();
-    }
-  }, [isInitialized, posthog]);
 
   // Track funnel on initial load
   useEffect(() => {

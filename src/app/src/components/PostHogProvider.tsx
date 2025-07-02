@@ -6,6 +6,7 @@ import { PostHogContext, type PostHogContextType } from './PostHogContext';
 // PostHog configuration - using the same key system as the backend
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY;
 const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST;
+const DISABLE_TELEMETRY = import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY;
 
 interface PostHogProviderProps {
   children: React.ReactNode;
@@ -40,51 +41,23 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
   }, [isInitialized, email, userId]);
 
   useEffect(() => {
-    if (POSTHOG_KEY && typeof window !== 'undefined') {
+    if (POSTHOG_KEY && typeof window !== 'undefined' && !DISABLE_TELEMETRY) {
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
           loaded: (posthogInstance: any) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.log('PostHog loaded');
-            }
             setIsInitialized(true);
           },
-          capture_pageview: false, // Disable automatic pageview capture, we'll do it manually
+          capture_pageview: false,
           autocapture: {
-            dom_event_allowlist: ['click'], // Only capture clicks automatically
-            url_allowlist: [], // Add specific URLs if needed
+            dom_event_allowlist: ['click'],
+            url_allowlist: [],
           },
           disable_session_recording: true,
           session_recording: {
-            maskAllInputs: true, // Mask all inputs for privacy
-            maskInputOptions: {
-              password: true,
-            },
-            maskTextSelector: '*',
-            maskTextFn: (text, element) => {
-              // only elements with `data-capture="true"` will be captured
-              if (element?.dataset['capture'] === 'true') {
-                return text;
-              }
-              return '*'.repeat(text.trim().length);
-            },
+            maskAllInputs: true,
           },
-          // Disable tracking in development unless explicitly enabled
           opt_out_capturing_by_default: process.env.NODE_ENV === 'development',
-          advanced_disable_decide: false,
-          sanitize_properties: (properties: any, event: any) => {
-            // Remove any sensitive data
-            if (properties.$current_url) {
-              try {
-                const url = new URL(properties.$current_url);
-                properties.$current_url = `${url.protocol}//${url.host}${url.pathname}`;
-              } catch {
-                // Keep original if URL parsing fails
-              }
-            }
-            return properties;
-          },
         });
       } catch (error) {
         console.error('Failed to initialize PostHog:', error);
@@ -96,6 +69,10 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
     posthog: isInitialized ? posthog : null,
     isInitialized,
   };
+
+  if (DISABLE_TELEMETRY) {
+    return children;
+  }
 
   return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>;
 };

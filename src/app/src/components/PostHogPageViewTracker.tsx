@@ -16,7 +16,7 @@ export const PostHogPageViewTracker = () => {
         hash: location.hash,
       });
     }
-  }, [location, isInitialized, posthog]);
+  }, [location.pathname, location.search, location.hash, isInitialized, posthog]);
 
   // This component doesn't render anything
   return null;
