@@ -29,7 +29,6 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
 
     posthog.identify(userId, {
       email: email || undefined,
-      ...(email && { $email: email }), // PostHog special property
     });
   };
 
@@ -61,6 +60,14 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
             maskAllInputs: true, // Mask all inputs for privacy
             maskInputOptions: {
               password: true,
+            },
+            maskTextSelector: '*',
+            maskTextFn: (text, element) => {
+              // only elements with `data-capture="true"` will be captured
+              if (element?.dataset['capture'] === 'true') {
+                return text;
+              }
+              return '*'.repeat(text.trim().length);
             },
           },
           // Disable tracking in development unless explicitly enabled

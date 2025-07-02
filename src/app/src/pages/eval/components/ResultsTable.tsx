@@ -531,7 +531,7 @@ function ResultsTable({
                     ? `${value.substring(0, maxTextLength - 3).trim()}...`
                     : value;
                 return (
-                  <div className="cell">
+                  <div className="cell" data-capture="true">
                     {renderMarkdown ? (
                       <MarkdownErrorBoundary fallback={<>{value}</>}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
