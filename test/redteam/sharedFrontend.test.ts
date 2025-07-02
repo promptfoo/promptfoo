@@ -80,11 +80,12 @@ describe('getUnifiedConfig', () => {
     expect(typeof result.defaultTest).toBe('object');
     expect(result.defaultTest).toBeDefined();
     // Type assertion since we've verified it's an object above
-    const defaultTest = result.defaultTest as Exclude<typeof result.defaultTest, string | undefined>;
+    const defaultTest = result.defaultTest as Exclude<
+      typeof result.defaultTest,
+      string | undefined
+    >;
     expect(defaultTest.vars).toEqual({ test: 'value' });
-    expect(defaultTest.options!.transformVars).toBe(
-      '{ ...vars, sessionId: context.uuid }',
-    );
+    expect(defaultTest.options!.transformVars).toBe('{ ...vars, sessionId: context.uuid }');
   });
 
   it('should transform plugins correctly', () => {

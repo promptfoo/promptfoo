@@ -20,7 +20,11 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
       p.constructor.name === 'OpenAiAssistantProvider',
   );
 
-  if (hasAzure && !hasOpenAi && !(typeof testSuite.defaultTest === 'object' && testSuite.defaultTest?.options?.provider)) {
+  if (
+    hasAzure &&
+    !hasOpenAi &&
+    !(typeof testSuite.defaultTest === 'object' && testSuite.defaultTest?.options?.provider)
+  ) {
     const modelGradedAsserts = tests.flatMap((t) =>
       (t.assert || []).filter(
         (a) =>
