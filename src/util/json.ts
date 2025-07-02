@@ -418,7 +418,7 @@ export function renderJsonTemplate(template: string, vars: Record<string, any>):
   const rendered = renderVarsInObject(template, vars);
   try {
     return JSON.parse(rendered);
-  } catch (err) {
+  } catch {
     // Second attempt: re-render with JSON-escaped variables
     const escapedVars = escapeJsonVariables(vars);
     const reRendered = renderVarsInObject(template, escapedVars);
