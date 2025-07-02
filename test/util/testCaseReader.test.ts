@@ -1079,6 +1079,15 @@ describe('testCaseFromCsvRow', () => {
 });
 
 describe('readVarsFiles', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('should read variables from a single YAML file', async () => {
     const yamlContent = 'var1: value1\nvar2: value2';
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
@@ -1092,11 +1101,29 @@ describe('readVarsFiles', () => {
   it('should read variables from multiple YAML files', async () => {
     const yamlContent1 = 'var1: value1';
     const yamlContent2 = 'var2: value2';
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(yamlContent1)
-      .mockReturnValueOnce(yamlContent2);
-    jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
+    
+    // Clear any existing mocks and set up fresh ones
+    jest.mocked(fs.readFileSync).mockReset();
+    jest.mocked(globSync).mockReset();
+    
+    // Mock to return the correct content for each file
+    jest.mocked(fs.readFileSync).mockImplementation((path) => {
+      if (String(path).includes('vars1.yaml')) {
+        return yamlContent1;
+      } else if (String(path).includes('vars2.yaml')) {
+        return yamlContent2;
+      }
+      return '';
+    });
+    jest.mocked(globSync).mockImplementation((pattern) => {
+      // Return the appropriate files based on the pattern
+      if (String(pattern).includes('vars1.yaml')) {
+        return ['vars1.yaml'];
+      } else if (String(pattern).includes('vars2.yaml')) {
+        return ['vars2.yaml'];
+      }
+      return [];
+    });
 
     const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
 
