@@ -490,7 +490,7 @@ const config: Config = {
         path: './releases',
         blogTitle: 'Release Notes',
         blogDescription: 'promptfoo release notes and updates',
-        blogSidebarCount: 10,
+        blogSidebarCount: 0,
         blogSidebarTitle: 'Recent Releases',
         postsPerPage: 10,
         showReadingTime: false,

@@ -1,6 +1,6 @@
 # Monthly Release Roundups Guidelines
 
-This directory contains monthly roundups of Promptfoo releases. These comprehensive summaries publish automatically to the `/releases/` section of the website and highlight key developments, major features, and important updates from each month.
+This rule provides comprehensive guidelines for creating monthly roundups of Promptfoo releases. These summaries publish automatically to the `/releases/` section of the website and highlight key developments, major features, and important updates from each month.
 
 ## File Naming Convention
 
@@ -196,3 +196,7 @@ Update the `authors.yml` file to add new team members who will be authoring mont
 **Note:** These are monthly roundups summarizing multiple releases. For detailed version-specific changes, refer to the [GitHub releases page](https://github.com/promptfoo/promptfoo/releases) or individual release changelogs.
 
 For questions about release roundups, reach out to the documentation team or refer to the [Docusaurus documentation guidelines](https://docusaurus.io/docs/blog).
+description:
+globs:
+alwaysApply: false
+---
