@@ -340,7 +340,7 @@ describe('evaluator', () => {
       // Mark first two results with manual human ratings for filter tests
       const results = await EvalResult.findManyByEvalId(evalWithResults.id);
       // The factory creates 20 results, so we know we have at least 2
-      
+
       results[0].gradingResult = {
         pass: true,
         score: 1,
@@ -358,7 +358,7 @@ describe('evaluator', () => {
       } as any;
       results[0].success = true;
       await results[0].save();
-      
+
       results[1].gradingResult = {
         pass: false,
         score: 0,
@@ -495,7 +495,7 @@ describe('evaluator', () => {
       // With the withHighlights: true in the factory, we should have some highlighted results
       // Since we set withHighlights: true, we expect to have results
       expect(result.body.length).toBeGreaterThan(0);
-      
+
       for (const row of result.body) {
         const hasHighlight = row.outputs.some((output) =>
           output.gradingResult?.comment?.startsWith('!highlight'),
@@ -520,7 +520,7 @@ describe('evaluator', () => {
       // Add human ratings to some results
       const results = await EvalResult.findManyByEvalId(evaluation.id);
       expect(results.length).toBeGreaterThan(0);
-      
+
       results[0].gradingResult = {
         pass: true,
         score: 1,
@@ -688,7 +688,7 @@ describe('evaluator', () => {
       const gradingResult = results[0].gradingResult;
       expect(gradingResult).toBeDefined();
       expect(gradingResult?.componentResults).toBeDefined();
-      
+
       results[0].gradingResult!.componentResults =
         results[0].gradingResult!.componentResults!.filter(
           (r: any) => r.assertion?.type !== 'human',
