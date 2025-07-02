@@ -66,17 +66,18 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
     message: string;
   }>({ show: false, message: '' });
 
-  const getTestSuite = useStore((state) => state.getTestSuite);
-  const providers = useStore((state) => state.providers);
-  const prompts = useStore((state) => state.prompts);
-  const testCases = useStore((state) => state.testCases);
-  const derivedMetrics = useStore((state) => state.derivedMetrics);
-  const evaluateOptions = useStore((state) => state.evaluateOptions);
-  const scenarios = useStore((state) => state.scenarios);
-  const extensions = useStore((state) => state.extensions);
-  const env = useStore((state) => state.env);
-  const description = useStore((state) => state.description);
-  const defaultTest = useStore((state) => state.defaultTest);
+  const store = useStore();
+  const getTestSuite = store.getTestSuite;
+  const providers = store.providers;
+  const prompts = store.prompts;
+  const testCases = store.testCases;
+  const derivedMetrics = store.derivedMetrics;
+  const evaluateOptions = store.evaluateOptions;
+  const scenarios = store.scenarios;
+  const extensions = store.extensions;
+  const env = store.env;
+  const description = store.description;
+  const defaultTest = store.defaultTest;
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
