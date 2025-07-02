@@ -21,6 +21,7 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
+import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 import {
   STRATEGY_PRESETS,
   PRESET_IDS,
@@ -44,9 +45,6 @@ interface CustomPreset {
 }
 
 type PresetWithName = StrategyPreset | CustomPreset;
-
-// Define multi-modal strategies
-export const MULTI_MODAL_STRATEGIES = ['audio', 'video', 'image'] as const;
 
 // Define recommended strategies based on DEFAULT_STRATEGIES for consistency
 const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;

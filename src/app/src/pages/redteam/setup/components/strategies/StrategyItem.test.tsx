@@ -1,5 +1,5 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+import React from 'react';
 import { vi } from 'vitest';
 import { StrategyItem } from './StrategyItem';
 import type { StrategyCardData } from './types';
@@ -26,7 +26,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Test Strategy')).toBeInTheDocument();
@@ -40,7 +40,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       const checkbox = screen.getByRole('checkbox');
@@ -52,7 +52,7 @@ describe('StrategyItem', () => {
           isSelected={true}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(checkbox).toBeChecked();
@@ -72,7 +72,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Recommended')).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Agent')).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Multi-modal')).toBeInTheDocument();
@@ -126,7 +126,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Experimental')).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.queryByRole('button', { name: '' })).not.toBeInTheDocument();
@@ -164,12 +164,12 @@ describe('StrategyItem', () => {
           isSelected={true}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       // The icon button has no explicit name, so we look for buttons
       const buttons = screen.getAllByRole('button');
-      expect(buttons.length).toBeGreaterThan(0);
+      expect(buttons).toHaveLength(1);
     });
 
     it('does not show settings button for non-configurable strategies even when selected', () => {
@@ -184,12 +184,12 @@ describe('StrategyItem', () => {
           isSelected={true}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       // Should only have checkbox, no settings button
       const buttons = screen.queryAllByRole('button');
-      expect(buttons.length).toBe(0);
+      expect(buttons).toHaveLength(0);
     });
   });
 
@@ -201,7 +201,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       const card = screen.getByText('Test Strategy').closest('[class*="MuiPaper"]');
@@ -217,7 +217,7 @@ describe('StrategyItem', () => {
           isSelected={false}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       const checkbox = screen.getByRole('checkbox');
@@ -238,7 +238,7 @@ describe('StrategyItem', () => {
           isSelected={true}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       const buttons = screen.getAllByRole('button');
@@ -263,15 +263,14 @@ describe('StrategyItem', () => {
           isSelected={true}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       // Check that the title box has padding-right style
       const titleBox = screen.getByText('Test Strategy').parentElement;
-      const styles = window.getComputedStyle(titleBox!);
       // Note: In tests, the actual computed styles might not reflect MUI's sx prop
       // but we're testing that the component renders without errors
       expect(titleBox).toBeInTheDocument();
     });
   });
-}); 
+});

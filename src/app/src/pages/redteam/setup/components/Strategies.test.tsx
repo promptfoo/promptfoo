@@ -1,74 +1,17 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { vi } from 'vitest';
+import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import Strategies, { MULTI_MODAL_STRATEGIES } from './Strategies';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { vi } from 'vitest';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import Strategies from './Strategies';
+import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 
-// Mock dependencies
+// Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('./StrategyConfigDialog', () => ({
-  default: () => <div>Strategy Config Dialog</div>,
-}));
-vi.mock('./strategies/PresetSelector', () => ({
-  PresetSelector: ({ presets, selectedPreset, onSelect }: any) => (
-    <div>
-      <button onClick={() => onSelect({ name: 'Quick' })}>Quick</button>
-      <button onClick={() => onSelect({ name: 'Medium' })}>Medium</button>
-      <button onClick={() => onSelect({ name: 'Large' })}>Large</button>
-    </div>
-  ),
-}));
-vi.mock('./strategies/RecommendedOptions', () => ({
-  RecommendedOptions: () => <div>Recommended Options</div>,
-}));
-vi.mock('./strategies/StrategySection', () => ({
-  StrategySection: ({ title, description }: any) => (
-    <div>
-      <h2>{title}</h2>
-      {description && <p>{description}</p>}
-    </div>
-  ),
-}));
-vi.mock('./strategies/SystemConfiguration', () => ({
-  SystemConfiguration: () => <div>System Configuration</div>,
-}));
-vi.mock('./strategies/utils', () => ({
-  getEstimatedProbes: vi.fn(() => 100),
-  getStrategyId: vi.fn((s: any) => (typeof s === 'string' ? s : s?.id || '')),
-}));
-vi.mock('@promptfoo/redteam/constants', () => ({
-  ALL_STRATEGIES: ['basic', 'jailbreak', 'jailbreak:composite', 'audio', 'video', 'image', 'crescendo', 'goat'],
-  MULTI_TURN_STRATEGIES: ['crescendo', 'goat'],
-  AGENTIC_STRATEGIES: ['jailbreak', 'crescendo', 'goat'],
-  DEFAULT_STRATEGIES: ['basic', 'jailbreak', 'jailbreak:composite'],
-  DEFAULT_PLUGINS: [],
-  REDTEAM_DEFAULTS: {
-    NUM_TESTS: 5,
-    MAX_CONCURRENCY: 10,
-  },
-  strategyDisplayNames: {
-    basic: 'Basic',
-    jailbreak: 'Jailbreak',
-    'jailbreak:composite': 'Composite Jailbreaks',
-    audio: 'Audio',
-    video: 'Video',
-    image: 'Image',
-    crescendo: 'Crescendo',
-    goat: 'GOAT',
-  },
-  strategyDescriptions: {
-    basic: 'Original plugin tests without any additional strategies or optimizations',
-    jailbreak: 'Optimizes single-turn attacks to bypass security controls',
-    'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
-    audio: 'Tests detection and handling of audio-based malicious payloads',
-    video: 'Tests detection and handling of video-based malicious payloads',
-    image: 'Tests detection and handling of image-based malicious payloads',
-    crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
-    goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
-  },
+  default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
 }));
 
 const mockUpdateConfig = vi.fn();
@@ -80,7 +23,7 @@ describe('Strategies', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     (useRedTeamConfig as any).mockReturnValue({
       config: {
         target: {
@@ -105,12 +48,14 @@ describe('Strategies', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       expect(screen.getByText('Strategy Configuration')).toBeInTheDocument();
       expect(
-        screen.getByText('Strategies modify how prompts are delivered to test different attack vectors.')
+        screen.getByText(
+          'Strategies modify how prompts are delivered to test different attack vectors.',
+        ),
       ).toBeInTheDocument();
     });
 
@@ -118,12 +63,15 @@ describe('Strategies', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       const docLink = screen.getByText('Learn more about strategies');
       expect(docLink).toBeInTheDocument();
-      expect(docLink).toHaveAttribute('href', 'https://www.promptfoo.dev/docs/red-team/strategies/');
+      expect(docLink).toHaveAttribute(
+        'href',
+        'https://www.promptfoo.dev/docs/red-team/strategies/',
+      );
       expect(docLink).toHaveAttribute('target', '_blank');
       expect(docLink).toHaveAttribute('rel', 'noopener noreferrer');
     });
@@ -132,7 +80,7 @@ describe('Strategies', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       expect(screen.getByText('Back')).toBeInTheDocument();
@@ -140,12 +88,12 @@ describe('Strategies', () => {
     });
   });
 
-  describe('Strategy categorization', () => {
-    it('renders all strategy sections', () => {
+  describe('Strategy sections', () => {
+    it('renders strategy sections with actual strategies', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       // Check for section titles
@@ -153,27 +101,35 @@ describe('Strategies', () => {
       expect(screen.getByText('Agentic Strategies (Single-turn)')).toBeInTheDocument();
       expect(screen.getByText('Agentic Strategies (Multi-turn)')).toBeInTheDocument();
       expect(screen.getByText('Multi-modal Strategies')).toBeInTheDocument();
-      // Other Strategies may not be present if all strategies are categorized
+
+      // Check for actual strategy items
+      expect(screen.getByText('Basic')).toBeInTheDocument();
+      expect(screen.getByText('Composite Jailbreaks')).toBeInTheDocument();
+      expect(screen.getByText('Audio')).toBeInTheDocument();
+      expect(screen.getByText('Video')).toBeInTheDocument();
+      expect(screen.getByText('Image')).toBeInTheDocument();
     });
 
     it('renders section descriptions', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       expect(
-        screen.getByText('Core strategies that provide comprehensive coverage for most use cases')
+        screen.getByText('Core strategies that provide comprehensive coverage for most use cases'),
       ).toBeInTheDocument();
       expect(
-        screen.getByText('Advanced AI-powered strategies that dynamically adapt their attack patterns')
+        screen.getByText(
+          'Advanced AI-powered strategies that dynamically adapt their attack patterns',
+        ),
       ).toBeInTheDocument();
       expect(
-        screen.getByText('AI-powered strategies that evolve across multiple conversation turns')
+        screen.getByText('AI-powered strategies that evolve across multiple conversation turns'),
       ).toBeInTheDocument();
       expect(
-        screen.getByText('Test handling of non-text content including audio, video, and images')
+        screen.getByText('Test handling of non-text content including audio, video, and images'),
       ).toBeInTheDocument();
     });
   });
@@ -186,30 +142,18 @@ describe('Strategies', () => {
   });
 
   describe('Preset selection', () => {
-    it('renders preset selector', () => {
+    it('renders preset selector cards', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
-      // PresetSelector component should be rendered
+      // Check for preset cards (they appear as headings, not buttons)
       expect(screen.getByText('Quick')).toBeInTheDocument();
       expect(screen.getByText('Medium')).toBeInTheDocument();
       expect(screen.getByText('Large')).toBeInTheDocument();
-    });
-  });
-
-  describe('Strategy selection', () => {
-    it('renders strategy sections correctly', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
-      );
-
-      // Just check that the component renders without errors
-      expect(screen.getByText('Strategy Configuration')).toBeInTheDocument();
+      expect(screen.getByText('Custom')).toBeInTheDocument();
     });
   });
 
@@ -218,7 +162,7 @@ describe('Strategies', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       expect(mockRecordEvent).toHaveBeenCalledWith('webui_page_view', {
@@ -246,7 +190,7 @@ describe('Strategies', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       // SystemConfiguration component should be rendered
@@ -255,15 +199,18 @@ describe('Strategies', () => {
   });
 
   describe('UI description overrides', () => {
-    it('component handles UI description overrides', () => {
+    it('uses UI-friendly description for basic strategy', () => {
       render(
         <MemoryRouter>
           <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
-      // Component should render with UI overrides applied
-      expect(screen.getByText('Strategy Configuration')).toBeInTheDocument();
+      // The basic strategy should have the UI override description
+      const basicDescription = screen.getByText(
+        'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
+      );
+      expect(basicDescription).toBeInTheDocument();
     });
   });
-}); 
+});

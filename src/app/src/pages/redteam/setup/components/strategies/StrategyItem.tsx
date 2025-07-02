@@ -3,6 +3,7 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { Paper, Box, Typography, Chip, Checkbox, IconButton } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { DEFAULT_STRATEGIES, AGENTIC_STRATEGIES } from '@promptfoo/redteam/constants';
+import { MULTI_MODAL_STRATEGIES } from './constants';
 import type { StrategyCardData } from './types';
 
 const CONFIGURABLE_STRATEGIES = [
@@ -16,8 +17,6 @@ const CONFIGURABLE_STRATEGIES = [
   'gcg',
   'citation',
 ] as const;
-
-const MULTI_MODAL_STRATEGIES = ['audio', 'video', 'image'] as const;
 
 interface StrategyItemProps {
   strategy: StrategyCardData;

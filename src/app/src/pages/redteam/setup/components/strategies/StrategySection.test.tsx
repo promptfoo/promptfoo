@@ -1,5 +1,5 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+import React from 'react';
 import { vi } from 'vitest';
 import { StrategySection } from './StrategySection';
 import type { StrategyCardData } from './types';
@@ -28,7 +28,7 @@ describe('StrategySection', () => {
           selectedIds={[]}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe('StrategySection', () => {
           selectedIds={[]}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('This is a test description')).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe('StrategySection', () => {
           selectedIds={[]}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.queryByText('This is a test description')).not.toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('StrategySection', () => {
           selectedIds={[]}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Strategy 1')).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('StrategySection', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.getByText('Reset')).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe('StrategySection', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset');
@@ -121,7 +121,7 @@ describe('StrategySection', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset');
@@ -137,7 +137,7 @@ describe('StrategySection', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset');
@@ -154,7 +154,7 @@ describe('StrategySection', () => {
           selectedIds={['strategy1', 'strategy3']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset');
@@ -176,7 +176,7 @@ describe('StrategySection', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           highlighted={true}
-        />
+        />,
       );
 
       // Look for the grid container with special styling
@@ -193,7 +193,7 @@ describe('StrategySection', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           highlighted={true}
-        />
+        />,
       );
 
       const title = screen.getByText('Highlighted Section');
@@ -211,7 +211,7 @@ describe('StrategySection', () => {
           selectedIds={[]}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
-        />
+        />,
       );
 
       expect(screen.getByText('Empty Section')).toBeInTheDocument();
@@ -219,4 +219,4 @@ describe('StrategySection', () => {
       expect(screen.queryByText('Strategy 1')).not.toBeInTheDocument();
     });
   });
-}); 
+});
