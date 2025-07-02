@@ -52,7 +52,6 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
             setIsInitialized(true);
           },
           capture_pageview: false, // Disable automatic pageview capture, we'll do it manually
-          persistence: 'localStorage+cookie',
           autocapture: {
             dom_event_allowlist: ['click'], // Only capture clicks automatically
             url_allowlist: [], // Add specific URLs if needed
