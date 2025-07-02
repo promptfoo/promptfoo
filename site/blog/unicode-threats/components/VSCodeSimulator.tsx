@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type React from 'react';
+import { useEffect, useState } from 'react';
 import styles from '../styles/VSCodeSimulator.module.css';
 
 interface File {
@@ -84,18 +85,18 @@ const VSCodeSimulator: React.FC = () => {
             '<span class="' + styles.hiddenInstruction + '">[HIDDEN: $1]</span>',
           ),
         };
-      } else if (useHiddenChars && selectedFile.isMalicious) {
+      }
+      if (useHiddenChars && selectedFile.isMalicious) {
         return {
           __html: content.replace(
             /\[HIDDEN: (.*?)\]/g,
             '[HIDDEN: <span class="' + styles.hiddenContent + '">$1</span>]',
           ),
         };
-      } else {
-        return {
-          __html: content.replace(/\s*\[HIDDEN:.*?\]/g, ''),
-        };
       }
+      return {
+        __html: content.replace(/\s*\[HIDDEN:.*?\]/g, ''),
+      };
     }
 
     // Highlight malicious code in other files when Show hidden threats is enabled

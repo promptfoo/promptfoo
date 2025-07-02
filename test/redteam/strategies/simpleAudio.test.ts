@@ -1,4 +1,4 @@
-import { expect, it, describe } from '@jest/globals';
+import { describe, expect, it } from '@jest/globals';
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';

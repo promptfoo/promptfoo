@@ -1,10 +1,10 @@
 import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import {
-  makeRequest,
-  getProviderFromCloud,
   getConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
+  getProviderFromCloud,
+  makeRequest,
 } from '../../src/util/cloud';
 
 jest.mock('../../src/fetch');

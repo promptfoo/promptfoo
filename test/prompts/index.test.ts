@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
-import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
+import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts';
 import { maybeFilePath } from '../../src/prompts/utils';
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
 
@@ -169,7 +169,8 @@ describe('readPrompts', () => {
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath.toString().endsWith('prompt1.txt')) {
         return 'Test prompt 1\n---\nTest prompt 2';
-      } else if (filePath.toString().endsWith('prompt2.txt')) {
+      }
+      if (filePath.toString().endsWith('prompt2.txt')) {
         return 'Test prompt 3\n---\nTest prompt 4\n---\nTest prompt 5';
       }
       throw new Error(`Unexpected file path in test: ${filePath}`);
@@ -465,7 +466,8 @@ describe('readPrompts', () => {
     jest.mocked(fs.statSync).mockImplementation((filePath) => {
       if (filePath.toString().endsWith('prompt1.txt')) {
         return { isDirectory: () => false } as fs.Stats;
-      } else if (filePath.toString().endsWith('prompts')) {
+      }
+      if (filePath.toString().endsWith('prompts')) {
         return { isDirectory: () => true } as fs.Stats;
       }
       throw new Error(`Unexpected file path in test: ${filePath}`);
@@ -481,7 +483,8 @@ describe('readPrompts', () => {
         filePath.toString().endsWith('*/prompt1.txt')
       ) {
         return 'Test prompt 1\n---\nTest prompt 2';
-      } else if (
+      }
+      if (
         filePath.toString().endsWith('prompt2.txt') ||
         filePath.toString().endsWith('*/prompt2.txt')
       ) {

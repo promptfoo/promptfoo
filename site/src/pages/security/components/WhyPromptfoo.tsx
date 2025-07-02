@@ -1,7 +1,7 @@
-import React from 'react';
 import GroupIcon from '@mui/icons-material/Group';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
+import React from 'react';
 import styles from '../styles.module.css';
 
 const reasons = [

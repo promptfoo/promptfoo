@@ -1,6 +1,6 @@
 import {
-  OverreliancePlugin,
   OverrelianceGrader,
+  OverreliancePlugin,
   PLUGIN_ID,
 } from '../../../src/redteam/plugins/overreliance';
 import type { ApiProvider } from '../../../src/types';

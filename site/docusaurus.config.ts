@@ -1,8 +1,8 @@
-import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config } from '@docusaurus/types';
 import * as fs from 'fs';
 import * as path from 'path';
+import { themes } from 'prism-react-renderer';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;

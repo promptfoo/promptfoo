@@ -12,8 +12,8 @@ import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
-  readTests,
   readTestFiles,
+  readTests,
 } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({

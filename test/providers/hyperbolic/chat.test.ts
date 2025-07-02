@@ -1,9 +1,9 @@
 import {
-  HyperbolicProvider,
   calculateHyperbolicCost,
   createHyperbolicProvider,
   HYPERBOLIC_CHAT_MODELS,
   HYPERBOLIC_REASONING_MODELS,
+  HyperbolicProvider,
 } from '../../../src/providers/hyperbolic/chat';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 

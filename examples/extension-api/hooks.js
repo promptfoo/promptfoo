@@ -30,14 +30,16 @@ async function extensionHook(hookName, context) {
     context.suite.defaultTest.assert.push({ type: 'is-json' });
 
     return context;
-  } else if (hookName === 'beforeEach') {
+  }
+  if (hookName === 'beforeEach') {
     console.log(`Preparing test`);
 
     // All languages are now pirate:
     context.test.vars.language = `Pirate ${context.test.vars.language}`;
 
     return context;
-  } else if (hookName === 'afterEach') {
+  }
+  if (hookName === 'afterEach') {
     console.log(
       `Completed test ${counter++}${context.result ? `, Result: ${context.result.success ? 'Pass' : 'Fail'}, Score: ${context.result.score}` : ''}`,
     );

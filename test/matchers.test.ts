@@ -6,18 +6,18 @@ import { importModule } from '../src/esm';
 import {
   getAndCheckProvider,
   getGradingProvider,
+  matchesAnswerRelevance,
   matchesClassification,
+  matchesClosedQa,
+  matchesContextFaithfulness,
+  matchesContextRecall,
+  matchesContextRelevance,
+  matchesFactuality,
+  matchesGEval,
+  matchesLlmRubric,
   matchesModeration,
   matchesSimilarity,
-  matchesLlmRubric,
-  matchesFactuality,
-  matchesClosedQa,
-  matchesAnswerRelevance,
-  matchesContextRelevance,
-  matchesContextRecall,
-  matchesContextFaithfulness,
   renderLlmRubricPrompt,
-  matchesGEval,
 } from '../src/matchers';
 import { ANSWER_RELEVANCY_GENERATE } from '../src/prompts';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
@@ -77,7 +77,8 @@ describe('matchesSimilarity', () => {
           embedding: [1, 0, 0],
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         });
-      } else if (text === 'Different output') {
+      }
+      if (text === 'Different output') {
         return Promise.resolve({
           embedding: [0, 1, 0],
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
@@ -1761,7 +1762,8 @@ describe('matchesAnswerRelevance', () => {
           embedding: [1, 0, 0],
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         });
-      } else if (text.includes('Different output')) {
+      }
+      if (text.includes('Different output')) {
         return Promise.resolve({
           embedding: [0, 1, 0],
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
@@ -2498,12 +2500,11 @@ describe('matchesGEval', () => {
           output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         };
-      } else {
-        return {
-          output: '{"score": 8, "reason": "The response is well-structured and clear"}',
-          tokenUsage: { total: 15, prompt: 8, completion: 7 },
-        };
       }
+      return {
+        output: '{"score": 8, "reason": "The response is well-structured and clear"}',
+        tokenUsage: { total: 15, prompt: 8, completion: 7 },
+      };
     });
   });
 

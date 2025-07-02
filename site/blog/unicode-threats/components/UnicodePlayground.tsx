@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type React from 'react';
+import { useEffect, useState } from 'react';
 import styles from '../styles/UnicodePlayground.module.css';
 
 // Define our invisible character mapping (same as the script)

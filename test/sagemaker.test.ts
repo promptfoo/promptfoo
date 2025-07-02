@@ -10,9 +10,11 @@ jest.mock('../src/util/transform', () => ({
   transform: jest.fn().mockImplementation((transformPath, input) => {
     if (transformPath === 'file://test-transform.js') {
       return 'transformed via file';
-    } else if (transformPath === 'file://empty-transform.js') {
+    }
+    if (transformPath === 'file://empty-transform.js') {
       return null;
-    } else if (transformPath === 'file://error-transform.js') {
+    }
+    if (transformPath === 'file://error-transform.js') {
       throw new Error('Transform file error');
     }
     return input;
@@ -47,9 +49,11 @@ jest.spyOn(global, 'Function').mockImplementation((...args) => {
       // Handle specific test cases
       if (jsExpression.includes('json.data.nested.value')) {
         return 'Nested data value';
-      } else if (jsExpression.includes('json.data.array[1]')) {
+      }
+      if (jsExpression.includes('json.data.array[1]')) {
         return 2;
-      } else if (jsExpression.includes('json.custom.result')) {
+      }
+      if (jsExpression.includes('json.custom.result')) {
         return 'Extracted value';
       }
       return undefined;
@@ -62,14 +66,18 @@ jest.spyOn(global, 'Function').mockImplementation((...args) => {
     if (fnBody.includes('(prompt => {')) {
       // Return a different value to trigger isTransformed = true
       return () => 'Transformed with arrow function';
-    } else if (fnBody.includes('function(prompt)')) {
+    }
+    if (fnBody.includes('function(prompt)')) {
       // Return a different value to trigger isTransformed = true
       return () => 'Transformed with regular function';
-    } else if (fnBody.includes('prompt => ({ prompt, systemPrompt')) {
+    }
+    if (fnBody.includes('prompt => ({ prompt, systemPrompt')) {
       return () => ({ prompt: 'test', systemPrompt: 'You are a helpful assistant' });
-    } else if (fnBody.includes('prompt => 42')) {
+    }
+    if (fnBody.includes('prompt => 42')) {
       return () => 42;
-    } else if (fnBody.includes('throw new Error')) {
+    }
+    if (fnBody.includes('throw new Error')) {
       // For error test case - return the original prompt to ensure isTransformed = false
       return () => {
         throw new Error('Transform function error');

@@ -2,8 +2,8 @@ import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
 import {
   DoNotAnswerPlugin,
-  PLUGIN_ID,
   fetchDataset,
+  PLUGIN_ID,
 } from '../../../src/redteam/plugins/donotanswer';
 
 jest.mock('fs');

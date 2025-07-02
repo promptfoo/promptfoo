@@ -5,11 +5,11 @@ import { fetchWithRetries } from '../../src/fetch';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import type {
-  Assertion,
   ApiProvider,
+  Assertion,
   AtomicTestCase,
-  ProviderResponse,
   GradingResult,
+  ProviderResponse,
 } from '../../src/types';
 import { TestGrader } from '../util/utils';
 
@@ -2153,7 +2153,8 @@ describe('runAssertion', () => {
             embedding: [1, 0, 0],
             tokenUsage: { total: 5, prompt: 2, completion: 3 },
           });
-        } else if (text.startsWith('Different output')) {
+        }
+        if (text.startsWith('Different output')) {
           return Promise.resolve({
             embedding: [0, 1, 0],
             tokenUsage: { total: 5, prompt: 2, completion: 3 },

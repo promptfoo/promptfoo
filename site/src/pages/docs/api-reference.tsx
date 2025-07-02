@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
 import { useTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
+import React, { useEffect } from 'react';
 
 export default function ApiReference() {
   const theme = useTheme();

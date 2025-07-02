@@ -1,7 +1,7 @@
 import {
   CRESCENDO_SYSTEM_PROMPT,
-  REFUSAL_SYSTEM_PROMPT,
   EVAL_SYSTEM_PROMPT,
+  REFUSAL_SYSTEM_PROMPT,
 } from '../../../../src/redteam/providers/crescendo/prompts';
 
 describe('Crescendo prompts', () => {

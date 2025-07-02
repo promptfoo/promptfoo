@@ -60,7 +60,7 @@ export default class EvalFactory {
 
     // If no options are provided, create the default test results
     if (!options || options.numResults === undefined) {
-      await this.addDefaultResults(eval_);
+      await EvalFactory.addDefaultResults(eval_);
       return eval_;
     }
 
@@ -77,7 +77,7 @@ export default class EvalFactory {
       const resultType = resultTypes[resultTypeIndex];
 
       // Create a test result based on the type
-      await this.addCustomResult(eval_, {
+      await EvalFactory.addCustomResult(eval_, {
         testIdx: i,
         resultType,
         withHighlight: withHighlights && i % 3 === 0, // Add highlights to every 3rd result if enabled

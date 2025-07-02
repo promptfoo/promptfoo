@@ -1,4 +1,3 @@
-import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
@@ -7,6 +6,7 @@ import ShieldIcon from '@mui/icons-material/Shield';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import React from 'react';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
 import styles from './llm-vulnerability-scanner.module.css';

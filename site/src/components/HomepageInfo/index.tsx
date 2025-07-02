@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
+import React, { useState } from 'react';
 import styles from './styles.module.css';
 
 export default function HomepageInfo(): JSX.Element {

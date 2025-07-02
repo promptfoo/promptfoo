@@ -1,15 +1,15 @@
 import { Severity } from '../../src/redteam/constants';
 import type {
-  RedteamPluginObject,
-  RedteamPlugin,
-  RedteamStrategyObject,
+  BaseRedteamMetadata,
   PluginActionParams,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
-  SynthesizeOptions,
+  RedteamPlugin,
+  RedteamPluginObject,
   RedteamRunOptions,
+  RedteamStrategyObject,
   SavedRedteamConfig,
-  BaseRedteamMetadata,
+  SynthesizeOptions,
 } from '../../src/redteam/types';
 import type { ApiProvider } from '../../src/types/providers';
 

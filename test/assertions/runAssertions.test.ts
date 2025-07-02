@@ -2,20 +2,20 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';
 import { runAssertion, runAssertions } from '../../src/assertions';
-import { validateXml, containsXml } from '../../src/assertions/xml';
+import { containsXml, validateXml } from '../../src/assertions/xml';
 import { fetchWithRetries } from '../../src/fetch';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import {
-  DefaultGradingJsonProvider,
   DefaultEmbeddingProvider,
+  DefaultGradingJsonProvider,
 } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import type {
-  Assertion,
   ApiProvider,
+  Assertion,
   AtomicTestCase,
-  ProviderResponse,
   GradingResult,
+  ProviderResponse,
 } from '../../src/types';
 import { TestGrader } from '../util/utils';
 

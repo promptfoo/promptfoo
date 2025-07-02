@@ -152,32 +152,31 @@ function getEmployeeData(args) {
         return JSON.stringify({
           error: `No employee found with ID or name: ${employeeId}`,
         });
-      } else if (matchingEmployees.length > 1) {
+      }
+      if (matchingEmployees.length > 1) {
         return JSON.stringify({
           error: `Multiple matches found. Please specify exact employee ID from: ${matchingEmployees.map(([id, data]) => `${id} (${data.name})`).join(', ')}`,
         });
-      } else {
-        // One match found
-        const [id, data] = matchingEmployees[0];
-
-        if (requestedFields) {
-          const filteredData = {};
-          requestedFields.forEach((field) => {
-            if (field in data) {
-              filteredData[field] = data[field];
-            }
-          });
-          return JSON.stringify({
-            employee_id: id,
-            ...filteredData,
-          });
-        } else {
-          return JSON.stringify({
-            employee_id: id,
-            ...data,
-          });
-        }
       }
+      // One match found
+      const [id, data] = matchingEmployees[0];
+
+      if (requestedFields) {
+        const filteredData = {};
+        requestedFields.forEach((field) => {
+          if (field in data) {
+            filteredData[field] = data[field];
+          }
+        });
+        return JSON.stringify({
+          employee_id: id,
+          ...filteredData,
+        });
+      }
+      return JSON.stringify({
+        employee_id: id,
+        ...data,
+      });
     }
 
     // Employee found by exact ID
@@ -194,12 +193,11 @@ function getEmployeeData(args) {
         employee_id: employeeId,
         ...filteredData,
       });
-    } else {
-      return JSON.stringify({
-        employee_id: employeeId,
-        ...employee,
-      });
     }
+    return JSON.stringify({
+      employee_id: employeeId,
+      ...employee,
+    });
   } catch (error) {
     return JSON.stringify({
       error: `Error retrieving employee data: ${error.message}`,
@@ -345,7 +343,8 @@ function accessHrDocument(args) {
       return JSON.stringify({
         error: `No document found matching: ${documentId}`,
       });
-    } else if (matchingDocs.length > 1) {
+    }
+    if (matchingDocs.length > 1) {
       return JSON.stringify({
         available_documents: matchingDocs.map(([id, data]) => ({
           id,
@@ -374,12 +373,11 @@ function accessHrDocument(args) {
             [matchingSection]: document.sections[matchingSection],
           },
         });
-      } else {
-        return JSON.stringify({
-          error: `Section not found: ${section}`,
-          available_sections: Object.keys(document.sections),
-        });
       }
+      return JSON.stringify({
+        error: `Section not found: ${section}`,
+        available_sections: Object.keys(document.sections),
+      });
     }
 
     // Return the full document

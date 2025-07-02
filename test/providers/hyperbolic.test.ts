@@ -1,5 +1,5 @@
 import { HyperbolicAudioProvider } from '../../src/providers/hyperbolic/audio';
-import { HyperbolicProvider, calculateHyperbolicCost } from '../../src/providers/hyperbolic/chat';
+import { calculateHyperbolicCost, HyperbolicProvider } from '../../src/providers/hyperbolic/chat';
 import { HyperbolicImageProvider } from '../../src/providers/hyperbolic/image';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 

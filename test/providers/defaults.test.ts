@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
@@ -7,8 +7,8 @@ import {
 } from '../../src/providers/defaults';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
-  DefaultGradingProvider as MistralGradingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
+  DefaultGradingProvider as MistralGradingProvider,
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from '../../src/providers/mistral/defaults';

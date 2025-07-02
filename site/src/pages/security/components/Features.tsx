@@ -1,10 +1,10 @@
-import React from 'react';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import dedent from 'dedent';
+import React from 'react';
 import styles from '../styles.module.css';
 
 const features = [

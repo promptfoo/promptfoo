@@ -3,8 +3,8 @@ import { getEnvString } from '../../src/envars';
 import { fetchWithRetries } from '../../src/fetch';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
-  PromptfooHarmfulCompletionProvider,
   PromptfooChatCompletionProvider,
+  PromptfooHarmfulCompletionProvider,
   PromptfooSimulatedUserProvider,
 } from '../../src/providers/promptfoo';
 

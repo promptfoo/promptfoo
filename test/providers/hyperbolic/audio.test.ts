@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../../src/cache';
 import {
-  HyperbolicAudioProvider,
   createHyperbolicAudioProvider,
+  HyperbolicAudioProvider,
 } from '../../../src/providers/hyperbolic/audio';
 
 jest.mock('../../../src/cache');

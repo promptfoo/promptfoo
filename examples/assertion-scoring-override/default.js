@@ -5,10 +5,9 @@ module.exports = (namedScores, context) => {
     scores[key] = value || 0;
   }
 
-  const totalScore = Math.pow(
-    Object.values(scores).reduce((acc, score) => acc * score, 1),
-    1 / Object.keys(scores).length,
-  );
+  const totalScore =
+    Object.values(scores).reduce((acc, score) => acc * score, 1) **
+    (1 / Object.keys(scores).length);
 
   console.log('Default scoring function (JavaScript):', namedScores, 'Total score:', totalScore);
   const threshold = context?.threshold ?? 0.7;

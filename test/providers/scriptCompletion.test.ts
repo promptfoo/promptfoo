@@ -3,8 +3,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import * as cacheModule from '../../src/cache';
 import {
-  parseScriptParts,
   getFileHashes,
+  parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
 

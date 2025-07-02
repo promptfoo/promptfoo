@@ -1,4 +1,3 @@
-import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
@@ -9,6 +8,7 @@ import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import React from 'react';
 import NewsletterForm from '../components/NewsletterForm';
 import styles from './index.module.css';
 
@@ -45,11 +45,14 @@ function HomepageWalkthrough() {
     if (typeof window !== 'undefined') {
       if (window.location.hash === '#evals') {
         return 4;
-      } else if (window.location.hash === '#redteam') {
+      }
+      if (window.location.hash === '#redteam') {
         return 1;
-      } else if (window.location.hash === '#guardrails') {
+      }
+      if (window.location.hash === '#guardrails') {
         return 2;
-      } else if (window.location.hash === '#modelsecurity') {
+      }
+      if (window.location.hash === '#modelsecurity') {
         return 3;
       }
     }

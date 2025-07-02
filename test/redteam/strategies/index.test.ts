@@ -2,7 +2,7 @@ import path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { validateStrategies, loadStrategy } from '../../../src/redteam/strategies';
+import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies';
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types';
 
 jest.mock('../../../src/cliState');

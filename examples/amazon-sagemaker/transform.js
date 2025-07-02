@@ -26,22 +26,21 @@ module.exports = function (promptOrJson, context) {
     };
   }
   // Otherwise, this is being used for response transformation (input is a JSON object)
-  else {
-    // Extract the generated text from the response
-    const generatedText =
-      promptOrJson.generated_text ||
-      (Array.isArray(promptOrJson) && promptOrJson[0]?.generated_text) ||
-      promptOrJson.text ||
-      promptOrJson;
 
-    // Return the extracted text with additional metadata
-    return {
-      output: typeof generatedText === 'string' ? generatedText : JSON.stringify(generatedText),
-      source: 'SageMaker',
-      model_type: context?.config?.modelType || 'custom',
-      timestamp: new Date().toISOString(),
-    };
-  }
+  // Extract the generated text from the response
+  const generatedText =
+    promptOrJson.generated_text ||
+    (Array.isArray(promptOrJson) && promptOrJson[0]?.generated_text) ||
+    promptOrJson.text ||
+    promptOrJson;
+
+  // Return the extracted text with additional metadata
+  return {
+    output: typeof generatedText === 'string' ? generatedText : JSON.stringify(generatedText),
+    source: 'SageMaker',
+    model_type: context?.config?.modelType || 'custom',
+    timestamp: new Date().toISOString(),
+  };
 };
 
 /**

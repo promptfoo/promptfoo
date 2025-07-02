@@ -1,6 +1,6 @@
-import React from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import dedent from 'dedent';
+import React from 'react';
 import styles from '../styles.module.css';
 
 const faqs = [

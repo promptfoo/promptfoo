@@ -1,8 +1,8 @@
 import { fetchWithProxy } from '../src/fetch';
 import {
-  fetchCsvFromGoogleSheetUnauthenticated,
-  fetchCsvFromGoogleSheetAuthenticated,
   checkGoogleSheetAccess,
+  fetchCsvFromGoogleSheetAuthenticated,
+  fetchCsvFromGoogleSheetUnauthenticated,
   writeCsvToGoogleSheet,
 } from '../src/googleSheets';
 import logger from '../src/logger';

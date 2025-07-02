@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../src/cache';
 import {
-  OllamaCompletionProvider,
   OllamaChatProvider,
+  OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
 import type { CallApiContextParams } from '../../src/types';

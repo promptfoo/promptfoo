@@ -24,13 +24,12 @@ export function installJestMatchers() {
           message: () => `expected ${received} not to match semantic similarity with ${expected}`,
           pass: true,
         };
-      } else {
-        return {
-          message: () =>
-            `expected ${received} to match semantic similarity with ${expected}, but it did not. Reason: ${result.reason}`,
-          pass: false,
-        };
       }
+      return {
+        message: () =>
+          `expected ${received} to match semantic similarity with ${expected}, but it did not. Reason: ${result.reason}`,
+        pass: false,
+      };
     },
 
     async toPassLLMRubric(
@@ -44,13 +43,12 @@ export function installJestMatchers() {
           message: () => `expected ${received} not to pass LLM Rubric with ${expected}`,
           pass: true,
         };
-      } else {
-        return {
-          message: () =>
-            `expected ${received} to pass LLM Rubric with ${expected}, but it did not. Reason: ${gradingResult.reason}`,
-          pass: false,
-        };
       }
+      return {
+        message: () =>
+          `expected ${received} to pass LLM Rubric with ${expected}, but it did not. Reason: ${gradingResult.reason}`,
+        pass: false,
+      };
     },
   });
 }

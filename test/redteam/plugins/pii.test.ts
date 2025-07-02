@@ -1,4 +1,4 @@
-import { PiiGrader, getPiiLeakTestsForCategory } from '../../../src/redteam/plugins/pii';
+import { getPiiLeakTestsForCategory, PiiGrader } from '../../../src/redteam/plugins/pii';
 import type { PluginActionParams } from '../../../src/types';
 
 describe('PiiGrader', () => {

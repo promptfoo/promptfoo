@@ -1,6 +1,5 @@
-import { Editor } from '@monaco-editor/react';
-import React, { useState, useEffect } from 'react';
 import Link from '@docusaurus/Link';
+import { Editor } from '@monaco-editor/react';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
@@ -10,6 +9,7 @@ import { AggregateAjvError } from '@segment/ajv-human-errors';
 import Layout from '@theme/Layout';
 import Ajv from 'ajv';
 import yaml from 'js-yaml';
+import React, { useEffect, useState } from 'react';
 
 const DEFAULT_INPUT = `prompts:
   - "Write a tweet about {{topic}}"

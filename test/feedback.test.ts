@@ -1,4 +1,4 @@
-import { sendFeedback, gatherFeedback } from '../src/feedback';
+import { gatherFeedback, sendFeedback } from '../src/feedback';
 import { fetchWithProxy } from '../src/fetch';
 import logger from '../src/logger';
 import * as readlineUtils from '../src/util/readline';

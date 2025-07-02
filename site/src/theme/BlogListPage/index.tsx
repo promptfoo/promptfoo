@@ -1,5 +1,4 @@
-import React from 'react';
-import { PageMetadata, HtmlClassNameProvider, ThemeClassNames } from '@docusaurus/theme-common';
+import { HtmlClassNameProvider, PageMetadata, ThemeClassNames } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BlogPostGrid from '@site/src/components/Blog/BlogPostGrid';
 import FeaturedBlogPost from '@site/src/components/Blog/FeaturedBlogPost';
@@ -9,6 +8,7 @@ import BlogListPageStructuredData from '@theme/BlogListPage/StructuredData';
 import BlogListPaginator from '@theme/BlogListPaginator';
 import SearchMetadata from '@theme/SearchMetadata';
 import clsx from 'clsx';
+import React from 'react';
 import styles from './styles.module.css';
 
 function BlogListPageMetadata(props: Props): JSX.Element {

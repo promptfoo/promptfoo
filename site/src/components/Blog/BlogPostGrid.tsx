@@ -1,5 +1,5 @@
-import React from 'react';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
+import React from 'react';
 import BlogPostCard from './BlogPostCard';
 import styles from './BlogPostGrid.module.css';
 

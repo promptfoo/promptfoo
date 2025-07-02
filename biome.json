@@ -18,7 +18,18 @@
     "lineEnding": "lf",
     "lineWidth": 100,
     "attributePosition": "auto",
-    "includes": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs", "**/*.json", "**/*.css", "**/*.scss", "**/*.html"]
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.mjs",
+      "**/*.cjs",
+      "**/*.json",
+      "**/*.css",
+      "**/*.scss",
+      "**/*.html"
+    ]
   },
   "linter": {
     "enabled": true,

@@ -1,7 +1,7 @@
-import React from 'react';
 import { Container, Typography } from '@mui/material';
 import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 import Layout from '@theme/Layout';
+import React from 'react';
 
 export default function HttpConfigGeneratorPage(): JSX.Element {
   return (

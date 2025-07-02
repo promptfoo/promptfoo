@@ -2,10 +2,10 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  DEFAULT_PLUGINS,
   Severity,
 } from '../../src/redteam/constants';
 import { RedteamConfigSchema } from '../../src/validators/redteam';

@@ -7,7 +7,7 @@ import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { type UnifiedConfig } from '../../../src/types';
+import type { UnifiedConfig } from '../../../src/types';
 import { isRunningUnderNpx } from '../../../src/util';
 import {
   combineConfigs,
@@ -144,7 +144,8 @@ describe('combineConfigs', () => {
         ): string | Buffer => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
-          } else if (typeof path === 'string' && path === 'config2.json') {
+          }
+          if (typeof path === 'string' && path === 'config2.json') {
             return JSON.stringify(config2);
           }
           return Buffer.from('');
@@ -376,7 +377,8 @@ describe('combineConfigs', () => {
               description: 'test1',
               prompts: ['file://prompt1.txt', 'prompt2'],
             });
-          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
+          }
+          if (typeof path === 'string' && path.endsWith('config2.json')) {
             return JSON.stringify({
               description: 'test2',
               prompts: ['file://prompt3.txt', 'prompt4'],
@@ -432,7 +434,8 @@ describe('combineConfigs', () => {
               description: 'test1',
               prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
             });
-          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
+          }
+          if (typeof path === 'string' && path.endsWith('config2.json')) {
             return JSON.stringify({
               description: 'test2',
               prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],

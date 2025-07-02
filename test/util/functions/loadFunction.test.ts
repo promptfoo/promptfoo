@@ -2,9 +2,9 @@ import * as path from 'path';
 import { importModule } from '../../../src/esm';
 import { runPython } from '../../../src/python/pythonUtils';
 import {
+  functionCache,
   loadFunction,
   parseFileUrl,
-  functionCache,
 } from '../../../src/util/functions/loadFunction';
 
 jest.mock('../../../src/esm', () => ({

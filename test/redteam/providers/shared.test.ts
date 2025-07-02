@@ -7,10 +7,10 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
-  redteamProviderManager,
   getTargetResponse,
-  messagesToRedteamHistory,
   type Message,
+  messagesToRedteamHistory,
+  redteamProviderManager,
 } from '../../../src/redteam/providers/shared';
 import type {
   ApiProvider,

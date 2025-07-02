@@ -1,8 +1,8 @@
 import { fetchWithCache } from '../../../src/cache';
 import {
-  HyperbolicImageProvider,
-  formatHyperbolicImageOutput,
   createHyperbolicImageProvider,
+  formatHyperbolicImageOutput,
+  HyperbolicImageProvider,
 } from '../../../src/providers/hyperbolic/image';
 
 jest.mock('../../../src/cache');

@@ -2,9 +2,9 @@ import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDa
 import {
   AegisGrader,
   AegisPlugin,
-  PLUGIN_ID,
   DATASET_PATH,
   fetchDataset,
+  PLUGIN_ID,
 } from '../../../src/redteam/plugins/aegis';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, TestCase } from '../../../src/types';

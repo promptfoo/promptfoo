@@ -1,5 +1,5 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import styles from './A2ACapabilityExplorer.module.css';
 
 interface AgentCapability {

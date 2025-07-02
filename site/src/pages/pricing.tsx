@@ -1,8 +1,8 @@
-import React from 'react';
 import Link from '@docusaurus/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import React from 'react';
 import styles from './pricing.module.css';
 
 function PricingHeader() {

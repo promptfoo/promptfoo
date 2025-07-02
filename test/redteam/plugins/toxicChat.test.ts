@@ -1,9 +1,9 @@
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
-  ToxicChatPlugin,
-  ToxicChatGrader,
   fetchDataset,
   PLUGIN_ID,
+  ToxicChatGrader,
+  ToxicChatPlugin,
 } from '../../../src/redteam/plugins/toxicChat';
 import type { TestCase } from '../../../src/types';
 

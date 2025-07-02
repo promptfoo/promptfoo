@@ -6,23 +6,23 @@ import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import {
-  ResultFailureReason,
   type ApiProvider,
   type EvaluateResult,
+  ResultFailureReason,
   type TestCase,
 } from '../../src/types';
 import {
+  maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   providerToIdentifier,
   readFilters,
   readOutput,
+  renderVarsInObject,
   resultIsForTestCase,
   setupEnv,
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
 } from '../../src/util';
 import { TestGrader } from './utils';
 
@@ -540,7 +540,7 @@ describe('util', () => {
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
-        filePath: expect.stringMatching(/base[\\\/]relative[\\\/]path[\\\/]to[\\\/]file.txt/),
+        filePath: expect.stringMatching(/base[\\/]relative[\\/]path[\\/]to[\\/]file.txt/),
       });
     });
 

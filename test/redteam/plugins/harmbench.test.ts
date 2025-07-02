@@ -4,7 +4,7 @@ import {
   HarmbenchPlugin,
   PLUGIN_ID,
 } from '../../../src/redteam/plugins/harmbench';
-import type { AtomicTestCase, ApiProvider } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

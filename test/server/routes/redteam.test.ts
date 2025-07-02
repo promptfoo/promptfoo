@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import cliState from '../../../src/cliState';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import { evalJobs } from '../../../src/server/routes/eval';

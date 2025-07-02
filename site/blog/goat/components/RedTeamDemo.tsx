@@ -1,25 +1,26 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
-  KeyRound,
-  Heart,
-  Crown,
+  ArrowLeftRight,
   BookOpen,
   Copy,
-  MessageSquare,
-  User,
-  Split,
-  ArrowLeftRight,
-  StepForward,
   CornerUpRight,
-  Type,
+  Crown,
+  Heart,
+  KeyRound,
+  MessageSquare,
   Shield,
   ShieldAlert,
+  Split,
+  StepForward,
+  Type,
+  User,
 } from 'lucide-react';
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import RedTeamSuggestions from './RedTeamSuggestions';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from './constants';
 import styles from './RedTeamDemo.module.css';
+import RedTeamSuggestions from './RedTeamSuggestions';
 
 const attacks = [
   {
@@ -165,7 +166,7 @@ const RedTeamDemo: React.FC = () => {
             });
           }
           break;
-        case 'safety':
+        case 'safety': {
           const lastMessage = newMessages[newMessages.length - 1];
           if (lastMessage && event.data.result) {
             lastMessage.safety = event.data.result;
@@ -181,6 +182,7 @@ const RedTeamDemo: React.FC = () => {
             }
           }
           break;
+        }
         case 'progress':
           if (event.data.turn !== undefined && event.data.totalTurns) {
             return {

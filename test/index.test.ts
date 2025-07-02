@@ -5,7 +5,7 @@ import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
 import * as providers from '../src/providers';
-import { writeOutput, writeMultipleOutputs } from '../src/util';
+import { writeMultipleOutputs, writeOutput } from '../src/util';
 
 jest.mock('../src/cache');
 jest.mock('../src/database', () => ({

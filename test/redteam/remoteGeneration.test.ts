@@ -3,10 +3,10 @@ import { getEnvBool, getEnvString } from '../../src/envars';
 import { readGlobalConfig } from '../../src/globalConfig/globalConfig';
 import {
   getRemoteGenerationUrl,
+  getRemoteGenerationUrlForUnaligned,
+  getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
-  getRemoteHealthUrl,
-  getRemoteGenerationUrlForUnaligned,
 } from '../../src/redteam/remoteGeneration';
 
 jest.mock('../../src/envars');

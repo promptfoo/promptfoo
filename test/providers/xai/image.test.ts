@@ -1,6 +1,6 @@
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
-import { XAIImageProvider, createXAIImageProvider } from '../../../src/providers/xai/image';
+import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
 
 jest.mock('../../../src/logger');
 jest.mock('../../../src/providers/openai/image', () => ({

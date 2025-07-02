@@ -1,14 +1,14 @@
 import { jest } from '@jest/globals';
 import {
-  VERSION,
-  DEFAULT_QUERY_LIMIT,
-  DEFAULT_API_BASE_URL,
-  getShareApiBaseUrl,
-  getDefaultShareViewBaseUrl,
-  getShareViewBaseUrl,
-  getDefaultPort,
-  TERMINAL_MAX_WIDTH,
   CLOUD_PROVIDER_PREFIX,
+  DEFAULT_API_BASE_URL,
+  DEFAULT_QUERY_LIMIT,
+  getDefaultPort,
+  getDefaultShareViewBaseUrl,
+  getShareApiBaseUrl,
+  getShareViewBaseUrl,
+  TERMINAL_MAX_WIDTH,
+  VERSION,
 } from '../src/constants';
 import { REDTEAM_DEFAULTS } from '../src/redteam/constants';
 

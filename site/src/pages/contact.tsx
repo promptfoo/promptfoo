@@ -1,5 +1,4 @@
 import Cal, { getCalApi } from '@calcom/embed-react';
-import React, { useEffect, useState } from 'react';
 import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -9,12 +8,13 @@ import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
+import React, { useEffect, useState } from 'react';
 import styles from './contact.module.css';
 
 function Calendar() {

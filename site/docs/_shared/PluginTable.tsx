@@ -1,6 +1,6 @@
 import React from 'react';
-import { PLUGINS, PLUGIN_CATEGORIES } from './data/plugins';
 import type { Plugin, PluginCategory } from './data/plugins';
+import { PLUGIN_CATEGORIES, PLUGINS } from './data/plugins';
 import { getCategoryAnchor } from './utils/categoryUtils';
 
 type GroupedPlugins = Record<PluginCategory, Plugin[]>;

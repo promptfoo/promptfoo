@@ -37,18 +37,18 @@ describe('RedteamIterativeProvider', () => {
                 prompt: 'test prompt',
               }),
             };
-          } else if (Array.isArray(input) && input[0]?.content?.includes('on-topic')) {
+          }
+          if (Array.isArray(input) && input[0]?.content?.includes('on-topic')) {
             return {
               output: JSON.stringify({ onTopic: true }),
             };
-          } else {
-            return {
-              output: JSON.stringify({
-                currentResponse: { rating: 5, explanation: 'test' },
-                previousBestResponse: { rating: 0, explanation: 'none' },
-              }),
-            };
           }
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'test' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
         }),
     } as jest.Mocked<ApiProvider>;
 

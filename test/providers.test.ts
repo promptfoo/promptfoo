@@ -11,7 +11,7 @@ import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import type { ProviderOptions } from '../src/types';
-import { getProviderFromCloud, isCloudProvider, getCloudDatabaseId } from '../src/util/cloud';
+import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 
 jest.mock('fs');
 jest.mock('js-yaml');
@@ -622,7 +622,8 @@ describe('loadApiProviders', () => {
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath.toString().includes('first.yaml')) {
         return 'first file content';
-      } else if (filePath.toString().includes('second.yaml')) {
+      }
+      if (filePath.toString().includes('second.yaml')) {
         return 'second file content';
       }
       return '';
@@ -632,7 +633,8 @@ describe('loadApiProviders', () => {
     jest.mocked(yaml.load).mockImplementation((content) => {
       if (content === 'first file content') {
         return firstFileContent;
-      } else if (content === 'second file content') {
+      }
+      if (content === 'second file content') {
         return secondFileContent;
       }
       return null;

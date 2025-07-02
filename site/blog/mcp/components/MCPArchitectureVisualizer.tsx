@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import type React from 'react';
+import { useEffect, useState } from 'react';
 import styles from './MCPArchitectureVisualizer.module.css';
 
 interface FlowStep {

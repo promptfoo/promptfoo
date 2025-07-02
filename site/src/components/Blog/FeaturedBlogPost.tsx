@@ -1,6 +1,6 @@
-import React from 'react';
 import Link from '@docusaurus/Link';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
+import React from 'react';
 import styles from './FeaturedBlogPost.module.css';
 
 interface FeaturedBlogPostProps {
