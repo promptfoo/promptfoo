@@ -127,7 +127,7 @@ describe('CrescendoProvider', () => {
         },
       })),
     } as any);
-    
+
     // Set up default tryUnblocking mock
     jest.mocked(tryUnblocking).mockReset();
     jest.mocked(tryUnblocking).mockResolvedValue({ output: null });
@@ -491,7 +491,7 @@ describe('CrescendoProvider', () => {
     // Refusal check returns true (is a refusal) which triggers backtracks
     mockScoringProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
-        value: true,  // true means it IS a refusal
+        value: true, // true means it IS a refusal
         metadata: 0,
         rationale: 'This is a refusal',
       }),
@@ -689,7 +689,7 @@ describe('CrescendoProvider', () => {
           },
         })),
       } as any);
-      
+
       const provider = new CrescendoProvider({
         injectVar: 'objective',
         maxTurns: 5,

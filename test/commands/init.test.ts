@@ -148,7 +148,7 @@ describe('init command', () => {
 
     it('should throw an error if downloadDirectory fails', async () => {
       jest.spyOn(fs, 'mkdir').mockResolvedValue(undefined);
-      
+
       // Mock fetch to simulate downloadDirectory failure
       mockFetch.mockRejectedValue(new Error('Network error'));
 

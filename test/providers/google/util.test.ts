@@ -6,8 +6,6 @@ import type { Tool } from '../../../src/providers/google/types';
 import {
   maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
-  getGoogleClient,
-  hasGoogleDefaultCredentials,
   loadFile,
   parseStringObject,
   validateFunctionCall,

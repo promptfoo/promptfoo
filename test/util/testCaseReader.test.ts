@@ -1101,11 +1101,11 @@ describe('readVarsFiles', () => {
   it('should read variables from multiple YAML files', async () => {
     const yamlContent1 = 'var1: value1';
     const yamlContent2 = 'var2: value2';
-    
+
     // Clear any existing mocks and set up fresh ones
     jest.mocked(fs.readFileSync).mockReset();
     jest.mocked(globSync).mockReset();
-    
+
     // Mock to return the correct content for each file
     jest.mocked(fs.readFileSync).mockImplementation((path) => {
       if (String(path).includes('vars1.yaml')) {
