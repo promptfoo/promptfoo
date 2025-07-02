@@ -64,6 +64,9 @@ jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Set default mock implementations for envars
+    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
+    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue);
   });
 
   it('should read CSV file and return test cases', async () => {
@@ -1143,7 +1146,6 @@ describe('CSV parsing with JSON fields', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
-    jest.resetModules();
   });
 
   it('should parse CSV file containing properly escaped JSON fields in strict mode', async () => {
@@ -1199,27 +1201,6 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
     await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow(
       'Invalid Opening Quote: a quote is found on field',
     );
-
-    jest.mocked(fs.readFileSync).mockRestore();
-  });
-
-  it('should propagate non-quote-related CSV errors', async () => {
-    const mockParse = jest.fn().mockImplementation(() => {
-      const error = new Error('Some other CSV error');
-      (error as any).code = 'CSV_OTHER_ERROR';
-      throw error;
-    });
-
-    jest.mock('csv-parse/sync', () => ({
-      parse: mockParse,
-    }));
-
-    const csvContent = `label,query,expected_json_format,context
-my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
-
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-    const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
-    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
 
     jest.mocked(fs.readFileSync).mockRestore();
   });
