@@ -189,24 +189,9 @@ Python snake_case fields are automatically mapped to camelCase:
 
 By default, promptfoo will run `python` in your shell. Make sure `python` points to the appropriate executable.
 
+If a `python` binary is not present, you will see a "python: command not found" error.
+
 To override the Python binary, set the `PROMPTFOO_PYTHON` environment variable. You may set it to a path (such as `/path/to/python3.11`) or just an executable in your PATH (such as `python3.11`).
-
-### Debugging Python Assertions
-
-When debugging complex assertion logic, you can use the Python debugger:
-
-```bash
-export PROMPTFOO_PYTHON_PDB_TRACING_ENABLED=true
-```
-
-Then add breakpoints in your assertion code:
-
-```python
-def get_assert(output, context):
-    import pdb; pdb.set_trace()
-    # Inspect the output and context
-    return output.lower() == context['vars']['expected_output'].lower()
-```
 
 ## Other assertion types
 
