@@ -745,8 +745,8 @@ describe('util', () => {
         getProjectId: jest.fn().mockResolvedValue(mockProjectId),
       };
 
-      const { GoogleAuth } = require('google-auth-library');
-      jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
+      const googleAuthLib = await import('google-auth-library');
+      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
 
       // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
@@ -766,17 +766,17 @@ describe('util', () => {
         getProjectId: jest.fn().mockResolvedValue(mockProjectId),
       };
 
-      const { GoogleAuth } = require('google-auth-library');
-      jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
+      const googleAuthLib = await import('google-auth-library');
+      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
 
       // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
 
       await getGoogleClient();
-      const googleAuthCalls = jest.mocked(GoogleAuth).mock.calls.length;
+      const googleAuthCalls = jest.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
 
       await getGoogleClient();
-      expect(jest.mocked(GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
+      expect(jest.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
     });
   });
 
@@ -800,8 +800,8 @@ describe('util', () => {
         getProjectId: jest.fn().mockResolvedValue('test-project'),
       };
 
-      const { GoogleAuth } = require('google-auth-library');
-      jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
+      const googleAuthLib = await import('google-auth-library');
+      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
 
       // Import hasGoogleDefaultCredentials after mocking
       const { hasGoogleDefaultCredentials } = await import('../../../src/providers/google/util');

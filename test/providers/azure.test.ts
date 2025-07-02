@@ -11,7 +11,16 @@ jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-describe('maybeEmitAzureOpenAiWarning', () => {
+describe('Azure Provider Tests', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('maybeEmitAzureOpenAiWarning', () => {
   it('should not emit warning when no Azure providers are used', () => {
     const testSuite: TestSuite = {
       providers: [new OpenAiCompletionProvider('foo')],
@@ -534,6 +543,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
     let provider: AzureChatCompletionProvider;
 
     beforeEach(() => {
+      jest.clearAllMocks();
       provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           apiHost: 'test.azure.com',
@@ -543,7 +553,8 @@ describe('AzureOpenAiChatCompletionProvider', () => {
     });
 
     afterEach(() => {
-      jest.resetAllMocks();
+      jest.clearAllMocks();
+      jest.restoreAllMocks();
     });
 
     it('should parse JSON response when prompt config specifies json_object format', async () => {
@@ -791,4 +802,5 @@ describe('AzureCompletionProvider', () => {
     expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
   });
+});
 });

@@ -1082,14 +1082,23 @@ describe('readVarsFiles', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
+    // Reset fs mocks
+    jest.mocked(fs.readFileSync).mockReset();
+    jest.mocked(fs.existsSync).mockReset();
+    jest.mocked(fs.readdirSync).mockReset();
+    jest.mocked(fs.statSync).mockReset();
+    jest.mocked(globSync).mockReset();
   });
 
   afterEach(() => {
+    jest.clearAllMocks();
     jest.restoreAllMocks();
   });
 
   it('should read variables from a single YAML file', async () => {
     const yamlContent = 'var1: value1\nvar2: value2';
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as any);
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
     jest.mocked(globSync).mockReturnValue(['vars.yaml']);
 
