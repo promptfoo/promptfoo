@@ -66,7 +66,17 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
     message: string;
   }>({ show: false, message: '' });
 
-  const { getTestSuite } = useStore();
+  const getTestSuite = useStore((state) => state.getTestSuite);
+  const providers = useStore((state) => state.providers);
+  const prompts = useStore((state) => state.prompts);
+  const testCases = useStore((state) => state.testCases);
+  const derivedMetrics = useStore((state) => state.derivedMetrics);
+  const evaluateOptions = useStore((state) => state.evaluateOptions);
+  const scenarios = useStore((state) => state.scenarios);
+  const extensions = useStore((state) => state.extensions);
+  const env = useStore((state) => state.env);
+  const description = useStore((state) => state.description);
+  const defaultTest = useStore((state) => state.defaultTest);
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
@@ -181,16 +191,36 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
     }
   };
 
+  // Update YAML when store changes (only if in read-only mode to avoid overwriting edits)
+  React.useEffect(() => {
+    if (!initialYaml && !initialConfig && isReadOnly) {
+      const currentConfig = getTestSuite();
+      setCode(formatYamlWithSchema(currentConfig));
+    }
+  }, [
+    providers,
+    prompts,
+    testCases,
+    derivedMetrics,
+    evaluateOptions,
+    scenarios,
+    extensions,
+    env,
+    description,
+    defaultTest,
+    isReadOnly,
+    getTestSuite,
+    initialYaml,
+    initialConfig,
+  ]);
+
+  // Handle initial YAML/config
   React.useEffect(() => {
     if (initialYaml) {
       setCode(ensureSchemaComment(initialYaml));
     } else if (initialConfig) {
       setCode(formatYamlWithSchema(initialConfig));
-    } else {
-      const currentConfig = getTestSuite();
-      setCode(formatYamlWithSchema(currentConfig));
     }
-    // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
   }, [initialYaml, initialConfig]);
 
   return (
