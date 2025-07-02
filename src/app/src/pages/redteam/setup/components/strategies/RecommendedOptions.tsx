@@ -1,27 +1,15 @@
 import React from 'react';
-import {
-  Paper,
-  Box,
-  Typography,
-  Checkbox,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-} from '@mui/material';
+import { Paper, Box, Typography, Checkbox, FormControlLabel } from '@mui/material';
 import { STRATEGY_PRESETS, PRESET_IDS } from './types';
 
 interface RecommendedOptionsProps {
   isMultiTurnEnabled: boolean;
-  isStatefulValue: boolean;
   onMultiTurnChange: (checked: boolean) => void;
-  onStatefulChange: (isStateful: boolean) => void;
 }
 
 export function RecommendedOptions({
   isMultiTurnEnabled,
-  isStatefulValue,
   onMultiTurnChange,
-  onStatefulChange,
 }: RecommendedOptionsProps) {
   const mediumPreset = STRATEGY_PRESETS[PRESET_IDS.MEDIUM];
   if (!mediumPreset?.options?.multiTurn) {
@@ -42,32 +30,17 @@ export function RecommendedOptions({
               onChange={(e) => onMultiTurnChange(e.target.checked)}
             />
           }
-          label={mediumPreset.options.multiTurn.label}
+          label={
+            <Box>
+              <Typography variant="body2" component="span">
+                {mediumPreset.options.multiTurn.label}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                Adds multi-turn strategies like GOAT for conversational applications
+              </Typography>
+            </Box>
+          }
         />
-
-        {isMultiTurnEnabled && (
-          <Box sx={{ pl: 4 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Does your system maintain conversation state?
-            </Typography>
-            <RadioGroup
-              value={String(isStatefulValue)}
-              onChange={(e) => onStatefulChange(e.target.value === 'true')}
-              row
-            >
-              <FormControlLabel
-                value="true"
-                control={<Radio size="small" />}
-                label="Yes - my system is stateful and maintains conversation history"
-              />
-              <FormControlLabel
-                value="false"
-                control={<Radio size="small" />}
-                label="No - my system is not stateful, the full conversation history must be sent on every request"
-              />
-            </RadioGroup>
-          </Box>
-        )}
       </Box>
     </Paper>
   );

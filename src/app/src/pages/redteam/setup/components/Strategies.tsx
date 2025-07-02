@@ -17,7 +17,6 @@ import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
-import { SystemConfiguration } from './strategies/SystemConfiguration';
 import {
   STRATEGY_PRESETS,
   PRESET_IDS,
@@ -315,8 +314,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies],
   );
 
-  const showSystemConfig = config.strategies.some((s) =>
-    ['goat', 'crescendo'].includes(getStrategyId(s)),
+  // Check if any multi-turn strategies are selected (for both preset and custom configs)
+  const hasMultiTurnStrategies = useMemo(
+    () => config.strategies.some((s) => MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any)),
+    [config.strategies],
   );
 
   const hasSessionParser = Boolean(
@@ -365,13 +366,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         onSelect={handlePresetSelect}
       />
 
-      {/* Recommended-specific options */}
+      {/* Recommended Options - only for preset-specific multi-turn enablement */}
       {(selectedPreset === PRESET_IDS.MEDIUM || selectedPreset === PRESET_IDS.LARGE) && (
         <RecommendedOptions
           isMultiTurnEnabled={isMultiTurnEnabled}
-          isStatefulValue={isStatefulValue}
           onMultiTurnChange={handleMultiTurnChange}
-          onStatefulChange={handleStatefulChange}
         />
       )}
 
@@ -393,16 +392,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         onToggle={handleStrategyToggle}
         onConfigClick={handleConfigClick}
         onSelectNone={handleSelectNoneInSection}
+        showMultiTurnConfig={hasMultiTurnStrategies}
+        isStatefulValue={isStatefulValue}
+        onStatefulChange={handleStatefulChange}
+        hasSessionParser={hasSessionParser}
       />
-
-      {/* Additional system config section, if needed */}
-      {showSystemConfig && (
-        <SystemConfiguration
-          isStatefulValue={isStatefulValue}
-          onStatefulChange={handleStatefulChange}
-          hasSessionParser={hasSessionParser}
-        />
-      )}
 
       {/* Footer Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
