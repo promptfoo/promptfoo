@@ -393,7 +393,7 @@ Promptfoo now supports Google's WebSocket-based Live API, which enables low-late
 
 ### Using the Live Provider
 
-Access the Live API by specifying the model with the 'live' service type:
+Access the Google Live API by specifying the model with the 'live' service type:
 
 ```yaml
 providers:
@@ -414,7 +414,7 @@ providers:
 
 ### Function Calling Example
 
-The Live API supports function calling, allowing you to define tools that the model can use:
+The Google Live API supports function calling, allowing you to define tools that the model can use:
 
 ```yaml
 providers:
@@ -459,7 +459,7 @@ Where `tools.json` contains function declarations and built-in tools:
 
 ### Built-in Tools
 
-The Live API includes several built-in tools:
+The Google Live API includes several built-in tools:
 
 1. **Code Execution**: Execute Python code directly in the model's runtime
 
@@ -532,4 +532,4 @@ promptfoo init --example google-live-audio
 - Rate limits of 3 concurrent sessions per API key apply
 - Maximum of 4M tokens per minute
 
-For more details, see the [Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+For more details, see the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live).
