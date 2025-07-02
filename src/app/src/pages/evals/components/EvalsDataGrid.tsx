@@ -176,7 +176,8 @@ export default function EvalsDataGrid({
         {
           field: 'evalId',
           headerName: 'ID',
-          flex: 1,
+          flex: 0.5,
+          minWidth: 120,
           renderCell: (params: GridRenderCellParams<Eval>) =>
             params.row.evalId === focusedEvalId ? (
               params.row.evalId
@@ -200,7 +201,7 @@ export default function EvalsDataGrid({
         {
           field: 'createdAt',
           headerName: 'Created',
-          flex: 1,
+          flex: 0.9,
           valueGetter: (value: Eval['createdAt'], row: Eval) => {
             return new Date(value);
           },
@@ -209,7 +210,7 @@ export default function EvalsDataGrid({
         {
           field: 'description',
           headerName: 'Description',
-          flex: 1,
+          flex: 2,
           valueGetter: (value: Eval['description'], row: Eval) => value ?? row.label,
         },
         {
@@ -366,7 +367,7 @@ export default function EvalsDataGrid({
             sortModel: [{ field: 'createdAt', sort: 'desc' }],
           },
           pagination: {
-            paginationModel: { pageSize: 25 },
+            paginationModel: { pageSize: 50 },
           },
         }}
         pageSizeOptions={[10, 25, 50, 100]}

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { PythonShell } from 'python-shell';
 import { Writable, Readable } from 'stream';
-import { getEnvString } from '../../src/envars';
+import { getEnvString, getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { execAsync } from '../../src/python/execAsync';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -17,6 +17,7 @@ jest.mock('fs', () => ({
 
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn(),
+  getEnvBool: jest.fn(),
 }));
 
 jest.mock('../../src/python/execAsync', () => ({
@@ -73,6 +74,9 @@ describe('Python Utils', () => {
     jest.mocked(execAsync).mockReset();
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
+    // Set default mock return values
+    jest.mocked(getEnvString).mockReturnValue('');
+    jest.mocked(getEnvBool).mockReturnValue(false);
   });
 
   describe('tryPath', () => {
