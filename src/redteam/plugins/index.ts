@@ -45,6 +45,7 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { TestCounterfactualPlugin } from './testCounterfactual';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
@@ -189,6 +190,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(TestCounterfactualPlugin, 'test-counterfactual'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,

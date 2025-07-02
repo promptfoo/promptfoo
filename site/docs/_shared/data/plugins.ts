@@ -1248,6 +1248,21 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Trust and Safety',
+    description:
+      'Generates template test cases for counterfactual bias testing with protected attributes',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/test-counterfactual/',
+    name: 'Counterfactual Bias Test Generator',
+    pluginId: 'test-counterfactual',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
     applicationTypes: {
       agent: true,
       chat: true,

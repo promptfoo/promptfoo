@@ -188,6 +188,7 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
   'system-prompt-override',
+  'test-counterfactual',
   'tool-discovery',
   'unsafebench',
   'xstest',

@@ -127,6 +127,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'test-counterfactual':
+    'Generates template test cases for counterfactual bias testing with protected attributes',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
@@ -248,6 +250,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  'test-counterfactual': 'Counterfactual Bias Test Generator',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
@@ -356,6 +359,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
+  'test-counterfactual': Severity.Medium,
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
@@ -430,6 +434,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'medical:incorrect-knowledge',
     'medical:prioritization-error',
     'medical:sycophancy',
+    'test-counterfactual',
   ],
 
   Brand: [
@@ -568,6 +573,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
+  'test-counterfactual': 'CounterfactualBiasTesting',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
 };
@@ -683,6 +689,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'test-counterfactual':
+    'Generates template test cases for counterfactual bias testing with protected attributes',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
