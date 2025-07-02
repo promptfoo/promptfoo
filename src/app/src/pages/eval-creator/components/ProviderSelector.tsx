@@ -20,6 +20,7 @@ const defaultProviders: ProviderOptions[] = (
       id: 'openai:gpt-4.1',
       label: 'OpenAI: GPT-4.1',
       config: {
+        apiKey: '',
         organization: '',
         temperature: 0.5,
         max_tokens: 1024,
