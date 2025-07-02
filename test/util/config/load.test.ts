@@ -7,6 +7,8 @@ import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
+import { readPrompts } from '../../../src/prompts';
+import { loadApiProviders } from '../../../src/providers';
 import { type UnifiedConfig } from '../../../src/types';
 import { isRunningUnderNpx } from '../../../src/util';
 import {
@@ -17,8 +19,6 @@ import {
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readTests } from '../../../src/util/testCaseReader';
-import { readPrompts } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
@@ -75,7 +75,9 @@ jest.mock('../../../src/util/testCaseReader', () => ({
     return test;
   }),
   readTests: jest.fn().mockImplementation(async (tests) => {
-    if (!tests) {return [];}
+    if (!tests) {
+      return [];
+    }
     if (Array.isArray(tests)) {
       return tests;
     }
@@ -103,7 +105,9 @@ jest.mock('../../../src/util/templates', () => ({
 
 jest.mock('../../../src/prompts', () => ({
   readPrompts: jest.fn().mockImplementation(async (prompts) => {
-    if (!prompts) {return [];}
+    if (!prompts) {
+      return [];
+    }
     if (Array.isArray(prompts)) {
       return prompts.map((p, idx) => ({
         raw: typeof p === 'string' ? p : p.raw || '',
@@ -1220,19 +1224,6 @@ describe('resolveConfigs', () => {
         raw: prompt,
         label: prompt,
         config: {},
-        metrics: {
-          score: 0,
-          testPassCount: 0,
-          testFailCount: 0,
-          testErrorCount: 0,
-          assertPassCount: 0,
-          assertFailCount: 0,
-          totalLatencyMs: 0,
-          tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
-          namedScores: {},
-          namedScoresCount: {},
-          cost: 0,
-        },
       },
     ]);
 

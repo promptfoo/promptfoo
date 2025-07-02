@@ -2966,11 +2966,11 @@ describe('evaluator defaultTest merging', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
-    
+
     // The evaluator should have processed the tests and merged defaultTest options
     expect(summary.results).toBeDefined();
     expect(summary.results.length).toBeGreaterThan(0);
-    
+
     // Check that the test case has the merged options from defaultTest
     const processedTest = summary.results[0].testCase;
     expect(processedTest?.options?.provider).toEqual({
@@ -3020,7 +3020,7 @@ describe('evaluator defaultTest merging', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
-    
+
     // Check that the test case options override defaultTest options
     const processedTest = summary.results[0].testCase;
     expect(processedTest?.options?.provider).toBe('openai:gpt-4');
