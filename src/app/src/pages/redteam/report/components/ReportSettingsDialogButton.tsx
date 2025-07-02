@@ -1,4 +1,3 @@
-import React from 'react';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -9,6 +8,7 @@ import IconButton from '@mui/material/IconButton';
 import Slider from '@mui/material/Slider';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import React from 'react';
 import { useReportStore } from './store';
 
 const ReportSettingsDialogButton: React.FC = () => {

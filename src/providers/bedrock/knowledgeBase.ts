@@ -4,7 +4,7 @@ import type {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getEnvInt } from '../../envars';
+import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { EnvOverrides } from '../../types/env';
@@ -200,12 +200,12 @@ export class AwsBedrockKnowledgeBaseProvider
       logger.debug(`Amazon Bedrock Knowledge Base API response: ${JSON.stringify(response)}`);
 
       let output = '';
-      if (response && response.output && response.output.text) {
+      if (response?.output?.text) {
         output = response.output.text;
       }
 
       let citations: Citation[] = [];
-      if (response && response.citations && Array.isArray(response.citations)) {
+      if (response?.citations && Array.isArray(response.citations)) {
         citations = response.citations;
       }
 

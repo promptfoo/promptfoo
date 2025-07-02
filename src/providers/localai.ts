@@ -3,7 +3,7 @@ import { getEnvFloat, getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
@@ -39,7 +39,7 @@ class LocalAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }

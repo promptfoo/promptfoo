@@ -35,15 +35,16 @@ export function createTogetherAiProvider(
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'completion') {
+  }
+  if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
+  }
+  if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiEmbeddingProvider(modelName, togetherAiConfig);
-  } else {
-    // If no specific type is provided, default to chat
-    const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
   }
+  // If no specific type is provided, default to chat
+  const modelName = splits.slice(1).join(':');
+  return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
 }

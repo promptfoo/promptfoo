@@ -19,7 +19,7 @@ export function throwConfigurationError(message: string): never {
  */
 export function calculateAzureCost(
   modelName: string,
-  config: AzureCompletionOptions,
+  _config: AzureCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {

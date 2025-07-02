@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
 import Navigation from '@app/components/Navigation';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import type React from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Outlet } from 'react-router-dom';
 
 const createAppTheme = (darkMode: boolean) =>
   createTheme({

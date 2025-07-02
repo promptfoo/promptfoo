@@ -21,18 +21,16 @@ import {
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
 import type {
+  ApiProvider,
+  Assertion,
   AssertionParams,
+  AssertionType,
   AssertionValueFunctionContext,
+  AtomicTestCase,
   BaseAssertionTypes,
+  GradingResult,
   ProviderResponse,
   ScoringFunction,
-} from '../types';
-import {
-  type ApiProvider,
-  type Assertion,
-  type AssertionType,
-  type AtomicTestCase,
-  type GradingResult,
 } from '../types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
@@ -341,31 +339,29 @@ export async function runAssertions({
     assertion: Assertion;
     assertResult: AssertionsResult;
     index: number;
-  }[] = test.assert
-    .map((assertion, i) => {
-      if (assertion.type === 'assert-set') {
-        const subAssertResult = new AssertionsResult({
-          threshold: assertion.threshold,
-          parentAssertionSet: {
-            assertionSet: assertion,
-            index: i,
-          },
-        });
+  }[] = test.assert.flatMap((assertion, i) => {
+    if (assertion.type === 'assert-set') {
+      const subAssertResult = new AssertionsResult({
+        threshold: assertion.threshold,
+        parentAssertionSet: {
+          assertionSet: assertion,
+          index: i,
+        },
+      });
 
-        subAssertResults.push(subAssertResult);
+      subAssertResults.push(subAssertResult);
 
-        return assertion.assert.map((subAssert, j) => {
-          return {
-            assertion: subAssert,
-            assertResult: subAssertResult,
-            index: j,
-          };
-        });
-      }
+      return assertion.assert.map((subAssert, j) => {
+        return {
+          assertion: subAssert,
+          assertResult: subAssertResult,
+          index: j,
+        };
+      });
+    }
 
-      return { assertion, assertResult: mainAssertResult, index: i };
-    })
-    .flat();
+    return { assertion, assertResult: mainAssertResult, index: i };
+  });
 
   await async.forEachOfLimit(
     asserts,

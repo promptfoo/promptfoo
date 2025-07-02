@@ -98,7 +98,7 @@ export function handleApiError(err: any, data?: any): ProviderModerationResponse
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
-export function getModerationCacheKey(modelName: string, config: any, content: string): string {
+export function getModerationCacheKey(modelName: string, _config: any, content: string): string {
   return `azure-moderation:${modelName}:${JSON.stringify(content)}`;
 }
 
@@ -155,7 +155,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   async callModerationApi(
-    userPrompt: string,
+    _userPrompt: string,
     assistantResponse: string,
   ): Promise<ProviderModerationResponse> {
     await this.ensureInitialized();
@@ -173,7 +173,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     }
 
     if (apiKey) {
-      const maskedKey = apiKey.substring(0, 4) + '...' + apiKey.substring(apiKey.length - 4);
+      const maskedKey = `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`;
       logger.debug(`Using Azure Content Safety API key: ${maskedKey}`);
     } else {
       logger.error('No Azure Content Safety API key found');
@@ -241,7 +241,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
 
         try {
           const errorJson = JSON.parse(errorText);
-          if (errorJson.error && errorJson.error.message) {
+          if (errorJson.error?.message) {
             errorMessage += ` - ${errorJson.error.message}`;
           }
         } catch {

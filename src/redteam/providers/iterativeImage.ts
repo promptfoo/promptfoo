@@ -6,10 +6,10 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  Prompt,
   NunjucksFilterMap,
-  RedteamFileConfig,
+  Prompt,
   ProviderResponse,
+  RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
@@ -275,7 +275,8 @@ async function runRedteamConversation({
         continue;
       }
 
-      let improvement, newInjectVar;
+      let improvement;
+      let newInjectVar;
       try {
         const parsed = extractFirstJsonObject<{
           improvement: string;
@@ -529,11 +530,9 @@ async function runRedteamConversation({
         }
       } catch (err) {
         logger.warn(`Iteration ${i + 1}: Failed to parse judge response: ${err}`);
-        continue;
       }
     } catch (err) {
       logger.error(`Iteration ${i + 1} failed: ${err}`);
-      continue;
     }
   }
 
@@ -564,7 +563,7 @@ class RedteamIterativeProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams & { injectVar?: string },
     options?: CallApiOptionsParams,
   ) {

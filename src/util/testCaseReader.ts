@@ -303,7 +303,7 @@ export async function loadTestsFromGlob(
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
-  const testFiles: Array<string> = globSync(resolvedPath, {
+  const testFiles: string[] = globSync(resolvedPath, {
     windowsPathsNoEscape: true,
   });
 
@@ -353,7 +353,6 @@ export async function loadTestsFromGlob(
         .map((line) => JSON.parse(line));
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       testCases = await _deref(require(testFile), testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
@@ -384,7 +383,8 @@ export async function readTests(
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
-  } else if (
+  }
+  if (
     typeof tests === 'object' &&
     !Array.isArray(tests) &&
     'path' in tests &&

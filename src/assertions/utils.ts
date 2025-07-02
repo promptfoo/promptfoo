@@ -4,7 +4,7 @@ import path from 'path';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import { type Assertion, type TestCase } from '../types';
+import type { Assertion, TestCase } from '../types';
 
 const clone = Clone();
 
@@ -12,13 +12,12 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   // Deep copy
   const ret = clone({
     ...test,
-    ...(test.options &&
-      test.options.provider && {
-        options: {
-          ...test.options,
-          provider: undefined,
-        },
-      }),
+    ...(test.options?.provider && {
+      options: {
+        ...test.options,
+        provider: undefined,
+      },
+    }),
     ...(test.provider && {
       provider: undefined,
     }),
@@ -43,15 +42,16 @@ export async function loadFromJavaScriptFile(
   const requiredModule = await importModule(filePath, functionName);
   if (functionName && typeof requiredModule[functionName] === 'function') {
     return requiredModule[functionName](...args);
-  } else if (typeof requiredModule === 'function') {
-    return requiredModule(...args);
-  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-    return requiredModule.default(...args);
-  } else {
-    throw new Error(
-      `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
-    );
   }
+  if (typeof requiredModule === 'function') {
+    return requiredModule(...args);
+  }
+  if (requiredModule.default && typeof requiredModule.default === 'function') {
+    return requiredModule.default(...args);
+  }
+  throw new Error(
+    `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
+  );
 }
 
 export function processFileReference(fileRef: string): object | string {
@@ -61,11 +61,11 @@ export function processFileReference(fileRef: string): object | string {
   const extension = path.extname(filePath);
   if (['.json', '.yaml', '.yml'].includes(extension)) {
     return yaml.load(fileContent) as object;
-  } else if (extension === '.txt') {
-    return fileContent.trim();
-  } else {
-    throw new Error(`Unsupported file type: ${filePath}`);
   }
+  if (extension === '.txt') {
+    return fileContent.trim();
+  }
+  throw new Error(`Unsupported file type: ${filePath}`);
 }
 
 export function coerceString(value: string | object): string {

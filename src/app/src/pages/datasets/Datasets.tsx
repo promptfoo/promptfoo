@@ -1,23 +1,23 @@
-import React from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
   type GridRenderCellParams,
-  GridToolbarContainer,
   GridToolbarColumnsButton,
-  GridToolbarFilterButton,
+  GridToolbarContainer,
   GridToolbarDensitySelector,
   GridToolbarExport,
+  GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
+import React from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import DatasetDialog from './DatasetDialog';
 
 // augment the props for the toolbar slot
@@ -100,7 +100,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         hasShownPopup.current = true;
       }
     }
-  }, [data, searchParams]);
+  }, [data, searchParams, handleClickOpen]);
 
   const columns: GridColDef<DatasetRow>[] = React.useMemo(
     () => [
@@ -116,7 +116,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Test Cases',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: DatasetRow['testCases'], row: DatasetRow) => value.length,
+        valueGetter: (value: DatasetRow['testCases'], _row: DatasetRow) => value.length,
         renderCell: (params: GridRenderCellParams<DatasetRow>) => `${params.value} test cases`,
       },
       {
@@ -124,7 +124,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Variables',
         flex: 2,
         minWidth: 200,
-        valueGetter: (value: undefined, row: DatasetRow) => getVariables(row.testCases),
+        valueGetter: (_value: undefined, row: DatasetRow) => getVariables(row.testCases),
       },
       {
         field: 'count',
@@ -137,7 +137,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Total Prompts',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
+        valueGetter: (_value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
       },
       {
         field: 'recentEvalDate',

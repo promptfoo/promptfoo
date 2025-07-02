@@ -16,7 +16,7 @@ const orderRedTeam = (redteam: any): any => {
   ] as const;
 
   redTeamOrder.forEach((key) => {
-    if (Object.prototype.hasOwnProperty.call(redteam, key)) {
+    if (Object.hasOwn(redteam, key)) {
       orderedRedTeam[key] = redteam[key];
     }
   });
@@ -29,7 +29,7 @@ const orderKeys = (obj: any): any => {
   const keyOrder = ['description', 'targets', 'prompts', 'extensions', 'redteam', 'defaultTest'];
 
   keyOrder.forEach((key) => {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+    if (Object.hasOwn(obj, key)) {
       if (key === 'redteam') {
         orderedObj[key] = orderRedTeam(obj[key]);
       } else {

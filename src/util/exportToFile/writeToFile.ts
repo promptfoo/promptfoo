@@ -8,7 +8,7 @@ export class JsonlFileWriter {
   }
 
   async write(data: Record<string, any>): Promise<void> {
-    const jsonLine = JSON.stringify(data) + '\n';
+    const jsonLine = `${JSON.stringify(data)}\n`;
 
     return new Promise<void>((resolve, reject) => {
       this.writeStream.write(jsonLine, (error) => {

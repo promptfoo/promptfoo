@@ -42,15 +42,14 @@ export function authCommand(program: Command) {
           setUserEmail(user.email);
           logger.info(chalk.green('Successfully logged in'));
           return;
-        } else {
-          logger.info(
-            `Please login or sign up at ${chalk.green('https://promptfoo.app')} to get an API key.`,
-          );
-
-          logger.info(
-            `After logging in, you can get your api token at ${chalk.green('https://promptfoo.app/welcome')}`,
-          );
         }
+        logger.info(
+          `Please login or sign up at ${chalk.green('https://promptfoo.app')} to get an API key.`,
+        );
+
+        logger.info(
+          `After logging in, you can get your api token at ${chalk.green('https://promptfoo.app/welcome')}`,
+        );
 
         return;
       } catch (error) {
@@ -101,7 +100,7 @@ export function authCommand(program: Command) {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch user info: ' + response.statusText);
+          throw new Error(`Failed to fetch user info: ${response.statusText}`);
         }
 
         const { user, organization } = await response.json();

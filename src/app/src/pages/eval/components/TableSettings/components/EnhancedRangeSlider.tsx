@@ -1,17 +1,17 @@
-import React, { useState, useCallback, useEffect } from 'react';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import {
-  Box,
-  Typography,
-  Slider,
-  TextField,
-  InputAdornment,
-  IconButton,
-  Stack,
-  Tooltip,
-  useTheme,
   alpha,
+  Box,
+  IconButton,
+  InputAdornment,
+  Slider,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+  useTheme,
 } from '@mui/material';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useDebounce } from 'use-debounce';
 import { tokens } from '../tokens';
 
@@ -62,7 +62,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
   useEffect(() => {
     setLocalValue(safeValue);
     setInputValue(isUnlimited ? 'Unlimited' : String(safeValue));
-  }, [safeValue, max, unlimited, isUnlimited]);
+  }, [safeValue, isUnlimited]);
 
   const handleChange = useCallback(
     (_: Event | React.SyntheticEvent, newValue: number | number[]) => {

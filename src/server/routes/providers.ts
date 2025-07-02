@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
@@ -36,7 +36,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
 
   // Client-generated Session ID:
   if (providerOptions.config?.sessionSource === 'client') {
-    vars['sessionId'] = uuidv4();
+    vars.sessionId = uuidv4();
   }
 
   try {

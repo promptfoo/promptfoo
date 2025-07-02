@@ -1,21 +1,21 @@
-import React from 'react';
 import CloseIcon from '@mui/icons-material/Close';
 import RestoreIcon from '@mui/icons-material/Restore';
 import SettingsIcon from '@mui/icons-material/Settings';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  alpha,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
   IconButton,
   Stack,
   Typography,
-  Divider,
-  useTheme,
-  alpha,
   useMediaQuery,
+  useTheme,
 } from '@mui/material';
+import React from 'react';
 import SettingsPanel from './components/SettingsPanel';
 import { useSettingsState } from './hooks/useSettingsState';
 import { tokens } from './tokens';

@@ -1,6 +1,5 @@
 import chalk from 'chalk';
-import { spawn } from 'child_process';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import type { Command } from 'commander';
 import { promisify } from 'util';
 import logger from '../logger';

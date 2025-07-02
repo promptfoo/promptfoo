@@ -29,7 +29,7 @@ export async function tryPath(path: string): Promise<string | null> {
       timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
     });
 
-    const result = await Promise.race([execAsync(path + ' --version'), timeoutPromise]);
+    const result = await Promise.race([execAsync(`${path} --version`), timeoutPromise]);
 
     // Clear the timeout to prevent open handle
     if (timeoutId) {

@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Box, Typography, Button, Tooltip } from '@mui/material';
+import { Box, Button, Tooltip, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
   ALL_STRATEGIES,
@@ -12,19 +11,20 @@ import {
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
+import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import {
-  STRATEGY_PRESETS,
   PRESET_IDS,
   type PresetId,
+  STRATEGY_PRESETS,
   type StrategyPreset,
 } from './strategies/types';
-import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import { getEstimatedProbes, getStrategyId } from './strategies/utils';
 
 // ------------------------------------------------------------------
@@ -93,7 +93,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       setIsMultiTurnEnabled(true);
     }
 
-    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([presetId, preset]) => {
+    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([_presetId, preset]) => {
       if (!preset) {
         return false;
       }

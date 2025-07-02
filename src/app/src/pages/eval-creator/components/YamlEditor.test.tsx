@@ -1,7 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import yaml from 'js-yaml';
-import { vi, expect, describe, it, beforeEach, afterEach } from 'vitest';
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
 
 vi.mock('react-router-dom', () => ({

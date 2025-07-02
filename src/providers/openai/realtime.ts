@@ -1,5 +1,4 @@
 import WebSocket from 'ws';
-import { OpenAiGenericProvider } from '.';
 import logger from '../../logger';
 import type {
   CallApiContextParams,
@@ -9,6 +8,7 @@ import type {
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
+import { OpenAiGenericProvider } from '.';
 import type { OpenAiCompletionOptions } from './types';
 import { OPENAI_REALTIME_MODELS } from './util';
 
@@ -289,7 +289,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
                   responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
-                  if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
+                  if (Object.hasOwn(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {
                     responseEvent.response.tool_choice = 'auto';
@@ -330,7 +330,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
 
               // Track content part ID if needed for later reference
-              if (message.content_part && message.content_part.id) {
+              if (message.content_part?.id) {
                 logger.debug(`Content part added with ID: ${message.content_part.id}`);
               }
               break;
@@ -415,7 +415,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               logger.debug('Output item complete');
               break;
 
-            case 'response.function_call_arguments.done':
+            case 'response.function_call_arguments.done': {
               // Find the function call in our pending list and update its arguments
               const callIndex = pendingFunctionCalls.findIndex(
                 (call) => call.id === message.call_id,
@@ -424,8 +424,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 pendingFunctionCalls[callIndex].arguments = message.arguments;
               }
               break;
+            }
 
-            case 'response.done':
+            case 'response.done': {
               responseDone = true;
               usage = message.response.usage;
 
@@ -481,14 +482,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 logger.debug(
                   'Empty response detected before resolving. Checking response message details',
                 );
-                logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
+                logger.debug(`Response message details: ${JSON.stringify(message, null, 2)}`);
 
                 // Try to extract any text content from the message as a fallback
-                if (
-                  message.response &&
-                  message.response.content &&
-                  Array.isArray(message.response.content)
-                ) {
+                if (message.response?.content && Array.isArray(message.response.content)) {
                   const textContent = message.response.content.find(
                     (item: any) => item.type === 'text' && item.text && item.text.length > 0,
                   );
@@ -543,6 +540,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   functionCallResults.length > 0 ? functionCallResults : undefined,
               });
               break;
+            }
 
             case 'rate_limits.updated':
               // Store rate limits in metadata if needed
@@ -608,7 +606,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
@@ -652,7 +650,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               if (typeof message.content === 'string') {
                 promptText = message.content;
                 break;
-              } else if (Array.isArray(message.content) && message.content.length > 0) {
+              }
+              if (Array.isArray(message.content) && message.content.length > 0) {
                 // Find the first text content - check for both 'text' and 'input_text' for backward compatibility
                 const textContent = message.content.find(
                   (content: any) =>
@@ -878,7 +877,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
                   responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
-                  if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
+                  if (Object.hasOwn(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {
                     responseEvent.response.tool_choice = 'auto';
@@ -919,7 +918,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
 
               // Track content part ID if needed for later reference
-              if (message.content_part && message.content_part.id) {
+              if (message.content_part?.id) {
                 logger.debug(`Content part added with ID: ${message.content_part.id}`);
               }
               break;
@@ -1004,7 +1003,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               logger.debug('Output item complete');
               break;
 
-            case 'response.function_call_arguments.done':
+            case 'response.function_call_arguments.done': {
               // Find the function call in our pending list and update its arguments
               const callIndex = pendingFunctionCalls.findIndex(
                 (call) => call.id === message.call_id,
@@ -1013,8 +1012,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 pendingFunctionCalls[callIndex].arguments = message.arguments;
               }
               break;
+            }
 
-            case 'response.done':
+            case 'response.done': {
               responseDone = true;
               usage = message.response.usage;
 
@@ -1070,14 +1070,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 logger.debug(
                   'Empty response detected before resolving. Checking response message details',
                 );
-                logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
+                logger.debug(`Response message details: ${JSON.stringify(message, null, 2)}`);
 
                 // Try to extract any text content from the message as a fallback
-                if (
-                  message.response &&
-                  message.response.content &&
-                  Array.isArray(message.response.content)
-                ) {
+                if (message.response?.content && Array.isArray(message.response.content)) {
                   const textContent = message.response.content.find(
                     (item: any) => item.type === 'text' && item.text && item.text.length > 0,
                   );
@@ -1132,6 +1128,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   functionCallResults.length > 0 ? functionCallResults : undefined,
               });
               break;
+            }
 
             case 'rate_limits.updated':
               // Store rate limits in metadata if needed

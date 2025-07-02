@@ -1,21 +1,21 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   type Plugin,
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   type Strategy,
 } from '../redteam/constants';
@@ -346,7 +346,7 @@ export const RedteamConfigSchema = z
     const strategies = Array.from(
       new Map<string, RedteamStrategy>(
         [...(data.strategies || []), ...Array.from(strategySet)].flatMap(
-          (strategy): Array<[string, RedteamStrategy]> => {
+          (strategy): [string, RedteamStrategy][] => {
             if (typeof strategy === 'string') {
               if (strategy === 'basic') {
                 return [];
@@ -386,8 +386,7 @@ export const RedteamConfigSchema = z
   });
 
 // Ensure that schemas match their corresponding types
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
+function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();

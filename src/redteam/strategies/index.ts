@@ -59,7 +59,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'basic',
-    action: async (testCases: TestCase[], injectVar: string, config?: Record<string, any>) => {
+    action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {
       // Basic strategy doesn't modify test cases, it just controls whether they're included
       // The actual filtering happens in synthesize()
       return [];
@@ -300,7 +300,6 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
       if (strategy.config?.enabled !== undefined && typeof strategy.config.enabled !== 'boolean') {
         throw new Error('Basic strategy enabled config must be a boolean');
       }
-      continue;
     }
   }
 

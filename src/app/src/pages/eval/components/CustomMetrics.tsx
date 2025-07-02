@@ -1,5 +1,5 @@
-import React from 'react';
 import Tooltip from '@mui/material/Tooltip';
+import React from 'react';
 import './CustomMetrics.css';
 
 const NUM_METRICS_TO_DISPLAY_ABOVE_FOLD = 10;
@@ -20,7 +20,7 @@ interface MetricValueProps {
 }
 
 const MetricValue: React.FC<MetricValueProps> = ({ metric, score, counts, metricTotals }) => {
-  if (metricTotals && metricTotals[metric]) {
+  if (metricTotals?.[metric]) {
     if (metricTotals[metric] === 0) {
       return <span data-testid={`metric-value-${metric}`}>0%</span>;
     }
@@ -30,7 +30,8 @@ const MetricValue: React.FC<MetricValueProps> = ({ metric, score, counts, metric
         {metricTotals[metric]?.toFixed(2) ?? '0'})
       </span>
     );
-  } else if (counts && counts[metric]) {
+  }
+  if (counts?.[metric]) {
     if (counts[metric] === 0) {
       return <span data-testid={`metric-value-${metric}`}>0</span>;
     }

@@ -19,9 +19,9 @@ import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
+export * from '../redteam/types';
 export * from './prompts';
 export * from './providers';
-export * from '../redteam/types';
 export * from './shared';
 
 export type { EnvOverrides };
@@ -484,7 +484,7 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)), // eslint-disable-line @typescript-eslint/no-use-before-define
+  assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
   // Tag this assertion result as a named metric
@@ -676,8 +676,7 @@ export const TestCaseSchema = z.object({
     .optional(),
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
+export type TestCase<_vars = Record<string, string | string[] | object>> = z.infer<
   typeof TestCaseSchema
 >;
 
@@ -718,8 +717,7 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
+export type AtomicTestCase<_vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 
@@ -1053,7 +1051,7 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   .transform((data) => {
     if (data.targets && !data.providers) {
       data.providers = data.targets;
-      delete data.targets;
+      data.targets = undefined;
     }
 
     // Handle null extensions, undefined extensions, or empty arrays by deleting the field
@@ -1062,7 +1060,7 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
       data.extensions === undefined ||
       (Array.isArray(data.extensions) && data.extensions.length === 0)
     ) {
-      delete data.extensions;
+      data.extensions = undefined;
     }
 
     return data;

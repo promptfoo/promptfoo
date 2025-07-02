@@ -7,9 +7,8 @@ export async function checkGoogleSheetAccess(url: string) {
     const response = await fetchWithProxy(url);
     if (response.ok) {
       return { public: true, status: response.status };
-    } else {
-      return { public: false, status: response.status };
     }
+    return { public: false, status: response.status };
   } catch (error) {
     logger.error(`Error checking sheet access: ${error}`);
     return { public: false };

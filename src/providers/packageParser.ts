@@ -1,6 +1,6 @@
+import { createRequire } from 'node:module';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { createRequire } from 'node:module';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';

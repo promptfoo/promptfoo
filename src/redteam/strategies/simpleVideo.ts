@@ -1,4 +1,4 @@
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -105,11 +105,10 @@ export async function textToVideo(text: string): Promise<string> {
             reject(err);
           });
       });
-    } else {
-      throw new Error(
-        'Local video generation requires fluent-ffmpeg. Future versions may support remote generation.',
-      );
     }
+    throw new Error(
+      'Local video generation requires fluent-ffmpeg. Future versions may support remote generation.',
+    );
   } catch (error) {
     logger.error(`Error generating video from text: ${error}`);
     return getFallbackBase64(text);

@@ -98,14 +98,14 @@ export default class GoatProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
     // Reset successful attacks array for each new call
     this.successfulAttacks = [];
 
-    let response: Response | undefined = undefined;
+    let response: Response | undefined;
     logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
@@ -122,7 +122,7 @@ export default class GoatProvider implements ApiProvider {
       cached: 0,
     };
 
-    let lastTargetResponse: ProviderResponse | undefined = undefined;
+    let lastTargetResponse: ProviderResponse | undefined;
 
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;

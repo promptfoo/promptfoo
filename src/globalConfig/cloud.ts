@@ -106,7 +106,7 @@ export class CloudConfig {
         logger.error(
           `[Cloud] Failed to validate API token: ${errorMessage}. HTTP Status: ${response.status} - ${response.statusText}.`,
         );
-        throw new Error('Failed to validate API token: ' + response.statusText);
+        throw new Error(`Failed to validate API token: ${response.statusText}`);
       }
 
       const { user, organization, app } = await response.json();

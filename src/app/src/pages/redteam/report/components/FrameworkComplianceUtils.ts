@@ -118,20 +118,19 @@ export const getProgressColor = (percentage: number, forAttackRate: boolean = fa
       return '#ffc107';
     } // Amber
     return '#4caf50'; // Green (low attack success is good)
-  } else {
-    // For pass rate, high percentages are good
-    if (percentage >= 90) {
-      return '#4caf50';
-    } // Green
-    if (percentage >= 75) {
-      return '#8bc34a';
-    } // Light Green
-    if (percentage >= 50) {
-      return '#ffeb3b';
-    } // Yellow
-    if (percentage >= 25) {
-      return '#ff9800';
-    } // Orange
-    return '#f44336'; // Red
   }
+  // For pass rate, high percentages are good
+  if (percentage >= 90) {
+    return '#4caf50';
+  } // Green
+  if (percentage >= 75) {
+    return '#8bc34a';
+  } // Light Green
+  if (percentage >= 50) {
+    return '#ffeb3b';
+  } // Yellow
+  if (percentage >= 25) {
+    return '#ff9800';
+  } // Orange
+  return '#f44336'; // Red
 };

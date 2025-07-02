@@ -2,8 +2,7 @@ import OpenAI from 'openai';
 import type { TokenUsage } from '../../types';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { getAjv } from '../../util/json';
-import { safeJsonStringify } from '../../util/json';
+import { getAjv, safeJsonStringify } from '../../util/json';
 import type { ProviderConfig } from '../shared';
 import { calculateCost } from '../shared';
 
@@ -384,22 +383,21 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
-    } else {
-      return {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens || 0,
-        completion: data.usage.completion_tokens || 0,
-        ...(data.usage.completion_tokens_details
-          ? {
-              completionDetails: {
-                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
-                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
-              },
-            }
-          : {}),
-      };
     }
+    return {
+      total: data.usage.total_tokens,
+      prompt: data.usage.prompt_tokens || 0,
+      completion: data.usage.completion_tokens || 0,
+      ...(data.usage.completion_tokens_details
+        ? {
+            completionDetails: {
+              reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+              acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
+              rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+            },
+          }
+        : {}),
+    };
   }
   return {};
 }
@@ -466,6 +464,6 @@ export function formatOpenAiError(data: {
   if (data.error.code) {
     errorMessage += `, Code: ${data.error.code}`;
   }
-  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
+  errorMessage += `\n\n${safeJsonStringify(data, true /* prettyPrint */)}`;
   return errorMessage;
 }

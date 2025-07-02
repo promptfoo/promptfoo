@@ -1,12 +1,11 @@
-import React from 'react';
 import {
-  Paper,
-  Typography,
+  Alert,
   FormControl,
   FormControlLabel,
+  Paper,
   Radio,
   RadioGroup,
-  Alert,
+  Typography,
 } from '@mui/material';
 
 interface SystemConfigurationProps {

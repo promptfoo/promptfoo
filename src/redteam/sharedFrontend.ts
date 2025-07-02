@@ -33,8 +33,8 @@ export function getUnifiedConfig(
 ): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
   // Remove UI specific configs from target
   const target = { ...config.target, config: { ...config.target.config } };
-  delete target.config.sessionSource;
-  delete target.config.stateful;
+  target.config.sessionSource = undefined;
+  target.config.stateful = undefined;
 
   const defaultTest = {
     ...(config.defaultTest ?? {}),

@@ -1,12 +1,12 @@
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import type {
+  ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import type { ApiProvider } from '../types/providers';
 
 // Define types for the expected model API response structure
 interface ModelMessage {
@@ -73,8 +73,8 @@ export class PromptfooModelProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     logger.debug(`[PromptfooModel] Calling API with model: ${this.model}`);
 

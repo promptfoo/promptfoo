@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import logoPanda from '@app/assets/logo.svg';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { Terminal as TerminalIcon } from '@mui/icons-material';
 import LanguageIcon from '@mui/icons-material/Language';
 import {
+  Alert,
   Box,
-  Typography,
-  Paper,
-  Link,
   CircularProgress,
-  useMediaQuery,
+  Collapse,
+  createTheme,
+  Link,
+  Paper,
   styled,
   ThemeProvider,
-  createTheme,
-  Alert,
-  Collapse,
+  Typography,
+  useMediaQuery,
 } from '@mui/material';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DarkModeToggle from '../../components/DarkMode';
 import { useApiHealth } from '../../hooks/useApiHealth';
 

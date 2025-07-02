@@ -210,7 +210,7 @@ export function calculateHyperbolicCost(
   }
 
   const model = HYPERBOLIC_CHAT_MODELS.find(
-    (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
+    (m) => m.id === modelName || m.aliases?.includes(modelName),
   );
   if (!model || !model.cost) {
     return undefined;

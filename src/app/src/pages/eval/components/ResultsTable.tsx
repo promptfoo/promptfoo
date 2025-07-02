@@ -1,19 +1,10 @@
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
-import React, { useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { Link, useNavigate } from 'react-router-dom';
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
-import {
-  type EvaluateTable,
-  type EvaluateTableOutput,
-  type EvaluateTableRow,
-  type FilterMode,
+import type {
+  EvaluateTable,
+  EvaluateTableOutput,
+  EvaluateTableRow,
+  FilterMode,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -30,17 +21,26 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
+import React, { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
-import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -156,7 +156,7 @@ function useScrollHandler() {
       window.addEventListener('scroll', handleScroll, { passive: true });
       return () => window.removeEventListener('scroll', handleScroll);
     }
-  }, [stickyHeader]);
+  }, [stickyHeader, isCollapsed]);
 
   return { isCollapsed };
 }
@@ -186,7 +186,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
   } = useTableStore();
-  const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { inComparisonMode } = useResultsViewSettingsStore();
 
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -338,7 +338,7 @@ function ResultsTable({
         }
       }
     },
-    [body, head, setTable, evalId, inComparisonMode, showToast],
+    [body, head, setTable, evalId, inComparisonMode, showToast, version],
   );
 
   const [localDebouncedSearchText] = useDebounce(searchText, 200);
@@ -366,7 +366,7 @@ function ResultsTable({
 
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+  }, [pagination]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -380,7 +380,7 @@ function ResultsTable({
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
     }
-  }, [evalId]);
+  }, [evalId, pagination.pageSize]);
 
   // Only fetch data when pagination or filters change, but not when evalId changes
   React.useEffect(() => {
@@ -410,16 +410,16 @@ function ResultsTable({
     pagination.pageIndex,
     pagination.pageSize,
     filterMode,
-    comparisonEvalIds,
     debouncedSearchText,
     selectedMetric,
     fetchEvalData,
+    evalId,
   ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
     () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
-    [head.prompts, body],
+    [head.prompts],
   );
 
   const numTests = React.useMemo(
@@ -427,7 +427,7 @@ function ResultsTable({
       head.prompts.map(
         (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
       ),
-    [head.prompts, body],
+    [head.prompts],
   );
 
   const numAsserts = React.useMemo(
@@ -435,12 +435,12 @@ function ResultsTable({
       head.prompts.map(
         (prompt) => (prompt.metrics?.assertFailCount ?? 0) + (prompt.metrics?.assertPassCount ?? 0),
       ),
-    [head.prompts, body],
+    [head.prompts],
   );
 
   const numGoodAsserts = React.useMemo(
     () => head.prompts.map((prompt) => prompt.metrics?.assertPassCount || 0),
-    [head.prompts, body],
+    [head.prompts],
   );
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
@@ -468,7 +468,7 @@ function ResultsTable({
                 const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
                   | Record<string, { path: string; type: string; format?: string }>
                   | undefined;
-                const isMediaFile = fileMetadata && fileMetadata[varName];
+                const isMediaFile = fileMetadata?.[varName];
 
                 if (isMediaFile) {
                   // Handle various media types
@@ -533,7 +533,7 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <MarkdownErrorBoundary fallback={<>{value}</>}>
+                      <MarkdownErrorBoundary fallback={value}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
                       </MarkdownErrorBoundary>
                     ) : (
@@ -549,7 +549,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, toggleLightbox]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -818,7 +818,6 @@ function ResultsTable({
       }),
     ];
   }, [
-    body.length,
     config?.providers,
     columnHelper,
     failureFilter,
@@ -835,8 +834,12 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    selectedMetric,
     handleMetricFilter,
+    evalId,
+    numTests[idx],
+    onSearchTextChange,
+    setFilterMode,
+    visiblePromptCount,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -893,7 +896,7 @@ function ResultsTable({
 
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
-    const rowId = params['rowId'];
+    const rowId = params.rowId;
 
     if (rowId) {
       const parsedRowId = Number(rowId);
@@ -967,7 +970,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, tableBody.length, pageCount, parseQueryParams]);
 
   return (
     <div>

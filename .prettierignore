@@ -1,16 +1,34 @@
+# Ignore everything by default
+*
+
+# Only format files that Biome doesn't handle
+!**/*.md
+!**/*.mdx
+!**/*.yaml
+!**/*.yml
+!**/*.css
+!**/*.scss
+!**/*.html
+!**/*.svg
+!**/*.xml
+
+# Also format these specific file types
+!**/*.j2
+!**/*.mdc
+!**/.prettierrc*
+!**/.*rc.yaml
+!**/.*rc.yml
+
+# But still ignore these directories
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+.coverage/
+site/.docusaurus/
+site/build/
+venv/
 **/site-packages/**
 .aider*
-.coverage
-dist
-drizzle
-examples/adaline-gateway/adaline-chat-history/prompt.json
-examples/adaline-gateway/adaline-embedding-similarity/prompt.json
-examples/multiple-turn-conversation/prompt.json
-examples/openai-chat-history/prompt.json
-examples/redteam-foundation-model/redteam.yaml
-examples/simple-test/output.html
-helm/chart/promptfoo/templates/**/*.yaml
-site/.docusaurus
-site/build
-site/static/config-schema.json
-venv

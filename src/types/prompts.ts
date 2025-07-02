@@ -34,12 +34,10 @@ export interface PromptFunctionResult {
   config?: Record<string, any>;
 }
 
-export interface PromptFunction {
-  (context: {
-    vars: Record<string, string | any>;
-    provider?: ApiProvider;
-  }): Promise<PromptContent | PromptFunctionResult>;
-}
+export type PromptFunction = (context: {
+  vars: Record<string, string | any>;
+  provider?: ApiProvider;
+}) => Promise<PromptContent | PromptFunctionResult>;
 
 export interface Prompt {
   id?: string;

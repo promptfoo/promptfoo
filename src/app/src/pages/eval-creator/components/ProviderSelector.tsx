@@ -1,4 +1,3 @@
-import React from 'react';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -8,6 +7,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { ProviderOptions } from '@promptfoo/types';
+import React from 'react';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
@@ -696,7 +696,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           options={allProviders}
           value={providers}
           groupBy={getProviderGroup}
-          onChange={(event, newValue: (string | ProviderOptions)[]) => {
+          onChange={(_event, newValue: (string | ProviderOptions)[]) => {
             const validValues = newValue.filter((value) => value !== null && value !== undefined);
             onChange(
               validValues.map((value) => (typeof value === 'string' ? { id: value } : value)),
@@ -782,7 +782,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         onClose={() => setIsAddLocalDialogOpen(false)}
         onAdd={handleAddLocalProvider}
       />
-      {selectedProvider && selectedProvider.id && (
+      {selectedProvider?.id && (
         <ProviderConfigDialog
           open={!!selectedProvider}
           providerId={selectedProvider.id}

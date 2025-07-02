@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
 import InfoIcon from '@mui/icons-material/Info';
 import Alert from '@mui/material/Alert';
 import Link from '@mui/material/Link';
+import type React from 'react';
+import { useEffect, useState } from 'react';
 
 interface EnterpriseBannerProps {
   evalId?: string;

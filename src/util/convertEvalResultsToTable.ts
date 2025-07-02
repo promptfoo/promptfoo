@@ -1,4 +1,4 @@
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types';
+import type { EvaluateTable, EvaluateTableRow, ResultsFile } from '../types';
 import invariant from '../util/invariant';
 
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
@@ -22,15 +22,13 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       description: result.description || undefined,
       outputs: [],
       vars: result.vars
-        ? Object.values(varsForHeader)
-            .map((varName) => {
-              const varValue = result.vars?.[varName] || '';
-              if (typeof varValue === 'string') {
-                return varValue;
-              }
-              return JSON.stringify(varValue);
-            })
-            .flat()
+        ? Object.values(varsForHeader).flatMap((varName) => {
+            const varValue = result.vars?.[varName] || '';
+            if (typeof varValue === 'string') {
+              return varValue;
+            }
+            return JSON.stringify(varValue);
+          })
         : [],
       test: result.testCase,
     };

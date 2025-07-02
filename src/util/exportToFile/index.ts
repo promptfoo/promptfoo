@@ -52,15 +52,13 @@ export function convertTestResultsToTableRow(
     description: results[0].description || undefined,
     outputs: [] as EvaluateTableRow['outputs'],
     vars: results[0].testCase.vars
-      ? Object.values(varsForHeader)
-          .map((varName) => {
-            const varValue = results[0].testCase.vars?.[varName] || '';
-            if (typeof varValue === 'string') {
-              return varValue;
-            }
-            return JSON.stringify(varValue);
-          })
-          .flat()
+      ? Object.values(varsForHeader).flatMap((varName) => {
+          const varValue = results[0].testCase.vars?.[varName] || '';
+          if (typeof varValue === 'string') {
+            return varValue;
+          }
+          return JSON.stringify(varValue);
+        })
       : [],
     test: results[0].testCase,
     testIdx: results[0].testIdx,

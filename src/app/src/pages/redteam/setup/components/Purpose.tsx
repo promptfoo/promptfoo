@@ -1,4 +1,3 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Code from '@app/components/Code';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -15,12 +14,13 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
+import { alpha, useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
-import { alpha, useTheme } from '@mui/material/styles';
-import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
+import type { TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { ApplicationDefinition } from '../types';
 
@@ -135,10 +135,10 @@ export default function Purpose({ onNext }: PromptsProps) {
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
-  }, []);
+  }, [recordEvent]);
 
   const handleTestModeChange = (
-    event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement>,
     newMode: 'application' | 'model',
   ) => {
     if (newMode !== null) {
@@ -237,7 +237,7 @@ export default function Purpose({ onNext }: PromptsProps) {
       setIsDiscovering(false);
       setShowSlowDiscoveryMessage(false);
     }
-  }, [config.target]);
+  }, [config.target, recordEvent]);
 
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
 
@@ -361,6 +361,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     href="https://promptfoo.dev/docs/red-team/discovery"
                     target="_blank"
                     style={{ color: 'inherit', textDecoration: 'underline' }}
+                    rel="noopener"
                   >
                     Learn more
                   </a>
@@ -464,7 +465,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     security attacks and red team tests.
                   </Typography>
 
-                  {discoveryResult && discoveryResult.purpose && (
+                  {discoveryResult?.purpose && (
                     <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
                   )}
 
@@ -601,7 +602,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                         restricts, input formats, or any other domain-specific rules.
                       </Typography>
 
-                      {discoveryResult && discoveryResult.limitations && (
+                      {discoveryResult?.limitations && (
                         <DiscoveryResult
                           text={discoveryResult.limitations}
                           section="attackConstraints"
@@ -1041,7 +1042,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                   vulnerabilities.
                 </Typography>
 
-                {discoveryResult && discoveryResult.user && (
+                {discoveryResult?.user && (
                   <DiscoveryResult text={discoveryResult.user} section="redteamUser" />
                 )}
 

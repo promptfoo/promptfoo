@@ -1,6 +1,6 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
-import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
+import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types';
 import { BaseAssertionTypesSchema } from './types';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
@@ -87,12 +87,14 @@ export function assertionFromString(expected: string): Assertion {
         type: fullType as AssertionType,
         value: value ? value.split(',').map((s) => s.trim()) : value,
       };
-    } else if (type === 'contains-json' || type === 'is-json') {
+    }
+    if (type === 'contains-json' || type === 'is-json') {
       return {
         type: fullType as AssertionType,
         value,
       };
-    } else if (
+    }
+    if (
       type === 'answer-relevance' ||
       type === 'classifier' ||
       type === 'context-faithfulness' ||
@@ -113,12 +115,11 @@ export function assertionFromString(expected: string): Assertion {
         value: value?.trim?.(),
         threshold: threshold ?? defaultThreshold,
       };
-    } else {
-      return {
-        type: fullType as AssertionType,
-        value: value?.trim?.(),
-      };
     }
+    return {
+      type: fullType as AssertionType,
+      value: value?.trim?.(),
+    };
   }
 
   // Default to equality
@@ -237,5 +238,5 @@ export function serializeObjectArrayAsCSV(vars: object[]): string {
           .join('","')}"`,
     )
     .join('\n');
-  return [columnNames, rows].join('\n') + '\n';
+  return `${[columnNames, rows].join('\n')}\n`;
 }

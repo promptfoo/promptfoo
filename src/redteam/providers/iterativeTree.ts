@@ -342,7 +342,7 @@ async function pruneOffTopicNodes(
   nodes: TreeNode[],
   redteamProvider: ApiProvider,
   onTopicSystemPrompt: string,
-  goal: string,
+  _goal: string,
 ): Promise<TreeNode[]> {
   const remainingNodes: TreeNode[] = [];
 
@@ -869,7 +869,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @returns A promise that resolves to an object with the output and metadata.
    */
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<RedteamTreeResponse> {

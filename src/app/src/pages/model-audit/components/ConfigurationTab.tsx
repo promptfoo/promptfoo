@@ -1,4 +1,3 @@
-import React from 'react';
 import { PlayArrow as PlayArrowIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import type { ScanPath } from '../ModelAudit.types';

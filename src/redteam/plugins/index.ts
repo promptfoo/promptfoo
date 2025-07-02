@@ -21,7 +21,7 @@ import {
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
-import { type RedteamPluginBase } from './base';
+import type { RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';

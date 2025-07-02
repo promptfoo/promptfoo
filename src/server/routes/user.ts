@@ -1,5 +1,5 @@
-import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
@@ -10,7 +10,7 @@ import { ApiSchemas } from '../apiSchemas';
 
 export const userRouter = Router();
 
-userRouter.get('/email', async (req: Request, res: Response): Promise<void> => {
+userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => {
   try {
     const email = getUserEmail();
     if (email) {
@@ -56,7 +56,7 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
+userRouter.get('/email/status', async (_req: Request, res: Response): Promise<void> => {
   try {
     const result = await checkEmailStatus();
 

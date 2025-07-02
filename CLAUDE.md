@@ -21,11 +21,11 @@ const response = await fetch('/api/traces/evaluation/123');
 - `npm run build` - Build the project
 - `npm run build:clean` - Clean the dist directory
 - `npm run build:watch` - Watch for changes and rebuild TypeScript files
-- `npm run lint` - Run ESLint (max 0 warnings)
-- `npm run lint:src` - Run ESLint on src directory
-- `npm run lint:tests` - Run ESLint on test directory
-- `npm run lint:site` - Run ESLint on site directory
-- `npm run format` - Format with Prettier
+- `npm run lint` - Run Biome linter
+- `npm run lint:src` - Run Biome linter on src directory
+- `npm run lint:tests` - Run Biome linter on test directory
+- `npm run lint:site` - Run Biome linter on site directory
+- `npm run format` - Format with Biome (JS/TS/JSON) and Prettier (MD/YAML)
 - `npm run format:check` - Check formatting without making changes
 - `npm run f` - Format only changed files
 - `npm run l` - Lint only changed files

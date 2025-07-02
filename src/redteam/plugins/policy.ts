@@ -58,7 +58,7 @@ export class PolicyPlugin extends RedteamPluginBase {
     return template;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

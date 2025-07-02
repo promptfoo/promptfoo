@@ -1,8 +1,8 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
-  Tool as GoogleTool,
   FunctionDeclaration as GoogleFunctionDeclaration,
   Schema as GoogleSchema,
+  Tool as GoogleTool,
 } from '../google/types';
 import type { OpenAiTool } from '../openai/util';
 import type { MCPTool, MCPToolInputSchema } from './types';
@@ -11,7 +11,7 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {
     const schema: MCPToolInputSchema = tool.inputSchema;
     let properties: Record<string, any> = {};
-    let required: string[] | undefined = undefined;
+    let required: string[] | undefined;
 
     if (schema && typeof schema === 'object' && 'properties' in schema) {
       properties = schema.properties ?? {};

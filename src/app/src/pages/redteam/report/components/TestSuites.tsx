@@ -1,5 +1,3 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -16,13 +14,15 @@ import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
   displayNameOverrides,
+  type Plugin,
   riskCategories,
   Severity,
   subCategoryDescriptions,
-  type Plugin,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import './TestSuites.css';
 
 interface TestSuitesProps {
@@ -44,23 +44,22 @@ const getSubCategoryStats = (
         description:
           subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
         passRate: categoryStats[subCategory]
-          ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
+          ? `${((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,
-            ) + '%'
+            )}%`
           : 'N/A',
         passRateWithFilter: categoryStats[subCategory]
-          ? (
-              (categoryStats[subCategory].passWithFilter / categoryStats[subCategory].total) *
-              100
-            ).toFixed(1) + '%'
+          ? `${(
+              (categoryStats[subCategory].passWithFilter / categoryStats[subCategory].total) * 100
+            ).toFixed(1)}%`
           : 'N/A',
         severity: getRiskCategorySeverityMap(plugins)[subCategory as Plugin] || 'Unknown',
         attackSuccessRate: categoryStats[subCategory]
-          ? (
+          ? `${(
               ((categoryStats[subCategory].total - categoryStats[subCategory].pass) /
                 categoryStats[subCategory].total) *
-              100
-            ).toFixed(1) + '%'
+                100
+            ).toFixed(1)}%`
           : 'N/A',
       });
     }
@@ -84,7 +83,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
 
-  const handleChangePage = (event: unknown, newPage: number) => {
+  const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
@@ -119,7 +118,8 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
         return order === 'asc'
           ? Number.parseFloat(a.attackSuccessRate) - Number.parseFloat(b.attackSuccessRate)
           : Number.parseFloat(b.attackSuccessRate) - Number.parseFloat(a.attackSuccessRate);
-      } else if (orderBy === 'severity') {
+      }
+      if (orderBy === 'severity') {
         if (a.passRate === 'N/A') {
           return 1;
         }
@@ -135,20 +135,18 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
         return order === 'asc'
           ? severityOrder[a.severity] - severityOrder[b.severity]
           : severityOrder[b.severity] - severityOrder[a.severity];
-      } else {
-        // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
-        const severityOrder = {
-          [Severity.Critical]: 4,
-          [Severity.High]: 3,
-          [Severity.Medium]: 2,
-          [Severity.Low]: 1,
-        };
-        if (a.severity === b.severity) {
-          return Number.parseFloat(b.passRate) - Number.parseFloat(a.passRate);
-        } else {
-          return severityOrder[b.severity] - severityOrder[a.severity];
-        }
       }
+      // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
+      const severityOrder = {
+        [Severity.Critical]: 4,
+        [Severity.High]: 3,
+        [Severity.Medium]: 2,
+        [Severity.Low]: 1,
+      };
+      if (a.severity === b.severity) {
+        return Number.parseFloat(b.passRate) - Number.parseFloat(a.passRate);
+      }
+      return severityOrder[b.severity] - severityOrder[a.severity];
     });
 
     const csvData = sortedData.map((subCategory) => [
@@ -248,7 +246,8 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                         Number.parseFloat(b.attackSuccessRate)
                     : Number.parseFloat(b.attackSuccessRate) -
                         Number.parseFloat(a.attackSuccessRate);
-                } else if (orderBy === 'severity') {
+                }
+                if (orderBy === 'severity') {
                   if (a.attackSuccessRate === 'N/A') {
                     return 1;
                   }
@@ -264,23 +263,20 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                   return order === 'asc'
                     ? severityOrder[a.severity] - severityOrder[b.severity]
                     : severityOrder[b.severity] - severityOrder[a.severity];
-                } else {
-                  // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
-                  const severityOrder = {
-                    [Severity.Critical]: 4,
-                    [Severity.High]: 3,
-                    [Severity.Medium]: 2,
-                    [Severity.Low]: 1,
-                  };
-                  if (a.severity === b.severity) {
-                    return (
-                      Number.parseFloat(b.attackSuccessRate) -
-                      Number.parseFloat(a.attackSuccessRate)
-                    );
-                  } else {
-                    return severityOrder[b.severity] - severityOrder[a.severity];
-                  }
                 }
+                // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
+                const severityOrder = {
+                  [Severity.Critical]: 4,
+                  [Severity.High]: 3,
+                  [Severity.Medium]: 2,
+                  [Severity.Low]: 1,
+                };
+                if (a.severity === b.severity) {
+                  return (
+                    Number.parseFloat(b.attackSuccessRate) - Number.parseFloat(a.attackSuccessRate)
+                  );
+                }
+                return severityOrder[b.severity] - severityOrder[a.severity];
               })
               .map((subCategory, index) => {
                 // Calculate if this row should be visible in normal view

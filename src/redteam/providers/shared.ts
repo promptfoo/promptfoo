@@ -301,13 +301,12 @@ export async function tryUnblocking({
         unblockingPrompt: parsed.unblockingAnswer,
         tokenUsage: response.tokenUsage,
       };
-    } else {
-      logger.debug('[Unblocking] No blocking question detected');
-      return {
-        success: false,
-        tokenUsage: response.tokenUsage,
-      };
     }
+    logger.debug('[Unblocking] No blocking question detected');
+    return {
+      success: false,
+      tokenUsage: response.tokenUsage,
+    };
   } catch (error) {
     logger.error(`[Unblocking] Error in unblocking: ${error}`);
     return { success: false };

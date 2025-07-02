@@ -1,4 +1,4 @@
-import { type Option as sqlParserOption } from 'node-sql-parser';
+import type { Option as sqlParserOption } from 'node-sql-parser';
 import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 

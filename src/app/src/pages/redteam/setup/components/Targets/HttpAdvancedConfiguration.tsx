@@ -1,5 +1,3 @@
-import React from 'react';
-import Editor from 'react-simple-code-editor';
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -8,7 +6,7 @@ import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import KeyIcon from '@mui/icons-material/Key';
 import UploadIcon from '@mui/icons-material/Upload';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import { FormControl, FormControlLabel, RadioGroup, Radio, FormGroup } from '@mui/material';
+import { FormControl, FormControlLabel, FormGroup, Radio, RadioGroup } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -18,11 +16,13 @@ import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import type { ProviderOptions } from '@promptfoo/types';
 import dedent from 'dedent';
+import React from 'react';
+import Editor from 'react-simple-code-editor';
 import 'prismjs/components/prism-clike';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
@@ -76,6 +76,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#request-transform"
                 target="_blank"
+                rel="noopener"
               >
                 docs
               </a>{' '}
@@ -124,6 +125,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
                 target="_blank"
+                rel="noopener"
               >
                 docs
               </a>{' '}
@@ -218,6 +220,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#session-management"
                 target="_blank"
+                rel="noopener"
               >
                 docs
               </a>{' '}
@@ -287,6 +290,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#digital-signature-authentication"
                 target="_blank"
+                rel="noopener"
               >
                 docs
               </a>{' '}
@@ -677,6 +681,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#error-handling"
                 target="_blank"
+                rel="noopener"
               >
                 docs
               </a>{' '}

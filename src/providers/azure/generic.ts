@@ -131,19 +131,18 @@ export class AzureGenericProvider implements ApiProvider {
     const apiKey = this.getApiKey();
     if (apiKey) {
       return { 'api-key': apiKey };
-    } else {
-      try {
-        const token = await this.getAccessToken();
-        return { Authorization: 'Bearer ' + token };
-      } catch (err) {
-        logger.info(`Azure Authentication failed. Please check your credentials: ${err}`);
-        throw new Error(`Azure Authentication failed. 
+    }
+    try {
+      const token = await this.getAccessToken();
+      return { Authorization: `Bearer ${token}` };
+    } catch (err) {
+      logger.info(`Azure Authentication failed. Please check your credentials: ${err}`);
+      throw new Error(`Azure Authentication failed. 
 Please choose one of the following options:
   1. Set an API key via the AZURE_API_KEY environment variable.
   2. Provide client credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID).
   3. Authenticate with Azure CLI using az login.
     `);
-      }
     }
   }
 
@@ -168,9 +167,9 @@ Please choose one of the following options:
 
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }

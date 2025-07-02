@@ -1,4 +1,3 @@
-import React from 'react';
 import { InsertDriveFile as FileIcon, Folder as FolderIcon } from '@mui/icons-material';
 import {
   Box,

@@ -1,10 +1,10 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import type { OpenAiSharedOptions } from './types';
 import { formatOpenAiError } from './util';
 
@@ -87,20 +87,19 @@ export function formatOutput(
     }
 
     return JSON.stringify(data);
-  } else {
-    const url = data.data[0].url;
-    if (!url) {
-      return { error: `No image URL found in response: ${JSON.stringify(data)}` };
-    }
-
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-
-    return `![${ellipsizedPrompt}](${url})`;
   }
+  const url = data.data[0].url;
+  if (!url) {
+    return { error: `No image URL found in response: ${JSON.stringify(data)}` };
+  }
+
+  const sanitizedPrompt = prompt
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')');
+  const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+
+  return `![${ellipsizedPrompt}](${url})`;
 }
 
 export function prepareRequestBody(
@@ -141,9 +140,10 @@ export function calculateImageCost(
 
   if (model === 'dall-e-3') {
     const costKey = `${imageQuality}_${size}`;
-    const costPerImage = DALLE3_COSTS[costKey] || DALLE3_COSTS['standard_1024x1024'];
+    const costPerImage = DALLE3_COSTS[costKey] || DALLE3_COSTS.standard_1024x1024;
     return costPerImage * n;
-  } else if (model === 'dall-e-2') {
+  }
+  if (model === 'dall-e-2') {
     const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
     return costPerImage * n;
   }
@@ -221,7 +221,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
@@ -263,7 +263,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       ...config.headers,
     };
 
-    let data, status, statusText;
+    let data;
+    let status;
+    let statusText;
     let cached = false;
     try {
       ({ data, cached, status, statusText } = await callOpenAiImageApi(

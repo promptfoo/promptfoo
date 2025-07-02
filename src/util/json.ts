@@ -48,7 +48,7 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
 
   const truncateValue = (val: any): any => {
     if (typeof val === 'string') {
-      return val.length > 1000 ? val.substring(0, 1000) + '...[truncated]' : val;
+      return val.length > 1000 ? `${val.substring(0, 1000)}...[truncated]` : val;
     }
 
     if (Array.isArray(val)) {
@@ -104,7 +104,7 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
     return (
       JSON.stringify(
         value,
-        (key, val) => {
+        (_key, val) => {
           if (typeof val === 'object' && val !== null) {
             if (cache.has(val)) {
               return;
@@ -366,7 +366,7 @@ export function summarizeEvaluateResultForLogging(
       const output = String(result.response.output);
       summary.response.output =
         output.length > maxOutputLength
-          ? output.substring(0, maxOutputLength) + '...[truncated]'
+          ? `${output.substring(0, maxOutputLength)}...[truncated]`
           : output;
     }
 

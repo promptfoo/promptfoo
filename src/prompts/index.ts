@@ -1,13 +1,13 @@
 import { globSync } from 'glob';
 import logger from '../logger';
 import type {
-  UnifiedConfig,
+  EvaluateTestSuite,
   Prompt,
   PromptFunction,
+  ProviderOptions,
   ProviderOptionsMap,
   TestSuite,
-  ProviderOptions,
-  EvaluateTestSuite,
+  UnifiedConfig,
 } from '../types';
 import { parsePathOrGlob } from '../util';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -211,7 +211,8 @@ export async function processPrompts(
             label: promptInput?.name ?? promptInput.toString(),
             function: promptInput as PromptFunction,
           };
-        } else if (typeof promptInput === 'string') {
+        }
+        if (typeof promptInput === 'string') {
           return readPrompts(promptInput);
         }
         try {

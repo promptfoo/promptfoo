@@ -81,8 +81,7 @@ jobs:
 
             FILE_PATH="{{file}}"
 
-            npx prettier --write $FILE_PATH
-            npx eslint --fix $FILE_PATH --no-warn-ignored
+            npx @biomejs/biome check --fix $FILE_PATH
 
             # Use incremental build to reduce latency for subsequent build checks
             # However, this means that we need to run with concurrency of 1 (on Tusk)

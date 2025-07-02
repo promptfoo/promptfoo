@@ -11,8 +11,8 @@ import type {
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { transform } from '../util/transform';
 import type { TransformContext } from '../util/transform';
+import { transform } from '../util/transform';
 import { parseChatPrompt } from './shared';
 
 /**
@@ -250,38 +250,37 @@ export abstract class SageMakerGenericProvider {
 
             if (typeof result === 'string') {
               return result; // Return string results directly (even empty strings)
-            } else if (typeof result === 'object') {
+            }
+            if (typeof result === 'object') {
               return JSON.stringify(result); // Convert objects to JSON
-            } else {
-              // Handle other types (numbers, booleans) by converting to string
-              return String(result);
             }
-          } else {
-            // Regular function format
-            // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
-            const fn = new Function(
-              'prompt',
-              'context',
-              `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
-            );
-            const result = fn(prompt, transformContext);
-
-            // Handle all possible return types, including falsy values (empty string, 0, etc.)
-            if (result === undefined || result === null) {
-              // Only skip undefined/null, allowing empty strings, false, 0, etc.
-              logger.debug('Transform function returned null or undefined, using original prompt');
-              return prompt;
-            }
-
-            if (typeof result === 'string') {
-              return result; // Return string results directly (even empty strings)
-            } else if (typeof result === 'object') {
-              return JSON.stringify(result); // Convert objects to JSON
-            } else {
-              // Handle other types (numbers, booleans) by converting to string
-              return String(result);
-            }
+            // Handle other types (numbers, booleans) by converting to string
+            return String(result);
           }
+          // Regular function format
+          // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
+          const fn = new Function(
+            'prompt',
+            'context',
+            `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+          );
+          const result = fn(prompt, transformContext);
+
+          // Handle all possible return types, including falsy values (empty string, 0, etc.)
+          if (result === undefined || result === null) {
+            // Only skip undefined/null, allowing empty strings, false, 0, etc.
+            logger.debug('Transform function returned null or undefined, using original prompt');
+            return prompt;
+          }
+
+          if (typeof result === 'string') {
+            return result; // Return string results directly (even empty strings)
+          }
+          if (typeof result === 'object') {
+            return JSON.stringify(result); // Convert objects to JSON
+          }
+          // Handle other types (numbers, booleans) by converting to string
+          return String(result);
         } catch (transformError) {
           logger.error(`Error executing inline transform: ${transformError}`);
         }
@@ -306,12 +305,12 @@ export abstract class SageMakerGenericProvider {
 
           if (typeof transformed === 'string') {
             return transformed; // Return string results directly (even empty strings)
-          } else if (typeof transformed === 'object') {
-            return JSON.stringify(transformed); // Convert objects to JSON
-          } else {
-            // Handle other types (numbers, booleans) by converting to string
-            return String(transformed);
           }
+          if (typeof transformed === 'object') {
+            return JSON.stringify(transformed); // Convert objects to JSON
+          }
+          // Handle other types (numbers, booleans) by converting to string
+          return String(transformed);
         } catch (transformError) {
           logger.error(`Error using transform utility: ${transformError}`);
         }
@@ -544,8 +543,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           },
         };
         break;
-
-      case 'custom':
       default:
         // For custom, we just pass through the raw prompt data
         try {
@@ -629,8 +626,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       case 'jumpstart':
         // For AWS JumpStart models
         return responseJson.generated_text || responseJson;
-
-      case 'custom':
       default:
         // For custom endpoints, try common patterns
         return (
@@ -678,7 +673,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
@@ -748,7 +743,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     logger.debug(`Calling SageMaker endpoint ${this.getEndpointName()}`);
     logger.debug(
-      `With payload: ${payload.length > 1000 ? payload.substring(0, 1000) + '...' : payload}`,
+      `With payload: ${payload.length > 1000 ? `${payload.substring(0, 1000)}...` : payload}`,
     );
 
     try {
@@ -775,7 +770,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       const responseBody = new TextDecoder().decode(response.Body);
       logger.debug(
-        `SageMaker response (truncated): ${responseBody.length > 1000 ? responseBody.substring(0, 1000) + '...' : responseBody}`,
+        `SageMaker response (truncated): ${responseBody.length > 1000 ? `${responseBody.substring(0, 1000)}...` : responseBody}`,
       );
 
       const output = await this.parseResponse(responseBody);
@@ -951,8 +946,6 @@ export class SageMakerEmbeddingProvider
           inputs: transformedText,
         });
         break;
-
-      case 'custom':
       default:
         // Try to support multiple common formats
         payload = JSON.stringify({
@@ -1039,11 +1032,10 @@ export class SageMakerEmbeddingProvider
             );
 
             return result;
-          } else {
-            logger.warn(
-              'Extracted data is not a valid embedding array, trying other extraction methods',
-            );
           }
+          logger.warn(
+            'Extracted data is not a valid embedding array, trying other extraction methods',
+          );
         } catch (error) {
           logger.warn(
             `Failed to extract embedding from path expression: ${this.config.responseFormat.path}, Error: ${error}`,

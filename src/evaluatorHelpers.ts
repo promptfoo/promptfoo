@@ -12,17 +12,17 @@ import type EvalResult from './models/evalResult';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
-import {
-  type ApiProvider,
-  type NunjucksFilterMap,
-  type Prompt,
-  type TestSuite,
-  type CompletedPrompt,
-  type EvaluateResult,
-  type TestCase,
+import type {
+  ApiProvider,
+  CompletedPrompt,
+  EvaluateResult,
+  NunjucksFilterMap,
+  Prompt,
+  TestCase,
+  TestSuite,
 } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
+import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
@@ -83,7 +83,7 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   // Detects any occurrence of an opening Nunjucks tag without a matching close
   // e.g. "{%" or "{{" not followed by a closing "%}" or "}}"
   const hasPartialTag = /({%[^%]*$|{{[^}]*$|{#[^#]*$)/m.test(prompt);
-  const alreadyWrapped = /{\%\s*raw\s*\%}/.test(prompt) && /{\%\s*endraw\s*\%}/.test(prompt);
+  const alreadyWrapped = /{%\s*raw\s*%}/.test(prompt) && /{%\s*endraw\s*%}/.test(prompt);
   if (hasPartialTag && !alreadyWrapped) {
     return `{% raw %}${prompt}{% endraw %}`;
   }
@@ -273,7 +273,8 @@ export async function renderPrompt(
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
-  } else if (prompt.raw.startsWith('langfuse://')) {
+  }
+  if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
     // we default to "text" type.
@@ -289,7 +290,8 @@ export async function renderPrompt(
       version === 'latest' ? undefined : Number(version),
     );
     return langfuseResult;
-  } else if (prompt.raw.startsWith('helicone://')) {
+  }
+  if (prompt.raw.startsWith('helicone://')) {
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];

@@ -1,26 +1,28 @@
 import { Anthropic as GatewayAnthropic } from '@adaline/anthropic';
 import { Azure as GatewayAzure } from '@adaline/azure';
-import { Gateway } from '@adaline/gateway';
-import type { Cache as GatewayCache } from '@adaline/gateway';
 import type {
   CompleteChatHandlerResponseType,
+  Cache as GatewayCache,
   GetEmbeddingsHandlerResponseType,
 } from '@adaline/gateway';
+import { Gateway } from '@adaline/gateway';
 import { Google as GatewayGoogle } from '@adaline/google';
 import { Groq as GatewayGroq } from '@adaline/groq';
 import { OpenRouter as GatewayOpenRouter } from '@adaline/open-router';
 import { OpenAI as GatewayOpenAI } from '@adaline/openai';
-import type { ChatModelV1 as GatewayChatModel } from '@adaline/provider';
-import type { EmbeddingModelV1 as GatewayEmbeddingModel } from '@adaline/provider';
+import type {
+  ChatModelV1 as GatewayChatModel,
+  EmbeddingModelV1 as GatewayEmbeddingModel,
+} from '@adaline/provider';
 import { TogetherAI as GatewayTogetherAi } from '@adaline/together-ai';
 import type {
-  MessageType as GatewayMessageType,
-  ToolType as GatewayToolType,
-  ResponseSchemaType as GatewayResponseSchemaType,
   EmbeddingRequestsType as GatewayEmbeddingRequestsType,
+  MessageType as GatewayMessageType,
+  ResponseSchemaType as GatewayResponseSchemaType,
+  ToolType as GatewayToolType,
 } from '@adaline/types';
 import { Vertex as GatewayVertex } from '@adaline/vertex';
-import { isCacheEnabled, getCache } from '../cache';
+import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -64,7 +66,7 @@ class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
   }
 
   // Gateway will never invoke this method
-  async delete(key: string): Promise<void> {
+  async delete(_key: string): Promise<void> {
     throw new Error('Not implemented');
   }
 
@@ -175,9 +177,9 @@ export class AdalineGatewayGenericProvider implements ApiProvider {
 
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
@@ -294,7 +296,8 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         if ('definition' in this.config.tools[0]) {
           // valid tool in config and sufficiently in gateway format
           return { formatType: 'gateway' };
-        } else if ('function' in this.config.tools[0]) {
+        }
+        if ('function' in this.config.tools[0]) {
           // valid tool in config and sufficiently in openai format
           return { formatType: 'openai' };
         }
@@ -334,7 +337,8 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           ) {
             // JSON prompt sufficiently matches openai format
             return { formatType: 'openai' };
-          } else if (
+          }
+          if (
             Array.isArray(objPrompt[0].content) &&
             objPrompt[0].content.length > 0 &&
             'modality' in objPrompt[0].content[0]

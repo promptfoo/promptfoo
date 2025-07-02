@@ -1,13 +1,17 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import type { OpenAiCompletionOptions } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
+import {
+  calculateOpenAICost,
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_COMPLETION_MODELS,
+} from './util';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
@@ -66,8 +70,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     };
 
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiUrl()}/completions`,

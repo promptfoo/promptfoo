@@ -27,11 +27,9 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -103,9 +101,9 @@ export async function doEval(
 ): Promise<Eval> {
   setupEnv(cmdObj.envPath);
 
-  let config: Partial<UnifiedConfig> | undefined = undefined;
-  let testSuite: TestSuite | undefined = undefined;
-  let _basePath: string | undefined = undefined;
+  let config: Partial<UnifiedConfig> | undefined;
+  let testSuite: TestSuite | undefined;
+  let _basePath: string | undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -201,8 +199,7 @@ export async function doEval(
     testSuite.tests = await filterTests(testSuite, filterOptions);
 
     if (
-      config.redteam &&
-      config.redteam.plugins &&
+      config.redteam?.plugins &&
       config.redteam.plugins.length > 0 &&
       testSuite.tests &&
       testSuite.tests.length > 0
@@ -354,7 +351,7 @@ export async function doEval(
       // Output CLI table
       const outputTable = generateTable(table);
 
-      logger.info('\n' + outputTable.toString());
+      logger.info(`\n${outputTable.toString()}`);
       if (table.body.length > 25) {
         const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
@@ -481,7 +478,7 @@ export async function doEval(
             // Extract just the provider ID part (remove class name in parentheses)
             const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
             logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}`,
+              `    ${chalk.gray(`${displayId}:`)} ${chalk.white(displayTotal.toLocaleString())}`,
             );
 
             // Show breakdown if there are individual components
@@ -500,7 +497,7 @@ export async function doEval(
                 details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
               }
               if (details.length > 0) {
-                logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
+                logger.info(`      ${chalk.dim(`(${details.join(', ')})`)}`);
               }
             }
           }
@@ -571,7 +568,8 @@ export async function doEval(
               .map((p) => {
                 if (typeof p === 'string' && p.startsWith('file://')) {
                   return path.resolve(basePath, p.slice('file://'.length));
-                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+                }
+                if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
                   return path.resolve(basePath, p.id.slice('file://'.length));
                 }
                 return null;
@@ -592,7 +590,8 @@ export async function doEval(
               .flatMap((t) => {
                 if (typeof t === 'string' && t.startsWith('file://')) {
                   return path.resolve(basePath, t.slice('file://'.length));
-                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
+                }
+                if (typeof t !== 'string' && 'vars' in t && t.vars) {
                   return Object.values(t.vars).flatMap((v) => {
                     if (typeof v === 'string' && v.startsWith('file://')) {
                       return path.resolve(basePath, v.slice('file://'.length));
@@ -639,9 +638,8 @@ export async function doEval(
         logger.info('\nDone.');
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
-      } else {
-        logger.info('\nDone.');
       }
+      logger.info('\nDone.');
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);

@@ -120,7 +120,8 @@ export async function resolveProvider(
     return context.env
       ? await loadApiProvider(provider, { env: context.env })
       : await loadApiProvider(provider);
-  } else if (typeof provider === 'object') {
+  }
+  if (typeof provider === 'object') {
     const casted = provider as ProviderOptions;
     invariant(casted.id, 'Provider object must have an id');
     const loadOptions: LoadApiProviderOptions = { options: casted };
@@ -128,13 +129,13 @@ export async function resolveProvider(
       loadOptions.env = context.env;
     }
     return await loadApiProvider(casted.id, loadOptions);
-  } else if (typeof provider === 'function') {
+  }
+  if (typeof provider === 'function') {
     return context.env
       ? await loadApiProvider(provider, { env: context.env })
       : await loadApiProvider(provider);
-  } else {
-    throw new Error('Invalid provider type');
   }
+  throw new Error('Invalid provider type');
 }
 
 /**
@@ -193,14 +194,16 @@ export async function loadApiProviders(
       return loadProvidersFromFile(providerPaths, { basePath, env });
     }
     return [await loadApiProvider(providerPaths, { basePath, env })];
-  } else if (typeof providerPaths === 'function') {
+  }
+  if (typeof providerPaths === 'function') {
     return [
       {
         id: () => 'custom-function',
         callApi: providerPaths,
       },
     ];
-  } else if (Array.isArray(providerPaths)) {
+  }
+  if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
         if (typeof provider === 'string') {
@@ -253,9 +256,11 @@ export async function loadApiProviders(
 export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
   if (typeof providerPaths === 'string') {
     return [providerPaths];
-  } else if (typeof providerPaths === 'function') {
+  }
+  if (typeof providerPaths === 'function') {
     return ['custom-function'];
-  } else if (Array.isArray(providerPaths)) {
+  }
+  if (Array.isArray(providerPaths)) {
     return providerPaths.map((provider, idx) => {
       if (typeof provider === 'string') {
         return provider;

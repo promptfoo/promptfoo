@@ -4,7 +4,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 const AI21_CHAT_MODELS = [
   {
@@ -38,13 +38,12 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
-    } else {
-      return {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens || 0,
-        completion: data.usage.completion_tokens || 0,
-      };
     }
+    return {
+      total: data.usage.total_tokens,
+      prompt: data.usage.prompt_tokens || 0,
+      completion: data.usage.completion_tokens || 0,
+    };
   }
   return {};
 }
@@ -137,8 +136,8 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     const url = `${this.getApiUrl()}/chat/completions`;
     logger.debug(`AI21 API request: ${url} ${JSON.stringify(body)}`);
 
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
 
     try {
       ({ data, cached } = (await fetchWithCache(

@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
+import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
+import { useMemo } from 'react';
 
 interface SpanData {
   spanId: string;
@@ -36,7 +36,8 @@ const getSpanStatus = (statusCode?: number | null): { color: string; label: stri
   // From SpanStatusCode in @opentelemetry/api
   if (statusCode === 1) {
     return { color: 'success', label: 'OK' };
-  } else if (statusCode === 2) {
+  }
+  if (statusCode === 2) {
     return { color: 'error', label: 'ERROR' };
   }
   return { color: 'default', label: 'UNSET' };
@@ -46,11 +47,11 @@ const formatDuration = (microseconds: number): string => {
   const milliseconds = microseconds / 1000;
   if (milliseconds < 1) {
     return `${Math.round(milliseconds)}ms`;
-  } else if (milliseconds < 1000) {
-    return `${Math.round(milliseconds)}ms`;
-  } else {
-    return `${(milliseconds / 1000).toFixed(2)}s`;
   }
+  if (milliseconds < 1000) {
+    return `${Math.round(milliseconds)}ms`;
+  }
+  return `${(milliseconds / 1000).toFixed(2)}s`;
 };
 
 const formatTimestamp = (millis: number): string => {

@@ -33,7 +33,7 @@ export function createScriptBasedProviderFactory(
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       // Extract the script path from the provider path
       let scriptPath: string;

@@ -101,9 +101,7 @@ export function calculateXAICost(
     return undefined;
   }
 
-  const model = XAI_CHAT_MODELS.find(
-    (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
-  );
+  const model = XAI_CHAT_MODELS.find((m) => m.id === modelName || m.aliases?.includes(modelName));
   if (!model || !model.cost) {
     return undefined;
   }

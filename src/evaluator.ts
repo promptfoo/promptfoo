@@ -48,7 +48,7 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -231,7 +231,7 @@ export async function runEval({
   try {
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-    let renderedJson = undefined;
+    let renderedJson;
     try {
       renderedJson = JSON.parse(renderedPrompt);
     } catch {}
@@ -303,7 +303,7 @@ export async function runEval({
     const endTime = Date.now();
     latencyMs = endTime - startTime;
 
-    let conversationLastInput = undefined;
+    let conversationLastInput;
     if (renderedJson && Array.isArray(renderedJson)) {
       const lastElt = renderedJson[renderedJson.length - 1];
       // Use the `content` field if present (OpenAI chat format)
@@ -457,7 +457,7 @@ export async function runEval({
     return [
       {
         ...setup,
-        error: String(err) + '\n\n' + (err as Error).stack,
+        error: `${String(err)}\n\n${(err as Error).stack}`,
         success: false,
         failureReason: ResultFailureReason.ERROR,
         score: 0,

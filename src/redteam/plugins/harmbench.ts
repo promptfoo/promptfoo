@@ -4,7 +4,7 @@ import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmbench';
 
@@ -55,7 +55,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     throw new Error('Not implemented');
   }
 
-  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
     const records = await fetchDataset(n);
 
     return records.map(
@@ -74,7 +74,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     );
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

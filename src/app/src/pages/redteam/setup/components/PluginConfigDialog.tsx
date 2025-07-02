@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
@@ -11,6 +10,7 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
+import { useEffect, useState } from 'react';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {
@@ -36,7 +36,7 @@ export default function PluginConfigDialog({
     if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
       setLocalConfig(config || {});
     }
-  }, [open, plugin, config]);
+  }, [open, plugin, config, localConfig]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -90,7 +90,7 @@ export default function PluginConfigDialog({
 
     switch (plugin) {
       case 'policy':
-      case 'prompt-extraction':
+      case 'prompt-extraction': {
         const key = plugin === 'policy' ? 'policy' : 'systemPrompt';
         return (
           <TextField
@@ -104,9 +104,10 @@ export default function PluginConfigDialog({
             onChange={(e) => setLocalConfig({ ...localConfig, [key]: e.target.value })}
           />
         );
+      }
       case 'bfla':
       case 'bola':
-      case 'ssrf':
+      case 'ssrf': {
         const arrayKey =
           plugin === 'bfla'
             ? 'targetIdentifiers'
@@ -147,6 +148,7 @@ export default function PluginConfigDialog({
             </Button>
           </>
         );
+      }
       case 'indirect-prompt-injection':
         return (
           <TextField

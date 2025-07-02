@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import type { Assertion, AssertionValue, ResultSuggestion } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:contracts';
 
@@ -48,7 +48,7 @@ export class ContractPlugin extends RedteamPluginBase {
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

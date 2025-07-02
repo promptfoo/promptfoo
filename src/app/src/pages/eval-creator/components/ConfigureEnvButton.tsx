@@ -1,4 +1,3 @@
-import React, { useState } from 'react';
 import { useStore } from '@app/stores/evalConfig';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Accordion from '@mui/material/Accordion';
@@ -10,6 +9,8 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
+import type React from 'react';
+import { useState } from 'react';
 
 const ConfigureEnvButton: React.FC = () => {
   const { env: defaultEnv, setEnv: saveEnv } = useStore();

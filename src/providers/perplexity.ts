@@ -1,5 +1,10 @@
-import type { ApiProvider, ProviderOptions } from '../types';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types';
 import type { EnvOverrides } from '../types/env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -20,7 +25,7 @@ export function calculatePerplexityCost(
   modelName: string,
   promptTokens?: number,
   completionTokens?: number,
-  usageTier: 'high' | 'medium' | 'low' = 'medium',
+  _usageTier: 'high' | 'medium' | 'low' = 'medium',
 ): number {
   if (!promptTokens && !completionTokens) {
     return 0;

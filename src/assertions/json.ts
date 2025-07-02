@@ -89,11 +89,10 @@ export function handleContainsJson({
       pass = validate(jsonObject);
       if (pass) {
         break;
-      } else {
-        errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
-          validate.errors,
-        )}`;
       }
+      errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
+        validate.errors,
+      )}`;
     }
   }
   return {

@@ -91,12 +91,17 @@ export class ScriptCompletionProvider implements ApiProvider {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
       // These are not useful in the shell
-      delete context?.getCache;
-      delete context?.logger;
+      const contextForScript = context
+        ? {
+            ...context,
+            getCache: undefined,
+            logger: undefined,
+          }
+        : {};
       const scriptArgs = scriptParts.concat([
         prompt,
         safeJsonStringify(this.options || {}) as string,
-        safeJsonStringify(context || {}) as string,
+        safeJsonStringify(contextForScript) as string,
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 

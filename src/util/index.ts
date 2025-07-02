@@ -15,17 +15,17 @@ import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import type { Vars } from '../types';
 import {
-  type EvaluateResult,
-  type EvaluateTableOutput,
-  type NunjucksFilterMap,
-  type TestCase,
-  type OutputFile,
   type CompletedPrompt,
   type CsvRow,
+  type EvaluateResult,
+  type EvaluateTableOutput,
   isApiProvider,
   isProviderOptions,
+  type NunjucksFilterMap,
+  type OutputFile,
   OutputFileExtension,
   ResultFailureReason,
+  type TestCase,
 } from '../types';
 import invariant from '../util/invariant';
 import { convertTestResultsToTableRow } from './exportToFile';
@@ -243,9 +243,11 @@ export type StandaloneEval = CompletedPrompt & {
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
   if (isApiProvider(provider)) {
     return provider.id();
-  } else if (isProviderOptions(provider)) {
+  }
+  if (isProviderOptions(provider)) {
     return provider.id;
-  } else if (typeof provider === 'string') {
+  }
+  if (typeof provider === 'string') {
     return provider;
   }
   return undefined;
@@ -281,7 +283,8 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
       result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
     }
     return result as T;
-  } else if (typeof obj === 'function') {
+  }
+  if (typeof obj === 'function') {
     const fn = obj as Function;
     return renderVarsInObject(fn({ vars }) as T);
   }
@@ -333,7 +336,7 @@ export function parsePathOrGlob(
     }
   }
 
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
+  const isPathPattern = stats?.isDirectory() || /[*?{}[\]]/.test(filePath); // glob pattern
   const safeFilename = path.relative(
     basePath,
     path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
@@ -351,9 +354,9 @@ export function isRunningUnderNpx(): boolean {
   const npmLifecycleScript = getEnvString('npm_lifecycle_script');
 
   return Boolean(
-    (npmExecPath && npmExecPath.includes('npx')) ||
+    npmExecPath?.includes('npx') ||
       process.execPath.includes('npx') ||
-      (npmLifecycleScript && npmLifecycleScript.includes('npx')),
+      npmLifecycleScript?.includes('npx'),
   );
 }
 

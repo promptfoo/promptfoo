@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess, spawn } from 'child_process';
 import path from 'path';
 import WebSocket from 'ws';
 import cliState from '../../cliState';
@@ -169,7 +169,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
-      let statefulApiState: any = undefined;
+      let statefulApiState: any;
 
       const isTextExpected =
         this.config.generationConfig?.response_modalities?.includes('text') ?? false;
@@ -214,7 +214,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
         // Determine final output text and thinking
         let outputText = response_text_total;
-        let thinking = undefined;
+        let thinking;
 
         // If we have audio content with transcript
         if (hasAudioContent && response_audio_transcript) {
@@ -455,7 +455,7 @@ export class GoogleLiveProvider implements ApiProvider {
           } else if (response.toolCall?.functionCalls) {
             for (const functionCall of response.toolCall.functionCalls) {
               function_calls_total.push(functionCall);
-              if (functionCall && functionCall.id && functionCall.name) {
+              if (functionCall?.id && functionCall.name) {
                 let callbackResponse = {};
                 const functionName = functionCall.name;
                 try {
@@ -628,7 +628,8 @@ export class GoogleLiveProvider implements ApiProvider {
 
       if (typeof requiredModule === 'function') {
         return requiredModule;
-      } else if (
+      }
+      if (
         requiredModule &&
         typeof requiredModule === 'object' &&
         functionName &&
@@ -669,7 +670,7 @@ export class GoogleLiveProvider implements ApiProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            callback = new Function(`return ${callbackStr}`)();
           }
 
           // Cache for future use

@@ -35,10 +35,9 @@ export const handleSimilar = async ({
       score: minScore,
       reason: `None of the provided values met the similarity threshold`,
     };
-  } else {
-    return {
-      assertion,
-      ...(await matchesSimilarity(renderedValue, outputString, threshold, inverse, test.options)),
-    };
   }
+  return {
+    assertion,
+    ...(await matchesSimilarity(renderedValue, outputString, threshold, inverse, test.options)),
+  };
 };

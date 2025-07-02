@@ -38,9 +38,11 @@ async function getJavascriptTransformFunction(
 
   if (functionName && typeof requiredModule[functionName] === 'function') {
     return requiredModule[functionName];
-  } else if (typeof requiredModule === 'function') {
+  }
+  if (typeof requiredModule === 'function') {
     return requiredModule;
-  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+  }
+  if (requiredModule.default && typeof requiredModule.default === 'function') {
     return requiredModule.default;
   }
   throw new Error(
@@ -78,7 +80,8 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
 
   if (isJavascriptFile(fullPath)) {
     return getJavascriptTransformFunction(fullPath, functionName);
-  } else if (fullPath.endsWith('.py')) {
+  }
+  if (fullPath.endsWith('.py')) {
     return getPythonTransformFunction(fullPath, functionName);
   }
   throw new Error(`Unsupported transform file format: file://${actualFilePath}`);

@@ -44,7 +44,7 @@ export function writePromptfooConfig(
 
   const schemaComment = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json`;
   const headerCommentLines = headerComments
-    ? headerComments.map((comment) => `# ${comment}`).join('\n') + '\n'
+    ? `${headerComments.map((comment) => `# ${comment}`).join('\n')}\n`
     : '';
 
   fs.writeFileSync(outputPath, `${schemaComment}\n${headerCommentLines}${yamlContent}`);

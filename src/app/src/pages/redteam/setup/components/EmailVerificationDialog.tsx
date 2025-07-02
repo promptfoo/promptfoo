@@ -1,4 +1,3 @@
-import React, { useState } from 'react';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useToast } from '@app/hooks/useToast';
 import Box from '@mui/material/Box';
@@ -10,6 +9,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import type React from 'react';
+import { useState } from 'react';
 
 interface EmailVerificationDialogProps {
   open: boolean;

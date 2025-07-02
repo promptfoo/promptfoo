@@ -1,6 +1,6 @@
 import type OpenAI from 'openai';
 import type { MCPConfig } from '../mcp/types';
-import { type OpenAiFunction, type OpenAiTool } from './util';
+import type { OpenAiFunction, OpenAiTool } from './util';
 
 /**
  * Context provided to function callbacks for assistant providers

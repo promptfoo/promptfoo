@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   CheckCircle as CheckCircleIcon,
   Code as CodeIcon,
@@ -9,6 +8,7 @@ import {
 } from '@mui/icons-material';
 import {
   Alert,
+  alpha,
   Box,
   Button,
   Collapse,
@@ -18,7 +18,6 @@ import {
   Select,
   Stack,
   Typography,
-  alpha,
   useTheme,
 } from '@mui/material';
 import { SeverityBadge } from '../ModelAudit.styles';
@@ -68,7 +67,7 @@ export default function SecurityFindings({
     });
 
     const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
-    const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent);
+    const dataUri = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
     const exportFileDefaultName = `model-audit-${new Date().toISOString().split('T')[0]}.csv`;
 
     const linkElement = document.createElement('a');
@@ -174,7 +173,7 @@ export default function SecurityFindings({
                     </Typography>
                     <SeverityBadge severity={issue.severity}>{issue.severity}</SeverityBadge>
                   </Stack>
-                  {(issue.location || (issue.details && issue.details.path)) && (
+                  {(issue.location || issue.details?.path) && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       Location: <code>{issue.location || issue.details?.path}</code>
                     </Typography>

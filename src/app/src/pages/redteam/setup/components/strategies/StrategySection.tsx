@@ -1,5 +1,4 @@
-import React from 'react';
-import { Typography, Box, Button } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import { StrategyItem } from './StrategyItem';
 import type { StrategyCardData } from './types';
 

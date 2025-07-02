@@ -157,10 +157,9 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
           {},
         ),
       };
-    } else {
-      logger.debug(`No plugin severity overrides found for cloud provider ${cloudProviderId}`);
-      return null;
     }
+    logger.debug(`No plugin severity overrides found for cloud provider ${cloudProviderId}`);
+    return null;
   } catch (e) {
     logger.error(`Failed to fetch plugin severity overrides from cloud.`);
     logger.error(String(e));

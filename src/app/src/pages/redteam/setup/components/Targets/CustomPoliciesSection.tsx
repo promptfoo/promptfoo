@@ -1,4 +1,3 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -10,6 +9,8 @@ import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import type React from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 
@@ -111,7 +112,7 @@ export const CustomPoliciesSection = () => {
     if (currentPolicies !== newPolicies) {
       updateConfig('plugins', [...otherPlugins, ...policyPlugins]);
     }
-  }, [debouncedPolicies]);
+  }, [debouncedPolicies, config.plugins.filter, config.plugins.some, updateConfig]);
 
   const handlePolicyChange = useCallback((policyId: string, newValue: string) => {
     setPolicies((prev) => prev.map((p) => (p.id === policyId ? { ...p, policy: newValue } : p)));

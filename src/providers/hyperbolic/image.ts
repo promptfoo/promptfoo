@@ -77,7 +77,7 @@ export const HYPERBOLIC_IMAGE_MODELS = [
 
 export function formatHyperbolicImageOutput(
   imageData: string,
-  prompt: string,
+  _prompt: string,
   responseFormat?: string,
 ): string {
   if (responseFormat === 'b64_json') {
@@ -85,21 +85,20 @@ export function formatHyperbolicImageOutput(
     return JSON.stringify({
       data: [{ b64_json: imageData }],
     });
-  } else {
-    // For URL format or default, format as data URL for proper rendering
-    // Determine image format from base64 header
-    let mimeType = 'image/jpeg'; // Default to JPEG
-    if (imageData.startsWith('/9j/')) {
-      mimeType = 'image/jpeg';
-    } else if (imageData.startsWith('iVBORw0KGgo')) {
-      mimeType = 'image/png';
-    } else if (imageData.startsWith('UklGR')) {
-      mimeType = 'image/webp';
-    }
-
-    // Return as data URL for proper image rendering in the viewer
-    return `data:${mimeType};base64,${imageData}`;
   }
+  // For URL format or default, format as data URL for proper rendering
+  // Determine image format from base64 header
+  let mimeType = 'image/jpeg'; // Default to JPEG
+  if (imageData.startsWith('/9j/')) {
+    mimeType = 'image/jpeg';
+  } else if (imageData.startsWith('iVBORw0KGgo')) {
+    mimeType = 'image/png';
+  } else if (imageData.startsWith('UklGR')) {
+    mimeType = 'image/webp';
+  }
+
+  // Return as data URL for proper image rendering in the viewer
+  return `data:${mimeType};base64,${imageData}`;
 }
 
 export class HyperbolicImageProvider implements ApiProvider {
@@ -137,14 +136,14 @@ export class HyperbolicImageProvider implements ApiProvider {
 
   private getApiModelName(): string {
     const model = HYPERBOLIC_IMAGE_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
+      (m) => m.id === this.modelName || m.aliases?.includes(this.modelName),
     );
     return model?.id || this.modelName;
   }
 
   private calculateImageCost(): number {
     const model = HYPERBOLIC_IMAGE_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
+      (m) => m.id === this.modelName || m.aliases?.includes(this.modelName),
     );
     return model?.cost || 0.01; // Default to $0.01 per image
   }
@@ -152,7 +151,7 @@ export class HyperbolicImageProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -229,7 +228,9 @@ export class HyperbolicImageProvider implements ApiProvider {
       Authorization: `Bearer ${apiKey}`,
     } as Record<string, string>;
 
-    let data: any, status: number, statusText: string;
+    let data: any;
+    let status: number;
+    let statusText: string;
     let cached = false;
     try {
       ({ data, cached, status, statusText } = await fetchWithCache(

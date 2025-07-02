@@ -7,7 +7,6 @@ import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
@@ -28,12 +27,13 @@ import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
+import { synthesize } from '../';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   type Plugin,
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
@@ -333,7 +333,7 @@ export async function doGenerateRedteam(
   };
 
   let ret: Partial<UnifiedConfig> | undefined;
-  if (options.output && options.output.endsWith('.burp')) {
+  if (options.output?.endsWith('.burp')) {
     // Write in Burp Intruder compatible format
     const outputLines = redteamTests
       .map((test) => {
@@ -351,7 +351,8 @@ export async function doGenerateRedteam(
     );
     // No need to return anything, Burp outputs are only invoked via command line.
     return {};
-  } else if (options.output) {
+  }
+  if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};
@@ -465,7 +466,7 @@ export async function doGenerateRedteam(
     const command = configPath.endsWith('promptfooconfig.yaml')
       ? `${commandPrefix} eval`
       : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
-    logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
+    logger.info(`\n${chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`)}`);
   } else {
     const author = getAuthor();
     const userEmail = getUserEmail();

@@ -1,4 +1,3 @@
-import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '@app/stores/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
@@ -19,6 +18,8 @@ import TableContainer from '@mui/material/TableContainer';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PromptDialog from './PromptDialog';
 import './PromptsSection.css';
 
@@ -157,7 +158,7 @@ const PromptsSection: React.FC = () => {
                   <TableCell>
                     <Typography variant="body2">
                       {`Prompt #${index + 1}: `}
-                      {(prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt)
+                      {(prompt.length > 250 ? `${prompt.slice(0, 250)} ...` : prompt)
                         .split(/({{\w+}})/g)
                         .map((part: string, i: number) =>
                           /{{\s*(\w+)\s*}}/g.test(part) ? (

@@ -6,7 +6,7 @@
  */
 export function ellipsize(str: string, maxLen: number): string {
   if (str.length > maxLen) {
-    return str.slice(0, maxLen - 3) + '...';
+    return `${str.slice(0, maxLen - 3)}...`;
   }
   return str;
 }

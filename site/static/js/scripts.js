@@ -1,4 +1,3 @@
-/* eslint-disable */
 
 !(function (t) {
   if (window.ko) return;

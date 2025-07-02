@@ -1,4 +1,3 @@
-import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -13,15 +12,16 @@ import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
+import { useEffect, useState } from 'react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
+import { customTargetOption, predefinedTargets } from '../constants';
 import LoadExampleButton from '../LoadExampleButton';
 import Prompts from '../Prompts';
-import { customTargetOption, predefinedTargets } from '../constants';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -46,7 +46,8 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
     const parsedUrl = new URL(url);
     if (type === 'http') {
       return ['http:', 'https:'].includes(parsedUrl.protocol);
-    } else if (type === 'websocket') {
+    }
+    if (type === 'websocket') {
       return ['ws:', 'wss:'].includes(parsedUrl.protocol);
     }
     return false;
@@ -89,7 +90,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_targets' });
-  }, []);
+  }, [recordEvent]);
 
   useEffect(() => {
     const updatedTarget = { ...selectedTarget };

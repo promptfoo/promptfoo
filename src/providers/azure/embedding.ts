@@ -18,8 +18,8 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       input: text,
       model: this.deploymentName,
     };
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/embeddings?api-version=${

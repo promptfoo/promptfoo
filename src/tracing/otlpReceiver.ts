@@ -131,13 +131,13 @@ export class OTLPReceiver {
     });
 
     // Health check endpoint
-    this.app.get('/health', (req, res) => {
+    this.app.get('/health', (_req, res) => {
       logger.debug('[OtlpReceiver] Health check requested');
       res.status(200).json({ status: 'ok' });
     });
 
     // OTLP service info endpoint
-    this.app.get('/v1/traces', (req, res) => {
+    this.app.get('/v1/traces', (_req, res) => {
       res.status(200).json({
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
@@ -146,7 +146,7 @@ export class OTLPReceiver {
     });
 
     // Debug endpoint to check receiver status
-    this.app.get('/debug/status', async (req, res) => {
+    this.app.get('/debug/status', async (_req, res) => {
       res.status(200).json({
         status: 'running',
         uptime: process.uptime(),
@@ -156,7 +156,7 @@ export class OTLPReceiver {
     });
 
     // Global error handler
-    this.app.use((error: any, req: any, res: any, next: any) => {
+    this.app.use((error: any, _req: any, res: any, _next: any) => {
       logger.error(`[OtlpReceiver] Global error handler: ${error}`);
       logger.error(`[OtlpReceiver] Error stack: ${error.stack}`);
 

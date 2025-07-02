@@ -1,15 +1,13 @@
+import { Buffer } from 'node:buffer';
+import { randomUUID } from 'node:crypto';
 import {
   BedrockRuntimeClient,
   InvokeModelWithBidirectionalStreamCommand,
   type InvokeModelWithBidirectionalStreamInput,
 } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
-import { Buffer } from 'node:buffer';
-import { randomUUID } from 'node:crypto';
-import { Subject } from 'rxjs';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
-import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -17,6 +15,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 // Configuration types
 interface SessionState {
@@ -99,7 +98,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
   private async sendEvent(sessionId: string, event: any) {
     if (Object.keys(event.event)[0] !== 'audioInput') {
-      logger.debug('sendEvent: ' + Object.keys(event.event)[0]);
+      logger.debug(`sendEvent: ${Object.keys(event.event)[0]}`);
     }
     const session = this.sessions.get(sessionId);
     if (!session?.isActive) {
@@ -115,7 +114,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
-    } else if (!session.isActive) {
+    }
+    if (!session.isActive) {
       logger.debug(`Session ${sessionId} is not active`);
       return;
     }
@@ -151,7 +151,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       throw new Error(`Session ${sessionId} not found`);
     }
     const textPromptID = randomUUID();
-    logger.debug('sendTextMessage: ' + prompt);
+    logger.debug(`sendTextMessage: ${prompt}`);
     this.sendEvent(sessionId, {
       event: {
         contentStart: {
@@ -205,14 +205,14 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     let hasAudioContent = false;
     let functionCallOccurred = false;
 
-    logger.debug('prompt: ' + prompt.slice(0, 1000));
+    logger.debug(`prompt: ${prompt.slice(0, 1000)}`);
     // Set up event handlers
     session.responseHandlers.set('textOutput', (data) => {
-      logger.debug('textOutput: ' + JSON.stringify(data));
+      logger.debug(`textOutput: ${JSON.stringify(data)}`);
       if (data.role === 'USER') {
-        userTranscript += data.content + '\n';
+        userTranscript += `${data.content}\n`;
       } else if (data.role === 'ASSISTANT') {
-        assistantTranscript += data.content + '\n';
+        assistantTranscript += `${data.content}\n`;
       }
     });
 
@@ -354,7 +354,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
       // Send the actual prompt
       const chunks = promptText?.match(/.{1,1024}/g)?.map((chunk) => Buffer.from(chunk)) || [];
-      logger.debug('audioInput in chunks: ' + chunks.length);
+      logger.debug(`audioInput in chunks: ${chunks.length}`);
       for (const chunk of chunks) {
         await this.sendEvent(sessionId, {
           event: {
@@ -390,7 +390,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
           if (event.chunk?.bytes) {
             const data = JSON.parse(new TextDecoder().decode(event.chunk.bytes));
             const eventType = Object.keys(data.event || {})[0];
-            logger.debug('processing eventType: ' + eventType);
+            logger.debug(`processing eventType: ${eventType}`);
             const handler = session.responseHandlers.get(eventType);
             if (handler) {
               await handler(data.event[eventType]);
@@ -429,7 +429,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         },
       };
     } catch (error) {
-      logger.error('Error in nova-sonic provider: ' + JSON.stringify(error));
+      logger.error(`Error in nova-sonic provider: ${JSON.stringify(error)}`);
       return {
         error: error instanceof Error ? error.message : String(error),
         metadata: {},
@@ -476,9 +476,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
               },
               done: false,
             };
-          } else {
-            return { done: true, value: undefined };
           }
+          return { done: true, value: undefined };
         },
       }),
     };

@@ -25,7 +25,7 @@ export const isPandamoniumProvider = (
     typeof provider === 'object' &&
     provider !== null &&
     'runPandamonium' in provider &&
-    typeof (provider as Record<string, unknown>)['runPandamonium'] === 'function'
+    typeof (provider as Record<string, unknown>).runPandamonium === 'function'
   );
 };
 
@@ -94,7 +94,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     }
     this.stateful = options.stateful ?? false;
     this.currentTurn = 0;
-    this.baseUrl = cloudConfig.getApiHost() + '/api/pandamonium';
+    this.baseUrl = `${cloudConfig.getApiHost()}/api/pandamonium`;
     this.currentTestIdx = 0;
     this.log(
       `Constructor options: ${JSON.stringify({
@@ -110,7 +110,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     this.maxTurns = options.maxTurns || 500;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(_prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     throw new Error('Pandamonium is not a real provider. Call runPandamonium instead.');
   }
 
@@ -123,7 +123,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
    */
   async runPandamonium(
     targetProvider: ApiProvider,
-    test: AtomicTestCase,
+    _test: AtomicTestCase,
     allTests: RunEvalOptions[],
     concurrency: number = 4,
   ): Promise<EvaluateResult[]> {

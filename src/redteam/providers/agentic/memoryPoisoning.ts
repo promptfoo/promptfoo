@@ -36,7 +36,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       const targetProvider: ApiProvider | undefined = context?.originalProvider;
@@ -65,7 +65,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
       // Scope the scenario to the test case to ensure its passed to the grader:
       const scenario = await scenarioRes.json();
       context!.test!.metadata ??= {};
-      context!.test!.metadata['scenario'] = scenario;
+      context!.test!.metadata.scenario = scenario;
 
       // Send the memory message to the provider.
       const memoryResponse = await targetProvider.callApi(scenario.memory, context);

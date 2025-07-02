@@ -37,15 +37,16 @@ export function createLambdaLabsProvider(
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiChatCompletionProvider(modelName, lambdaLabsConfig);
-  } else if (splits[1] === 'completion') {
+  }
+  if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiCompletionProvider(modelName, lambdaLabsConfig);
-  } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
+  }
+  if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiEmbeddingProvider(modelName, lambdaLabsConfig);
-  } else {
-    // If no specific type is provided, default to chat
-    const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, lambdaLabsConfig);
   }
+  // If no specific type is provided, default to chat
+  const modelName = splits.slice(1).join(':');
+  return new OpenAiChatCompletionProvider(modelName, lambdaLabsConfig);
 }

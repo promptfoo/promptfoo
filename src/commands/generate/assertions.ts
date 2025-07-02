@@ -7,7 +7,7 @@ import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { type TestSuite, type UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 
@@ -111,7 +111,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   });
 }
 
-function validateAssertionType(value: string, previous: string) {
+function validateAssertionType(value: string, _previous: string) {
   const allowedStrings = ['pi', 'g-eval', 'llm-rubric'];
   if (!allowedStrings.includes(value)) {
     throw new InvalidArgumentError(`Option --type must be one of: ${allowedStrings.join(', ')}.`);

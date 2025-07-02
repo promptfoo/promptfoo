@@ -1,4 +1,3 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -28,15 +27,15 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
@@ -88,7 +87,7 @@ export default function Review() {
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
-  }, []);
+  }, [recordEvent]);
 
   // Sync local maxConcurrency state with config
   useEffect(() => {
@@ -154,8 +153,7 @@ export default function Review() {
         (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
           typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
       )
-      .map((p) => p.config.intent)
-      .flat()
+      .flatMap((p) => p.config.intent)
       .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
   }, [config.plugins]);
 
@@ -175,7 +173,7 @@ export default function Review() {
     });
 
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
-  }, [config.strategies]);
+  }, [config.strategies, getStrategyId]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -202,7 +200,8 @@ export default function Review() {
         );
         setIsEmailDialogOpen(true);
         return;
-      } else if (emailResult.error) {
+      }
+      if (emailResult.error) {
         setEmailVerificationError(emailResult.error);
         showToast(emailResult.error, 'error');
         return;
@@ -401,7 +400,7 @@ export default function Review() {
                   onDelete={() => {
                     const strategyId =
                       Object.entries(strategyDisplayNames).find(
-                        ([id, displayName]) => displayName === label,
+                        ([_id, displayName]) => displayName === label,
                       )?.[0] || label;
 
                     const newStrategies = config.strategies.filter((strategy) => {
@@ -451,7 +450,7 @@ export default function Review() {
                       size="small"
                       onClick={() => {
                         const newPlugins = config.plugins.filter(
-                          (p, i) =>
+                          (p, _i) =>
                             !(
                               typeof p === 'object' &&
                               p.id === 'policy' &&

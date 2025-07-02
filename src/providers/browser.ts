@@ -1,4 +1,4 @@
-import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import type { BrowserContext, ElementHandle, Page } from 'playwright';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -88,7 +88,8 @@ export class BrowserProvider implements ApiProvider {
       prompt,
     };
 
-    let chromium, stealth;
+    let chromium;
+    let stealth;
     try {
       ({ chromium } = await import('playwright-extra'));
       ({ default: stealth } = await import('puppeteer-extra-plugin-stealth'));
@@ -167,7 +168,7 @@ export class BrowserProvider implements ApiProvider {
         logger.debug(`Navigating to ${renderedArgs.url}`);
         await page.goto(renderedArgs.url);
         break;
-      case 'click':
+      case 'click': {
         invariant(
           renderedArgs.selector,
           `Expected headless action to have a selector when using 'click'`,
@@ -182,6 +183,7 @@ export class BrowserProvider implements ApiProvider {
           throw new Error(`Element not found: ${renderedArgs.selector}`);
         }
         break;
+      }
       case 'type':
         invariant(renderedArgs.text, `Expected headless action to have a text when using 'type'`);
         invariant(
@@ -232,7 +234,7 @@ export class BrowserProvider implements ApiProvider {
           path: renderedArgs.path,
         });
         break;
-      case 'extract':
+      case 'extract': {
         invariant(
           renderedArgs.selector,
           `Expected headless action to have a selector when using 'extract'`,
@@ -251,6 +253,7 @@ export class BrowserProvider implements ApiProvider {
           throw new Error('Expected headless action to have a name when using `extract`');
         }
         break;
+      }
       case 'wait':
         logger.debug(`Waiting for ${renderedArgs.ms}ms`);
         await page.waitForTimeout(renderedArgs.ms);

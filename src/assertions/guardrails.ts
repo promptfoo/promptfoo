@@ -25,14 +25,13 @@ export const handleGuardrails = async ({
         reason,
         assertion,
       };
-    } else {
-      return {
-        pass: true,
-        score: 1,
-        reason: 'Content passed safety checks',
-        assertion,
-      };
     }
+    return {
+      pass: true,
+      score: 1,
+      reason: 'Content passed safety checks',
+      assertion,
+    };
   }
   return {
     pass: true,

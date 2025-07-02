@@ -59,14 +59,14 @@ export class HyperbolicAudioProvider implements ApiProvider {
 
   private getApiModelName(): string {
     const model = HYPERBOLIC_AUDIO_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
+      (m) => m.id === this.modelName || m.aliases?.includes(this.modelName),
     );
     return model?.id || this.modelName;
   }
 
   private calculateAudioCost(textLength: number): number {
     const model = HYPERBOLIC_AUDIO_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
+      (m) => m.id === this.modelName || m.aliases?.includes(this.modelName),
     );
     const costPer1000Chars = model?.cost || 0.001;
     return (textLength / 1000) * costPer1000Chars;
@@ -75,7 +75,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -116,7 +116,9 @@ export class HyperbolicAudioProvider implements ApiProvider {
       Authorization: `Bearer ${apiKey}`,
     } as Record<string, string>;
 
-    let data: any, status: number, statusText: string;
+    let data: any;
+    let status: number;
+    let statusText: string;
     let cached = false;
     try {
       ({ data, cached, status, statusText } = await fetchWithCache(

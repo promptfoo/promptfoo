@@ -1,30 +1,30 @@
-import { desc, eq, and, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
 import { getDb } from '../database';
 import {
   datasetsTable,
+  evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
   evalsToTagsTable,
   promptsTable,
   tagsTable,
-  evalResultsTable,
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
-import {
-  type EvalWithMetadata,
-  type EvaluateTable,
-  type PromptWithMetadata,
-  type ResultsFile,
-  type TestCasesWithMetadata,
-  type TestCasesWithMetadataPrompt,
-  type UnifiedConfig,
-  type CompletedPrompt,
-  type EvaluateSummaryV2,
+import type {
+  CompletedPrompt,
+  EvaluateSummaryV2,
+  EvaluateTable,
+  EvalWithMetadata,
+  PromptWithMetadata,
+  ResultsFile,
+  TestCasesWithMetadata,
+  TestCasesWithMetadataPrompt,
+  UnifiedConfig,
 } from '../types';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';

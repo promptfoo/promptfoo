@@ -100,11 +100,14 @@ export const consoleFormatter = winston.format.printf(
 
     if (info.level === 'error') {
       return chalk.red(`${location}${message}`);
-    } else if (info.level === 'warn') {
+    }
+    if (info.level === 'warn') {
       return chalk.yellow(`${location}${message}`);
-    } else if (info.level === 'info') {
+    }
+    if (info.level === 'info') {
       return `${location}${message}`;
-    } else if (info.level === 'debug') {
+    }
+    if (info.level === 'debug') {
       return `${chalk.cyan(location)}${message}`;
     }
     throw new Error(`Invalid log level: ${info.level}`);

@@ -102,7 +102,7 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
 /**
  * Check if tracing is enabled for a test case
  */
-export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
+export function isTracingEnabled(test: TestCase, _testSuite?: TestSuite): boolean {
   return test.metadata?.tracingEnabled === true || process.env.PROMPTFOO_TRACING_ENABLED === 'true';
 }
 

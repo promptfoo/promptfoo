@@ -6,13 +6,12 @@ const validateResult = async (result: any): Promise<boolean | number | GradingRe
   result = await Promise.resolve(result);
   if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
     return result;
-  } else {
-    throw new Error(
-      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
-        result,
-      )}`,
-    );
   }
+  throw new Error(
+    `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
+      result,
+    )}`,
+  );
 };
 
 export const handleJavascript = async ({
@@ -35,7 +34,7 @@ export const handleJavascript = async ({
         const functionString = assertion.value.toString();
         ret.assertion = {
           type: 'javascript',
-          value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
+          value: functionString.length > 50 ? `${functionString.slice(0, 50)}...` : functionString,
         };
       }
       return ret;

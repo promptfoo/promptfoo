@@ -1,4 +1,4 @@
-import { Box, Paper, alpha, styled } from '@mui/material';
+import { alpha, Box, Paper, styled } from '@mui/material';
 
 export const SeverityBadge = styled(Box)<{ severity: string }>(({ theme, severity }) => ({
   display: 'inline-flex',

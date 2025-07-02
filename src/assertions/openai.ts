@@ -1,7 +1,6 @@
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import { validateFunctionCall } from '../providers/openai/util';
-import type { AssertionParams } from '../types';
-import type { GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import invariant from '../util/invariant';
 

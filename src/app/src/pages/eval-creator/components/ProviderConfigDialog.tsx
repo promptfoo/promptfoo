@@ -1,4 +1,3 @@
-import React, { useEffect, useState } from 'react';
 import JsonTextField from '@app/components/JsonTextField';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -9,6 +8,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import React, { useEffect, useState } from 'react';
 
 interface ProviderConfigDialogProps {
   open: boolean;
@@ -38,7 +38,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   // Reset local config when the dialog opens or providerId changes
   useEffect(() => {
     setLocalConfig(config);
-  }, [open, providerId, config]);
+  }, [config]);
 
   const handleSave = () => {
     onSave(providerId, localConfig);
@@ -133,23 +133,22 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                 />
               </Box>
             );
-          } else {
-            return (
-              <Box key={key} my={2}>
-                <JsonTextField
-                  label={key}
-                  defaultValue={JSON.stringify(value)}
-                  onChange={(parsed) => {
-                    setLocalConfig({ ...localConfig, [key]: parsed });
-                  }}
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Box>
-            );
           }
+          return (
+            <Box key={key} my={2}>
+              <JsonTextField
+                label={key}
+                defaultValue={JSON.stringify(value)}
+                onChange={(parsed) => {
+                  setLocalConfig({ ...localConfig, [key]: parsed });
+                }}
+                fullWidth
+                multiline
+                minRows={2}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Box>
+          );
         })}
       </DialogContent>
       <DialogActions>

@@ -264,7 +264,7 @@ export async function fetchWithRetries(
 
       logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
       if (i < maxRetries) {
-        const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
+        const waitTime = 2 ** i * (backoff + 1000 * Math.random());
         await sleep(waitTime);
       }
       lastErrorMessage = errorMessage;

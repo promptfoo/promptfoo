@@ -1,4 +1,3 @@
-import React, { useState } from 'react';
 import {
   Box,
   Button,
@@ -14,6 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useState } from 'react';
 import type { ScanOptions } from '../ModelAudit.types';
 
 interface AdvancedOptionsDialogProps {

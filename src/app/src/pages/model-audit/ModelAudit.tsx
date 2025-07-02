@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
 import { Security as SecurityIcon } from '@mui/icons-material';
 import {
@@ -12,12 +11,13 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import type { ScanPath, ScanOptions, ScanResult } from './ModelAudit.types';
+import React, { useEffect, useState } from 'react';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
 import InstallationCheck from './components/InstallationCheck';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
+import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
 
 export default function ModelAudit() {
@@ -56,7 +56,7 @@ export default function ModelAudit() {
 
   React.useEffect(() => {
     checkModelAuditInstalled();
-  }, []);
+  }, [checkModelAuditInstalled]);
 
   const handleAddPath = (path: ScanPath) => {
     setPaths([...paths, path]);

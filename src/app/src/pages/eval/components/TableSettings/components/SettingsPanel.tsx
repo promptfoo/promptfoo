@@ -1,4 +1,3 @@
-import React, { useState, useCallback } from 'react';
 import CodeIcon from '@mui/icons-material/Code';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
@@ -8,7 +7,8 @@ import TableRowsIcon from '@mui/icons-material/TableRows';
 import TextFormatIcon from '@mui/icons-material/TextFormat';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { Box, alpha } from '@mui/material';
+import { alpha, Box } from '@mui/material';
+import React, { useCallback, useState } from 'react';
 import { useResultsViewSettingsStore } from '../../store';
 import { tokens } from '../tokens';
 import EnhancedRangeSlider from './EnhancedRangeSlider';

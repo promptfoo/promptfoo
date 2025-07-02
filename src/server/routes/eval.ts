@@ -1,23 +1,23 @@
 import dedent from 'dedent';
-import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import type {
+  EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
   ResultsFile,
-  EvalTableDTO,
 } from '../../index';
 import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { updateResult, deleteEval, writeResultsToDatabase } from '../../util/database';
+import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 
@@ -240,7 +240,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
         ],
         vars: table.head.vars, // Assuming vars are the same
       },
-      body: table.body.map((row, index) => {
+      body: table.body.map((row, _index) => {
         // Find matching row in comparison table by test index
         const testIdx = row.testIdx;
         const matchingRows = comparisonTables

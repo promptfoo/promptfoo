@@ -1,4 +1,3 @@
-import React, { useState } from 'react';
 import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -8,6 +7,8 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { Assertion, AssertionType } from '@promptfoo/types';
+import type React from 'react';
+import { useState } from 'react';
 
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;
@@ -94,7 +95,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
                 value={assert.type}
                 options={assertTypes}
                 sx={{ minWidth: 200 }}
-                onChange={(event, newValue) => {
+                onChange={(_event, newValue) => {
                   const newType = newValue;
                   const newAsserts = asserts.map((a, i) =>
                     i === index ? { ...a, type: newType as AssertionType } : a,

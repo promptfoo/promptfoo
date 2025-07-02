@@ -1,4 +1,3 @@
-import React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -10,6 +9,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import React from 'react';
 
 const DEFAULT_LANGUAGES: Record<string, string> = {
   bn: 'Bengali',
@@ -133,7 +133,8 @@ export default function StrategyConfigDialog({
           />
         </>
       );
-    } else if (strategy === 'jailbreak') {
+    }
+    if (strategy === 'jailbreak') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -155,7 +156,8 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'multilingual') {
+    }
+    if (strategy === 'multilingual') {
       return (
         <>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -197,7 +199,8 @@ export default function StrategyConfigDialog({
           />
         </>
       );
-    } else if (strategy === 'retry') {
+    }
+    if (strategy === 'retry') {
       return (
         <>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -221,7 +224,8 @@ export default function StrategyConfigDialog({
           />
         </>
       );
-    } else if (strategy === 'best-of-n') {
+    }
+    if (strategy === 'best-of-n') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -274,7 +278,8 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'goat' || strategy === 'crescendo') {
+    }
+    if (strategy === 'goat' || strategy === 'crescendo') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -317,7 +322,8 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'pandamonium') {
+    }
+    if (strategy === 'pandamonium') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -359,7 +365,8 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'jailbreak:tree') {
+    }
+    if (strategy === 'jailbreak:tree') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -437,7 +444,8 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'gcg') {
+    }
+    if (strategy === 'gcg') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -459,7 +467,8 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'citation') {
+    }
+    if (strategy === 'citation') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -527,13 +536,12 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else {
-      return (
-        <Typography color="text.secondary">
-          No configuration options available for this strategy.
-        </Typography>
-      );
     }
+    return (
+      <Typography color="text.secondary">
+        No configuration options available for this strategy.
+      </Typography>
+    );
   };
 
   if (!strategy) {

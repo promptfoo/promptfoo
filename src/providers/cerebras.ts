@@ -33,7 +33,7 @@ export function createCerebrasProvider(
       // Cerebras API doesn't support both max_tokens and max_completion_tokens
       // If max_completion_tokens is set, use it and remove max_tokens
       if (body.max_completion_tokens) {
-        delete body.max_tokens;
+        body.max_tokens = undefined;
       }
 
       return { body, config };

@@ -55,7 +55,7 @@ export class PlinyPlugin extends RedteamPluginBase {
     return this.injectVar;
   }
 
-  getAssertions(prompt: string): Assertion[] {
+  getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -72,7 +72,7 @@ export class PlinyPlugin extends RedteamPluginBase {
 
     return selectedTexts.map((text) => ({
       vars: {
-        [this.injectVar]: ' ' + text,
+        [this.injectVar]: ` ${text}`,
       },
       assert: this.getAssertions(text),
       metadata: {

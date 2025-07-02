@@ -1,5 +1,4 @@
 import path from 'path';
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
@@ -12,10 +11,10 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -81,7 +80,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       if (typeof requiredModule === 'function') {
         return requiredModule;
-      } else if (
+      }
+      if (
         requiredModule &&
         typeof requiredModule === 'object' &&
         functionName &&
@@ -126,7 +126,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            callback = new Function(`return ${callbackStr}`)();
           }
 
           // Cache for future use
@@ -148,7 +148,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // Format the result
       if (result === undefined || result === null) {
         return '';
-      } else if (typeof result === 'object') {
+      }
+      if (typeof result === 'object') {
         try {
           return JSON.stringify(result);
         } catch (error) {
@@ -318,7 +319,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
     logger.debug(`Calling ${this.getApiUrl()} API: ${JSON.stringify(body)}`);
 
-    let data, status, statusText;
+    let data;
+    let status;
+    let statusText;
     let cached = false;
     try {
       ({ data, cached, status, statusText } = await fetchWithCache(

@@ -1,10 +1,10 @@
 import compression from 'compression';
 import cors from 'cors';
 import 'dotenv/config';
-import type { Request, Response } from 'express';
-import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
+import type { Request, Response } from 'express';
+import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
@@ -82,11 +82,11 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
     const apiUrl = getRemoteHealthUrl();
 
     if (apiUrl === null) {
@@ -107,7 +107,6 @@ export function createApp() {
   app.get(
     '/api/results',
     async (
-      // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       req: Request<{}, {}, {}, { datasetId?: string }>,
       res: Response<{ data: EvalSummary[] }>,
     ): Promise<void> => {
@@ -126,7 +125,7 @@ export function createApp() {
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
     if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
@@ -152,7 +151,7 @@ export function createApp() {
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
     res.json({ data: await getTestCases() });
   });
 
@@ -244,7 +243,7 @@ export function createApp() {
   app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
   // Handle client routing, return all requests to the app
-  app.get('/*splat', (req: Request, res: Response): void => {
+  app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
   return app;

@@ -1,8 +1,8 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import type { ProviderEmbeddingResponse } from '../../types';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import { getTokenUsage } from './util';
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
@@ -15,8 +15,8 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       input: text,
       model: this.modelName,
     };
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,

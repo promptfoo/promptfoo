@@ -20,7 +20,7 @@
         },
         "terminal.integrated.defaultProfile.linux": "zsh"
       },
-      "extensions": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint", "GitHub.copilot"]
+      "extensions": ["esbenp.prettier-vscode", "biomejs.biome", "GitHub.copilot"]
     }
   },
   "postCreateCommand": "npm ci && npm run build && npm link"

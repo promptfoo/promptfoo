@@ -107,7 +107,7 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
 
     // For other network errors, include more details including the cause if available
     const cause = 'cause' in error ? ` (Cause: ${error.cause})` : '';
-    const code = 'code' in error ? ` [${error['code']}]` : '';
+    const code = 'code' in error ? ` [${error.code}]` : '';
 
     logger.debug(
       `[CheckRemoteHealth] API health check failed: ${JSON.stringify({

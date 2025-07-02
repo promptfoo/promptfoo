@@ -1,14 +1,13 @@
-import React from 'react';
 import {
-  Paper,
   Box,
-  Typography,
   Checkbox,
   FormControlLabel,
+  Paper,
   Radio,
   RadioGroup,
+  Typography,
 } from '@mui/material';
-import { STRATEGY_PRESETS, PRESET_IDS } from './types';
+import { PRESET_IDS, STRATEGY_PRESETS } from './types';
 
 interface RecommendedOptionsProps {
   isMultiTurnEnabled: boolean;

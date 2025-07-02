@@ -34,18 +34,17 @@ export const handleGEval = async ({
       score: scoresSum / scores.length,
       reason: reasons.join('\n\n'),
     };
-  } else {
-    const resp = await matchesGEval(
-      renderedValue,
-      prompt || '',
-      outputString,
-      threshold,
-      test.options,
-    );
-
-    return {
-      assertion,
-      ...resp,
-    };
   }
+  const resp = await matchesGEval(
+    renderedValue,
+    prompt || '',
+    outputString,
+    threshold,
+    test.options,
+  );
+
+  return {
+    assertion,
+    ...resp,
+  };
 };

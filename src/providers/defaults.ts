@@ -13,8 +13,8 @@ import {
 } from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
-  DefaultGradingProvider as MistralGradingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
+  DefaultGradingProvider as MistralGradingProvider,
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';

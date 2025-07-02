@@ -8,8 +8,8 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
-import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
+import { VALID_SCHEMA_TYPES } from './types';
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
@@ -138,7 +138,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
 
   if (parseResult.success) {
     // Check for native Gemini system_instruction format
-    let systemInst = undefined;
+    let systemInst;
     if (typeof contents === 'object' && 'system_instruction' in contents) {
       systemInst = contents.system_instruction;
       // We need to modify the contents to remove system_instruction
@@ -205,30 +205,30 @@ export function maybeCoerceToGeminiFormat(contents: any): {
         const parts = item.content.map((contentItem: any) => {
           if (typeof contentItem === 'string') {
             return { text: contentItem };
-          } else if (contentItem.type === 'text') {
-            return { text: contentItem.text };
-          } else {
-            // Handle other content types if needed
-            return contentItem;
           }
+          if (contentItem.type === 'text') {
+            return { text: contentItem.text };
+          }
+          // Handle other content types if needed
+          return contentItem;
         });
         return {
           role: item.role as 'user' | 'model' | undefined,
           parts,
         };
-      } else if (typeof item.content === 'object') {
+      }
+      if (typeof item.content === 'object') {
         // Handle object content
         return {
           role: item.role as 'user' | 'model' | undefined,
           parts: [item.content],
         };
-      } else {
-        // Handle string content
-        return {
-          role: item.role as 'user' | 'model' | undefined,
-          parts: [{ text: item.content }],
-        };
       }
+      // Handle string content
+      return {
+        role: item.role as 'user' | 'model' | undefined,
+        parts: [{ text: item.content }],
+      };
     });
     coerced = true;
   } else if (typeof contents === 'object' && 'parts' in contents) {
@@ -292,7 +292,7 @@ export async function hasGoogleDefaultCredentials() {
 }
 
 export function getCandidate(data: GeminiResponseData) {
-  if (!(data && data.candidates && data.candidates.length === 1)) {
+  if (!(data?.candidates && data.candidates.length === 1)) {
     throw new Error('Expected one candidate in API response.');
   }
   const candidate = data.candidates[0];
@@ -312,12 +312,10 @@ export function formatCandidateContents(candidate: Candidate) {
     }
     if (is_text) {
       return output;
-    } else {
-      return candidate.content.parts;
     }
-  } else {
-    throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
+    return candidate.content.parts;
   }
+  throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
 }
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
@@ -481,20 +479,20 @@ function normalizeSchemaTypes(schemaNode: any): any {
   const newNode: { [key: string]: any } = {};
 
   for (const key in schemaNode) {
-    if (Object.prototype.hasOwnProperty.call(schemaNode, key)) {
+    if (Object.hasOwn(schemaNode, key)) {
       const value = schemaNode[key];
 
       if (key === 'type') {
         if (
           typeof value === 'string' &&
-          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
+          (VALID_SCHEMA_TYPES as readonly string[]).includes(value)
         ) {
           // Convert type value(s) to lowercase
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
           // Handle type arrays like ["STRING", "NULL"]
           newNode[key] = value.map((t) =>
-            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
+            typeof t === 'string' && (VALID_SCHEMA_TYPES as readonly string[]).includes(t)
               ? t.toLowerCase()
               : t,
           );
@@ -534,7 +532,7 @@ export function validateFunctionCall(
     } else if (Array.isArray(parsedOutput)) {
       // Vertex and AIS Format
       functionCalls = parsedOutput
-        .filter((obj) => Object.prototype.hasOwnProperty.call(obj, 'functionCall'))
+        .filter((obj) => Object.hasOwn(obj, 'functionCall'))
         .map((obj) => obj.functionCall);
     } else {
       throw new Error();

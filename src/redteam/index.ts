@@ -14,6 +14,7 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
+  BIAS_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
@@ -22,7 +23,6 @@ import {
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
-  BIAS_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -326,7 +326,7 @@ async function applyStrategies(
 export function getTestCount(
   strategy: RedteamStrategyObject,
   totalPluginTests: number,
-  strategies: RedteamStrategyObject[],
+  _strategies: RedteamStrategyObject[],
 ): number {
   // Basic strategy either keeps original count or removes all tests
   if (strategy.id === 'basic') {
@@ -613,7 +613,7 @@ export async function synthesize({
     if (mappingKey) {
       const mapping =
         ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
-        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
+        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((_m) =>
           plugin.id.startsWith(`${mappingKey}:`),
         );
       if (mapping) {

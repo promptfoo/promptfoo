@@ -1,7 +1,6 @@
-import React from 'react';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 
 interface PresetCardProps {
   name: string;

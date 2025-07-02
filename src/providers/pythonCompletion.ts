@@ -6,10 +6,10 @@ import { runPython } from '../python/pythonUtils';
 import type {
   ApiProvider,
   CallApiContextParams,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-  ProviderEmbeddingResponse,
-  ProviderClassificationResponse,
 } from '../types';
 import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
@@ -147,126 +147,125 @@ export class PythonProvider implements ApiProvider {
         }
       }
       return parsedResult;
-    } else {
-      if (context) {
-        // Remove properties not useful in Python
-        delete context.getCache;
-        delete context.logger;
-      }
-
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
-      // Prepare arguments for the Python script based on API type
-      const args =
-        apiType === 'call_api'
-          ? [prompt, optionsWithProcessedConfig, context]
-          : [prompt, optionsWithProcessedConfig];
-
-      logger.debug(
-        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
-
-      const functionName = this.functionName || apiType;
-      let result;
-
-      switch (apiType) {
-        case 'call_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
-          // Log result structure for debugging
-          logger.debug(
-            `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
-          );
-          if (result && 'output' in result) {
-            logger.debug(
-              `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
-            );
-          }
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('output' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_embedding_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('embedding' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_classification_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('classification' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        default:
-          throw new Error(`Unsupported apiType: ${apiType}`);
-      }
-
-      // Store result in cache if enabled and no errors
-      const hasError =
-        'error' in result &&
-        result.error !== null &&
-        result.error !== undefined &&
-        result.error !== '';
-
-      if (isCacheEnabled() && !hasError) {
-        logger.debug(`PythonProvider caching result: ${cacheKey}`);
-        await cache.set(cacheKey, JSON.stringify(result));
-      } else {
-        logger.debug(
-          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
-        );
-      }
-
-      // Set cached=false on fresh results
-      if (typeof result === 'object' && result !== null && apiType === 'call_api') {
-        logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
-        result.cached = false;
-      }
-
-      return result;
     }
+    if (context) {
+      // Remove properties not useful in Python
+      context.getCache = undefined;
+      context.logger = undefined;
+    }
+
+    // Create a new options object with processed file references included in the config
+    // This ensures any file:// references are replaced with their actual content
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: {
+        ...this.options?.config,
+        ...this.config, // Merge in the processed config containing resolved file references
+      },
+    };
+
+    // Prepare arguments for the Python script based on API type
+    const args =
+      apiType === 'call_api'
+        ? [prompt, optionsWithProcessedConfig, context]
+        : [prompt, optionsWithProcessedConfig];
+
+    logger.debug(
+      `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
+    );
+
+    const functionName = this.functionName || apiType;
+    let result;
+
+    switch (apiType) {
+      case 'call_api':
+        result = await runPython(absPath, functionName, args, {
+          pythonExecutable: this.config.pythonExecutable,
+        });
+
+        // Log result structure for debugging
+        logger.debug(
+          `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
+        );
+        if (result && 'output' in result) {
+          logger.debug(
+            `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
+          );
+        }
+
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          (!('output' in result) && !('error' in result))
+        ) {
+          throw new Error(
+            `The Python script \`${functionName}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
+              result,
+            )}`,
+          );
+        }
+        break;
+      case 'call_embedding_api':
+        result = await runPython(absPath, functionName, args, {
+          pythonExecutable: this.config.pythonExecutable,
+        });
+
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          (!('embedding' in result) && !('error' in result))
+        ) {
+          throw new Error(
+            `The Python script \`${functionName}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
+              result,
+            )}`,
+          );
+        }
+        break;
+      case 'call_classification_api':
+        result = await runPython(absPath, functionName, args, {
+          pythonExecutable: this.config.pythonExecutable,
+        });
+
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          (!('classification' in result) && !('error' in result))
+        ) {
+          throw new Error(
+            `The Python script \`${functionName}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
+              result,
+            )}`,
+          );
+        }
+        break;
+      default:
+        throw new Error(`Unsupported apiType: ${apiType}`);
+    }
+
+    // Store result in cache if enabled and no errors
+    const hasError =
+      'error' in result &&
+      result.error !== null &&
+      result.error !== undefined &&
+      result.error !== '';
+
+    if (isCacheEnabled() && !hasError) {
+      logger.debug(`PythonProvider caching result: ${cacheKey}`);
+      await cache.set(cacheKey, JSON.stringify(result));
+    } else {
+      logger.debug(
+        `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+      );
+    }
+
+    // Set cached=false on fresh results
+    if (typeof result === 'object' && result !== null && apiType === 'call_api') {
+      logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
+      result.cached = false;
+    }
+
+    return result;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {

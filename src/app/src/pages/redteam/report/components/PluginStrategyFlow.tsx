@@ -1,9 +1,10 @@
 // PluginStrategyFlow.tsx
-import React, { useMemo } from 'react';
+
 import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
-import { Sankey, Tooltip, ResponsiveContainer, Layer, Rectangle } from 'recharts';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import React, { useMemo } from 'react';
+import { Layer, Rectangle, ResponsiveContainer, Sankey, Tooltip } from 'recharts';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 
 interface TestRecord {
@@ -40,7 +41,7 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
     if (textRef.current) {
       setLabelWidth(textRef.current.getComputedTextLength() + 16);
     }
-  }, [label]);
+  }, []);
 
   return (
     <Layer key={`CustomNode${index}`}>
@@ -90,17 +91,16 @@ const interpolateColor = (ratio: number) => {
       .padStart(2, '0')}${Math.round(colors.red.b + (colors.yellow.b - colors.red.b) * t)
       .toString(16)
       .padStart(2, '0')}`;
-  } else {
-    // Interpolate from yellow to green
-    const t = (ratio - 0.5) * 2; // normalize to 0-1 range
-    return `#${Math.round(colors.yellow.r + (colors.green.r - colors.yellow.r) * t)
-      .toString(16)
-      .padStart(2, '0')}${Math.round(colors.yellow.g + (colors.green.g - colors.yellow.g) * t)
-      .toString(16)
-      .padStart(2, '0')}${Math.round(colors.yellow.b + (colors.green.b - colors.yellow.b) * t)
-      .toString(16)
-      .padStart(2, '0')}`;
   }
+  // Interpolate from yellow to green
+  const t = (ratio - 0.5) * 2; // normalize to 0-1 range
+  return `#${Math.round(colors.yellow.r + (colors.green.r - colors.yellow.r) * t)
+    .toString(16)
+    .padStart(2, '0')}${Math.round(colors.yellow.g + (colors.green.g - colors.yellow.g) * t)
+    .toString(16)
+    .padStart(2, '0')}${Math.round(colors.yellow.b + (colors.green.b - colors.yellow.b) * t)
+    .toString(16)
+    .padStart(2, '0')}`;
 };
 
 const CustomLink = (props: any) => {

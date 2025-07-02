@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
-import { ResultFailureReason, type EvaluateTable } from './types';
+import { type EvaluateTable, ResultFailureReason } from './types';
 import { ellipsize } from './util/text';
 
 export function generateTable(
@@ -31,7 +31,8 @@ export function generateTable(
         text = ellipsize(text, tableCellMaxLength);
         if (pass) {
           return chalk.green('[PASS] ') + text;
-        } else if (!pass) {
+        }
+        if (!pass) {
           // color everything red up until '---'
           return (
             chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +

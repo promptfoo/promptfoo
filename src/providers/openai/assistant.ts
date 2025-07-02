@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import type { Metadata } from 'openai/resources/shared';
 import path from 'path';
-import { OpenAiGenericProvider } from '.';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
@@ -10,7 +9,8 @@ import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
 import { failApiCall, getTokenUsage } from './util';
 
@@ -77,7 +77,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             logger.debug(`Successfully preloaded function callback '${name}' from file`);
           } else {
             // It's an inline function string
-            this.loadedFunctionCallbacks[name] = new Function('return ' + callbackStr)();
+            this.loadedFunctionCallbacks[name] = new Function(`return ${callbackStr}`)();
             logger.debug(`Successfully preloaded inline function callback '${name}'`);
           }
         } else if (typeof callback === 'function') {
@@ -116,7 +116,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
       if (typeof requiredModule === 'function') {
         return requiredModule;
-      } else if (
+      }
+      if (
         requiredModule &&
         typeof requiredModule === 'object' &&
         functionName &&
@@ -161,7 +162,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            callback = new Function(`return ${callbackStr}`)();
           }
 
           // Cache for future use
@@ -196,7 +197,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       // Format the result
       if (result === undefined || result === null) {
         return '';
-      } else if (typeof result === 'object') {
+      }
+      if (typeof result === 'object') {
         try {
           return JSON.stringify(result);
         } catch (error) {
@@ -217,7 +219,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(

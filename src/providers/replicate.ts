@@ -1,7 +1,7 @@
 import type { Cache } from 'cache-manager';
 import type Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiModerationProvider,
@@ -89,7 +89,7 @@ export class ReplicateProvider implements ApiProvider {
       prompt = this.config.prompt.prefix + prompt;
     }
     if (this.config.prompt?.suffix) {
-      prompt = prompt + this.config.prompt.suffix;
+      prompt += this.config.prompt.suffix;
     }
 
     let cache;
@@ -309,7 +309,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const cache = getCache();
     const cacheKey = `replicate:image:${safeJsonStringify({ context, prompt })}`;

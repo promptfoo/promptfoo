@@ -61,11 +61,10 @@ export async function doRemoteScoringWithPi(
         REQUEST_TIMEOUT_MS,
       );
       return convertPiResultToGradingResult(data, passThreshold);
-    } else {
-      throw new Error(
-        `Env var WITHPI_API_KEY must be set. Visit https://docs.withpi.ai for more information.`,
-      );
     }
+    throw new Error(
+      `Env var WITHPI_API_KEY must be set. Visit https://docs.withpi.ai for more information.`,
+    );
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);
   }

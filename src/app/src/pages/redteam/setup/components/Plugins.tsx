@@ -1,5 +1,3 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -16,9 +14,9 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
+import { alpha } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { alpha } from '@mui/material/styles';
 import {
   AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,
@@ -35,12 +33,14 @@ import {
   OWASP_API_TOP_10_MAPPING,
   OWASP_LLM_RED_TEAM_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
-  type Plugin,
   PLUGIN_PRESET_DESCRIPTIONS,
+  type Plugin,
   riskCategories,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
 import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
@@ -113,7 +113,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
-  }, []);
+  }, [recordEvent]);
 
   useEffect(() => {
     if (debouncedPlugins) {
@@ -344,7 +344,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       <Accordion
         key={category}
         expanded={isExpanded}
-        onChange={(event, expanded) => {
+        onChange={(_event, expanded) => {
           setExpandedCategories((prev) => {
             const newSet = new Set(prev);
             if (expanded) {
@@ -691,7 +691,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
           <Accordion
             expanded={expandedCategories.has('Custom Prompts')}
-            onChange={(event, expanded) => {
+            onChange={(_event, expanded) => {
               setExpandedCategories((prev) => {
                 const newSet = new Set(prev);
                 if (expanded) {
@@ -719,7 +719,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           </Accordion>
           <Accordion
             expanded={expandedCategories.has('Custom Policies')}
-            onChange={(event, expanded) => {
+            onChange={(_event, expanded) => {
               setExpandedCategories((prev) => {
                 const newSet = new Set(prev);
                 if (expanded) {

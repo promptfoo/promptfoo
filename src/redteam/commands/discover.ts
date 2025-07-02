@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { type Command } from 'commander';
+import type { Command } from 'commander';
 import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import * as fs from 'fs';
@@ -102,7 +102,7 @@ const isNullLike = (value: string | null | undefined): boolean => {
 };
 
 // Helper function to clean tools array
-const cleanTools = (tools: Array<any> | null | undefined): Array<any> => {
+const cleanTools = (tools: any[] | null | undefined): any[] => {
   if (!tools || !Array.isArray(tools)) {
     return [];
   }
@@ -212,7 +212,7 @@ export async function doTargetPurposeDiscovery(
         throw new Error(errorMessage);
       }
       // Should another question be asked?
-      else if (!done) {
+      if (!done) {
         invariant(question, 'Question should always be defined if `done` is falsy.');
 
         const renderedPrompt = prompt
@@ -311,7 +311,7 @@ export function discoverCommand(
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports
       // a single target at a time.
-      let target: ApiProvider | undefined = undefined;
+      let target: ApiProvider | undefined;
       // Fallback to the default config path:
 
       // If user provides a config, read the target from it:

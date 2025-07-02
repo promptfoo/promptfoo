@@ -9,7 +9,7 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
@@ -155,13 +155,12 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
-    } else {
-      return {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens || 0,
-        completion: data.usage.completion_tokens || 0,
-      };
     }
+    return {
+      total: data.usage.total_tokens,
+      prompt: data.usage.prompt_tokens || 0,
+      completion: data.usage.completion_tokens || 0,
+    };
   }
   return {};
 }
@@ -281,8 +280,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
     const url = `${this.getApiUrl()}/chat/completions`;
     logger.debug(`Mistral API request: ${url} ${JSON.stringify(params)}`);
 
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
 
     try {
       ({ data, cached } = (await fetchWithCache(

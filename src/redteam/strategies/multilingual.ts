@@ -1,5 +1,5 @@
 import async from 'async';
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
@@ -185,7 +185,7 @@ export async function translateBatch(
     } catch {}
 
     const codeBlockMatch = result.output.match(/```(?:json)?\s*({[\s\S]*?})\s*```/);
-    if (codeBlockMatch && codeBlockMatch[1]) {
+    if (codeBlockMatch?.[1]) {
       try {
         const jsonFromCodeBlock = JSON.parse(codeBlockMatch[1]);
         if (jsonFromCodeBlock && typeof jsonFromCodeBlock === 'object') {
@@ -221,7 +221,7 @@ export async function translateBatch(
     for (const lang of languages) {
       const pattern = new RegExp(`["']${lang}["']\\s*:\\s*["']([^"']*)["']`);
       const match = result.output.match(pattern);
-      if (match && match[1]) {
+      if (match?.[1]) {
         translations[lang] = match[1];
       }
     }

@@ -141,9 +141,8 @@ export class AssertionsResult {
             assertion: subResult.assertion || result.assertion,
           })),
         ];
-      } else {
-        return result;
       }
+      return result;
     });
 
     this.result = {

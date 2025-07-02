@@ -2,8 +2,8 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { URL } from 'url';
-import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
-import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
+import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
+import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
@@ -178,7 +178,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     'Content-Type': 'application/json',
   };
   if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+    headers.Authorization = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
   const totalResults = await evalRecord.getResultsCount();

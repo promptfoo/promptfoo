@@ -1,6 +1,5 @@
 import path from 'path';
-import { fetchWithCache } from '../../cache';
-import { getCache, isCacheEnabled } from '../../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
@@ -129,7 +128,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
             logger.debug(`Successfully preloaded function callback '${name}' from file`);
           } else {
             // It's an inline function string
-            this.loadedFunctionCallbacks[name] = new Function('return ' + callbackStr)();
+            this.loadedFunctionCallbacks[name] = new Function(`return ${callbackStr}`)();
             logger.debug(`Successfully preloaded inline function callback '${name}'`);
           }
         } else if (typeof callback === 'function') {
@@ -168,7 +167,8 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
       if (typeof requiredModule === 'function') {
         return requiredModule;
-      } else if (
+      }
+      if (
         requiredModule &&
         typeof requiredModule === 'object' &&
         functionName &&
@@ -213,7 +213,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            callback = new Function(`return ${callbackStr}`)();
           }
 
           // Cache for future use
@@ -239,7 +239,8 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       // Format the result
       if (result === undefined || result === null) {
         return '';
-      } else if (typeof result === 'object') {
+      }
+      if (typeof result === 'object') {
         try {
           return JSON.stringify(result);
         } catch (error) {
@@ -260,7 +261,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {

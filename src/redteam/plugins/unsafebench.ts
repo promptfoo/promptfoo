@@ -3,7 +3,7 @@ import { fetchWithProxy } from '../../fetch';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
 export const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';
@@ -227,11 +227,11 @@ class UnsafeBenchDatasetManager {
             if (imageStr.startsWith('http')) {
               // It's a URL, so we need to download and convert to base64
               return { recordToProcess: processRecord, imageUrl: imageStr };
-            } else {
-              // It's already a suitable string (base64 or other format)
-              return processRecord(imageStr);
             }
-          } else if (
+            // It's already a suitable string (base64 or other format)
+            return processRecord(imageStr);
+          }
+          if (
             typeof record.vars.image === 'object' &&
             record.vars.image !== null &&
             'src' in record.vars.image &&
@@ -241,10 +241,9 @@ class UnsafeBenchDatasetManager {
             const imageUrl = record.vars.image.src;
             logger.debug('[unsafebench] Found image URL from src property');
             return { recordToProcess: processRecord, imageUrl };
-          } else {
-            logger.warn('[unsafebench] Record has invalid image format, skipping');
-            return null;
           }
+          logger.warn('[unsafebench] Record has invalid image format, skipping');
+          return null;
         })
         .filter(
           (

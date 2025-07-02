@@ -37,7 +37,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({ onEvalSelected }) => {
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, []);
+  }, [handleOpen]);
 
   return (
     <EvalSelectorDialog

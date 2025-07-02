@@ -1,5 +1,3 @@
-import React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
@@ -26,11 +24,13 @@ import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { StackProps } from '@mui/material/Stack';
 import Stack from '@mui/material/Stack';
+import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/material/styles';
 import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
+import React from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -45,8 +45,8 @@ import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useTableStore, useResultsViewSettingsStore } from './store';
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
@@ -195,16 +195,13 @@ export default function ResultsView({
       setSearchParams((prev) => ({ ...prev, search: text }));
       setSearchText(text);
     },
-    [searchParams],
+    [setSearchParams],
   );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
-  const handleFailureFilterToggle = React.useCallback(
-    (columnId: string, checked: boolean) => {
-      setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
-    },
-    [setFailureFilter],
-  );
+  const handleFailureFilterToggle = React.useCallback((columnId: string, checked: boolean) => {
+    setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
+  }, []);
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
@@ -314,7 +311,7 @@ export default function ResultsView({
       ...head.vars.map((_, idx) => ({
         value: `Variable ${idx + 1}`,
         label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
+          head.vars[idx].length > 100 ? `${head.vars[idx].slice(0, 97)}...` : head.vars[idx]
         }`,
         group: 'Variables',
       })),
@@ -462,7 +459,7 @@ export default function ResultsView({
   const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
 
   const availableMetrics = React.useMemo(() => {
-    if (table && table.head?.prompts) {
+    if (table?.head?.prompts) {
       const metrics = new Set<string>();
       table.head.prompts.forEach((prompt) => {
         if (prompt.metrics?.namedScores) {
@@ -580,7 +577,7 @@ export default function ResultsView({
               {searchText && (
                 <Chip
                   size="small"
-                  label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
+                  label={`Search: ${searchText.length > 4 ? `${searchText.substring(0, 5)}...` : searchText}`}
                   onDelete={() => handleSearchTextChange('')}
                   sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                 />

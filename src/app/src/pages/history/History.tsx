@@ -1,31 +1,30 @@
-import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
+  GridCsvExportMenuItem,
+  type GridExportMenuItemProps,
+  GridPrintExportMenuItem,
   type GridRenderCellParams,
-  GridToolbarContainer,
   GridToolbarColumnsButton,
-  GridToolbarFilterButton,
+  GridToolbarContainer,
   GridToolbarDensitySelector,
   GridToolbarExportContainer,
-  GridCsvExportMenuItem,
-  GridPrintExportMenuItem,
+  GridToolbarFilterButton,
   GridToolbarQuickFilter,
-  type GridExportMenuItemProps,
-  useGridApiContext,
   gridFilteredSortedRowIdsSelector,
   gridVisibleColumnFieldsSelector,
+  useGridApiContext,
 } from '@mui/x-data-grid';
 import type { StandaloneEval } from '@promptfoo/util';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   const apiRef = useGridApiContext();
 
@@ -146,7 +145,7 @@ export default function History({
         flex: 3,
         minWidth: 200,
         // Ensure proper formatting for export:
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (_value: undefined, row: StandaloneEval) =>
           `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
           <>
@@ -163,7 +162,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => {
+        valueGetter: (_value: undefined, row: StandaloneEval) => {
           const testPassCount = row.metrics?.testPassCount ?? 0;
           const testFailCount = row.metrics?.testFailCount ?? 0;
           const totalCount = testPassCount + testFailCount;
@@ -177,7 +176,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => row.metrics?.testPassCount,
+        valueGetter: (_value: undefined, row: StandaloneEval) => row.metrics?.testPassCount,
         valueFormatter: (value: number) => value?.toString() ?? '-',
       },
       {
@@ -186,7 +185,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (_value: undefined, row: StandaloneEval) =>
           (row.metrics?.testFailCount ?? 0) + (row.metrics?.testErrorCount ?? 0),
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => {
           const failCount = params.row.metrics?.testFailCount ?? 0;
@@ -210,7 +209,7 @@ export default function History({
         flex: 1,
         type: 'number',
         minWidth: 120,
-        valueGetter: (value, row) => row.metrics?.score,
+        valueGetter: (_value, row) => row.metrics?.score,
         valueFormatter: (value: number) => value?.toFixed(2) ?? '-',
       },
     ],

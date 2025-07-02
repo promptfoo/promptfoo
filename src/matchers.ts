@@ -1,11 +1,10 @@
 import path from 'path';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
-import { getEnvString, getEnvBool } from './envars';
+import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
-  SELECT_BEST_PROMPT,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
@@ -13,10 +12,11 @@ import {
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
+  GEVAL_PROMPT_EVALUATE,
+  GEVAL_PROMPT_STEPS,
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
-  GEVAL_PROMPT_STEPS,
-  GEVAL_PROMPT_EVALUATE,
+  SELECT_BEST_PROMPT,
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -41,7 +41,7 @@ import type {
 import { maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
-import { extractJsonObjects, extractFirstJsonObject } from './util/json';
+import { extractFirstJsonObject, extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 
 class LlmRubricProviderError extends Error {
@@ -131,9 +131,8 @@ export async function getAndCheckProvider(
     if (defaultProvider) {
       logger.warn(`No provider of type ${type} found for '${checkName}', falling back to default`);
       return defaultProvider;
-    } else {
-      throw new Error(`No provider of type ${type} found for '${checkName}'`);
     }
+    throw new Error(`No provider of type ${type} found for '${checkName}'`);
   }
 
   let isValidProviderType = true;
@@ -152,11 +151,10 @@ export async function getAndCheckProvider(
         `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}', falling back to default`,
       );
       return defaultProvider;
-    } else {
-      throw new Error(
-        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
-      );
     }
+    throw new Error(
+      `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
+    );
   }
 
   return matchedProvider;
@@ -230,7 +228,9 @@ export async function matchesSimilarity(
   const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    (await getDefaultProviders()).embeddingProvider,
+    (
+      await getDefaultProviders()
+    ).embeddingProvider,
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
@@ -455,7 +455,7 @@ export async function renderLlmRubricPrompt(
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
-    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+    const parsed = JSON.parse(rubricPrompt, (_k, v) =>
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
@@ -663,7 +663,7 @@ export async function matchesFactuality(
   }
 
   // If JSON parsing succeeded and provided a valid category
-  if (jsonData && jsonData.category && typeof jsonData.category === 'string') {
+  if (jsonData?.category && typeof jsonData.category === 'string') {
     const option = jsonData.category.trim().toUpperCase();
 
     if (!/^[A-E]$/.test(option)) {
@@ -723,7 +723,7 @@ export async function matchesFactuality(
 
   let modelReason = responseText;
   const reasonMatch = responseText.match(/\)\s*(.*)/s);
-  if (reasonMatch && reasonMatch[1]) {
+  if (reasonMatch?.[1]) {
     modelReason = reasonMatch[1].trim();
   }
 
@@ -856,7 +856,7 @@ export async function matchesGEval(
   // Step 1: Get evaluation steps using renderLlmRubricPrompt
   const stepsRubricPrompt =
     typeof grading?.rubricPrompt === 'object' && !Array.isArray(grading?.rubricPrompt)
-      ? grading?.rubricPrompt?.['steps']
+      ? grading?.rubricPrompt?.steps
       : undefined;
   const stepsPrompt = await loadRubricPrompt(stepsRubricPrompt, GEVAL_PROMPT_STEPS);
   const promptSteps = await renderLlmRubricPrompt(stepsPrompt, { criteria });
@@ -882,7 +882,7 @@ export async function matchesGEval(
   // Step 2: Use steps to evaluate using renderLlmRubricPrompt
   const evalRubricPrompt =
     typeof grading?.rubricPrompt === 'object' && !Array.isArray(grading?.rubricPrompt)
-      ? grading?.rubricPrompt?.['evaluate']
+      ? grading?.rubricPrompt?.evaluate
       : undefined;
   const evalPrompt = await loadRubricPrompt(evalRubricPrompt, GEVAL_PROMPT_EVALUATE);
   const promptText = await renderLlmRubricPrompt(evalPrompt, {
@@ -1251,7 +1251,7 @@ export async function matchesSelectBest(
       rejectedPrediction: 0,
     },
   };
-  return outputs.map((output, index) => {
+  return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
         pass: true,
@@ -1259,14 +1259,13 @@ export async function matchesSelectBest(
         reason: `Output selected as the best: ${criteria}`,
         tokensUsed,
       };
-    } else {
-      return {
-        pass: false,
-        score: 0,
-        reason: `Output not selected: ${criteria}`,
-        tokensUsed,
-      };
     }
+    return {
+      pass: false,
+      score: 0,
+      reason: `Output not selected: ${criteria}`,
+      tokensUsed,
+    };
   });
 }
 

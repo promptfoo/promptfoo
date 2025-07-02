@@ -44,7 +44,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
     }
     let prompt = removePrefix(line, 'Prompt');
     // Handle numbered lists with various formats
-    prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+    prompt = prompt.replace(/^\d+[.)-]?\s*-?\s*/, '');
     // Handle quotes
     prompt = prompt.replace(/^["'](.*)["']$/, '$1');
     // Handle nested quotes

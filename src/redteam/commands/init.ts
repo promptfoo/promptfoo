@@ -1,5 +1,4 @@
-import checkbox from '@inquirer/checkbox';
-import { Separator } from '@inquirer/checkbox';
+import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
@@ -18,19 +17,18 @@ import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
-import { setupEnv, isRunningUnderNpx } from '../../util';
-import { BrowserBehavior } from '../../util/server';
-import { checkServerRunning, openBrowser } from '../../util/server';
+import { isRunningUnderNpx, setupEnv } from '../../util';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
-  type Plugin,
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  HARM_PLUGINS,
+  type Plugin,
   type Strategy,
   subCategoryDescriptions,
-  HARM_PLUGINS,
 } from '../constants';
 import { doGenerateRedteam } from './generate';
 
@@ -630,34 +628,33 @@ export async function redteamInit(directory: string | undefined) {
         `),
     );
     return;
-  } else {
-    recordOnboardingStep('offer generate');
-    const readyToGenerate = await confirm({
-      message: 'Are you ready to generate adversarial test cases?',
-      default: true,
-    });
-    recordOnboardingStep('choose generate', { value: readyToGenerate });
+  }
+  recordOnboardingStep('offer generate');
+  const readyToGenerate = await confirm({
+    message: 'Are you ready to generate adversarial test cases?',
+    default: true,
+  });
+  recordOnboardingStep('choose generate', { value: readyToGenerate });
 
-    if (readyToGenerate) {
-      await doGenerateRedteam({
-        purpose,
-        plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
-        cache: false,
-        write: false,
-        output: 'redteam.yaml',
-        defaultConfig: {},
-        defaultConfigPath: configPath,
-        numTests,
-      });
-    } else {
-      logger.info(
-        '\n' +
-          chalk.blue(
-            'To generate test cases and run your red team later, use the command: ' +
-              chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
-          ),
-      );
-    }
+  if (readyToGenerate) {
+    await doGenerateRedteam({
+      purpose,
+      plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
+      cache: false,
+      write: false,
+      output: 'redteam.yaml',
+      defaultConfig: {},
+      defaultConfigPath: configPath,
+      numTests,
+    });
+  } else {
+    logger.info(
+      '\n' +
+        chalk.blue(
+          'To generate test cases and run your red team later, use the command: ' +
+            chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
+        ),
+    );
   }
 }
 

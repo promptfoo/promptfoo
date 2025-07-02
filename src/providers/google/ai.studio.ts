@@ -3,10 +3,10 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import type {
   ApiProvider,
-  ProviderResponse,
   CallApiContextParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
+  ProviderResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
@@ -17,13 +17,13 @@ import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
+import type { GeminiResponseData } from './util';
 import {
-  loadFile,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  loadFile,
 } from './util';
-import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -104,7 +104,7 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -161,8 +161,8 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiUrl()}/v1beta3/models/${
@@ -307,7 +307,8 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
-    let output, candidate;
+    let output;
+    let candidate;
     try {
       candidate = getCandidate(data);
       output = formatCandidateContents(candidate);
@@ -409,8 +410,8 @@ export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
 
     logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
 
-    let data,
-      _cached = false;
+    let data;
+    let _cached = false;
     try {
       ({ data, cached: _cached } = await fetchWithCache(
         url,

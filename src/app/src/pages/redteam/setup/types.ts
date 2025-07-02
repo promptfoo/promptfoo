@@ -91,9 +91,7 @@ export interface BrowserStep {
   name?: string;
 }
 
-export interface UpdateConfigFunction {
-  (section: keyof Config, value: any): void;
-}
+export type UpdateConfigFunction = (section: keyof Config, value: any) => void;
 
 export interface RedTeamConfigHook {
   config: Config;

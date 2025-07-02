@@ -6,7 +6,7 @@ import { getDefaultShareViewBaseUrl } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
+import { createShareableUrl, getShareableUrl, hasEvalBeenShared, isSharingEnabled } from '../share';
 import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
 
@@ -83,7 +83,7 @@ export function shareCommand(program: Command) {
 
         try {
           const { defaultConfig: currentConfig } = await loadDefaultConfig();
-          if (currentConfig && currentConfig.sharing) {
+          if (currentConfig?.sharing) {
             eval_.config.sharing = currentConfig.sharing;
             logger.debug(
               `Applied sharing config from promptfooconfig.yaml: ${JSON.stringify(currentConfig.sharing)}`,

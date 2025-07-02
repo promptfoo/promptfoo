@@ -3,15 +3,15 @@ import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import {
-  type ApiProvider,
-  type AtomicTestCase,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
-  type GuardrailResponse,
-  type NunjucksFilterMap,
-  type Prompt,
-  type RedteamFileConfig,
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
@@ -106,7 +106,7 @@ export async function runRedteamConversation({
   let highestScore = 0;
   let bestResponse = '';
   let finalIteration = 0;
-  let bestInjectVar: string | undefined = undefined;
+  let bestInjectVar: string | undefined;
   let targetPrompt: string | null = null;
 
   const totalTokenUsage = {
@@ -150,7 +150,8 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let improvement, newInjectVar;
+    let improvement;
+    let newInjectVar;
     if (typeof redteamResp.output === 'string') {
       try {
         const parsed = extractFirstJsonObject<{
@@ -496,7 +497,7 @@ class RedteamIterativeProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<{

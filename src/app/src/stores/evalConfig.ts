@@ -4,9 +4,9 @@ import type {
   EvaluateOptions,
   EvaluateTestSuiteWithEvaluateOptions,
   ProviderOptions,
+  Scenario,
   TestCase,
   UnifiedConfig,
-  Scenario,
 } from '@promptfoo/types';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';

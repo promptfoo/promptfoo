@@ -85,11 +85,14 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
       .map((block) => {
         if (block.type === 'text') {
           return block.text;
-        } else if (block.type === 'thinking' && showThinking) {
+        }
+        if (block.type === 'thinking' && showThinking) {
           return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
+        }
+        if (block.type === 'redacted_thinking' && showThinking) {
           return `Redacted Thinking: ${block.data}`;
-        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
+        }
+        if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
           return JSON.stringify(block);
         }
         return '';
@@ -202,13 +205,12 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     const total_tokens = data.usage.input_tokens + data.usage.output_tokens;
     if (cached) {
       return { cached: total_tokens, total: total_tokens };
-    } else {
-      return {
-        total: total_tokens,
-        prompt: data.usage.input_tokens || 0,
-        completion: data.usage.output_tokens || 0,
-      };
     }
+    return {
+      total: total_tokens,
+      prompt: data.usage.input_tokens || 0,
+      completion: data.usage.output_tokens || 0,
+    };
   }
   return {};
 }

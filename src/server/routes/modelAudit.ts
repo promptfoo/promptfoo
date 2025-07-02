@@ -1,7 +1,6 @@
-import { exec } from 'child_process';
-import { spawn } from 'child_process';
-import { Router } from 'express';
+import { exec, spawn } from 'child_process';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -13,7 +12,7 @@ const execAsync = promisify(exec);
 export const modelAuditRouter = Router();
 
 // Check if modelaudit is installed
-modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Promise<void> => {
+modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
     await execAsync('python -c "import modelaudit"');
     res.json({ installed: true, cwd: process.cwd() });

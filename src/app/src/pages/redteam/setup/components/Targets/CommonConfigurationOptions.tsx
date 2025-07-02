@@ -1,4 +1,3 @@
-import React from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
@@ -7,6 +6,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { ProviderOptions } from '@promptfoo/types';
+import React from 'react';
 import ExtensionEditor from './ExtensionEditor';
 import 'prismjs/themes/prism.css';
 
@@ -46,7 +46,11 @@ const CommonConfigurationOptions: React.FC<CommonConfigurationOptionsProps> = ({
         <AccordionDetails>
           <Typography variant="body1" sx={{ mb: 2 }}>
             Add a delay (ms) between requests to simulate a real user. See{' '}
-            <a href="https://www.promptfoo.dev/docs/providers/http/#delay" target="_blank">
+            <a
+              href="https://www.promptfoo.dev/docs/providers/http/#delay"
+              target="_blank"
+              rel="noopener"
+            >
               docs
             </a>{' '}
             for more details.

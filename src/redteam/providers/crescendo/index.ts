@@ -321,14 +321,14 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         if (lastResponse.sessionId && this.stateful) {
-          vars['sessionId'] = lastResponse.sessionId;
+          vars.sessionId = lastResponse.sessionId;
           if (!context) {
             context = {
               vars: { ...vars, sessionId: lastResponse.sessionId },
               prompt,
             };
           }
-          context.vars['sessionId'] = lastResponse.sessionId;
+          context.vars.sessionId = lastResponse.sessionId;
         }
 
         // Check if the target is asking a blocking question that needs an answer to proceed
@@ -374,9 +374,9 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           lastResponse = unblockingResponse;
           if (lastResponse.sessionId && this.stateful) {
-            vars['sessionId'] = lastResponse.sessionId;
+            vars.sessionId = lastResponse.sessionId;
             if (context) {
-              context.vars['sessionId'] = lastResponse.sessionId;
+              context.vars.sessionId = lastResponse.sessionId;
             }
           }
         }
@@ -663,7 +663,7 @@ export class CrescendoProvider implements ApiProvider {
     vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
-    roundNum: number,
+    _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<TargetResponse> {
@@ -847,7 +847,7 @@ export class CrescendoProvider implements ApiProvider {
     return this.memory.duplicateConversationExcludingLastTurn(conversationId);
   }
 
-  private logChatHistory(conversationId: string, lastMessageOnly = false): void {
+  private logChatHistory(conversationId: string, _lastMessageOnly = false): void {
     const messages = this.memory.getConversation(conversationId);
     logger.debug(`[Crescendo] Memory for conversation ${conversationId}:`);
     for (const message of messages) {

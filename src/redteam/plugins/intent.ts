@@ -33,7 +33,7 @@ export class IntentPlugin extends RedteamPluginBase {
     return '';
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     const assertions: Assertion[] = [
       {
         type: PLUGIN_ID,
@@ -43,7 +43,7 @@ export class IntentPlugin extends RedteamPluginBase {
     return assertions;
   }
 
-  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
+  async generateTests(_n: number, delayMs: number): Promise<TestCase[]> {
     // Instead of generating new prompts, we create one test case per intent
     const testCases: TestCase[] = [];
 

@@ -49,7 +49,7 @@ export interface Schema {
 
 type SchemaType = Schema['type']; // Create a type alias for convenience
 
-export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
+export const VALID_SCHEMA_TYPES: readonly SchemaType[] = [
   'TYPE_UNSPECIFIED',
   'STRING',
   'NUMBER',

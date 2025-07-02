@@ -1,4 +1,3 @@
-import React from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpIcon from '@mui/icons-material/Help';
 import {
@@ -13,6 +12,7 @@ import {
 } from '@mui/material';
 import Link from '@mui/material/Link';
 import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
+import React from 'react';
 
 interface ValidationError {
   message: string;
@@ -83,7 +83,7 @@ export default function ExtensionEditor({
 
       onExtensionsChange([`${FILE_PROTOCOL_PREFIX}${newValue}`]);
     },
-    [onExtensionsChange],
+    [onExtensionsChange, onValidationChange],
   );
 
   // Cleanup timeout on unmount

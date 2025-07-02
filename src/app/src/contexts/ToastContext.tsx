@@ -1,5 +1,5 @@
-import React, { useState, type ReactNode } from 'react';
-import { Snackbar, Alert, type AlertColor } from '@mui/material';
+import { Alert, type AlertColor, Snackbar } from '@mui/material';
+import React, { type ReactNode, useState } from 'react';
 import { ToastContext } from './ToastContextDef';
 
 export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -13,7 +13,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setOpen(true);
   };
 
-  const handleClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+  const handleClose = (_event?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
       return;
     }

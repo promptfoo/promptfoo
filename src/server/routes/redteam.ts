@@ -1,5 +1,5 @@
-import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
@@ -95,7 +95,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   res.json({ id });
 });
 
-redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void> => {
+redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
   if (!currentJobId) {
     res.status(400).json({ error: 'No job currently running' });
     return;
@@ -163,7 +163,7 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
   }
 });
 
-redteamRouter.get('/status', async (req: Request, res: Response): Promise<void> => {
+redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void> => {
   res.json({
     hasRunningJob: currentJobId !== null,
     jobId: currentJobId,

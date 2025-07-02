@@ -4,22 +4,21 @@ import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { readProviderPromptMap, processPrompts } from './prompts';
+import { processPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
-import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
+import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
 import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
 import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import { readTests } from './util/testCaseReader';
 
-export * from './types';
-
 export { generateTable } from './table';
+export * from './types';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {

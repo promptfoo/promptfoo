@@ -18,7 +18,6 @@ import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import {
-  UnifiedConfigSchema,
   type CommandLineOptions,
   type Prompt,
   type ProviderOptions,
@@ -28,6 +27,7 @@ import {
   type TestCase,
   type TestSuite,
   type UnifiedConfig,
+  UnifiedConfigSchema,
 } from '../../types';
 import { isRunningUnderNpx, readFilters } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -55,7 +55,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   const extractFunctionParameters = (functions: { parameters?: object }[]) => {
     return functions.map((func) => {
       const { parameters } = func;
-      delete func.parameters;
+      func.parameters = undefined;
       return { parameters };
     });
   };
@@ -64,7 +64,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
     return tools.map((tool) => {
       const { parameters } = tool.function || {};
       if (tool.function?.parameters) {
-        delete tool.function.parameters;
+        tool.function.parameters = undefined;
       }
       return { parameters };
     });
@@ -191,19 +191,19 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   if (ret.targets) {
     logger.debug(`Rewriting config.targets to config.providers`);
     ret.providers = ret.targets;
-    delete ret.targets;
+    ret.targets = undefined;
   }
   if (ret.plugins) {
     logger.debug(`Rewriting config.plugins to config.redteam.plugins`);
     ret.redteam = ret.redteam || {};
     ret.redteam.plugins = ret.plugins;
-    delete ret.plugins;
+    ret.plugins = undefined;
   }
   if (ret.strategies) {
     logger.debug(`Rewriting config.strategies to config.redteam.strategies`);
     ret.redteam = ret.redteam || {};
     ret.redteam.strategies = ret.strategies;
-    delete ret.strategies;
+    ret.strategies = undefined;
   }
   if (!ret.prompts) {
     logger.debug(`Setting default prompt because there is no \`prompts\` field`);
@@ -344,22 +344,22 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
     if (typeof relativePath === 'string') {
       if (relativePath.startsWith('file://')) {
-        relativePath =
-          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+        relativePath = `file://${path.resolve(path.dirname(configPath), relativePath.slice('file://'.length))}`;
       }
       return relativePath;
-    } else if (typeof relativePath === 'object' && relativePath.id) {
+    }
+    if (typeof relativePath === 'object' && relativePath.id) {
       if (relativePath.id.startsWith('file://')) {
         relativePath.id =
           'file://' +
           path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
       }
       return relativePath;
-    } else if (PromptSchema.safeParse(relativePath).success) {
-      return relativePath;
-    } else {
-      throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
     }
+    if (PromptSchema.safeParse(relativePath).success) {
+      return relativePath;
+    }
+    throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
   };
 
   const seenPrompts = new Set<string | Prompt>();

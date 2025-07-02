@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
+import { useEffect, useState } from 'react';
 import TraceTimeline from './TraceTimeline';
 
 interface TraceViewProps {

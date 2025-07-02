@@ -65,7 +65,7 @@ export class AnthropicGenericProvider implements ApiProvider {
   /**
    * Base implementation - should be overridden by specific provider implementations
    */
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented: callApi must be implemented by subclasses');
   }
 }

@@ -1,5 +1,5 @@
+import { alpha, Box, Paper, Stack, Typography, useTheme } from '@mui/material';
 import React from 'react';
-import { Box, Typography, Stack, useTheme, Paper, alpha } from '@mui/material';
 import { tokens } from '../tokens';
 
 interface SettingsSectionProps {

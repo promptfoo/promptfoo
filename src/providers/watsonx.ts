@@ -1,8 +1,8 @@
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
-import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
+import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 import { z } from 'zod';
-import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -64,7 +64,7 @@ const TIER_PRICING = {
 };
 
 function convertResponse(response: z.infer<typeof TextGenResponseSchema>): ProviderResponse {
-  const firstResult = response.results && response.results[0];
+  const firstResult = response.results?.[0];
 
   if (!firstResult) {
     throw new Error('No results returned from text generation API.');
@@ -247,7 +247,8 @@ export class WatsonXProvider implements ApiProvider {
     if (authType === 'iam' && apiKey) {
       logger.info('Using IAM Authentication based on WATSONX_AI_AUTH_TYPE.');
       return new IamAuthenticator({ apikey: apiKey });
-    } else if (authType === 'bearertoken' && bearerToken) {
+    }
+    if (authType === 'bearertoken' && bearerToken) {
       logger.info('Using Bearer Token Authentication based on WATSONX_AI_AUTH_TYPE.');
       return new BearerTokenAuthenticator({ bearerToken });
     }
@@ -255,14 +256,14 @@ export class WatsonXProvider implements ApiProvider {
     if (apiKey) {
       logger.info('Using IAM Authentication.');
       return new IamAuthenticator({ apikey: apiKey });
-    } else if (bearerToken) {
+    }
+    if (bearerToken) {
       logger.info('Using Bearer Token Authentication.');
       return new BearerTokenAuthenticator({ bearerToken });
-    } else {
-      throw new Error(
-        'Authentication credentials not provided. Please set either `WATSONX_AI_APIKEY` for IAM Authentication or `WATSONX_AI_BEARER_TOKEN` for Bearer Token Authentication.',
-      );
     }
+    throw new Error(
+      'Authentication credentials not provided. Please set either `WATSONX_AI_APIKEY` for IAM Authentication or `WATSONX_AI_BEARER_TOKEN` for Bearer Token Authentication.',
+    );
   }
 
   getProjectId(): string {

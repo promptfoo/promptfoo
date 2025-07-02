@@ -1,5 +1,3 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
@@ -13,21 +11,23 @@ import Select from '@mui/material/Select';
 import { useTheme } from '@mui/material/styles';
 import type { VisibilityState } from '@tanstack/table-core';
 import {
-  Chart,
   BarController,
-  LineController,
-  ScatterController,
-  CategoryScale,
-  LinearScale,
   BarElement,
+  CategoryScale,
+  Chart,
+  Colors,
+  LinearScale,
+  LineController,
   LineElement,
   PointElement,
+  ScatterController,
   Tooltip,
-  Colors,
   type TooltipItem,
 } from 'chart.js';
+import React, { useEffect, useRef, useState } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
 import { useTableStore } from './store';
-import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from './types';
+import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
@@ -96,7 +96,7 @@ function HistogramChart({ table }: ChartProps) {
       Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
     );
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
+    const datasets = table.head.prompts.map((_prompt, promptIdx) => {
       const scores = table.body
         .map((row) => row.outputs[promptIdx]?.score)
         .filter((score) => typeof score === 'number' && !Number.isNaN(score));
@@ -164,7 +164,7 @@ function PassRateChart({ table }: ChartProps) {
       passRateChartInstance.current.destroy();
     }
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
+    const datasets = table.head.prompts.map((_prompt, promptIdx) => {
       const outputs = table.body
         .map((row) => row.outputs[promptIdx])
         .filter((output) => output != null);
@@ -290,10 +290,10 @@ function ScatterChart({ table }: ChartProps) {
                 let prompt1Text = row.outputs[0]?.text || 'No output';
                 let prompt2Text = row.outputs[1]?.text || 'No output';
                 if (prompt1Text.length > 30) {
-                  prompt1Text = prompt1Text.substring(0, 30) + '...';
+                  prompt1Text = `${prompt1Text.substring(0, 30)}...`;
                 }
                 if (prompt2Text.length > 30) {
-                  prompt2Text = prompt2Text.substring(0, 30) + '...';
+                  prompt2Text = `${prompt2Text.substring(0, 30)}...`;
                 }
                 return `Output 1: ${prompt1Text}\nOutput 2: ${prompt2Text}`;
               },
@@ -343,7 +343,7 @@ function ScatterChart({ table }: ChartProps) {
         <DialogContent>
           <FormControl sx={{ m: 1, minWidth: 120 }}>
             <Select value={xAxisPrompt} onChange={(e) => setXAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
+              {table.head.prompts.map((_prompt, idx) => (
                 <MenuItem key={idx} value={idx}>
                   Prompt {idx + 1}
                 </MenuItem>
@@ -352,7 +352,7 @@ function ScatterChart({ table }: ChartProps) {
           </FormControl>
           <FormControl sx={{ m: 1, minWidth: 120 }}>
             <Select value={yAxisPrompt} onChange={(e) => setYAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
+              {table.head.prompts.map((_prompt, idx) => (
                 <MenuItem key={idx} value={idx}>
                   Prompt {idx + 1}
                 </MenuItem>
@@ -584,7 +584,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
           },
         },
       },
-      onClick: (event: any, elements: any) => {
+      onClick: (_event: any, elements: any) => {
         if (elements.length > 0) {
           const index = elements[0].index;
           window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');

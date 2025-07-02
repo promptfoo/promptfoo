@@ -1,4 +1,3 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -22,12 +21,13 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Pagination from '@mui/material/Pagination';
 import Paper from '@mui/material/Paper';
+import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 import { parse } from 'csv-parse/browser/esm/sync';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 
@@ -134,7 +134,7 @@ export default function CustomIntentSection() {
         }
       };
     },
-    [config.plugins, updatePlugins],
+    [config.plugins, updatePlugins, updateTimeout],
   );
 
   useEffect(() => {
@@ -322,22 +322,25 @@ export default function CustomIntentSection() {
     setIsDragOver(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    const supportedFile = files.find(
-      (file) =>
-        file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.json'),
-    );
+      const files = Array.from(e.dataTransfer.files);
+      const supportedFile = files.find(
+        (file) =>
+          file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.json'),
+      );
 
-    if (supportedFile) {
-      handleFileUpload(supportedFile);
-    } else {
-      setUploadError('Please drop a .csv or .json file');
-    }
-  }, []);
+      if (supportedFile) {
+        handleFileUpload(supportedFile);
+      } else {
+        setUploadError('Please drop a .csv or .json file');
+      }
+    },
+    [handleFileUpload],
+  );
 
   const hasEmptyArrayItems = (array: (string | string[])[] | undefined) => {
     return array?.some((item) => (typeof item === 'string' ? item.trim() === '' : false)) ?? false;

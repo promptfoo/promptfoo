@@ -47,9 +47,9 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
     const body = {
       email: getUserEmail(),
@@ -137,7 +137,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const body = {
       jsonOnly: this.options.jsonOnly,
@@ -207,8 +207,8 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const messages = JSON.parse(prompt);
     const body = {

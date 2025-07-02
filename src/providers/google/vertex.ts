@@ -9,8 +9,8 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
-  ProviderResponse,
   ProviderEmbeddingResponse,
+  ProviderResponse,
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -22,18 +22,18 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
-  GeminiResponseData,
   GeminiErrorResponse,
   GeminiFormat,
+  GeminiResponseData,
   Palm2ApiResponse,
 } from './util';
 import {
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
   loadFile,
   mergeParts,
-  formatCandidateContents,
 } from './util';
 
 class VertexGenericProvider implements ApiProvider {
@@ -111,7 +111,7 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -139,15 +139,17 @@ export class VertexChatProvider extends VertexGenericProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
-    } else if (this.modelName.includes('gemini')) {
+    }
+    if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt, context);
-    } else if (this.modelName.includes('llama')) {
+    }
+    if (this.modelName.includes('llama')) {
       return this.callLlamaApi(prompt, context);
     }
     return this.callPalm2Api(prompt);
   }
 
-  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [
       {
         role: 'user',
@@ -209,7 +211,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       logger.debug(`Claude API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const error = err as GaxiosError;
-      if (error.response && error.response.data) {
+      if (error.response?.data) {
         logger.debug(`Claude API error:\n${JSON.stringify(error.response.data)}`);
         return {
           error: `API call error: ${JSON.stringify(error.response.data)}`,
@@ -334,12 +336,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
       } catch (err) {
         const geminiError = err as GaxiosError;
-        if (
-          geminiError.response &&
-          geminiError.response.data &&
-          geminiError.response.data[0] &&
-          geminiError.response.data[0].error
-        ) {
+        if (geminiError.response?.data?.[0]?.error) {
           const errorDetails = geminiError.response.data[0].error;
           const code = errorDetails.code;
           const message = errorDetails.message;
@@ -374,19 +371,22 @@ export class VertexChatProvider extends VertexGenericProvider {
               return { output: finishReason };
             }
             return { error: finishReason };
-          } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+          }
+          if (candidate.finishReason && candidate.finishReason !== 'STOP') {
             // e.g. MALFORMED_FUNCTION_CALL
             return {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
             };
-          } else if (datum.promptFeedback?.blockReason) {
+          }
+          if (datum.promptFeedback?.blockReason) {
             const blockReason = `Content was blocked due to safety settings: ${datum.promptFeedback.blockReason}`;
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.
               return { output: blockReason };
             }
             return { error: blockReason };
-          } else if (candidate.content?.parts) {
+          }
+          if (candidate.content?.parts) {
             output = mergeParts(output, formatCandidateContents(candidate));
           } else {
             return {
@@ -576,7 +576,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
-  async callLlamaApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callLlamaApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     // Validate region for Llama models (only available in us-central1)
     const region = this.getRegion();
     if (region !== 'us-central1') {
@@ -685,7 +685,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       logger.debug(`Llama API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const error = err as GaxiosError;
-      if (error.response && error.response.data) {
+      if (error.response?.data) {
         logger.debug(`Llama API error:\n${JSON.stringify(error.response.data)}`);
         return {
           error: `API call error: ${JSON.stringify(error.response.data)}`,
@@ -769,7 +769,8 @@ export class VertexChatProvider extends VertexGenericProvider {
 
       if (typeof requiredModule === 'function') {
         return requiredModule;
-      } else if (
+      }
+      if (
         requiredModule &&
         typeof requiredModule === 'object' &&
         functionName &&
@@ -810,7 +811,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            callback = new Function(`return ${callbackStr}`)();
           }
 
           // Cache for future use

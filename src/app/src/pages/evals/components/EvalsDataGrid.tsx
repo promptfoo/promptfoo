@@ -1,21 +1,21 @@
-import React, { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
 import { callApi } from '@app/utils/api';
-import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
+import { Box, CircularProgress, Link, Paper, Typography, useTheme } from '@mui/material';
 import {
   DataGrid,
   type GridColDef,
-  GridToolbarContainer,
-  GridToolbarColumnsButton,
-  GridToolbarFilterButton,
-  GridToolbarDensitySelector,
-  GridToolbarQuickFilter,
-  type GridRowSelectionModel,
-  type GridRenderCellParams,
-  GridToolbarExportContainer,
   GridCsvExportMenuItem,
+  type GridRenderCellParams,
+  type GridRowSelectionModel,
+  GridToolbarColumnsButton,
+  GridToolbarContainer,
+  GridToolbarDensitySelector,
+  GridToolbarExportContainer,
+  GridToolbarFilterButton,
+  GridToolbarQuickFilter,
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 type Eval = {
   createdAt: number;
@@ -201,7 +201,7 @@ export default function EvalsDataGrid({
           field: 'createdAt',
           headerName: 'Created',
           flex: 1,
-          valueGetter: (value: Eval['createdAt'], row: Eval) => {
+          valueGetter: (value: Eval['createdAt'], _row: Eval) => {
             return new Date(value);
           },
           valueFormatter: (value: Eval['createdAt']) => new Date(value).toLocaleString(),
@@ -248,7 +248,7 @@ export default function EvalsDataGrid({
           flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [],
+    [focusedEvalId, onEvalSelected],
   );
 
   return (

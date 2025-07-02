@@ -1,9 +1,9 @@
-import cacheManager from 'cache-manager';
 import type { Cache } from 'cache-manager';
+import cacheManager from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
 import fs from 'fs';
 import path from 'path';
-import { getEnvBool, getEnvString, getEnvInt } from './envars';
+import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
@@ -79,7 +79,7 @@ export async function fetchWithCache<T = any>(
   }
 
   const copy = Object.assign({}, options);
-  delete copy.headers;
+  copy.headers = undefined;
   const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
   const cache = await getCache();
 

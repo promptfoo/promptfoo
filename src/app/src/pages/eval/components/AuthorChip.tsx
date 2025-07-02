@@ -1,4 +1,3 @@
-import React, { type KeyboardEvent, useState, useEffect } from 'react';
 import EditIcon from '@mui/icons-material/Edit';
 import EmailIcon from '@mui/icons-material/Email';
 import InfoIcon from '@mui/icons-material/Info';
@@ -10,6 +9,7 @@ import Popover from '@mui/material/Popover';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import React, { type KeyboardEvent, useEffect, useState } from 'react';
 
 interface AuthorChipProps {
   author: string | null;

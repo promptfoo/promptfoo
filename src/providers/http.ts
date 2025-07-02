@@ -4,7 +4,7 @@ import http from 'http';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
-import { fetchWithCache, type FetchWithCacheResult } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -67,7 +67,7 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     // Replace the original URL in the first line
     rawRequest = rawRequest.replace(
       firstLine,
-      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ` ${protocol}` : ''}`,
     );
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
@@ -210,7 +210,8 @@ export async function createSessionParser(
     throw new Error(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
-  } else if (typeof parser === 'string') {
+  }
+  if (typeof parser === 'string') {
     return (data: SessionParserData) => {
       const trimmedParser = parser.trim();
 
@@ -239,9 +240,8 @@ export async function createTransformResponse(
         const result = parser(data, text, context);
         if (typeof result === 'object') {
           return result;
-        } else {
-          return { output: result };
         }
+        return { output: result };
       } catch (err) {
         logger.error(
           `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
@@ -269,7 +269,8 @@ export async function createTransformResponse(
     throw new Error(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
-  } else if (typeof parser === 'string') {
+  }
+  if (typeof parser === 'string') {
     return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
@@ -336,13 +337,15 @@ export function processJsonBody(
     const processNestedValues = (obj: any): any => {
       if (Array.isArray(obj)) {
         return obj.map(processNestedValues);
-      } else if (typeof obj === 'object' && obj !== null) {
+      }
+      if (typeof obj === 'object' && obj !== null) {
         const result: Record<string, any> = {};
         for (const [key, value] of Object.entries(obj)) {
           result[key] = processNestedValues(value);
         }
         return result;
-      } else if (typeof obj === 'string') {
+      }
+      if (typeof obj === 'string') {
         try {
           return JSON.parse(obj);
         } catch {
@@ -405,7 +408,7 @@ export function processTextBody(body: string, vars: Record<string, any>): string
 }
 
 function parseRawRequest(input: string) {
-  const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  const adjusted = `${input.trim().replace(/\n/g, '\r\n')}\r\n\r\n`;
   // If the injectVar is in a query param, we need to encode the URL in the first line
   const encoded = urlEncodeRawRequestPath(adjusted);
   try {
@@ -529,7 +532,7 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status: number) => true;
+    return (_status: number) => true;
   }
 
   if (typeof validator === 'function') {
@@ -718,7 +721,8 @@ export class HttpProvider implements ApiProvider {
     }
     if (typeof body === 'object' && body !== null) {
       return { 'content-type': 'application/json' };
-    } else if (typeof body === 'string') {
+    }
+    if (typeof body === 'string') {
       return { 'content-type': 'application/x-www-form-urlencoded' };
     }
     return {};
@@ -948,11 +952,11 @@ export class HttpProvider implements ApiProvider {
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     const url = new URL(
       parsedRequest.url,
-      `${protocol}://${parsedRequest.headers['host']}`,
+      `${protocol}://${parsedRequest.headers.host}`,
     ).toString();
 
     // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
-    delete parsedRequest.headers['content-length'];
+    parsedRequest.headers['content-length'] = undefined;
 
     logger.debug(
       `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,

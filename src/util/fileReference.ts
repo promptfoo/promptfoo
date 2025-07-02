@@ -34,29 +34,32 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
       logger.debug(`Loading JSON file: ${resolvedPath}`);
       const content = await fs.promises.readFile(resolvedPath, 'utf8');
       return JSON.parse(content);
-    } else if (extension === '.yaml' || extension === '.yml') {
+    }
+    if (extension === '.yaml' || extension === '.yml') {
       logger.debug(`Loading YAML file: ${resolvedPath}`);
       const content = await fs.promises.readFile(resolvedPath, 'utf8');
       return yaml.load(content);
-    } else if (isJavascriptFile(resolvedPath)) {
+    }
+    if (isJavascriptFile(resolvedPath)) {
       logger.debug(`Loading JavaScript file: ${resolvedPath}`);
       const mod = await importModule(resolvedPath, functionName);
       return typeof mod === 'function' ? await mod() : mod;
-    } else if (extension === '.py') {
+    }
+    if (extension === '.py') {
       logger.debug(
         `Loading Python file: ${resolvedPath}, function: ${functionName || 'get_config'}`,
       );
       const fnName = functionName || 'get_config';
       const result = await runPython(resolvedPath, fnName, []);
       return result;
-    } else if (extension === '.txt' || extension === '.md' || extension === '') {
+    }
+    if (extension === '.txt' || extension === '.md' || extension === '') {
       // For text files, just return the content as a string
       logger.debug(`Loading text file: ${resolvedPath}`);
       return await fs.promises.readFile(resolvedPath, 'utf8');
-    } else {
-      logger.debug(`Unsupported file extension: ${extension}`);
-      throw new Error(`Unsupported file extension: ${extension}`);
     }
+    logger.debug(`Unsupported file extension: ${extension}`);
+    throw new Error(`Unsupported file extension: ${extension}`);
   } catch (error) {
     logger.error(`Error loading file reference ${fileRef}: ${error}`);
     throw error;

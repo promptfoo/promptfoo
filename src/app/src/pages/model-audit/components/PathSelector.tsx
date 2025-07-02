@@ -1,38 +1,39 @@
-import React, { useState } from 'react';
 import { callApi } from '@app/utils/api';
 import {
   Clear as ClearIcon,
+  Cloud as CloudIcon,
+  CloudUpload as CloudUploadIcon,
+  Computer as ComputerIcon,
   Delete as DeleteIcon,
   InsertDriveFile as FileIcon,
   Folder as FolderIcon,
-  CloudUpload as CloudUploadIcon,
-  Storage as StorageIcon,
   GitHub as GitHubIcon,
   Lock as LockIcon,
-  Cloud as CloudIcon,
-  Computer as ComputerIcon,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Chip,
+  Grid,
   IconButton,
   InputAdornment,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
-  Stack,
-  TextField,
-  Typography,
   Paper,
-  Grid,
-  Tooltip,
-  Tabs,
+  Stack,
   Tab,
-  Badge,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
 } from '@mui/material';
+import type React from 'react';
+import { useState } from 'react';
 import type { ScanPath } from '../ModelAudit.types';
 import { useModelAuditStore } from '../store';
 

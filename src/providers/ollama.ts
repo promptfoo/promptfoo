@@ -8,7 +8,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { maybeLoadToolsFromExternalFile } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161

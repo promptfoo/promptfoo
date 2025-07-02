@@ -1,18 +1,18 @@
-import React from 'react';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import {
-  Paper,
-  FormControlLabel,
-  Checkbox,
-  Switch,
-  Typography,
-  Box,
-  Stack,
-  IconButton,
-  Tooltip,
-  useTheme,
   alpha,
+  Box,
+  Checkbox,
+  FormControlLabel,
+  IconButton,
+  Paper,
+  Stack,
+  Switch,
+  Tooltip,
+  Typography,
+  useTheme,
 } from '@mui/material';
+import React from 'react';
 import { tokens } from '../tokens';
 
 interface SettingItemProps {

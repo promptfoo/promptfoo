@@ -101,7 +101,7 @@ export function toPigLatin(text: string): string {
 
       // Check if word starts with vowel
       if (/^[aeiouAEIOU]/.test(baseWord)) {
-        return baseWord + 'way' + punctuation;
+        return `${baseWord}way${punctuation}`;
       }
 
       // Find position of first vowel
@@ -109,13 +109,13 @@ export function toPigLatin(text: string): string {
 
       // If no vowels, just add 'ay' at the end
       if (vowelIndex === -1) {
-        return baseWord + 'ay' + punctuation;
+        return `${baseWord}ay${punctuation}`;
       }
 
       // Move consonants before first vowel to end and add 'ay'
       const prefix = baseWord.substring(0, vowelIndex);
       const suffix = baseWord.substring(vowelIndex);
-      return suffix + prefix + 'ay' + punctuation;
+      return `${suffix + prefix}ay${punctuation}`;
     })
     .join(' ');
 }

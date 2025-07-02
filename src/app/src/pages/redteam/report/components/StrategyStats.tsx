@@ -1,5 +1,4 @@
-import React from 'react';
-import { Tabs, Tab, List, ListItem, Chip } from '@mui/material';
+import { Chip, List, ListItem, Tab, Tabs } from '@mui/material';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -8,6 +7,7 @@ import Drawer from '@mui/material/Drawer';
 import Grid from '@mui/material/Grid';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
+import { alpha, styled, useTheme } from '@mui/material/styles';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -15,11 +15,9 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { alpha } from '@mui/material/styles';
-import { styled } from '@mui/material/styles';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
-import type { GradingResult, EvaluateResult } from '@promptfoo/types';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import React from 'react';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 
 interface TestWithMetadata {
@@ -330,7 +328,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                       ((strategyStats[selectedStrategy].total -
                         strategyStats[selectedStrategy].pass) /
                         strategyStats[selectedStrategy].total) *
-                      100
+                        100
                     ).toFixed(1)}%`}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">
@@ -390,6 +388,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 .failures.slice(0, 5)
                 .map((failure, index) => (
                   <Paper
+                    key={`failure-${index}`}
                     elevation={0}
                     sx={{
                       mb: 2,
@@ -499,6 +498,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 .passes.slice(0, 5)
                 .map((pass, index) => (
                   <Paper
+                    key={`pass-${index}`}
                     elevation={0}
                     sx={{
                       mb: 2,

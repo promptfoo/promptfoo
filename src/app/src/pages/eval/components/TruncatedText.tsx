@@ -49,10 +49,9 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
         if (currentLength + childLength > maxLength) {
           nodes.push(truncateText(child, currentLength));
           break;
-        } else {
-          nodes.push(child);
-          currentLength += childLength;
         }
+        nodes.push(child);
+        currentLength += childLength;
       }
       return nodes;
     }

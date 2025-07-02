@@ -1,4 +1,3 @@
-import React from 'react';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import ModelAudit from './ModelAudit';
