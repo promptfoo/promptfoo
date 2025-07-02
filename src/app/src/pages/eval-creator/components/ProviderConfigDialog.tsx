@@ -165,14 +165,14 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   // Reset local config when the dialog opens or providerId changes
   useEffect(() => {
-    // Only extract common fields and deployment_id for form view
+    // Start with all common fields (they can be undefined)
     const formConfig: Record<string, any> = {};
     Object.keys(COMMON_FIELDS).forEach((key) => {
-      if (config[key] !== undefined) {
-        formConfig[key] = config[key];
-      }
+      formConfig[key] = config[key]; // This will be undefined if not in config
     });
-    if (isAzureProvider && config.deployment_id !== undefined) {
+    
+    // Add deployment_id for Azure providers
+    if (isAzureProvider) {
       formConfig.deployment_id = config.deployment_id;
     }
 
@@ -191,14 +191,13 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     try {
       const parsed = yaml.load(code) as Record<string, any>;
 
-      // Update localConfig with common fields and deployment_id only
+      // Update localConfig with all common fields (can be undefined)
       const newLocalConfig: Record<string, any> = {};
       Object.keys(COMMON_FIELDS).forEach((key) => {
-        if (parsed[key] !== undefined) {
-          newLocalConfig[key] = parsed[key];
-        }
+        newLocalConfig[key] = parsed[key]; // This will be undefined if not in parsed
       });
-      if (isAzureProvider && parsed.deployment_id !== undefined) {
+      
+      if (isAzureProvider) {
         newLocalConfig.deployment_id = parsed.deployment_id;
       }
 
