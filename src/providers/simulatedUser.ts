@@ -5,6 +5,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  TokenUsage,
 } from '../types';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -112,7 +113,15 @@ export class SimulatedUser implements ApiProvider {
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
     const messages: Message[] = [];
     const maxTurns = this.maxTurns;
-    let numRequests = 0;
+
+    const totalTokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 0,
+      cached: 0,
+    };
+
     let agentResponse: ProviderResponse | undefined;
 
     for (let i = 0; i < maxTurns; i++) {
@@ -141,26 +150,36 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
 
-      numRequests += 1; // Only count the request to the agent.
+      if (agentResponse.tokenUsage) {
+        totalTokenUsage.total += agentResponse.tokenUsage.total ?? 0;
+        totalTokenUsage.prompt += agentResponse.tokenUsage.prompt ?? 0;
+        totalTokenUsage.completion += agentResponse.tokenUsage.completion ?? 0;
+        totalTokenUsage.numRequests += agentResponse.tokenUsage.numRequests ?? 1;
+        totalTokenUsage.cached += agentResponse.tokenUsage.cached ?? 0;
+      } else {
+        totalTokenUsage.numRequests += 1;
+      }
     }
 
-    return this.serializeOutput(messages, numRequests, agentResponse as ProviderResponse);
+    return this.serializeOutput(messages, totalTokenUsage, agentResponse as ProviderResponse);
   }
 
   toString() {
     return 'AgentProvider';
   }
 
-  serializeOutput(messages: Message[], numRequests: number, finalTargetResponse: ProviderResponse) {
+  serializeOutput(
+    messages: Message[],
+    tokenUsage: TokenUsage,
+    finalTargetResponse: ProviderResponse,
+  ) {
     return {
       output: messages
         .map(
           (message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`,
         )
         .join('\n---\n'),
-      tokenUsage: {
-        numRequests,
-      },
+      tokenUsage,
       metadata: {
         messages,
       },
