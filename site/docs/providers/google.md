@@ -508,7 +508,7 @@ providers:
         enableAffectiveDialog: true
 ```
 
-Other configuration options are available, such as setting proactive audio, setting the language code, and more. Read more about the sending and receiving audio for Gemini in the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#send-receive-audio).
+Other configuration options are available, such as setting proactive audio, setting the language code, and more. Read more about sending and receiving audio for Gemini in the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#send-receive-audio).
 
 
 ### Getting Started
