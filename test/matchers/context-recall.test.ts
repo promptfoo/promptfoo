@@ -1,21 +1,6 @@
 import { matchesContextRecall } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn().mockImplementation(() => {
-    throw new TypeError('The "original" argument must be of type function. Received undefined');
-  }),
-}));
-jest.mock('../../src/cliState');
-jest.mock('../../src/remoteGrading', () => ({
-  doRemoteGrading: jest.fn(),
-}));
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(true),
-}));
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
 
 describe('matchesContextRecall', () => {
   beforeEach(() => {

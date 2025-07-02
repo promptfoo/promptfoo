@@ -6,35 +6,6 @@ import {
 } from '../../src/providers/openai/defaults';
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn().mockImplementation(() => {
-    throw new TypeError('The "original" argument must be of type function. Received undefined');
-  }),
-}));
-jest.mock('../../src/esm');
-jest.mock('../../src/cliState');
-jest.mock('../../src/remoteGrading', () => ({
-  doRemoteGrading: jest.fn(),
-}));
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(true),
-}));
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
-jest.mock('better-sqlite3');
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(),
-}));
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
-
 describe('matchesAnswerRelevance', () => {
   beforeEach(() => {
     jest.clearAllMocks();
