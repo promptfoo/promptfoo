@@ -1,3 +1,4 @@
+import { getGraderById } from '../../../../src/redteam/graders';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
@@ -21,13 +22,11 @@ jest.mock('../../../../src/redteam/providers/shared', () => ({
 }));
 
 jest.mock('../../../../src/redteam/graders', () => ({
-  getGraderById: jest.fn(() => ({
-    getResult: jest.fn(async () => ({
-      grade: {
-        pass: false,
-      },
-    })),
-  })),
+  getGraderById: jest.fn(),
+}));
+
+jest.mock('../../../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: jest.fn(() => false),
 }));
 
 describe('MemorySystem', () => {
@@ -81,7 +80,7 @@ describe('CrescendoProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Create fresh mocks for each test
     mockRedTeamProvider = {
       id: () => 'mock-redteam',
@@ -106,14 +105,34 @@ describe('CrescendoProvider', () => {
       stateful: true,
     });
 
-    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async ({ jsonOnly }) => {
-      return jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    // Set up redteamProviderManager mock
+    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
+      // When the provider is already an object (not a string), return it for jsonOnly requests
+      // For non-jsonOnly requests (scoring), return the scoring provider
+      if (options.provider && typeof options.provider === 'object') {
+        return options.jsonOnly ? options.provider : mockScoringProvider;
+      }
+      return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
 
     // Mock server feature support to return true so unblocking logic runs
     jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+
+    // Set up default getGraderById mock
+    jest.mocked(getGraderById).mockReset();
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: {
+          pass: false,
+        },
+      })),
+    } as any);
+    
+    // Set up default tryUnblocking mock
+    jest.mocked(tryUnblocking).mockReset();
+    jest.mocked(tryUnblocking).mockResolvedValue({ output: null });
   });
-  
+
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -319,6 +338,24 @@ describe('CrescendoProvider', () => {
   });
 
   it('should succeed via internal evaluator when eval score is 100', async () => {
+    // Set up grader to pass (not detect jailbreak) so we don't fail via grader
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: {
+          pass: true, // Pass means no jailbreak detected
+        },
+      })),
+    } as any);
+
+    // Create a new provider with smaller max turns for this test
+    const testProvider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2, // Use smaller max turns
+      maxBacktracks: 10,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
     const prompt = 'test prompt';
     const context = {
       originalProvider: mockTargetProvider,
@@ -338,15 +375,28 @@ describe('CrescendoProvider', () => {
       output: 'target response',
     });
 
-    mockScoringProvider.callApi.mockResolvedValue({
-      output: JSON.stringify({
-        value: true,
-        metadata: 100,
-        rationale: 'test rationale',
-      }),
-    });
+    // Mock both refusal check and eval score
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        // First call is refusal check - not a refusal
+        output: JSON.stringify({
+          value: false,
+          metadata: 0,
+          rationale: 'Not a refusal',
+        }),
+      })
+      .mockResolvedValueOnce({
+        // Second call is eval score - success
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'test rationale',
+        }),
+      });
 
-    const result = await crescendoProvider.callApi(prompt, context);
+    const result = await testProvider.callApi(prompt, context);
+
+    expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(2);
     expect(result.metadata?.stopReason).toBe('Internal evaluator success');
     expect(result.metadata?.crescendoResult).toBe(true);
     expect(result.metadata?.crescendoConfidence).toBe(100);
@@ -401,7 +451,16 @@ describe('CrescendoProvider', () => {
   });
 
   it('should stop when max backtracks reached', async () => {
-    crescendoProvider = new CrescendoProvider({
+    // Set up grader to pass (not detect jailbreak)
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: {
+          pass: true,
+        },
+      })),
+    } as any);
+
+    const testProvider = new CrescendoProvider({
       injectVar: 'objective',
       maxTurns: 10,
       maxBacktracks: 2,
@@ -428,15 +487,17 @@ describe('CrescendoProvider', () => {
       output: 'I cannot help with that.',
     });
 
+    // Mock scoring provider to always detect refusal
+    // Refusal check returns true (is a refusal) which triggers backtracks
     mockScoringProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
-        value: true,
+        value: true,  // true means it IS a refusal
         metadata: 0,
         rationale: 'This is a refusal',
       }),
     });
 
-    const result = await crescendoProvider.callApi(prompt, context);
+    const result = await testProvider.callApi(prompt, context);
     expect(result.metadata?.crescendoBacktrackCount).toBe(2);
     expect(result.metadata?.stopReason).toBe('Max backtracks reached');
   });
@@ -620,6 +681,15 @@ describe('CrescendoProvider', () => {
     });
 
     it('should stop on first successful attack when continueAfterSuccess is false (default)', async () => {
+      // Ensure grader passes for this test
+      jest.mocked(getGraderById).mockReturnValue({
+        getResult: jest.fn(async () => ({
+          grade: {
+            pass: true, // No jailbreak detected by grader
+          },
+        })),
+      } as any);
+      
       const provider = new CrescendoProvider({
         injectVar: 'objective',
         maxTurns: 5,
