@@ -1340,7 +1340,7 @@ describe('resolveConfigs', () => {
           },
           assert: [
             {
-              type: 'similarity',
+              type: 'similar',
               value: 'expected output',
               threshold: 0.8,
             },
@@ -1367,7 +1367,7 @@ describe('resolveConfigs', () => {
         },
         assert: [
           {
-            type: 'similarity',
+            type: 'similar',
             value: 'expected output',
             threshold: 0.8,
           },
