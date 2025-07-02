@@ -24,6 +24,7 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
+      { id: 'counterfactual' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -126,6 +127,43 @@ describe('loadStrategy', () => {
 
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding emoji encoding'));
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should load counterfactual strategy', async () => {
+    const strategy = await loadStrategy('counterfactual');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('counterfactual');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call counterfactual strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('counterfactual');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {
+      protectedAttribute: 'gender',
+      values: ['male', 'female'],
+    };
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding Counterfactual'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should throw error for counterfactual strategy without required config', async () => {
+    const strategy = await loadStrategy('counterfactual');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    await expect(strategy.action(testCases, injectVar, config)).rejects.toThrow(
+      'Counterfactual strategy requires protectedAttribute and at least 2 values',
+    );
   });
 
   it('should throw error for non-existent strategy', async () => {

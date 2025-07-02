@@ -42,6 +42,7 @@ export const ADDITIONAL_STRATEGIES = [
   'best-of-n',
   'camelcase',
   'citation',
+  'counterfactual',
   'crescendo',
   'gcg',
   'goat',
@@ -79,3 +80,5 @@ const _ALL_STRATEGIES = [
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
+
+export { _ALL_STRATEGIES };
