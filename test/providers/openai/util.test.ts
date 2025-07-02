@@ -6,6 +6,7 @@ import {
   validateFunctionCall,
   formatOpenAiError,
   OPENAI_CHAT_MODELS,
+  hasContentFilterFinishReason,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -466,5 +467,58 @@ describe('formatOpenAiError', () => {
     expect(result).toContain('API error: Error message');
     expect(result).not.toContain('Type:');
     expect(result).not.toContain('Code:');
+  });
+});
+
+describe('hasContentFilterFinishReason', () => {
+  it('should return false when data is undefined', () => {
+    expect(hasContentFilterFinishReason(undefined)).toBe(false);
+  });
+
+  it('should return false when data has no choices', () => {
+    expect(hasContentFilterFinishReason({})).toBe(false);
+    expect(hasContentFilterFinishReason({ choices: null })).toBe(false);
+  });
+
+  it('should return false when choices is not an array', () => {
+    expect(hasContentFilterFinishReason({ choices: 'not an array' })).toBe(false);
+  });
+
+  it('should return false when no choice has content_filter finish_reason', () => {
+    expect(hasContentFilterFinishReason({
+      choices: [
+        { finish_reason: 'stop' },
+        { finish_reason: 'length' },
+        { finish_reason: 'tool_calls' }
+      ]
+    })).toBe(false);
+  });
+
+  it('should return true when at least one choice has content_filter finish_reason', () => {
+    expect(hasContentFilterFinishReason({
+      choices: [
+        { finish_reason: 'stop' },
+        { finish_reason: 'content_filter' },
+        { finish_reason: 'length' }
+      ]
+    })).toBe(true);
+  });
+
+  it('should return true when all choices have content_filter finish_reason', () => {
+    expect(hasContentFilterFinishReason({
+      choices: [
+        { finish_reason: 'content_filter' },
+        { finish_reason: 'content_filter' }
+      ]
+    })).toBe(true);
+  });
+
+  it('should handle choices without finish_reason property', () => {
+    expect(hasContentFilterFinishReason({
+      choices: [
+        { message: 'test' },
+        { finish_reason: 'content_filter' }
+      ]
+    })).toBe(true);
   });
 });

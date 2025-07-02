@@ -1,5 +1,6 @@
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
@@ -9,7 +10,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage } from './util';
+import { formatOpenAiError, getTokenUsage, hasContentFilterFinishReason } from './util';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
@@ -249,12 +250,54 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
+      
+      // In redteam context, check if this is a guardrail error
+      const isRedteam = !!cliState.config?.redteam;
+      
+      if (isRedteam && data.error.code === 'content_policy_violation') {
+        return {
+          guardrails: { 
+            flagged: true,
+            flaggedInput: true
+          },
+          error: formatOpenAiError(data),
+          tokenUsage: getTokenUsage(data, cached),
+          raw: data,
+        };
+      }
+      
       return {
         error: formatOpenAiError(data),
       };
     }
 
     try {
+      // Check for content_filter finish_reason
+      const hasContentFilter = hasContentFilterFinishReason(data);
+      const isRedteam = !!cliState.config?.redteam;
+      
+      if (hasContentFilter && isRedteam) {
+        const choice = data.choices?.[0];
+        return {
+          output: choice?.message?.content || 'Content was filtered by OpenAI',
+          guardrails: { 
+            flagged: true,
+            flaggedOutput: true
+          },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.input_tokens,
+            data.usage?.output_tokens,
+            0,
+            0,
+          ),
+          raw: data,
+        };
+      }
+
       // Find the assistant message in the output
       const output = data.output;
       if (!output || !Array.isArray(output) || output.length === 0) {

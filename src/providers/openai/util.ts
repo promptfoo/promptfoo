@@ -366,6 +366,20 @@ export function calculateOpenAICost(
   return totalCost || undefined;
 }
 
+/**
+ * Checks if an OpenAI response indicates content was filtered by guardrails.
+ * This applies to reasoning models (o1, o3) and other models that support content filtering.
+ */
+export function hasContentFilterFinishReason(data: any): boolean {
+  if (!data?.choices || !Array.isArray(data.choices)) {
+    return false;
+  }
+  
+  return data.choices.some(
+    (choice: any) => choice.finish_reason === 'content_filter'
+  );
+}
+
 export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     const errorType = err.error?.type || err.type || 'unknown';
