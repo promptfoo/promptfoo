@@ -339,44 +339,43 @@ describe('evaluator', () => {
 
       // Mark first two results with manual human ratings for filter tests
       const results = await EvalResult.findManyByEvalId(evalWithResults.id);
-      if (results[0]) {
-        results[0].gradingResult = {
-          pass: true,
-          score: 1,
-          reason: 'Manual result (overrides all other grading results)',
-          comment: '',
-          assertion: null,
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: 'Manual',
-              assertion: { type: 'human' },
-            },
-          ],
-        } as any;
-        results[0].success = true;
-        await results[0].save();
-      }
-      if (results[1]) {
-        results[1].gradingResult = {
-          pass: false,
-          score: 0,
-          reason: 'Manual result (overrides all other grading results)',
-          comment: '',
-          assertion: null,
-          componentResults: [
-            {
-              pass: false,
-              score: 0,
-              reason: 'Manual',
-              assertion: { type: 'human' },
-            },
-          ],
-        } as any;
-        results[1].success = false;
-        await results[1].save();
-      }
+      // The factory creates 20 results, so we know we have at least 2
+      
+      results[0].gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Manual result (overrides all other grading results)',
+        comment: '',
+        assertion: null,
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+        ],
+      } as any;
+      results[0].success = true;
+      await results[0].save();
+      
+      results[1].gradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Manual result (overrides all other grading results)',
+        comment: '',
+        assertion: null,
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+        ],
+      } as any;
+      results[1].success = false;
+      await results[1].save();
     });
 
     it('should return paginated results with default parameters', async () => {
@@ -422,8 +421,7 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({ filterMode: 'errors' });
 
       // Ensure there are results for the test to be meaningful
-      const hasResults = result.body.length > 0;
-      expect(hasResults).toBe(true);
+      expect(result.body.length).toBeGreaterThan(0);
 
       // Check all outputs for errors
       for (const row of result.body) {
@@ -439,8 +437,7 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({ filterMode: 'failures' });
 
       // Ensure there are results for the test to be meaningful
-      const hasResults = result.body.length > 0;
-      expect(hasResults).toBe(true);
+      expect(result.body.length).toBeGreaterThan(0);
 
       // All results should contain at least one failed output that's not an error
       for (const row of result.body) {
@@ -455,8 +452,7 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({ filterMode: 'passes' });
 
       // Ensure there are results for the test to be meaningful
-      const hasResults = result.body.length > 0;
-      expect(hasResults).toBe(true);
+      expect(result.body.length).toBeGreaterThan(0);
 
       // All results should contain at least one successful output
       for (const row of result.body) {
@@ -497,13 +493,14 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({ filterMode: 'highlights' });
 
       // With the withHighlights: true in the factory, we should have some highlighted results
-      if (result.body.length > 0) {
-        for (const row of result.body) {
-          const hasHighlight = row.outputs.some((output) =>
-            output.gradingResult?.comment?.startsWith('!highlight'),
-          );
-          expect(hasHighlight).toBe(true);
-        }
+      // Since we set withHighlights: true, we expect to have results
+      expect(result.body.length).toBeGreaterThan(0);
+      
+      for (const row of result.body) {
+        const hasHighlight = row.outputs.some((output) =>
+          output.gradingResult?.comment?.startsWith('!highlight'),
+        );
+        expect(hasHighlight).toBe(true);
       }
     });
 
@@ -522,29 +519,29 @@ describe('evaluator', () => {
 
       // Add human ratings to some results
       const results = await EvalResult.findManyByEvalId(evaluation.id);
-      if (results[0]) {
-        results[0].gradingResult = {
-          pass: true,
-          score: 1,
-          reason: 'Human rating',
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: 'Manual',
-              assertion: { type: 'human' },
-            },
-          ],
-        } as any;
-        await results[0].save();
-      }
+      expect(results.length).toBeGreaterThan(0);
+      
+      results[0].gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Human rating',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+        ],
+      } as any;
+      await results[0].save();
 
       // Filter should find the human-rated result
       const humanFiltered = await evaluation.getTablePage({ filterMode: 'human' });
-      expect(humanFiltered.body.length).toBe(1);
+      expect(humanFiltered.body).toHaveLength(1);
 
       const thumbsUpFiltered = await evaluation.getTablePage({ filterMode: 'thumbs-up' });
-      expect(thumbsUpFiltered.body.length).toBe(1);
+      expect(thumbsUpFiltered.body).toHaveLength(1);
     });
 
     it('should filter by specific test indices', async () => {
@@ -659,54 +656,55 @@ describe('evaluator', () => {
       // Create an eval with a human rating
       const evaluation = await EvalFactory.create({ numResults: 3 });
       const results = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(results.length).toBeGreaterThan(0);
 
       // Add human rating to first result
-      if (results[0]) {
-        results[0].gradingResult = {
-          pass: true,
-          score: 1,
-          reason: 'Test',
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: 'Manual',
-              assertion: { type: 'human' },
-            },
-            {
-              pass: false,
-              score: 0,
-              reason: 'Other assertion',
-              assertion: { type: 'isSimilar' },
-            },
-          ],
-        } as any;
-        await results[0].save();
-      }
+      results[0].gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Other assertion',
+            assertion: { type: 'isSimilar' },
+          },
+        ],
+      } as any;
+      await results[0].save();
 
       // Verify human filter finds it
       let humanFiltered = await evaluation.getTablePage({ filterMode: 'human' });
-      expect(humanFiltered.body.length).toBe(1);
+      expect(humanFiltered.body).toHaveLength(1);
 
       // Simulate clearing the human rating (removing it from componentResults)
-      if (results[0] && results[0].gradingResult?.componentResults) {
-        results[0].gradingResult.componentResults =
-          results[0].gradingResult.componentResults.filter(
-            (r: any) => r.assertion?.type !== 'human',
-          );
-        // Recalculate pass/score based on remaining assertions
-        const remainingResults = results[0].gradingResult.componentResults;
-        if (remainingResults.length > 0) {
-          const passCount = remainingResults.filter((r: any) => r.pass).length;
-          results[0].gradingResult.pass = passCount === remainingResults.length;
-          results[0].gradingResult.score = passCount / remainingResults.length;
-        }
-        await results[0].save();
+      const gradingResult = results[0].gradingResult;
+      expect(gradingResult).toBeDefined();
+      expect(gradingResult?.componentResults).toBeDefined();
+      
+      results[0].gradingResult!.componentResults =
+        results[0].gradingResult!.componentResults!.filter(
+          (r: any) => r.assertion?.type !== 'human',
+        );
+      // Recalculate pass/score based on remaining assertions
+      const remainingResults = results[0].gradingResult!.componentResults;
+      if (remainingResults.length > 0) {
+        const passCount = remainingResults.filter((r: any) => r.pass).length;
+        results[0].gradingResult!.pass = passCount === remainingResults.length;
+        results[0].gradingResult!.score = passCount / remainingResults.length;
       }
+      await results[0].save();
 
       // Verify human filter no longer finds it
       humanFiltered = await evaluation.getTablePage({ filterMode: 'human' });
-      expect(humanFiltered.body.length).toBe(0);
+      expect(humanFiltered.body).toHaveLength(0);
     });
   });
 });
