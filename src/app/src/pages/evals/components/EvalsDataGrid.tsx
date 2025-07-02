@@ -201,7 +201,7 @@ export default function EvalsDataGrid({
         {
           field: 'createdAt',
           headerName: 'Created',
-          flex: 0.75,
+          flex: 0.9,
           valueGetter: (value: Eval['createdAt'], row: Eval) => {
             return new Date(value);
           },
