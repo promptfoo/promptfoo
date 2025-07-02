@@ -222,7 +222,7 @@ npx promptfoo eval --verbose
 Promptfoo now supports native Python debugging with pdb. To enable it:
 
 ```bash
-export PROMPTFOO_PYTHON_PDB_TRACING_ENABLED=true
+export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
 ```
 
 Then add breakpoints in your Python code:

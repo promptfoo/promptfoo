@@ -566,7 +566,7 @@ def call_api(prompt, options, context):
 4. **Use Python debugger (pdb) for interactive debugging:**
 
    ```bash
-   export PROMPTFOO_PYTHON_PDB_TRACING_ENABLED=true
+   export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
    ```
 
    With this environment variable set, you can use `import pdb; pdb.set_trace()` in your Python code to set breakpoints:
