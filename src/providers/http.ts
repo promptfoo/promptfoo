@@ -19,7 +19,7 @@ import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
+import { renderJsonTemplate, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -360,6 +360,15 @@ export function processJsonBody(
     try {
       return JSON.parse(rendered);
     } catch (err) {
+      // If it looks like JSON but parsing failed, try with escaped variables
+      const trimmed = rendered.trim();
+      if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && typeof body === 'string') {
+        try {
+          return renderJsonTemplate(body, vars);
+        } catch {
+          // Fall back to original behavior
+        }
+      }
       // JSON.parse failed, return the string as-is
       // This string will be used directly as the request body without further JSON.stringify()
       logger.debug(
