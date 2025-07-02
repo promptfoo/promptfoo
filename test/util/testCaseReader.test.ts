@@ -560,7 +560,7 @@ describe('readTest', () => {
 
     // This should not throw even though it doesn't have required properties
     const result = await readTest(defaultTestInput, '', true);
-    expect(result.options?.provider).toEqual('openai:gpt-4.1-mini-0613');
+    expect(result.options?.provider).toBe('openai:gpt-4.1-mini-0613');
     expect(result.vars).toBeUndefined();
   });
 
@@ -581,18 +581,14 @@ describe('readTest', () => {
     // This should not throw even though it doesn't have required properties
     const result = await readTest(defaultTestInput, '', true);
     expect(result.options?.provider).toBeDefined();
-    if (
-      result.options?.provider &&
-      typeof result.options.provider === 'object' &&
-      'text' in result.options.provider
-    ) {
-      expect(result.options.provider.text).toEqual({
+    expect(result.options?.provider).toEqual({
+      text: {
         id: 'openai:gpt-4',
         config: {
           temperature: 0.7,
         },
-      });
-    }
+      },
+    });
     expect(result.vars).toBeUndefined();
   });
 
