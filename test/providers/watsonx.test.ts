@@ -49,13 +49,6 @@ jest.mock('../../src/envars', () => ({
   getEnvInt: jest.fn(),
 }));
 
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-}));
-
 describe('WatsonXProvider', () => {
   const modelName = 'test-model';
   const config = {
