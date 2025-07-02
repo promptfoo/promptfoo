@@ -20,6 +20,16 @@ jest.mock('../../../../src/redteam/providers/shared', () => ({
   tryUnblocking: jest.fn(),
 }));
 
+jest.mock('../../../../src/redteam/graders', () => ({
+  getGraderById: jest.fn(() => ({
+    getResult: jest.fn(async () => ({
+      grade: {
+        pass: false,
+      },
+    })),
+  })),
+}));
+
 describe('MemorySystem', () => {
   let memorySystem: MemorySystem;
 
@@ -65,23 +75,28 @@ describe('MemorySystem', () => {
 
 describe('CrescendoProvider', () => {
   let crescendoProvider: CrescendoProvider;
-  const mockRedTeamProvider = {
-    id: () => 'mock-redteam',
-    callApi: jest.fn(),
-    delay: 0,
-  };
-  const mockScoringProvider = {
-    id: () => 'mock-scoring',
-    callApi: jest.fn(),
-    delay: 0,
-  };
-  const mockTargetProvider = {
-    id: () => 'mock-target',
-    callApi: jest.fn(),
-  };
+  let mockRedTeamProvider: any;
+  let mockScoringProvider: any;
+  let mockTargetProvider: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Create fresh mocks for each test
+    mockRedTeamProvider = {
+      id: () => 'mock-redteam',
+      callApi: jest.fn(),
+      delay: 0,
+    };
+    mockScoringProvider = {
+      id: () => 'mock-scoring',
+      callApi: jest.fn(),
+      delay: 0,
+    };
+    mockTargetProvider = {
+      id: () => 'mock-target',
+      callApi: jest.fn(),
+    };
 
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
@@ -97,6 +112,10 @@ describe('CrescendoProvider', () => {
 
     // Mock server feature support to return true so unblocking logic runs
     jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+  });
+  
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should initialize with default config values', () => {
@@ -342,6 +361,11 @@ describe('CrescendoProvider', () => {
       test: { assert: [{ type: 'mock-grader' }] } as any,
     };
 
+    // Mock unblocking to return false so it doesn't interfere
+    jest.mocked(tryUnblocking).mockResolvedValue({
+      success: false,
+    });
+
     mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
         generatedQuestion: 'test question',
@@ -354,23 +378,23 @@ describe('CrescendoProvider', () => {
       output: 'target response',
     });
 
-    mockScoringProvider.callApi.mockResolvedValue({
-      output: JSON.stringify({
-        value: false,
-        metadata: 50,
-        rationale: 'test rationale',
-      }),
-    });
-
-    jest.mock('../../../../src/redteam/graders', () => ({
-      getGraderById: () => ({
-        getResult: async () => ({
-          grade: {
-            pass: false,
-          },
+    // First call checks for refusal (false = not a refusal)
+    // Second call is for internal evaluator
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false,
+          metadata: 0,
+          rationale: 'Not a refusal',
         }),
-      }),
-    }));
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false,
+          metadata: 50,
+          rationale: 'test rationale',
+        }),
+      });
 
     const result = await crescendoProvider.callApi(prompt, context);
     expect(result.metadata?.stopReason).toBe('Grader failed');
@@ -668,6 +692,11 @@ describe('CrescendoProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
         test: { assert: [{ type: 'mock-grader' }] } as any,
       };
+
+      // Mock unblocking to return false so it doesn't interfere
+      jest.mocked(tryUnblocking).mockResolvedValue({
+        success: false,
+      });
 
       mockRedTeamProvider.callApi
         .mockResolvedValueOnce({
