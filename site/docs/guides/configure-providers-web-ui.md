@@ -98,8 +98,8 @@ config:
 # Array configuration
 stop_sequences:
   - "\n\n"
-  - "END"
-  - "STOP"
+  - 'END'
+  - 'STOP'
 # Complex nested structure
 response_format:
   type: json_object

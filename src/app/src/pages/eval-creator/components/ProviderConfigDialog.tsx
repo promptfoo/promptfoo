@@ -86,7 +86,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       // When switching to form, update YAML with full config
       // This preserves any fields not shown in the form
       const fullConfig = { ...originalConfigRef.current };
-      Object.keys(localConfig).forEach(key => {
+      Object.keys(localConfig).forEach((key) => {
         fullConfig[key] = localConfig[key];
       });
       setYamlConfig(configToYaml(fullConfig));
@@ -94,36 +94,39 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   }, [localConfig, tabValue, configToYaml]);
 
   // Handle save functionality
-  const handleSave = useCallback((silent = false) => {
-    let configToSave: Record<string, any>;
-    
-    if (tabValue === 1) {
-      // Save from YAML editor
-      try {
-        configToSave = yaml.load(yamlConfig) as Record<string, any>;
-      } catch (err) {
-        if (!silent) {
-          setYamlError(`Invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
+  const handleSave = useCallback(
+    (silent = false) => {
+      let configToSave: Record<string, any>;
+
+      if (tabValue === 1) {
+        // Save from YAML editor
+        try {
+          configToSave = yaml.load(yamlConfig) as Record<string, any>;
+        } catch (err) {
+          if (!silent) {
+            setYamlError(`Invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
+          }
+          return;
         }
-        return;
+      } else {
+        // Save from form editor - merge with original config to preserve non-form fields
+        configToSave = { ...originalConfigRef.current };
+        Object.keys(localConfig).forEach((key) => {
+          if (localConfig[key] !== undefined) {
+            configToSave[key] = localConfig[key];
+          }
+        });
       }
-    } else {
-      // Save from form editor - merge with original config to preserve non-form fields
-      configToSave = { ...originalConfigRef.current };
-      Object.keys(localConfig).forEach(key => {
-        if (localConfig[key] !== undefined) {
-          configToSave[key] = localConfig[key];
-        }
-      });
-    }
-    
-    onSave(providerId, configToSave);
-    setHasUnsavedChanges(false);
-    
-    if (!silent) {
-      onClose();
-    }
-  }, [tabValue, yamlConfig, localConfig, providerId, onSave, onClose]);
+
+      onSave(providerId, configToSave);
+      setHasUnsavedChanges(false);
+
+      if (!silent) {
+        onClose();
+      }
+    },
+    [tabValue, yamlConfig, localConfig, providerId, onSave, onClose],
+  );
 
   // Auto-save functionality
   useEffect(() => {
@@ -131,12 +134,12 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
-      
+
       autoSaveTimerRef.current = setTimeout(() => {
         handleSave(true); // Silent save
       }, 2000);
     }
-    
+
     return () => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
@@ -148,7 +151,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   useEffect(() => {
     // Only extract common fields and deployment_id for form view
     const formConfig: Record<string, any> = {};
-    Object.keys(COMMON_FIELDS).forEach(key => {
+    Object.keys(COMMON_FIELDS).forEach((key) => {
       if (config[key] !== undefined) {
         formConfig[key] = config[key];
       }
@@ -156,7 +159,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     if (isAzureProvider && config.deployment_id !== undefined) {
       formConfig.deployment_id = config.deployment_id;
     }
-    
+
     setLocalConfig(formConfig);
     setYamlConfig(configToYaml(config));
     setHasUnsavedChanges(false);
@@ -167,14 +170,14 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     setYamlConfig(code);
     setYamlError(null);
     setHasUnsavedChanges(true);
-    
+
     // Try to parse and sync to form if valid
     try {
       const parsed = yaml.load(code) as Record<string, any>;
-      
+
       // Update localConfig with common fields and deployment_id only
       const newLocalConfig: Record<string, any> = {};
-      Object.keys(COMMON_FIELDS).forEach(key => {
+      Object.keys(COMMON_FIELDS).forEach((key) => {
         if (parsed[key] !== undefined) {
           newLocalConfig[key] = parsed[key];
         }
@@ -182,7 +185,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       if (isAzureProvider && parsed.deployment_id !== undefined) {
         newLocalConfig.deployment_id = parsed.deployment_id;
       }
-      
+
       setLocalConfig(newLocalConfig);
     } catch {
       // Invalid YAML, don't sync
@@ -267,9 +270,8 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   // Check if there are additional fields beyond common ones
   const hasAdditionalFields = useMemo(() => {
-    return Object.keys(config).some(key => 
-      !COMMON_FIELDS[key as keyof typeof COMMON_FIELDS] && 
-      key !== 'deployment_id'
+    return Object.keys(config).some(
+      (key) => !COMMON_FIELDS[key as keyof typeof COMMON_FIELDS] && key !== 'deployment_id',
     );
   }, [config]);
 
@@ -311,9 +313,9 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             )}
 
             {hasAdditionalFields && (
-              <Alert 
-                severity="info" 
-                sx={{ mb: 2 }} 
+              <Alert
+                severity="info"
+                sx={{ mb: 2 }}
                 icon={<InfoIcon />}
                 action={
                   <Button size="small" onClick={() => setTabValue(1)}>

@@ -106,8 +106,6 @@ describe('ProviderConfigDialog', () => {
     });
   });
 
-
-
   it('syncs YAML editor with form changes', async () => {
     renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
 
