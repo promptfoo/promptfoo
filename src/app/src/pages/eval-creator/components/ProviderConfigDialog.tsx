@@ -336,16 +336,11 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         >
           {providerId}
         </Typography>
-        {hasUnsavedChanges && (
-          <Typography variant="caption" color="primary" sx={{ display: 'block', mt: 1 }}>
-            Auto-saving in 2 seconds...
-          </Typography>
-        )}
       </DialogTitle>
       <DialogContent>
         <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
-          <Tab label="Form Editor" />
-          <Tab label="YAML Editor" />
+          <Tab label="Form" />
+          <Tab label="YAML" />
         </Tabs>
 
         {tabValue === 0 ? (
@@ -361,15 +356,19 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             )}
 
             {hasComplexFields && (
-              <Alert severity="info" sx={{ mb: 2 }} icon={<InfoIcon />}>
-                This configuration contains nested objects or arrays that can't be edited in form mode. 
-                Switch to the <strong>YAML Editor</strong> tab to modify complex fields.
+              <Alert 
+                severity="info" 
+                sx={{ mb: 2 }} 
+                icon={<InfoIcon />}
+                action={
+                  <Button size="small" onClick={() => setTabValue(1)}>
+                    Switch to YAML
+                  </Button>
+                }
+              >
+                Complex fields detected. Use YAML editor for full control.
               </Alert>
             )}
-
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-              Common Configuration
-            </Typography>
 
             {configKeys.map((key) => {
               if (customFields.find((f) => f.key === key)) {
@@ -392,61 +391,58 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               );
             })}
 
-            <Divider sx={{ my: 3 }} />
-
-            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                Simple Custom Fields
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                For nested objects or arrays, use the YAML Editor
-              </Typography>
-            </Box>
+            {(customFields.length > 0 || newFieldKey) && <Divider sx={{ my: 3 }} />}
 
             {customFields.map((field, index) => (
               <Box key={index} my={2} display="flex" gap={1} alignItems="flex-start">
                 <TextField
-                  label="Field Name"
+                  label="Field"
                   value={field.key}
                   onChange={(e) => updateCustomField(index, 'key', e.target.value)}
                   sx={{ flex: 1 }}
+                  size="small"
                 />
                 <Box sx={{ flex: 2 }}>
                   {renderFieldInput(field.key, field.value, (newValue) =>
                     updateCustomField(index, 'value', newValue),
                   )}
                 </Box>
-                <IconButton onClick={() => handleRemoveCustomField(index)} sx={{ mt: 1 }}>
-                  <DeleteIcon />
+                <IconButton 
+                  onClick={() => handleRemoveCustomField(index)} 
+                  size="small"
+                  sx={{ mt: 0.5 }}
+                >
+                  <DeleteIcon fontSize="small" />
                 </IconButton>
               </Box>
             ))}
 
             <Box display="flex" gap={1} mt={2}>
               <TextField
-                label="New Field Name"
+                placeholder="Add custom field..."
                 value={newFieldKey}
                 onChange={(e) => setNewFieldKey(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddCustomField()}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddCustomField();
+                  }
+                }}
+                size="small"
                 sx={{ flex: 1 }}
-                helperText="For complex values, use the YAML editor"
               />
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
+              <IconButton
                 onClick={handleAddCustomField}
                 disabled={!newFieldKey}
+                size="small"
+                color="primary"
               >
-                Add Field
-              </Button>
+                <AddIcon />
+              </IconButton>
             </Box>
           </>
         ) : (
           <Box>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              Edit the provider configuration in YAML format. This is the recommended way to configure 
-              nested objects, arrays, and complex settings. Changes are synced with the form editor.
-            </Typography>
             {yamlError && (
               <Alert severity="error" sx={{ mb: 2 }}>
                 {yamlError}
@@ -463,7 +459,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                 backgroundColor: isDarkMode ? '#1e1e1e' : '#f5f5f5',
                 border: `1px solid ${isDarkMode ? '#444' : '#e0e0e0'}`,
                 borderRadius: 4,
-                minHeight: 300,
+                minHeight: 400,
                 color: isDarkMode ? '#d4d4d4' : '#333',
               }}
             />

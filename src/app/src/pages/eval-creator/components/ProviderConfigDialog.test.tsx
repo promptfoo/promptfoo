@@ -36,8 +36,8 @@ describe('ProviderConfigDialog', () => {
   it('displays form editor by default', () => {
     renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
 
-    expect(screen.getByText('Common Configuration')).toBeInTheDocument();
-    expect(screen.getByText('Custom Configuration')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Form' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'YAML' })).toBeInTheDocument();
   });
 
   it('shows common fields even if not in config', () => {
@@ -52,27 +52,27 @@ describe('ProviderConfigDialog', () => {
   it('switches between form and YAML editor', async () => {
     renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
 
-    const yamlTab = screen.getByRole('tab', { name: 'YAML Editor' });
+    const yamlTab = screen.getByRole('tab', { name: 'YAML' });
     fireEvent.click(yamlTab);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Edit the provider configuration in YAML format/),
-      ).toBeInTheDocument();
+      // Check for the code editor by looking for textarea
+      const editor = document.querySelector('textarea');
+      expect(editor).toBeInTheDocument();
     });
   });
 
   it('allows adding custom fields', async () => {
     renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
 
-    const newFieldInput = screen.getByLabelText('New Field Name');
-    const addButton = screen.getByRole('button', { name: /Add Field/i });
-
+    const newFieldInput = screen.getByPlaceholderText('Add custom field...');
     fireEvent.change(newFieldInput, { target: { value: 'custom_param' } });
-    fireEvent.click(addButton);
+    
+    // Press Enter to add
+    fireEvent.keyPress(newFieldInput, { key: 'Enter', code: 'Enter', charCode: 13 });
 
     await waitFor(() => {
-      const fieldInputs = screen.getAllByLabelText('Field Name');
+      const fieldInputs = screen.getAllByLabelText('Field');
       expect(
         fieldInputs.some((input) => (input as HTMLInputElement).value === 'custom_param'),
       ).toBe(true);
@@ -99,16 +99,7 @@ describe('ProviderConfigDialog', () => {
     });
   });
 
-  it('shows auto-save message when changes are made', async () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
 
-    const temperatureInput = screen.getByLabelText('Temperature');
-    fireEvent.change(temperatureInput, { target: { value: '0.9' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Auto-saving in 2 seconds...')).toBeInTheDocument();
-    });
-  });
 
   it('syncs YAML editor with form changes', async () => {
     renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
@@ -118,7 +109,7 @@ describe('ProviderConfigDialog', () => {
     fireEvent.change(temperatureInput, { target: { value: '0.9' } });
 
     // Switch to YAML editor
-    const yamlTab = screen.getByRole('tab', { name: 'YAML Editor' });
+    const yamlTab = screen.getByRole('tab', { name: 'YAML' });
     fireEvent.click(yamlTab);
 
     // YAML should contain the updated temperature
@@ -148,7 +139,7 @@ describe('ProviderConfigDialog', () => {
   it('handles YAML editor errors gracefully', async () => {
     renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
 
-    const yamlTab = screen.getByRole('tab', { name: 'YAML Editor' });
+    const yamlTab = screen.getByRole('tab', { name: 'YAML' });
     fireEvent.click(yamlTab);
 
     await waitFor(() => {
