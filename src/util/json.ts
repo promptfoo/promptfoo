@@ -3,7 +3,6 @@ import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
 import type { EvaluateResult, ResultFailureReason } from '../types';
-import { renderVarsInObject } from '../util';
 import invariant from '../util/invariant';
 
 let ajvInstance: Ajv | null = null;
@@ -387,41 +386,4 @@ export function summarizeEvaluateResultForLogging(
   }
 
   return summary;
-}
-
-/**
- * Escapes string values in variables for safe JSON template substitution.
- * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
- */
-export function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
-  return Object.fromEntries(
-    Object.entries(vars).map(([key, value]) => [
-      key,
-      typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : value,
-    ]),
-  );
-}
-
-/**
- * Renders a JSON template string with proper escaping for JSON context.
- *
- * When template substitution would create invalid JSON (due to unescaped newlines,
- * quotes, etc.), this function attempts to fix it by re-rendering with escaped variables.
- *
- * @param template - The template string (should look like JSON)
- * @param vars - Variables to substitute into the template
- * @returns Parsed JSON object/array/primitive
- * @throws Error if the template cannot be rendered as valid JSON
- */
-export function renderJsonTemplate(template: string, vars: Record<string, any>): any {
-  // First attempt: try normal rendering and parsing
-  const rendered = renderVarsInObject(template, vars);
-  try {
-    return JSON.parse(rendered);
-  } catch {
-    // Second attempt: re-render with JSON-escaped variables
-    const escapedVars = escapeJsonVariables(vars);
-    const reRendered = renderVarsInObject(template, escapedVars);
-    return JSON.parse(reRendered); // This will throw if still invalid
-  }
 }

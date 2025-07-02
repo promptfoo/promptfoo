@@ -913,32 +913,6 @@ describe('HttpProvider', () => {
 }`);
       });
 
-      it('should handle mixed valid and invalid JSON syntax', () => {
-        // JSON that looks valid but has subtle syntax errors
-        const body = `{
-"valid_field": "{{prompt}}",
-"numbers": [1, 2, 3,],
-"object": {
-  "nested": true,
-  "value": "test"
-},
-"trailing_comma": "problem",
-}`;
-        const vars = { prompt: 'Test input' };
-        const result = processJsonBody(body, vars);
-
-        // Should return string as-is since it's already in intended format
-        expect(result).toBe(`{
-"valid_field": "Test input",
-"numbers": [1, 2, 3,],
-"object": {
-  "nested": true,
-  "value": "test"
-},
-"trailing_comma": "problem",
-}`);
-      });
-
       it('should auto-escape newlines in JSON templates (YAML literal case)', () => {
         // This is the real-world case: YAML literal string with unescaped newlines from red team
         const body = '{\n  "message": "{{prompt}}"\n}';

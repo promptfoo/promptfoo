@@ -19,9 +19,46 @@ import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { renderJsonTemplate, safeJsonStringify } from '../util/json';
+import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+/**
+ * Escapes string values in variables for safe JSON template substitution.
+ * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
+ */
+function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : value,
+    ]),
+  );
+}
+
+/**
+ * Renders a JSON template string with proper escaping for JSON context.
+ *
+ * When template substitution would create invalid JSON (due to unescaped newlines,
+ * quotes, etc.), this function attempts to fix it by re-rendering with escaped variables.
+ *
+ * @param template - The template string (should look like JSON)
+ * @param vars - Variables to substitute into the template
+ * @returns Parsed JSON object/array/primitive
+ * @throws Error if the template cannot be rendered as valid JSON
+ */
+function renderJsonTemplate(template: string, vars: Record<string, any>): any {
+  // First attempt: try normal rendering and parsing
+  const rendered = renderVarsInObject(template, vars);
+  try {
+    return JSON.parse(rendered);
+  } catch {
+    // Second attempt: re-render with JSON-escaped variables
+    const escapedVars = escapeJsonVariables(vars);
+    const reRendered = renderVarsInObject(template, escapedVars);
+    return JSON.parse(reRendered); // This will throw if still invalid
+  }
+}
 
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
