@@ -17,6 +17,8 @@ import {
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readTests } from '../../../src/util/testCaseReader';
+import { readPrompts } from '../../../src/prompts';
+import { loadApiProviders } from '../../../src/providers';
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
@@ -73,7 +75,7 @@ jest.mock('../../../src/util/testCaseReader', () => ({
     return test;
   }),
   readTests: jest.fn().mockImplementation(async (tests) => {
-    if (!tests) return [];
+    if (!tests) {return [];}
     if (Array.isArray(tests)) {
       return tests;
     }
@@ -101,7 +103,7 @@ jest.mock('../../../src/util/templates', () => ({
 
 jest.mock('../../../src/prompts', () => ({
   readPrompts: jest.fn().mockImplementation(async (prompts) => {
-    if (!prompts) return [];
+    if (!prompts) {return [];}
     if (Array.isArray(prompts)) {
       return prompts.map((p, idx) => ({
         raw: typeof p === 'string' ? p : p.raw || '',
@@ -1212,6 +1214,37 @@ describe('resolveConfigs', () => {
 
     jest.mocked(globSync).mockReturnValue(['config.json']);
 
+    // Mock readPrompts to return the expected format
+    jest.mocked(readPrompts).mockResolvedValue([
+      {
+        raw: prompt,
+        label: prompt,
+        config: {},
+        metrics: {
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 0,
+          assertPassCount: 0,
+          assertFailCount: 0,
+          totalLatencyMs: 0,
+          tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+          namedScores: {},
+          namedScoresCount: {},
+          cost: 0,
+        },
+      },
+    ]);
+
+    // Mock loadApiProviders to return the expected format
+    jest.mocked(loadApiProviders).mockResolvedValue([
+      {
+        id: () => 'openai:gpt-4',
+        label: 'openai:gpt-4',
+        modelName: 'gpt-4',
+      } as any,
+    ]);
+
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
@@ -1303,26 +1336,26 @@ describe('resolveConfigs', () => {
               id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
               config: {
                 region: 'us-east-1',
-                profile: 'test-profile'
-              }
-            }
-          }
-        }
+                profile: 'test-profile',
+              },
+            },
+          },
+        },
       },
       tests: [
         {
           vars: {
-            input: 'test input'
+            input: 'test input',
           },
           assert: [
             {
               type: 'similarity',
               value: 'expected output',
-              threshold: 0.8
-            }
-          ]
-        }
-      ]
+              threshold: 0.8,
+            },
+          ],
+        },
+      ],
     };
 
     jest.mocked(fs.existsSync).mockReturnValue(true);
@@ -1335,6 +1368,22 @@ describe('resolveConfigs', () => {
     jest.mocked(globSync).mockReturnValue(['config.yaml']);
     jest.mocked(isCI).mockReturnValue(true); // Avoid triggering exit
 
+    // Mock readTests to return the specific test for this case
+    jest.mocked(readTests).mockResolvedValue([
+      {
+        vars: {
+          input: 'test input',
+        },
+        assert: [
+          {
+            type: 'similarity',
+            value: 'expected output',
+            threshold: 0.8,
+          },
+        ],
+      },
+    ]);
+
     const cmdObj = { config: ['config.yaml'] };
     const result = await resolveConfigs(cmdObj, {});
 
@@ -1345,9 +1394,9 @@ describe('resolveConfigs', () => {
         id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
         config: {
           region: 'us-east-1',
-          profile: 'test-profile'
-        }
-      }
+          profile: 'test-profile',
+        },
+      },
     });
 
     // Verify the test case was loaded
@@ -1362,22 +1411,22 @@ describe('resolveConfigs', () => {
       providers: ['openai:gpt-3.5-turbo'],
       defaultTest: {
         options: {
-          provider: 'openai:gpt-4'
-        }
+          provider: 'openai:gpt-4',
+        },
       },
       tests: [
         {
           vars: {
-            input: 'test input'
+            input: 'test input',
           },
           assert: [
             {
               type: 'llm-rubric',
-              value: 'Output should be helpful'
-            }
-          ]
-        }
-      ]
+              value: 'Output should be helpful',
+            },
+          ],
+        },
+      ],
     };
 
     jest.mocked(fs.existsSync).mockReturnValue(true);
