@@ -62,21 +62,28 @@ describe('ProviderConfigDialog', () => {
     });
   });
 
-  it('allows adding custom fields', async () => {
+  it('shows message to use YAML tab for additional fields', () => {
     renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
 
-    const newFieldInput = screen.getByPlaceholderText('Add custom field...');
-    fireEvent.change(newFieldInput, { target: { value: 'custom_param' } });
-    
-    // Press Enter to add
-    fireEvent.keyPress(newFieldInput, { key: 'Enter', code: 'Enter', charCode: 13 });
+    expect(screen.getByText(/Need more configuration options\?/)).toBeInTheDocument();
+    expect(screen.getByText('YAML tab')).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      const fieldInputs = screen.getAllByLabelText('Field');
-      expect(
-        fieldInputs.some((input) => (input as HTMLInputElement).value === 'custom_param'),
-      ).toBe(true);
-    });
+  it('shows alert when config has additional fields beyond common ones', () => {
+    const propsWithExtraFields = {
+      ...defaultProps,
+      config: {
+        temperature: 0.7,
+        max_tokens: 1024,
+        custom_field: 'custom_value',
+        nested_config: { key: 'value' },
+      },
+    };
+
+    renderWithTheme(<ProviderConfigDialog {...propsWithExtraFields} />);
+
+    expect(screen.getByText(/Additional configuration detected/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Switch to YAML' })).toBeInTheDocument();
   });
 
   it('saves configuration from form editor', async () => {

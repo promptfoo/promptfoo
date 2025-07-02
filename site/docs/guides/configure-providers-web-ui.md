@@ -12,7 +12,7 @@ When you click on a provider in the web UI's evaluation creator, you'll see a co
 
 ### Form Editor
 
-The form editor provides a user-friendly interface for configuring simple provider settings:
+The form editor provides a user-friendly interface for configuring common provider settings:
 
 1. **Common Configuration Fields**
    - **API Key**: Authentication key for the provider
@@ -23,26 +23,27 @@ The form editor provides a user-friendly interface for configuring simple provid
    - **Timeout**: Request timeout in milliseconds
    - **Headers**: Custom HTTP headers as a JSON object
 
-2. **Simple Custom Fields**
-   - Click "Add Field" to add simple configuration parameters (strings, numbers, booleans)
-   - For nested objects, arrays, or complex configurations, use the YAML Editor
-   - The form will alert you if your configuration contains complex fields that need the YAML editor
+2. **Additional Configuration**
+   - For any fields beyond the common ones, use the YAML tab
+   - The form will alert you if your configuration contains additional fields
+   - Click "Switch to YAML" to see and edit all configuration
 
 3. **Auto-Save Feature**
    - Changes are automatically saved after 2 seconds of inactivity
-   - Look for the "Auto-saving in 2 seconds..." message
-   - No need to manually save unless you want to close the dialog immediately
+   - Works seamlessly in the background
+   - No need to manually save unless you want to close immediately
 
-### YAML Editor (Recommended for Complex Configurations)
+### YAML Editor
 
-The YAML editor tab is the recommended way to configure providers, especially for complex settings:
+The YAML editor tab is where you can configure any provider setting:
 
-- **Full syntax highlighting** with dark mode support
-- **Real-time syncing** - Changes in YAML are synced back to the form editor
-- **Handles all configuration types** - Nested objects, arrays, complex structures
+- **Full control** - Add any configuration field your provider supports
+- **Syntax highlighting** with dark mode support
+- **Real-time syncing** - Common fields are synced with the form editor
 - **Validation** - Shows errors for invalid YAML syntax
-- **Auto-save** - Same 2-second auto-save as the form editor
-- **Best for**:
+- **Auto-save** - Same seamless 2-second auto-save
+- **Use it for**:
+  - Adding custom fields beyond the common ones
   - Nested configuration objects
   - Array values
   - Complex provider-specific settings
@@ -110,13 +111,15 @@ response_format:
 
 ## Tips
 
-1. **Environment Variables**: You can still use environment variables for sensitive values like API keys. Set them in your environment and leave the fields empty in the UI.
+1. **Quick Setup**: Use the Form tab for common fields, then switch to YAML for anything else
 
-2. **Provider-Specific Fields**: Some providers have specific required fields (e.g., Azure requires `deployment_id`). The UI will show validation errors for missing required fields.
+2. **Environment Variables**: You can still use environment variables for sensitive values like API keys. Set them in your environment and leave the fields empty in the UI.
 
-3. **Copying Configurations**: Use the YAML editor to quickly copy configurations between providers or from existing YAML files.
+3. **Provider-Specific Fields**: Some providers have specific required fields (e.g., Azure requires `deployment_id`). The UI will show validation errors for missing required fields.
 
-4. **Custom Providers**: For custom providers using webhooks or local files, you can add any configuration fields your provider expects.
+4. **Adding Custom Fields**: Simply switch to the YAML tab and add any field your provider needs
+
+5. **Copying Configurations**: The YAML editor is perfect for pasting existing configurations from your YAML files
 
 ## Migration from CLI
 
