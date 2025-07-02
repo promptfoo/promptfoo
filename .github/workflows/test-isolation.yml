@@ -1,0 +1,52 @@
+name: Test Isolation Check
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  VITE_TELEMETRY_DISABLED: 1
+
+jobs:
+  test-isolation:
+    name: Test Isolation Check
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-suite: ['unit', 'matchers']
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Use Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run tests with randomization
+        run: |
+          if [ "${{ matrix.test-suite }}" == "unit" ]; then
+            # Run general unit tests with randomization
+            npm run test -- --ci --randomize --testPathIgnorePatterns="test/matchers"
+          else
+            # Run matcher tests specifically with randomization
+            npm run test -- --ci --randomize --testPathPattern="test/matchers"
+          fi
