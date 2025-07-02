@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb, sqliteInstance } from '../database';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
@@ -430,77 +430,94 @@ export default class Eval {
     searchQuery?: string;
     metricFilter?: string;
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
     const filter = opts.filterMode ?? 'all';
 
-    // Build filter conditions
-    const conditions = [`eval_id = '${this.id}'`];
+    // Ensure we have a valid sqlite instance
+    invariant(sqliteInstance, 'SQLite instance not initialized');
+
+    // Build filter conditions using parameterized queries
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    // Always filter by eval_id (now parameterized)
+    conditions.push('eval_id = ?');
+    params.push(this.id);
+
     if (filter === 'errors') {
-      conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
+      conditions.push(`failure_reason = ?`);
+      params.push(ResultFailureReason.ERROR);
     } else if (filter === 'failures') {
-      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
+      conditions.push(`success = 0 AND failure_reason != ?`);
+      params.push(ResultFailureReason.ERROR);
     } else if (filter === 'passes') {
       conditions.push(`success = 1`);
+    } else if (filter === 'highlights') {
+      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
+    } else if (filter === 'human') {
+      conditions.push(`grading_result LIKE '%"type":"human"%'`);
     } else if (filter === 'thumbs-up') {
       conditions.push(
-        `grading_result LIKE '%"type":"human"%' AND json_extract(grading_result, '$.pass') = 1`,
+        `grading_result LIKE '%"type":"human"%' AND grading_result LIKE '%"pass":true%'`,
       );
     } else if (filter === 'thumbs-down') {
       conditions.push(
-        `grading_result LIKE '%"type":"human"%' AND json_extract(grading_result, '$.pass') = 0`,
+        `grading_result LIKE '%"type":"human"%' AND grading_result LIKE '%"pass":false%'`,
       );
-    } else if (filter === 'human') {
-      conditions.push(`grading_result LIKE '%"type":"human"%'`);
     }
 
     // Add specific metric filter if provided
     if (opts.metricFilter && opts.metricFilter.trim() !== '') {
-      const sanitizedMetric = opts.metricFilter.replace(/'/g, "''");
-      conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
+      // Use parameterized query for metric filter
+      conditions.push(`json_extract(named_scores, '$.' || ?) IS NOT NULL`);
+      params.push(opts.metricFilter.trim());
     }
 
     // Add search condition if searchQuery is provided
     if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
+      const searchTerm = `%${opts.searchQuery.trim()}%`;
       const searchConditions = [
         // Search in response text
-        `response LIKE '%${sanitizedSearch}%'`,
+        `response LIKE ?`,
         // Search in grading result reason
-        `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(grading_result, '$.reason') LIKE ?`,
         // Search in grading result comment
-        `json_extract(grading_result, '$.comment') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(grading_result, '$.comment') LIKE ?`,
         // Search in named scores
-        `json_extract(named_scores, '$') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(named_scores, '$') LIKE ?`,
         // Search in metadata
-        `json_extract(metadata, '$') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(metadata, '$') LIKE ?`,
         // Search in test case vars
-        `json_extract(test_case, '$.vars') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(test_case, '$.vars') LIKE ?`,
         // Search in test case metadata
-        `json_extract(test_case, '$.metadata') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(test_case, '$.metadata') LIKE ?`,
       ];
       conditions.push(`(${searchConditions.join(' OR ')})`);
+      // Add search term parameter for each search condition
+      for (let i = 0; i < 7; i++) {
+        params.push(searchTerm);
+      }
     }
 
     const whereSql = conditions.join(' AND ');
 
-    // Get filtered count
-    const filteredCountQuery = sql.raw(
-      `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
-    );
+    // Get filtered count using parameterized query
+    const filteredCountSql = `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`;
     const countStart = Date.now();
-    const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
+    const countStmt = sqliteInstance.prepare(filteredCountSql);
+    const countResult = countStmt.get(...params) as FilteredCountRow;
     const countEnd = Date.now();
     logger.debug(`Count query took ${countEnd - countStart}ms`);
     const filteredCount = countResult?.count || 0;
 
-    // Query for test indices based on filters
-    const idxQuery = sql.raw(
-      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
-    );
+    // Query for test indices based on filters using parameterized query
+    // Add limit and offset as parameters
+    params.push(limit, offset);
+    const idxSql = `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ? OFFSET ?`;
     const idxStart = Date.now();
-    const rows = await db.all<TestIndexRow>(idxQuery);
+    const idxStmt = sqliteInstance.prepare(idxSql);
+    const rows = idxStmt.all(...params) as TestIndexRow[];
     const idxEnd = Date.now();
     logger.debug(`Index query took ${idxEnd - idxStart}ms`);
 
