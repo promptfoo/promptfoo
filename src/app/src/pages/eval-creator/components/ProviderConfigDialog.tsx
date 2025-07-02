@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Editor from 'react-simple-code-editor';
 import JsonTextField from '@app/components/JsonTextField';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InfoIcon from '@mui/icons-material/Info';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -63,6 +64,8 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   const [tabValue, setTabValue] = useState(0);
   const [yamlConfig, setYamlConfig] = useState('');
   const [yamlError, setYamlError] = useState<string | null>(null);
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const isAzureProvider = providerId.startsWith('azure:');
 
   // Helper function to check if a value has content
@@ -72,6 +75,58 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   const isDeploymentIdValid = !isAzureProvider || hasContent(localConfig.deployment_id);
 
+  // Convert config to YAML
+  const configToYaml = useCallback((configObj: Record<string, any>) => {
+    return yaml.dump(configObj, { skipInvalid: true });
+  }, []);
+
+  // Merge all configuration into a single object
+  const getMergedConfig = useCallback(() => {
+    const merged = { ...localConfig };
+    customFields.forEach(({ key, value }) => {
+      if (key && value !== undefined && value !== '') {
+        merged[key] = value;
+      }
+    });
+    return merged;
+  }, [localConfig, customFields]);
+
+  // Sync form state to YAML when in form editor mode
+  useEffect(() => {
+    if (tabValue === 0) {
+      const mergedConfig = getMergedConfig();
+      setYamlConfig(configToYaml(mergedConfig));
+    }
+  }, [localConfig, customFields, tabValue, configToYaml, getMergedConfig]);
+
+  // Auto-save functionality
+  const debouncedAutoSave = useCallback(() => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+    
+    const timer = setTimeout(() => {
+      if (hasUnsavedChanges) {
+        handleSave(true); // Silent save
+      }
+    }, 2000); // 2 second debounce
+    
+    setAutoSaveTimer(timer);
+  }, [hasUnsavedChanges, autoSaveTimer]);
+
+  // Trigger auto-save on changes
+  useEffect(() => {
+    if (hasUnsavedChanges) {
+      debouncedAutoSave();
+    }
+    
+    return () => {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer);
+      }
+    };
+  }, [hasUnsavedChanges, debouncedAutoSave]);
+
   // Reset local config when the dialog opens or providerId changes
   useEffect(() => {
     setLocalConfig(config);
@@ -79,33 +134,77 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     const customFieldsList: Array<{ key: string; value: any }> = [];
     Object.entries(config).forEach(([key, value]) => {
       if (!COMMON_FIELDS[key as keyof typeof COMMON_FIELDS] && key !== 'deployment_id') {
-        customFieldsList.push({ key, value });
+        // Only add simple values to custom fields, not nested objects
+        if (typeof value !== 'object' || value === null) {
+          customFieldsList.push({ key, value });
+        }
       }
     });
     setCustomFields(customFieldsList);
-    setYamlConfig(yaml.dump(config));
-  }, [open, providerId, config]);
+    setYamlConfig(configToYaml(config));
+    setHasUnsavedChanges(false);
+  }, [open, providerId, config, configToYaml]);
 
-  const handleSave = () => {
+  const handleSave = (silent = false) => {
+    let configToSave: Record<string, any>;
+    
     if (tabValue === 1) {
       // Save from YAML editor
       try {
-        const parsedConfig = yaml.load(yamlConfig) as Record<string, any>;
-        onSave(providerId, parsedConfig);
+        configToSave = yaml.load(yamlConfig) as Record<string, any>;
       } catch (err) {
-        setYamlError(`Invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
+        if (!silent) {
+          setYamlError(`Invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
+        }
         return;
       }
     } else {
       // Save from form editor
-      // Merge config with custom fields
-      const finalConfig = { ...localConfig };
-      customFields.forEach(({ key, value }) => {
-        if (key && value !== undefined) {
-          finalConfig[key] = value;
+      configToSave = getMergedConfig();
+    }
+    
+    onSave(providerId, configToSave);
+    setHasUnsavedChanges(false);
+    
+    if (!silent) {
+      onClose();
+    }
+  };
+
+  const handleYamlChange = (code: string) => {
+    setYamlConfig(code);
+    setYamlError(null);
+    setHasUnsavedChanges(true);
+    
+    // Try to parse and sync to form if valid
+    try {
+      const parsed = yaml.load(code) as Record<string, any>;
+      
+      // Update localConfig with common fields and deployment_id
+      const newLocalConfig: Record<string, any> = {};
+      Object.keys(COMMON_FIELDS).forEach(key => {
+        if (parsed[key] !== undefined) {
+          newLocalConfig[key] = parsed[key];
         }
       });
-      onSave(providerId, finalConfig);
+      if (isAzureProvider && parsed.deployment_id !== undefined) {
+        newLocalConfig.deployment_id = parsed.deployment_id;
+      }
+      
+      // Update custom fields with remaining simple fields
+      const newCustomFields: Array<{ key: string; value: any }> = [];
+      Object.entries(parsed).forEach(([key, value]) => {
+        if (!COMMON_FIELDS[key as keyof typeof COMMON_FIELDS] && 
+            key !== 'deployment_id' && 
+            (typeof value !== 'object' || value === null)) {
+          newCustomFields.push({ key, value });
+        }
+      });
+      
+      setLocalConfig(newLocalConfig);
+      setCustomFields(newCustomFields);
+    } catch {
+      // Invalid YAML, don't sync
     }
   };
 
@@ -117,6 +216,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     ) {
       setCustomFields([...customFields, { key: newFieldKey, value: '' }]);
       setNewFieldKey('');
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -124,12 +224,19 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     const newCustomFields = [...customFields];
     newCustomFields.splice(index, 1);
     setCustomFields(newCustomFields);
+    setHasUnsavedChanges(true);
   };
 
   const updateCustomField = (index: number, field: 'key' | 'value', newValue: any) => {
     const newCustomFields = [...customFields];
     newCustomFields[index] = { ...newCustomFields[index], [field]: newValue };
     setCustomFields(newCustomFields);
+    setHasUnsavedChanges(true);
+  };
+
+  const updateLocalConfigField = (key: string, value: any) => {
+    setLocalConfig({ ...localConfig, [key]: value });
+    setHasUnsavedChanges(true);
   };
 
   const renderFieldInput = (
@@ -206,8 +313,20 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     return Array.from(allKeys);
   }, [localConfig, isAzureProvider]);
 
+  // Check if there are complex fields that can't be edited in form mode
+  const hasComplexFields = useMemo(() => {
+    const mergedConfig = getMergedConfig();
+    return Object.entries(mergedConfig).some(([key, value]) => {
+      return !COMMON_FIELDS[key as keyof typeof COMMON_FIELDS] && 
+             key !== 'deployment_id' &&
+             typeof value === 'object' && 
+             value !== null &&
+             !customFields.find(f => f.key === key);
+    });
+  }, [getMergedConfig, customFields]);
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+    <Dialog open={open} onClose={() => handleSave(true)} fullWidth maxWidth="md">
       <DialogTitle>
         Provider Configuration
         <Typography
@@ -217,6 +336,11 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         >
           {providerId}
         </Typography>
+        {hasUnsavedChanges && (
+          <Typography variant="caption" color="primary" sx={{ display: 'block', mt: 1 }}>
+            Auto-saving in 2 seconds...
+          </Typography>
+        )}
       </DialogTitle>
       <DialogContent>
         <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
@@ -234,6 +358,13 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                     : 'You must specify a deployment ID for Azure OpenAI models. This is the name you gave your model deployment in the Azure portal.'}
                 </Alert>
               </Box>
+            )}
+
+            {hasComplexFields && (
+              <Alert severity="info" sx={{ mb: 2 }} icon={<InfoIcon />}>
+                This configuration contains nested objects or arrays that can't be edited in form mode. 
+                Switch to the <strong>YAML Editor</strong> tab to modify complex fields.
+              </Alert>
             )}
 
             <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
@@ -254,7 +385,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                   {renderFieldInput(
                     key,
                     value,
-                    (newValue) => setLocalConfig({ ...localConfig, [key]: newValue }),
+                    (newValue) => updateLocalConfigField(key, newValue),
                     isRequired,
                   )}
                 </Box>
@@ -263,9 +394,14 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
             <Divider sx={{ my: 3 }} />
 
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-              Custom Configuration
-            </Typography>
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                Simple Custom Fields
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                For nested objects or arrays, use the YAML Editor
+              </Typography>
+            </Box>
 
             {customFields.map((field, index) => (
               <Box key={index} my={2} display="flex" gap={1} alignItems="flex-start">
@@ -293,6 +429,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                 onChange={(e) => setNewFieldKey(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleAddCustomField()}
                 sx={{ flex: 1 }}
+                helperText="For complex values, use the YAML editor"
               />
               <Button
                 variant="outlined"
@@ -307,8 +444,8 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         ) : (
           <Box>
             <Typography variant="body2" sx={{ mb: 2 }}>
-              Edit the provider configuration in YAML format. This allows you to set any
-              configuration field supported by the provider.
+              Edit the provider configuration in YAML format. This is the recommended way to configure 
+              nested objects, arrays, and complex settings. Changes are synced with the form editor.
             </Typography>
             {yamlError && (
               <Alert severity="error" sx={{ mb: 2 }}>
@@ -317,10 +454,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             )}
             <Editor
               value={yamlConfig}
-              onValueChange={(code) => {
-                setYamlConfig(code);
-                setYamlError(null);
-              }}
+              onValueChange={handleYamlChange}
               highlight={(code) => highlight(code, languages.yaml)}
               padding={10}
               style={{
@@ -338,7 +472,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} disabled={!isDeploymentIdValid}>
+        <Button onClick={() => handleSave(false)} disabled={!isDeploymentIdValid}>
           Save
         </Button>
       </DialogActions>

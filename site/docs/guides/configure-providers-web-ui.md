@@ -12,7 +12,7 @@ When you click on a provider in the web UI's evaluation creator, you'll see a co
 
 ### Form Editor
 
-The form editor provides a user-friendly interface for configuring providers:
+The form editor provides a user-friendly interface for configuring simple provider settings:
 
 1. **Common Configuration Fields**
    - **API Key**: Authentication key for the provider
@@ -23,20 +23,30 @@ The form editor provides a user-friendly interface for configuring providers:
    - **Timeout**: Request timeout in milliseconds
    - **Headers**: Custom HTTP headers as a JSON object
 
-2. **Custom Configuration Fields**
-   - Click "Add Field" to add any additional configuration parameter
-   - Enter the field name and value
-   - Supports strings, numbers, booleans, and JSON objects
-   - Remove fields using the delete button
+2. **Simple Custom Fields**
+   - Click "Add Field" to add simple configuration parameters (strings, numbers, booleans)
+   - For nested objects, arrays, or complex configurations, use the YAML Editor
+   - The form will alert you if your configuration contains complex fields that need the YAML editor
 
-### YAML Editor
+3. **Auto-Save Feature**
+   - Changes are automatically saved after 2 seconds of inactivity
+   - Look for the "Auto-saving in 2 seconds..." message
+   - No need to manually save unless you want to close the dialog immediately
 
-The YAML editor tab allows you to edit the entire provider configuration in YAML format:
+### YAML Editor (Recommended for Complex Configurations)
 
-- Full syntax highlighting
-- Direct editing of all configuration parameters
-- Useful for complex configurations or copying from existing YAML files
-- Validation ensures your YAML is properly formatted
+The YAML editor tab is the recommended way to configure providers, especially for complex settings:
+
+- **Full syntax highlighting** with dark mode support
+- **Real-time syncing** - Changes in YAML are synced back to the form editor
+- **Handles all configuration types** - Nested objects, arrays, complex structures
+- **Validation** - Shows errors for invalid YAML syntax
+- **Auto-save** - Same 2-second auto-save as the form editor
+- **Best for**:
+  - Nested configuration objects
+  - Array values
+  - Complex provider-specific settings
+  - Pasting existing configurations from YAML files
 
 ## Examples
 
@@ -67,6 +77,35 @@ headers:
   X-Custom-Header: value
   Authorization: Bearer custom-token
 timeout: 30000
+```
+
+### Complex Provider Configuration (Requires YAML Editor)
+
+```yaml
+apiKey: sk-your-api-key
+temperature: 0.7
+# Nested configuration object
+config:
+  model_config:
+    top_p: 0.9
+    frequency_penalty: 0.5
+    presence_penalty: 0.5
+  generation_config:
+    max_length: 2048
+    min_length: 10
+    do_sample: true
+# Array configuration
+stop_sequences:
+  - "\n\n"
+  - "END"
+  - "STOP"
+# Complex nested structure
+response_format:
+  type: json_object
+  schema:
+    properties:
+      answer: { type: string }
+      confidence: { type: number }
 ```
 
 ## Tips

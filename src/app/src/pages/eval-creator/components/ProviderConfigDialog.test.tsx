@@ -99,6 +99,35 @@ describe('ProviderConfigDialog', () => {
     });
   });
 
+  it('shows auto-save message when changes are made', async () => {
+    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+
+    const temperatureInput = screen.getByLabelText('Temperature');
+    fireEvent.change(temperatureInput, { target: { value: '0.9' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Auto-saving in 2 seconds...')).toBeInTheDocument();
+    });
+  });
+
+  it('syncs YAML editor with form changes', async () => {
+    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+
+    // Make a change in form editor
+    const temperatureInput = screen.getByLabelText('Temperature');
+    fireEvent.change(temperatureInput, { target: { value: '0.9' } });
+
+    // Switch to YAML editor
+    const yamlTab = screen.getByRole('tab', { name: 'YAML Editor' });
+    fireEvent.click(yamlTab);
+
+    // YAML should contain the updated temperature
+    await waitFor(() => {
+      const yamlContent = document.querySelector('textarea')?.value || '';
+      expect(yamlContent).toContain('temperature: 0.9');
+    });
+  });
+
   it('validates Azure deployment_id requirement', () => {
     const azureProps = {
       ...defaultProps,
