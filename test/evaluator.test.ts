@@ -2915,3 +2915,116 @@ describe('formatVarsForDisplay', () => {
     // Should fit as much as possible within the limit
   });
 });
+
+describe('evaluator defaultTest merging', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should merge defaultTest.options.provider with test case options', async () => {
+    const mockProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('mock-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt {{text}}')],
+      providers: [mockProvider],
+      tests: [
+        {
+          vars: { text: 'Hello world' },
+          assert: [
+            {
+              type: 'similar',
+              value: 'expected output',
+              threshold: 0.8,
+            },
+          ],
+        },
+      ],
+      defaultTest: {
+        options: {
+          provider: {
+            embedding: {
+              id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+              config: {
+                region: 'us-east-1',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    
+    // The evaluator should have processed the tests and merged defaultTest options
+    expect(summary.results).toBeDefined();
+    expect(summary.results.length).toBeGreaterThan(0);
+    
+    // Check that the test case has the merged options from defaultTest
+    const processedTest = summary.results[0].testCase;
+    expect(processedTest?.options?.provider).toEqual({
+      embedding: {
+        id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+        config: {
+          region: 'us-east-1',
+        },
+      },
+    });
+  });
+
+  it('should allow test case options to override defaultTest options', async () => {
+    const mockProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('mock-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt {{text}}')],
+      providers: [mockProvider],
+      tests: [
+        {
+          vars: { text: 'Hello world' },
+          options: {
+            provider: 'openai:gpt-4',
+          },
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output is correct',
+            },
+          ],
+        },
+      ],
+      defaultTest: {
+        options: {
+          provider: 'openai:gpt-3.5-turbo',
+          transform: 'output.toUpperCase()',
+        },
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    
+    // Check that the test case options override defaultTest options
+    const processedTest = summary.results[0].testCase;
+    expect(processedTest?.options?.provider).toBe('openai:gpt-4');
+    // But other defaultTest options should still be merged
+    expect(processedTest?.options?.transform).toBe('output.toUpperCase()');
+  });
+});

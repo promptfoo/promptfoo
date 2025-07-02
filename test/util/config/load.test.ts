@@ -57,18 +57,78 @@ jest.mock('../../../src/util', () => ({
   isRunningUnderNpx: jest.fn(),
 }));
 
-jest.mock('../../../src/util/file', () => {
-  const originalModule = jest.requireActual('../../../src/util/file');
-  return {
-    ...originalModule,
-    maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
-    readFilters: jest.fn(),
-  };
-});
+jest.mock('../../../src/util/file', () => ({
+  ...jest.requireActual('../../../src/util/file'),
+  maybeLoadFromExternalFile: jest.fn((x) => x),
+  readFilters: jest.fn().mockResolvedValue({}),
+}));
 
 jest.mock('../../../src/util/testCaseReader', () => ({
-  readTest: jest.fn(),
-  readTests: jest.fn(),
+  readTest: jest.fn().mockImplementation(async (test, basePath, isDefaultTest) => {
+    // For defaultTest, just return the test as-is since it doesn't need validation
+    if (isDefaultTest) {
+      return test;
+    }
+    // For regular tests, just return the test
+    return test;
+  }),
+  readTests: jest.fn().mockImplementation(async (tests) => {
+    if (!tests) return [];
+    if (Array.isArray(tests)) {
+      return tests;
+    }
+    return [];
+  }),
+}));
+
+jest.mock('../../../src/providers', () => ({
+  ...jest.requireActual('../../../src/providers'),
+  loadApiProviders: jest.fn().mockImplementation(async (providers) => {
+    return providers.map((p: any) => ({
+      id: () => (typeof p === 'string' ? p : p.id),
+      label: typeof p === 'string' ? p : p.label || p.id,
+      config: typeof p === 'object' ? p.config : {},
+    }));
+  }),
+}));
+
+jest.mock('../../../src/util/templates', () => ({
+  extractVariablesFromTemplate: jest.fn().mockReturnValue([]),
+  getNunjucksEngine: jest.fn().mockReturnValue({
+    renderString: jest.fn().mockImplementation((str) => str),
+  }),
+}));
+
+jest.mock('../../../src/prompts', () => ({
+  readPrompts: jest.fn().mockImplementation(async (prompts) => {
+    if (!prompts) return [];
+    if (Array.isArray(prompts)) {
+      return prompts.map((p, idx) => ({
+        raw: typeof p === 'string' ? p : p.raw || '',
+        label: typeof p === 'string' ? `Prompt ${idx + 1}` : p.label || `Prompt ${idx + 1}`,
+        config: {},
+        metrics: {
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 0,
+          assertPassCount: 0,
+          assertFailCount: 0,
+          totalLatencyMs: 0,
+          tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+          namedScores: {},
+          namedScoresCount: {},
+          cost: 0,
+        },
+      }));
+    }
+    return [];
+  }),
+  readProviderPromptMap: jest.fn().mockReturnValue({}),
+}));
+
+jest.mock('../../../src/assertions', () => ({
+  validateAssertions: jest.fn(),
 }));
 
 describe('combineConfigs', () => {
@@ -1103,6 +1163,7 @@ describe('dereferenceConfig', () => {
 describe('resolveConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
   });
 
   it('should set cliState.basePath', async () => {
@@ -1229,6 +1290,112 @@ describe('resolveConfigs', () => {
     expect(
       async () => await resolveConfigs(cmdObj, defaultConfig, 'DatasetGeneration'),
     ).not.toThrow();
+  });
+
+  it('should load defaultTest with embedding provider configuration', async () => {
+    const configWithDefaultTest = {
+      prompts: ['Test prompt: {{input}}'],
+      providers: ['openai:gpt-3.5-turbo'],
+      defaultTest: {
+        options: {
+          provider: {
+            embedding: {
+              id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+              config: {
+                region: 'us-east-1',
+                profile: 'test-profile'
+              }
+            }
+          }
+        }
+      },
+      tests: [
+        {
+          vars: {
+            input: 'test input'
+          },
+          assert: [
+            {
+              type: 'similarity',
+              value: 'expected output',
+              threshold: 0.8
+            }
+          ]
+        }
+      ]
+    };
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+      if (typeof path === 'string' && path.endsWith('config.yaml')) {
+        return yaml.dump(configWithDefaultTest);
+      }
+      return Buffer.from('');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.yaml']);
+    jest.mocked(isCI).mockReturnValue(true); // Avoid triggering exit
+
+    const cmdObj = { config: ['config.yaml'] };
+    const result = await resolveConfigs(cmdObj, {});
+
+    // Verify the defaultTest was loaded with the embedding provider configuration
+    expect(result.testSuite.defaultTest).toBeDefined();
+    expect(result.testSuite.defaultTest?.options?.provider).toEqual({
+      embedding: {
+        id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+        config: {
+          region: 'us-east-1',
+          profile: 'test-profile'
+        }
+      }
+    });
+
+    // Verify the test case was loaded
+    expect(result.testSuite.tests).toBeDefined();
+    expect(result.testSuite.tests).toHaveLength(1);
+    expect(result.testSuite.tests![0].vars).toEqual({ input: 'test input' });
+  });
+
+  it('should load defaultTest with model-graded eval provider', async () => {
+    const configWithDefaultTest = {
+      prompts: ['Test prompt: {{input}}'],
+      providers: ['openai:gpt-3.5-turbo'],
+      defaultTest: {
+        options: {
+          provider: 'openai:gpt-4'
+        }
+      },
+      tests: [
+        {
+          vars: {
+            input: 'test input'
+          },
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output should be helpful'
+            }
+          ]
+        }
+      ]
+    };
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+      if (typeof path === 'string' && path.endsWith('config.yaml')) {
+        return yaml.dump(configWithDefaultTest);
+      }
+      return Buffer.from('');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.yaml']);
+    jest.mocked(isCI).mockReturnValue(true); // Avoid triggering exit
+
+    const cmdObj = { config: ['config.yaml'] };
+    const result = await resolveConfigs(cmdObj, {});
+
+    // Verify the defaultTest was loaded with the provider string
+    expect(result.testSuite.defaultTest).toBeDefined();
+    expect(result.testSuite.defaultTest?.options?.provider).toBe('openai:gpt-4');
   });
 });
 
