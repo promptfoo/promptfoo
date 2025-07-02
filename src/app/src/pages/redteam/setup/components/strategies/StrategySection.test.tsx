@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { vi } from 'vitest';
 import { StrategySection } from './StrategySection';
 import type { StrategyCardData } from './types';
@@ -164,6 +165,43 @@ describe('StrategySection', () => {
       expect(mockOnToggle).toHaveBeenCalledWith('strategy1');
       expect(mockOnToggle).toHaveBeenCalledWith('strategy3');
     });
+
+    it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', () => {
+      render(
+        <StrategySection
+          title="Test Section"
+          strategies={testStrategies}
+          selectedIds={['strategy1', 'nonexistent', 'strategy3']}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onSelectNone={mockOnSelectNone}
+        />,
+      );
+
+      const resetButton = screen.getByText('Reset');
+      fireEvent.click(resetButton);
+
+      expect(mockOnSelectNone).toHaveBeenCalledWith(['strategy1', 'strategy3']);
+    });
+
+    it('does not call onSelectNone or onToggle when strategies are empty but selectedIds contains IDs', () => {
+      render(
+        <StrategySection
+          title="Test Section"
+          strategies={[]}
+          selectedIds={['strategy1', 'strategy2']}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onSelectNone={mockOnSelectNone}
+        />,
+      );
+
+      const resetButton = screen.queryByText('Reset');
+
+      expect(resetButton).toBeNull();
+      expect(mockOnSelectNone).not.toHaveBeenCalled();
+      expect(mockOnToggle).not.toHaveBeenCalled();
+    });
   });
 
   describe('Highlighting', () => {
@@ -217,6 +255,73 @@ describe('StrategySection', () => {
       expect(screen.getByText('Empty Section')).toBeInTheDocument();
       // Should not show any strategy items
       expect(screen.queryByText('Strategy 1')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Theme customization', () => {
+    it('renders without error when theme.palette.primary.main is not defined and highlighted is true', () => {
+      const customTheme = createTheme({
+        palette: {
+          mode: 'light',
+        },
+      });
+
+      render(
+        <ThemeProvider theme={customTheme}>
+          <StrategySection
+            title="Test Section"
+            strategies={testStrategies}
+            selectedIds={[]}
+            onToggle={mockOnToggle}
+            onConfigClick={mockOnConfigClick}
+            highlighted={true}
+          />
+        </ThemeProvider>,
+      );
+
+      expect(screen.getByText('Test Section')).toBeInTheDocument();
+    });
+  });
+
+  describe('Configurable strategies', () => {
+    beforeEach(() => {
+      vi.mock('./StrategyItem', () => ({
+        StrategyItem: vi
+          .fn()
+          .mockImplementation(({ strategy, isSelected, onToggle, onConfigClick }) => (
+            <div>
+              {isSelected && strategy.id === 'configurable-strategy-id' && (
+                <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
+                  Settings
+                </button>
+              )}
+              {strategy.name}
+            </div>
+          )),
+        CONFIGURABLE_STRATEGIES: ['configurable-strategy-id'],
+      }));
+    });
+
+    it('renders config button when strategy is selected and configurable', () => {
+      const configurableStrategyId = 'configurable-strategy-id';
+      const configurableStrategy: StrategyCardData = {
+        id: configurableStrategyId,
+        name: 'Configurable Strategy',
+        description: 'Description for configurable strategy',
+      };
+
+      render(
+        <StrategySection
+          title="Test Section"
+          strategies={[configurableStrategy]}
+          selectedIds={[configurableStrategyId]}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      const configButton = screen.getByLabelText('settings');
+      expect(configButton).toBeInTheDocument();
     });
   });
 });

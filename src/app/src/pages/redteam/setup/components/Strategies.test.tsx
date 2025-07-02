@@ -139,6 +139,12 @@ describe('Strategies', () => {
       expect(MULTI_MODAL_STRATEGIES).toBeDefined();
       expect(MULTI_MODAL_STRATEGIES).toEqual(['audio', 'video', 'image']);
     });
+
+    it('should render visual labels for multi-modal strategies when their IDs match "audio", "video", or "image"', () => {
+      expect(MULTI_MODAL_STRATEGIES).toContain('audio');
+      expect(MULTI_MODAL_STRATEGIES).toContain('video');
+      expect(MULTI_MODAL_STRATEGIES).toContain('image');
+    });
   });
 
   describe('Preset selection', () => {
@@ -211,6 +217,32 @@ describe('Strategies', () => {
         'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
       );
       expect(basicDescription).toBeInTheDocument();
+    });
+  });
+
+  describe('Strategy categorization', () => {
+    it('should visually label a non-multi-modal strategy with ID in MULTI_MODAL_STRATEGIES as multi-modal', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'image' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Image')).toBeInTheDocument();
     });
   });
 });

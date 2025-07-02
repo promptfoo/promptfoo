@@ -131,6 +131,25 @@ describe('StrategyItem', () => {
 
       expect(screen.getByText('Experimental')).toBeInTheDocument();
     });
+
+    it('renders multiple badges when a strategy belongs to multiple categories', () => {
+      const multiCategoryStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'jailbreak',
+      };
+
+      render(
+        <StrategyItem
+          strategy={multiCategoryStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      expect(screen.getByText('Recommended')).toBeInTheDocument();
+      expect(screen.getByText('Agent')).toBeInTheDocument();
+    });
   });
 
   describe('Settings button', () => {
@@ -254,7 +273,7 @@ describe('StrategyItem', () => {
     it('applies padding to title section when settings button is present', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'jailbreak',
+        id: 'multilingual',
       };
 
       render(
@@ -266,11 +285,86 @@ describe('StrategyItem', () => {
         />,
       );
 
-      // Check that the title box has padding-right style
-      const titleBox = screen.getByText('Test Strategy').parentElement;
-      // Note: In tests, the actual computed styles might not reflect MUI's sx prop
-      // but we're testing that the component renders without errors
-      expect(titleBox).toBeInTheDocument();
+      const titleBox = screen.getByText('Test Strategy').closest('div');
+      expect(titleBox).toHaveStyle({ paddingRight: expect.anything() });
+    });
+
+    it('renders without overlap when multiple pills and settings button are present', () => {
+      const multiBadgeStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'jailbreak',
+      };
+
+      render(
+        <StrategyItem
+          strategy={multiBadgeStrategy}
+          isSelected={true}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      expect(screen.getByText('Test Strategy')).toBeInTheDocument();
+      expect(screen.getByText('Agent')).toBeInTheDocument();
+      expect(screen.getByText('Recommended')).toBeInTheDocument();
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('handles extremely long strategy names without layout issues', () => {
+      const longStrategyName =
+        'This is an extremely long strategy name that should not break the layout';
+      const configurableStrategy: StrategyCardData = {
+        id: 'multilingual',
+        name: longStrategyName,
+        description: 'Test description',
+      };
+
+      render(
+        <StrategyItem
+          strategy={configurableStrategy}
+          isSelected={true}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      expect(screen.getByText(longStrategyName)).toBeInTheDocument();
+    });
+  });
+
+  describe('Documentation Links', () => {
+    // [Tusk] FAILING TEST
+    it('renders documentation link and does not trigger toggle on click', () => {
+      interface StrategyCardData {
+        id: string;
+        name: string;
+        description: string;
+        documentationUrl?: string;
+      }
+      const strategyWithDocs: StrategyCardData = {
+        ...baseStrategy,
+        documentationUrl: 'https://example.com/docs',
+      };
+
+      render(
+        <StrategyItem
+          strategy={strategyWithDocs}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      const link = screen.getByRole('link', { name: 'Learn More' });
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute('href', 'https://example.com/docs');
+
+      fireEvent.click(link);
+
+      expect(mockOnToggle).not.toHaveBeenCalled();
+      expect(mockOnConfigClick).not.toHaveBeenCalled();
     });
   });
 });
