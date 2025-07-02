@@ -15,7 +15,7 @@ import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS, hasContentFilterFinishReason } from './util';
+import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS, buildGuardrailResponse } from './util';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -355,40 +355,28 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (data.error) {
       await data.deleteFromCache?.();
       
-      // In redteam context, check if this is a guardrail error
-      const isRedteam = !!cliState.config?.redteam;
-      
-      if (isRedteam && data.error.code === 'content_policy_violation') {
-        return {
-          guardrails: { 
-            flagged: true,
-            flaggedInput: true
-          },
-          error: formatOpenAiError(data),
-          tokenUsage: getTokenUsage(data, cached),
-          raw: data,
-        };
-      }
+      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
       
       return {
         error: formatOpenAiError(data),
+        ...(guardrails && { 
+          guardrails,
+          tokenUsage: getTokenUsage(data, cached),
+          raw: data,
+        }),
       };
     }
 
     try {
       const message = data.choices[0].message;
       
-      // Check for content_filter finish_reason
-      const hasContentFilter = hasContentFilterFinishReason(data);
-      const isRedteam = !!cliState.config?.redteam;
+      // Check for guardrails in redteam context
+      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
       
-      if (hasContentFilter && isRedteam) {
+      if (guardrails) {
         return {
           output: data.choices[0].message?.content || 'Content was filtered by OpenAI',
-          guardrails: { 
-            flagged: true,
-            flaggedOutput: true
-          },
+          guardrails,
           tokenUsage: getTokenUsage(data, cached),
           cached,
           cost: calculateOpenAICost(

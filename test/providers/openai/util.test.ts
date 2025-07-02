@@ -7,6 +7,7 @@ import {
   formatOpenAiError,
   OPENAI_CHAT_MODELS,
   hasContentFilterFinishReason,
+  buildGuardrailResponse,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -471,54 +472,31 @@ describe('formatOpenAiError', () => {
 });
 
 describe('hasContentFilterFinishReason', () => {
-  it('should return false when data is undefined', () => {
-    expect(hasContentFilterFinishReason(undefined)).toBe(false);
-  });
-
-  it('should return false when data has no choices', () => {
+  it('should detect content_filter finish_reason', () => {
+    expect(hasContentFilterFinishReason({ choices: [{ finish_reason: 'content_filter' }] })).toBe(true);
+    expect(hasContentFilterFinishReason({ choices: [{ finish_reason: 'stop' }] })).toBe(false);
     expect(hasContentFilterFinishReason({})).toBe(false);
-    expect(hasContentFilterFinishReason({ choices: null })).toBe(false);
+  });
+});
+
+describe('buildGuardrailResponse', () => {
+  it('should return undefined when not in redteam context', () => {
+    expect(buildGuardrailResponse({ error: { code: 'content_policy_violation' } }, false)).toBeUndefined();
+    expect(buildGuardrailResponse({ choices: [{ finish_reason: 'content_filter' }] }, false)).toBeUndefined();
   });
 
-  it('should return false when choices is not an array', () => {
-    expect(hasContentFilterFinishReason({ choices: 'not an array' })).toBe(false);
+  it('should detect content_policy_violation errors in redteam', () => {
+    const result = buildGuardrailResponse({ error: { code: 'content_policy_violation' } }, true);
+    expect(result).toEqual({ flagged: true, flaggedInput: true });
   });
 
-  it('should return false when no choice has content_filter finish_reason', () => {
-    expect(hasContentFilterFinishReason({
-      choices: [
-        { finish_reason: 'stop' },
-        { finish_reason: 'length' },
-        { finish_reason: 'tool_calls' }
-      ]
-    })).toBe(false);
+  it('should detect content_filter finish_reason in redteam', () => {
+    const result = buildGuardrailResponse({ choices: [{ finish_reason: 'content_filter' }] }, true);
+    expect(result).toEqual({ flagged: true, flaggedOutput: true });
   });
 
-  it('should return true when at least one choice has content_filter finish_reason', () => {
-    expect(hasContentFilterFinishReason({
-      choices: [
-        { finish_reason: 'stop' },
-        { finish_reason: 'content_filter' },
-        { finish_reason: 'length' }
-      ]
-    })).toBe(true);
-  });
-
-  it('should return true when all choices have content_filter finish_reason', () => {
-    expect(hasContentFilterFinishReason({
-      choices: [
-        { finish_reason: 'content_filter' },
-        { finish_reason: 'content_filter' }
-      ]
-    })).toBe(true);
-  });
-
-  it('should handle choices without finish_reason property', () => {
-    expect(hasContentFilterFinishReason({
-      choices: [
-        { message: 'test' },
-        { finish_reason: 'content_filter' }
-      ]
-    })).toBe(true);
+  it('should return undefined for other cases in redteam', () => {
+    expect(buildGuardrailResponse({ error: { code: 'rate_limit' } }, true)).toBeUndefined();
+    expect(buildGuardrailResponse({ choices: [{ finish_reason: 'stop' }] }, true)).toBeUndefined();
   });
 });

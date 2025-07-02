@@ -380,6 +380,31 @@ export function hasContentFilterFinishReason(data: any): boolean {
   );
 }
 
+/**
+ * Builds a guardrail response if content filtering is detected in redteam context.
+ * Returns undefined if no guardrails should be added.
+ */
+export function buildGuardrailResponse(
+  data: any,
+  isRedteam: boolean
+): { flagged: boolean; flaggedInput?: boolean; flaggedOutput?: boolean } | undefined {
+  if (!isRedteam) {
+    return undefined;
+  }
+
+  // Check for content policy violation error
+  if (data.error?.code === 'content_policy_violation') {
+    return { flagged: true, flaggedInput: true };
+  }
+
+  // Check for content_filter finish_reason
+  if (hasContentFilterFinishReason(data)) {
+    return { flagged: true, flaggedOutput: true };
+  }
+
+  return undefined;
+}
+
 export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     const errorType = err.error?.type || err.type || 'unknown';
