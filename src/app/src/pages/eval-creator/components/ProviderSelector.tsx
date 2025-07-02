@@ -640,7 +640,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   };
 
   const handleSave = (providerId: string, config: Record<string, any>) => {
-    onChange(providers.map((p) => (p.id === providerId && !p.label ? { ...p, config } : p)));
+    onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
     setSelectedProvider(null);
   };
 
