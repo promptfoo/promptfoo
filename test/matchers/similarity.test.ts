@@ -4,7 +4,6 @@ import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import type { GradingConfig } from '../../src/types';
 
-
 describe('matchesSimilarity', () => {
   beforeEach(() => {
     jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {

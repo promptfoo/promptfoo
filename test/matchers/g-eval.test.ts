@@ -1,7 +1,6 @@
 import { matchesGEval } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-
 describe('matchesGEval', () => {
   let originalCallApi: typeof DefaultGradingProvider.callApi;
 
@@ -130,9 +129,9 @@ describe('matchesGEval', () => {
     const result = await matchesGEval(criteria, input, output, threshold);
 
     expect(result.tokensUsed).toEqual({
-      total: 25, // 10 from steps call + 15 from evaluation call
-      prompt: 13, // 5 from steps call + 8 from evaluation call
-      completion: 12, // 5 from steps call + 7 from evaluation call
+      total: 25,
+      prompt: 13,
+      completion: 12,
       cached: 0,
       completionDetails: expect.any(Object),
     });

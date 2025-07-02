@@ -1,13 +1,11 @@
 import { matchesContextFaithfulness } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.resetAllMocks();
 
-    // Reset DefaultGradingProvider mock to prevent contamination
     jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     jest
       .spyOn(DefaultGradingProvider, 'callApi')
@@ -112,9 +110,9 @@ describe('matchesContextFaithfulness', () => {
     const result = await matchesContextFaithfulness(query, output, context, threshold);
 
     expect(result.tokensUsed).toEqual({
-      total: 20, // 10 from first call + 10 from second call
-      prompt: 10, // 5 from first call + 5 from second call
-      completion: 10, // 5 from first call + 5 from second call
+      total: 20,
+      prompt: 10,
+      completion: 10,
       cached: 0,
       completionDetails: expect.any(Object),
     });

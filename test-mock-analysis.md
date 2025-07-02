@@ -1,6 +1,7 @@
-# Jest Mock Analysis for test/matchers/*.test.ts
+# Jest Mock Analysis for test/matchers/\*.test.ts
 
 ## Global Mocks (jest.setup.ts)
+
 - `./src/logger`
 - `./src/globalConfig/globalConfig`
 
@@ -9,6 +10,7 @@
 ### 1. answer-relevance.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used (no database imports)
 - `../../src/esm` - Listed twice, not used (no esm imports beyond mock)
 - `../../src/cliState` - Not used (no cliState imports)
@@ -20,6 +22,7 @@
 - `fs` - Not used (no fs imports)
 
 **Actually Used Imports:**
+
 - `matchesAnswerRelevance` from '../../src/matchers'
 - `ANSWER_RELEVANCY_GENERATE` from '../../src/prompts'
 - `DefaultEmbeddingProvider, DefaultGradingProvider` from '../../src/providers/openai/defaults'
@@ -30,6 +33,7 @@
 ### 2. classification.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/esm` - Listed twice, not used
 - `../../src/cliState` - Not used
@@ -41,6 +45,7 @@
 - `fs` - Not used
 
 **Actually Used Imports:**
+
 - `matchesClassification` from '../../src/matchers'
 - `HuggingfaceTextClassificationProvider` from '../../src/providers/huggingface'
 - types from '../../src/types'
@@ -50,6 +55,7 @@
 ### 3. closed-qa.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/esm` - Listed twice, not used
 - `../../src/cliState` - Not used
@@ -61,6 +67,7 @@
 - `fs` - Not used
 
 **Actually Used Imports:**
+
 - `matchesClosedQa` from '../../src/matchers'
 - `DefaultGradingProvider` from '../../src/providers/openai/defaults'
 - type `GradingConfig` from '../../src/types'
@@ -70,6 +77,7 @@
 ### 4. context-faithfulness.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/cliState` - Not used
 - `../../src/remoteGrading` - Not used
@@ -77,6 +85,7 @@
 - `proxy-agent` - Not used
 
 **Actually Used Imports:**
+
 - `matchesContextFaithfulness` from '../../src/matchers'
 - `DefaultGradingProvider` from '../../src/providers/openai/defaults'
 
@@ -85,6 +94,7 @@
 ### 5. context-recall.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/cliState` - Not used
 - `../../src/remoteGrading` - Not used
@@ -92,6 +102,7 @@
 - `proxy-agent` - Not used
 
 **Actually Used Imports:**
+
 - `matchesContextRecall` from '../../src/matchers'
 - `DefaultGradingProvider` from '../../src/providers/openai/defaults'
 
@@ -100,6 +111,7 @@
 ### 6. context-relevance.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/esm` - Listed twice, not used
 - `../../src/cliState` - Not used
@@ -111,6 +123,7 @@
 - `fs` - Not used
 
 **Actually Used Imports:**
+
 - `matchesContextRelevance` from '../../src/matchers'
 - `DefaultGradingProvider` from '../../src/providers/openai/defaults'
 
@@ -119,9 +132,11 @@
 ### 7. factuality.test.ts
 
 **Mocks:**
+
 - None! (Only comment: "No additional mocks needed for matchesFactuality tests")
 
 **Actually Used Imports:**
+
 - `matchesFactuality` from '../../src/matchers'
 - `DefaultGradingProvider` from '../../src/providers/openai/defaults'
 - type `GradingConfig` from '../../src/types'
@@ -131,6 +146,7 @@
 ### 8. g-eval.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/cliState` - Not used
 - `../../src/remoteGrading` - Not used
@@ -138,6 +154,7 @@
 - `proxy-agent` - Not used
 
 **Actually Used Imports:**
+
 - `matchesGEval` from '../../src/matchers'
 - `DefaultGradingProvider` from '../../src/providers/openai/defaults'
 
@@ -146,6 +163,7 @@
 ### 9. llm-rubric.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/esm` - USED (importModule is imported and used)
 - `../../src/cliState` - USED (cliState is imported and used)
@@ -157,6 +175,7 @@
 - `fs` - USED (fs is imported and used)
 
 **Actually Used Imports:**
+
 - `fs` from 'fs'
 - `path` from 'path'
 - `loadFromJavaScriptFile` from '../../src/assertions/utils'
@@ -174,6 +193,7 @@
 ### 10. moderation.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/cliState` - Not used
 - `../../src/remoteGrading` - Not used
@@ -181,6 +201,7 @@
 - `proxy-agent` - Not used
 
 **Actually Used Imports:**
+
 - `matchesModeration` from '../../src/matchers'
 - `OpenAiModerationProvider` from '../../src/providers/openai/moderation'
 - `ReplicateModerationProvider` from '../../src/providers/replicate'
@@ -191,6 +212,7 @@
 ### 11. similarity.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/esm` - Listed twice, not used
 - `../../src/cliState` - Not used
@@ -202,6 +224,7 @@
 - `fs` - Not used
 
 **Actually Used Imports:**
+
 - `matchesSimilarity` from '../../src/matchers'
 - type `OpenAiChatCompletionProvider` from '../../src/providers/openai/chat'
 - `DefaultEmbeddingProvider` from '../../src/providers/openai/defaults'
@@ -213,6 +236,7 @@
 ### 12. utils.test.ts
 
 **Mocks:**
+
 - `../../src/database` - Not used
 - `../../src/esm` - Listed twice, not used
 - `../../src/cliState` - Not used
@@ -224,6 +248,7 @@
 - `fs` - Not used
 
 **Actually Used Imports:**
+
 - `getAndCheckProvider, getGradingProvider, renderLlmRubricPrompt` from '../../src/matchers'
 - `DefaultEmbeddingProvider, DefaultGradingProvider` from '../../src/providers/openai/defaults'
 - types from '../../src/types'
@@ -235,6 +260,7 @@
 Most test files have excessive mocks that are not actually used. Only `llm-rubric.test.ts` actually uses most of its mocks. The `factuality.test.ts` file is the cleanest with no unnecessary mocks.
 
 ### Common Unused Mocks Across Files:
+
 - `../../src/database` - Never used in any file
 - `proxy-agent` - Never used in any file
 - `glob` - Never used in any file

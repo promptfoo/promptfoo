@@ -38,10 +38,8 @@ describe('matchesLlmRubric', () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
 
-    // Reset cliState to default
     (cliState as any).config = {};
 
-    // Reset remote grading mock with default behavior
     jest.mocked(remoteGrading.doRemoteGrading).mockReset();
     jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
       pass: true,
@@ -49,7 +47,6 @@ describe('matchesLlmRubric', () => {
       reason: 'Remote grading passed',
     });
 
-    // Reset DefaultGradingProvider mock to prevent contamination
     jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
@@ -65,7 +62,6 @@ describe('matchesLlmRubric', () => {
       provider: Grader,
     };
 
-    // Ensure Grader mock is properly set up for this test
     jest.spyOn(Grader, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },

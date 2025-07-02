@@ -1240,4 +1240,29 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
 
     jest.mocked(fs.readFileSync).mockRestore();
   });
+
+  it('should propagate non-quote-related CSV errors', async () => {
+    // Isolate this test by using jest.isolateModules
+    await jest.isolateModules(async () => {
+      // Mock csv-parse/sync to throw a different error
+      jest.doMock('csv-parse/sync', () => ({
+        parse: jest.fn().mockImplementation(() => {
+          const error = new Error('Some other CSV error');
+          (error as any).code = 'CSV_OTHER_ERROR';
+          throw error;
+        }),
+      }));
+
+      const csvContent = `label,query,expected_json_format,context
+my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
+
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+
+      // Import within isolated context
+      const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
+      await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
+
+      jest.mocked(fs.readFileSync).mockRestore();
+    });
+  });
 });

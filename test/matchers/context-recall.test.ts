@@ -1,13 +1,11 @@
 import { matchesContextRecall } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-
 describe('matchesContextRecall', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.resetAllMocks();
 
-    // Reset DefaultGradingProvider mock to prevent contamination
     jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',

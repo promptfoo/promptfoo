@@ -7,7 +7,6 @@ describe('matchesClosedQa', () => {
     jest.clearAllMocks();
     jest.resetAllMocks();
 
-    // Reset DefaultGradingProvider mock to prevent contamination
     jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foo \n \n bar\n Y Y \n',

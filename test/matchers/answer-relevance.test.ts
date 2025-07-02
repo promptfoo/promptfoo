@@ -11,11 +11,9 @@ describe('matchesAnswerRelevance', () => {
     jest.clearAllMocks();
     jest.resetAllMocks();
 
-    // Reset DefaultGradingProvider and DefaultEmbeddingProvider mocks to prevent contamination
     jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockReset();
 
-    // Set up robust default mocks that work for most tests
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foobar',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -125,7 +123,6 @@ describe('matchesAnswerRelevance', () => {
 
     const result = await matchesAnswerRelevance(input, output, threshold);
 
-    // Verify token usage is properly accumulated from all API calls
     expect(result.tokensUsed?.total).toBeGreaterThan(0);
     expect(result.tokensUsed?.prompt).toBeGreaterThan(0);
     expect(result.tokensUsed?.completion).toBeGreaterThan(0);
@@ -133,8 +130,6 @@ describe('matchesAnswerRelevance', () => {
       (result.tokensUsed?.prompt || 0) + (result.tokensUsed?.completion || 0),
     );
 
-    // Should accumulate from multiple calls: 3 text generations + 1 input embedding + 3 candidate embeddings = 7 calls
-    // With mocked values: 3*10 + 1*5 + 3*5 = 50 total tokens
     expect(result.tokensUsed?.total).toBe(50);
     expect(result.tokensUsed?.cached).toBe(0);
     expect(result.tokensUsed?.completionDetails).toBeDefined();
