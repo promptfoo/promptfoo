@@ -1,11 +1,11 @@
 import { fetchWithCache } from '../../src/cache';
 import {
-  removePrefix,
-  normalizeApostrophes,
-  isEmptyResponse,
-  isBasicRefusal,
   extractGoalFromPrompt,
   getShortPluginId,
+  isBasicRefusal,
+  isEmptyResponse,
+  normalizeApostrophes,
+  removePrefix,
 } from '../../src/redteam/util';
 
 jest.mock('../../src/cache');
@@ -173,5 +173,50 @@ describe('extractGoalFromPrompt', () => {
 
     const result = await extractGoalFromPrompt('', '');
     expect(result).toBe('empty goal');
+  });
+
+  it('should include plugin context when pluginId is provided', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'plugin-specific goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt(
+      'innocent prompt',
+      'test purpose',
+      'indirect-prompt-injection',
+    );
+    expect(result).toBe('plugin-specific goal');
+
+    // Verify that the API was called with plugin context
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('pluginContext'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('should skip remote call when remote generation is disabled', async () => {
+    // Preserve original environment setting
+    const originalValue = process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+
+    // Cleanup: restore or delete the env var to avoid leaking into other tests
+    if (originalValue === undefined) {
+      delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    } else {
+      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = originalValue;
+    }
   });
 });

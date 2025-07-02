@@ -11,6 +11,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  PluginConfig,
   ProviderResponse,
   TokenUsage,
 } from '../types';
@@ -21,17 +22,20 @@ interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
   n: number;
   purpose: string;
+  config?: PluginConfig;
 }
 
 export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   harmCategory: string;
   n: number;
   purpose: string;
+  config?: PluginConfig;
 
   constructor(options: PromptfooHarmfulCompletionOptions) {
     this.harmCategory = options.harmCategory;
     this.n = options.n;
     this.purpose = options.purpose;
+    this.config = options.config;
   }
 
   id(): string {
@@ -53,6 +57,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       n: this.n,
       purpose: this.purpose,
       version: VERSION,
+      config: this.config,
     };
 
     try {
@@ -104,7 +109,14 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
-  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree' | 'judge';
+  task:
+    | 'crescendo'
+    | 'goat'
+    | 'iterative'
+    | 'iterative:image'
+    | 'iterative:tree'
+    | 'judge'
+    | 'blocking-question-analysis';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {

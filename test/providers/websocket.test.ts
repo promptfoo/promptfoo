@@ -55,6 +55,69 @@ describe('WebSocketProvider', () => {
     expect(provider.config.messageTemplate).toBe('{{ prompt }}');
   });
 
+  it('should pass headers to WebSocket connection', async () => {
+    const headers = {
+      Authorization: 'Bearer test-token',
+      'Custom-Header': 'test-value',
+    };
+
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        headers,
+      },
+    });
+
+    // Mock WebSocket to handle the connection properly
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ result: 'test' }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
+
+    // Trigger the WebSocket connection by calling callApi
+    await provider.callApi('test prompt');
+
+    // Now assert that WebSocket was called with the headers
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
+  });
+
+  it('should work without headers provided', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        // No headers provided
+      },
+    });
+
+    // Mock WebSocket to handle the connection properly
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ result: 'test' }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
+
+    // Trigger the WebSocket connection by calling callApi
+    const response = await provider.callApi('test prompt');
+
+    // Should still work and return expected response
+    expect(response).toEqual({ output: { output: { result: 'test' } } });
+    // Headers should be undefined when not provided
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers: undefined });
+  });
+
   it('should throw if messageTemplate is missing', () => {
     expect(() => {
       new WebSocketProvider('ws://test.com', {

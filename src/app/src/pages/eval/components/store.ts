@@ -12,6 +12,18 @@ import type {
   EvalTableDTO,
 } from './types';
 
+function computeHighlightCount(table: EvaluateTable | null): number {
+  if (!table) {
+    return 0;
+  }
+  return table.body.reduce((count, row) => {
+    return (
+      count +
+      row.outputs.filter((o) => o?.gradingResult?.comment?.trim().startsWith('!highlight')).length
+    );
+  }, 0);
+}
+
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
@@ -50,6 +62,8 @@ interface TableState {
 
   filteredResultsCount: number;
   setFilteredResultsCount: (count: number) => void;
+
+  highlightedResultsCount: number;
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
@@ -146,13 +160,26 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setVersion: (version: number) => set(() => ({ version })),
 
   table: null,
-  setTable: (table: EvaluateTable | null) => set(() => ({ table })),
+  setTable: (table: EvaluateTable | null) =>
+    set(() => ({
+      table,
+      highlightedResultsCount: computeHighlightCount(table),
+    })),
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
     if (resultsFile.version && resultsFile.version >= 4) {
-      set(() => ({ table: convertResultsToTable(resultsFile), version: resultsFile.version }));
+      const table = convertResultsToTable(resultsFile);
+      set(() => ({
+        table,
+        version: resultsFile.version,
+        highlightedResultsCount: computeHighlightCount(table),
+      }));
     } else {
       const results = resultsFile.results as EvaluateSummaryV2;
-      set(() => ({ table: results.table, version: resultsFile.version }));
+      set(() => ({
+        table: results.table,
+        version: resultsFile.version,
+        highlightedResultsCount: computeHighlightCount(results.table),
+      }));
     }
   },
   config: null,
@@ -162,6 +189,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setFilteredResultsCount: (count: number) => set(() => ({ filteredResultsCount: count })),
   totalResultsCount: 0,
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
+
+  highlightedResultsCount: 0,
 
   isFetching: false,
 
@@ -199,6 +228,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           table: data.table,
           filteredResultsCount: data.filteredCount,
           totalResultsCount: data.totalCount,
+          highlightedResultsCount: computeHighlightCount(data.table),
           config: data.config,
           version: data.version,
           author: data.author,

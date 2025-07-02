@@ -17,6 +17,9 @@ const BASE_OPTIONS = [
   { value: 'errors', label: 'Show errors only' },
   { value: 'different', label: 'Show different outputs' },
   { value: 'highlights', label: 'Show highlights only' },
+  { value: 'thumbs-up', label: 'Show thumbs up only' },
+  { value: 'thumbs-down', label: 'Show thumbs down only' },
+  { value: 'human', label: 'Show human-rated only' },
 ];
 
 export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({

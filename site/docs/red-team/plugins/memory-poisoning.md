@@ -41,6 +41,10 @@ redteam:
       numTests: 30 # Optional, defaults to 5
 ```
 
+:::note
+Memory Poisoning is a standalone plugin and does not use strategies. Strategies defined in the `redteam.strategies` configuration are ignored for this plugin.
+:::
+
 ## Example
 
 Here's an example configuration for testing an agent:
@@ -62,7 +66,7 @@ providers:
       transformResponse: 'json.message'
 
 prompts:
-  - '{{poisoned_message}}'
+  - '{{prompt}}'
 
 defaultTest:
   options:

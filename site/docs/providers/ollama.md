@@ -1,3 +1,7 @@
+---
+sidebar_label: Ollama
+---
+
 # Ollama
 
 The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.

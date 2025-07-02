@@ -10,19 +10,23 @@ providers:
     label: o3-mini-reasoning
     config:
       max_output_tokens: 1000
-      reasoning_effort: 'high'
+      reasoning:
+        effort: 'high'
+      user: 'math-student-001'
 
-  - id: openai:responses:o3
-    label: o3-reasoning
+  - id: openai:responses:o3-pro
+    label: o3-pro-reasoning
     config:
       max_output_tokens: 2000
-      reasoning_effort: 'high'
+      reasoning:
+        effort: 'high'
 
   - id: openai:responses:o4-mini
     label: o4-mini-reasoning
     config:
       max_output_tokens: 1000
-      reasoning_effort: 'medium'
+      reasoning:
+        effort: 'medium'
 
 tests:
   - vars:

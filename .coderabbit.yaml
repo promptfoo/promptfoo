@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+# Language settings
+language: 'en-US'
+early_access: false
+
+# Review configuration - minimal comments
+reviews:
+  profile: 'chill'
+  request_changes_workflow: false
+  high_level_summary: false
+  sequence_diagrams: false
+  changed_files_summary: false
+  suggested_labels: false
+  poem: false
+  review_status: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    auto_incremental_review: false
+    drafts: false
+
+ignore_draft_pr: true
+focus_on_security_issues: true
+
+# Chat configuration - minimal interaction
+chat:
+  auto_reply: false

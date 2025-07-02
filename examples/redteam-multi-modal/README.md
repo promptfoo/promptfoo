@@ -42,7 +42,6 @@ npx promptfoo@latest init --example redteam-multi-modal
 This example requires the following environment variables depending on which approach you're using:
 
 - For the Static Image and Image Strategy examples:
-
   - `AWS_ACCESS_KEY_ID` - Your AWS access key for Amazon Bedrock
   - `AWS_SECRET_ACCESS_KEY` - Your AWS secret key for Amazon Bedrock
   - `AWS_REGION` - Your AWS region (e.g., `us-east-1`)
@@ -188,7 +187,7 @@ targets:
 
 However, the techniques demonstrated can be applied to any multi-modal model that supports image inputs. You can easily swap out the target model in the configuration files to use models from:
 
-- **OpenAI**: `openai:gpt-4o-mini` and newer versions that support vision
+- **OpenAI**: `openai:gpt-4.1-mini` and newer versions that support vision
 - **Anthropic**: Claude 3 models with vision capabilities
 - **Google**: Gemini models
 - **Other providers**: Any model that can process both text and image inputs

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -20,27 +20,29 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import {
+  AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,
+  categoryAliases,
+  DATASET_EXEMPT_PLUGINS,
   DEFAULT_PLUGINS,
+  displayNameOverrides,
+  EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
-  OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
-  PLUGIN_PRESET_DESCRIPTIONS,
-  displayNameOverrides,
-  subCategoryDescriptions,
-  categoryAliases,
-  type Plugin,
-  riskCategories,
   OWASP_LLM_RED_TEAM_MAPPING,
-  EU_AI_ACT_MAPPING,
-  AGENTIC_EXEMPT_PLUGINS,
-  DATASET_EXEMPT_PLUGINS,
+  OWASP_LLM_TOP_10_MAPPING,
+  type Plugin,
+  PLUGIN_PRESET_DESCRIPTIONS,
+  riskCategories,
+  subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 import { useDebounce } from 'use-debounce';
-import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
+import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 import CustomIntentSection from './CustomIntentPluginSection';
 import PluginConfigDialog from './PluginConfigDialog';
@@ -218,6 +220,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
+      name: 'Guardrails Evaluation',
+      plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+    },
+    {
       name: 'Harmful',
       plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
     },
@@ -276,7 +282,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           return false;
         }
         for (const key in config) {
-          const value = config[key];
+          const value = config[key as keyof PluginConfig];
           if (Array.isArray(value) && value.length === 0) {
             return false;
           }
@@ -304,7 +310,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     for (const key in config) {
-      const value = config[key];
+      const value = config[key as keyof PluginConfig];
       if (Array.isArray(value) && value.length === 0) {
         return false;
       }

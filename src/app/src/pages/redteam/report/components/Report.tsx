@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
 import ListAltIcon from '@mui/icons-material/ListAlt';
+import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -16,7 +19,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import {
   type EvaluateResult,
   type ResultsFile,
@@ -27,7 +29,6 @@ import {
   isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import DiscoveredInformation from './DiscoveredInformation';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
@@ -40,6 +41,7 @@ import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {
+  const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
@@ -225,9 +227,10 @@ const App: React.FC = () => {
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
 
-  React.useEffect(() => {
-    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
-  }, [evalData, evalId]);
+  usePageMeta({
+    title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
+    description: 'Red team evaluation report',
+  });
 
   if (!evalData || !evalId) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
@@ -287,15 +290,15 @@ const App: React.FC = () => {
     setIsPromptModalOpen(false);
   };
 
-  const targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined =
-    evalData?.config?.metadata?.targetPurposeDiscoveryResult;
-
   return (
     <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
-          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+          <Box
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            className="print-hide"
+          >
             <Tooltip title="View all logs" placement="top">
               <IconButton
                 sx={{ position: 'relative' }}
@@ -305,7 +308,7 @@ const App: React.FC = () => {
                   if (event.ctrlKey || event.metaKey) {
                     window.open(url, '_blank');
                   } else {
-                    window.location.href = url;
+                    navigate(url);
                   }
                 }}
               >
@@ -316,6 +319,18 @@ const App: React.FC = () => {
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}
             />
+            <Tooltip
+              title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
+              placement="top"
+            >
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="print page"
+                onClick={() => window.print()}
+              >
+                <PrintIcon />
+              </IconButton>
+            </Tooltip>
             <ReportSettingsDialogButton />
           </Box>
           <Typography variant="h4">
@@ -405,9 +420,6 @@ const App: React.FC = () => {
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
         />
-        {targetPurposeDiscoveryResult && (
-          <DiscoveredInformation result={targetPurposeDiscoveryResult} />
-        )}
         <TestSuites
           evalId={evalId}
           categoryStats={categoryStats}

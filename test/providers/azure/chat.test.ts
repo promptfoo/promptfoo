@@ -376,6 +376,48 @@ describe('AzureChatCompletionProvider', () => {
         flaggedOutput: false,
       });
     });
+
+    it('should pass custom headers from config to fetchWithCache', async () => {
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'test' } }],
+          usage: {},
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const customHeaders = {
+        'X-Test-Header': 'test-value',
+        'Another-Header': 'another-value',
+      };
+
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          headers: customHeaders,
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'api-key': 'test-key',
+            'X-Test-Header': 'test-value',
+            'Another-Header': 'another-value',
+          }),
+        }),
+        expect.any(Number),
+        'json',
+        undefined,
+      );
+    });
   });
 
   describe('structured outputs', () => {
