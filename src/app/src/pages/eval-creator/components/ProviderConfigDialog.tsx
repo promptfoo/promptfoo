@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Editor from 'react-simple-code-editor';
 import JsonTextField from '@app/components/JsonTextField';
 import InfoIcon from '@mui/icons-material/Info';
@@ -58,9 +58,15 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   const [tabValue, setTabValue] = useState(0);
   const [yamlConfig, setYamlConfig] = useState('');
   const [yamlError, setYamlError] = useState<string | null>(null);
-  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const isAzureProvider = providerId.startsWith('azure:');
+  const originalConfigRef = useRef(config);
+
+  // Update original config ref when config prop changes
+  useEffect(() => {
+    originalConfigRef.current = config;
+  }, [config]);
 
   // Helper function to check if a value has content
   const hasContent = (val: any): boolean => {
@@ -74,53 +80,69 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     return yaml.dump(configObj, { skipInvalid: true });
   }, []);
 
-  // Get all config including non-common fields
-  const getMergedConfig = useCallback(() => {
-    // When in form view, we only return the fields that are in localConfig
-    // The full config is preserved in the YAML view
-    return localConfig;
-  }, [localConfig]);
-
   // Sync form state to YAML when in form editor mode
   useEffect(() => {
     if (tabValue === 0) {
       // When switching to form, update YAML with full config
       // This preserves any fields not shown in the form
-      const fullConfig = { ...config };
+      const fullConfig = { ...originalConfigRef.current };
       Object.keys(localConfig).forEach(key => {
         fullConfig[key] = localConfig[key];
       });
       setYamlConfig(configToYaml(fullConfig));
     }
-  }, [localConfig, tabValue, configToYaml, config]);
+  }, [localConfig, tabValue, configToYaml]);
 
-  // Auto-save functionality
-  const debouncedAutoSave = useCallback(() => {
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer);
+  // Handle save functionality
+  const handleSave = useCallback((silent = false) => {
+    let configToSave: Record<string, any>;
+    
+    if (tabValue === 1) {
+      // Save from YAML editor
+      try {
+        configToSave = yaml.load(yamlConfig) as Record<string, any>;
+      } catch (err) {
+        if (!silent) {
+          setYamlError(`Invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        return;
+      }
+    } else {
+      // Save from form editor - merge with original config to preserve non-form fields
+      configToSave = { ...originalConfigRef.current };
+      Object.keys(localConfig).forEach(key => {
+        if (localConfig[key] !== undefined) {
+          configToSave[key] = localConfig[key];
+        }
+      });
     }
     
-    const timer = setTimeout(() => {
-      if (hasUnsavedChanges) {
-        handleSave(true); // Silent save
-      }
-    }, 2000); // 2 second debounce
+    onSave(providerId, configToSave);
+    setHasUnsavedChanges(false);
     
-    setAutoSaveTimer(timer);
-  }, [hasUnsavedChanges, autoSaveTimer]);
+    if (!silent) {
+      onClose();
+    }
+  }, [tabValue, yamlConfig, localConfig, providerId, onSave, onClose]);
 
-  // Trigger auto-save on changes
+  // Auto-save functionality
   useEffect(() => {
     if (hasUnsavedChanges) {
-      debouncedAutoSave();
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      
+      autoSaveTimerRef.current = setTimeout(() => {
+        handleSave(true); // Silent save
+      }, 2000);
     }
     
     return () => {
-      if (autoSaveTimer) {
-        clearTimeout(autoSaveTimer);
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [hasUnsavedChanges, debouncedAutoSave]);
+  }, [hasUnsavedChanges, handleSave]);
 
   // Reset local config when the dialog opens or providerId changes
   useEffect(() => {
@@ -138,36 +160,8 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     setLocalConfig(formConfig);
     setYamlConfig(configToYaml(config));
     setHasUnsavedChanges(false);
+    originalConfigRef.current = config;
   }, [open, providerId, config, configToYaml, isAzureProvider]);
-
-  const handleSave = (silent = false) => {
-    let configToSave: Record<string, any>;
-    
-    if (tabValue === 1) {
-      // Save from YAML editor
-      try {
-        configToSave = yaml.load(yamlConfig) as Record<string, any>;
-      } catch (err) {
-        if (!silent) {
-          setYamlError(`Invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
-        }
-        return;
-      }
-    } else {
-      // Save from form editor - merge with original config to preserve non-form fields
-      configToSave = { ...config };
-      Object.keys(localConfig).forEach(key => {
-        configToSave[key] = localConfig[key];
-      });
-    }
-    
-    onSave(providerId, configToSave);
-    setHasUnsavedChanges(false);
-    
-    if (!silent) {
-      onClose();
-    }
-  };
 
   const handleYamlChange = (code: string) => {
     setYamlConfig(code);
@@ -279,8 +273,15 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     );
   }, [config]);
 
+  const handleClose = () => {
+    if (hasUnsavedChanges) {
+      handleSave(true);
+    }
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onClose={() => handleSave(true)} fullWidth maxWidth="md">
+    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
       <DialogTitle>
         Provider Configuration
         <Typography
