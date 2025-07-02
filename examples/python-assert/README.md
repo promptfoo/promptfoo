@@ -103,16 +103,6 @@ def get_assert(output, context):
 - **External example**: Shows advanced assertion patterns with detailed scoring and configuration support
 - **Inline example**: Demonstrates quick assertions and simple validation logic
 
-## Debugging
-
-To debug the Python code interactively:
-
-```bash
-export PROMPTFOO_PYTHON_PDB_TRACING_ENABLED=true
-```
-
-Then add `import pdb; pdb.set_trace()` anywhere in the Python code to set a breakpoint.
-
 ## Learn More
 
 - [Python Assertions Documentation](https://www.promptfoo.dev/docs/configuration/expected-outputs/python/)
