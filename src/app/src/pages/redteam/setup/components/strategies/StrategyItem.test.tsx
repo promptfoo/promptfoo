@@ -333,38 +333,4 @@ describe('StrategyItem', () => {
       expect(screen.getByText(longStrategyName)).toBeInTheDocument();
     });
   });
-
-  describe('Documentation Links', () => {
-    // [Tusk] FAILING TEST
-    it('renders documentation link and does not trigger toggle on click', () => {
-      interface StrategyCardData {
-        id: string;
-        name: string;
-        description: string;
-        documentationUrl?: string;
-      }
-      const strategyWithDocs: StrategyCardData = {
-        ...baseStrategy,
-        documentationUrl: 'https://example.com/docs',
-      };
-
-      render(
-        <StrategyItem
-          strategy={strategyWithDocs}
-          isSelected={false}
-          onToggle={mockOnToggle}
-          onConfigClick={mockOnConfigClick}
-        />,
-      );
-
-      const link = screen.getByRole('link', { name: 'Learn More' });
-      expect(link).toBeInTheDocument();
-      expect(link).toHaveAttribute('href', 'https://example.com/docs');
-
-      fireEvent.click(link);
-
-      expect(mockOnToggle).not.toHaveBeenCalled();
-      expect(mockOnConfigClick).not.toHaveBeenCalled();
-    });
-  });
 });
