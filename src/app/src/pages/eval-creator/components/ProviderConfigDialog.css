@@ -11,7 +11,7 @@
 }
 
 .token.namespace {
-  opacity: .7;
+  opacity: 0.7;
 }
 
 .token.property,
@@ -49,7 +49,7 @@
 
 .token.function,
 .token.class-name {
-  color: #DD4A68;
+  color: #dd4a68;
 }
 
 .token.regex,
@@ -77,11 +77,11 @@
   .token.prolog,
   .token.doctype,
   .token.cdata {
-    color: #6A9955;
+    color: #6a9955;
   }
 
   .token.punctuation {
-    color: #D4D4D4;
+    color: #d4d4d4;
   }
 
   .token.property,
@@ -91,7 +91,7 @@
   .token.constant,
   .token.symbol,
   .token.deleted {
-    color: #B5CEA8;
+    color: #b5cea8;
   }
 
   .token.selector,
@@ -100,7 +100,7 @@
   .token.char,
   .token.builtin,
   .token.inserted {
-    color: #CE9178;
+    color: #ce9178;
   }
 
   .token.operator,
@@ -108,23 +108,23 @@
   .token.url,
   .language-css .token.string,
   .style .token.string {
-    color: #D4D4D4;
+    color: #d4d4d4;
   }
 
   .token.atrule,
   .token.attr-value,
   .token.keyword {
-    color: #569CD6;
+    color: #569cd6;
   }
 
   .token.function,
   .token.class-name {
-    color: #DCDCAA;
+    color: #dcdcaa;
   }
 
   .token.regex,
   .token.important,
   .token.variable {
-    color: #D16969;
+    color: #d16969;
   }
-} 
+}

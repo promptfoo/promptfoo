@@ -7,12 +7,12 @@ This PR implements full provider configuration support in the promptfoo web UI, 
 ## Changes
 
 ### Provider Configuration Dialog Enhancement
-- **Form Editor Tab**: 
+
+- **Form Editor Tab**:
   - Always displays common provider fields (apiKey, apiBaseUrl, apiHost, temperature, max_tokens, timeout, headers)
   - Supports dynamic addition of custom configuration fields
   - Provides field-specific input types (text, number, boolean, JSON)
   - Includes helpful descriptions for common fields
-  
 - **YAML Editor Tab**:
   - Full YAML editing with syntax highlighting
   - Dark mode support
@@ -20,16 +20,19 @@ This PR implements full provider configuration support in the promptfoo web UI, 
   - Easy copy/paste from existing YAML configurations
 
 ### Red Team Setup Integration
+
 - Updated CustomTargetConfiguration to use the same ProviderConfigDialog
 - Added "Configure Provider Settings" button for comprehensive configuration
 - Displays current configuration in a readable format
 
 ### Documentation
+
 - Added comprehensive guide at `site/docs/guides/configure-providers-web-ui.md`
 - Includes examples for OpenAI, Azure, and local AI configurations
 - Migration guide for users moving from CLI to web UI
 
 ### Testing
+
 - Added tests for ProviderConfigDialog component
 - Added tests for CustomTargetConfiguration component
 - All tests use Vitest with proper mocking
@@ -37,12 +40,15 @@ This PR implements full provider configuration support in the promptfoo web UI, 
 ## Screenshots
 
 ### Form Editor
+
 ![Form Editor - showing common fields and custom field addition]
 
-### YAML Editor  
+### YAML Editor
+
 ![YAML Editor - with syntax highlighting and dark mode support]
 
 ### Red Team Configuration
+
 ![Red Team - Configure Provider Settings button and current config display]
 
 ## Benefits
@@ -64,4 +70,4 @@ This PR implements full provider configuration support in the promptfoo web UI, 
 
 ## Related Issues
 
-Closes #4536 
+Closes #4536

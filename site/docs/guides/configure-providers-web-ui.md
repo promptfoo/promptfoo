@@ -99,4 +99,4 @@ The same provider configuration capabilities are available in the Red Team setup
 2. **HTTP Endpoints**: The HTTP endpoint configuration includes its own specialized interface for configuring headers, request body, and transformations
 3. **All Configuration Options**: The same common fields (apiKey, apiBaseUrl, etc.) and custom field capabilities are available
 
-This ensures consistency across both evaluation creation and red team configuration workflows. 
+This ensures consistency across both evaluation creation and red team configuration workflows.

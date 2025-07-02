@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import Editor from 'react-simple-code-editor';
 import JsonTextField from '@app/components/JsonTextField';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -7,18 +10,15 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
-import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import Editor from 'react-simple-code-editor';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
@@ -40,7 +40,11 @@ const COMMON_FIELDS = {
   apiHost: { type: 'string', label: 'API Host', description: 'Hostname for the API' },
   temperature: { type: 'number', label: 'Temperature', description: 'Controls randomness (0-2)' },
   max_tokens: { type: 'number', label: 'Max Tokens', description: 'Maximum tokens in response' },
-  timeout: { type: 'number', label: 'Timeout (ms)', description: 'Request timeout in milliseconds' },
+  timeout: {
+    type: 'number',
+    label: 'Timeout (ms)',
+    description: 'Request timeout in milliseconds',
+  },
   headers: { type: 'object', label: 'Headers', description: 'Custom HTTP headers' },
 };
 
@@ -106,7 +110,11 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   };
 
   const handleAddCustomField = () => {
-    if (newFieldKey && !localConfig[newFieldKey] && !customFields.find(f => f.key === newFieldKey)) {
+    if (
+      newFieldKey &&
+      !localConfig[newFieldKey] &&
+      !customFields.find((f) => f.key === newFieldKey)
+    ) {
       setCustomFields([...customFields, { key: newFieldKey, value: '' }]);
       setNewFieldKey('');
     }
@@ -124,13 +132,23 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     setCustomFields(newCustomFields);
   };
 
-  const renderFieldInput = (key: string, value: any, onChange: (value: any) => void, isRequired = false) => {
-    if (typeof value === 'number' || (COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.type === 'number' && value === undefined)) {
+  const renderFieldInput = (
+    key: string,
+    value: any,
+    onChange: (value: any) => void,
+    isRequired = false,
+  ) => {
+    if (
+      typeof value === 'number' ||
+      (COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.type === 'number' && value === undefined)
+    ) {
       return (
         <TextField
           label={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.label || key}
           value={value === undefined ? '' : value}
-          onChange={(e) => onChange(e.target.value === '' ? undefined : Number.parseFloat(e.target.value))}
+          onChange={(e) =>
+            onChange(e.target.value === '' ? undefined : Number.parseFloat(e.target.value))
+          }
           fullWidth
           required={isRequired}
           type="number"
@@ -141,16 +159,14 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     } else if (typeof value === 'boolean') {
       return (
         <FormControlLabel
-          control={
-            <Switch
-              checked={value || false}
-              onChange={(e) => onChange(e.target.checked)}
-            />
-          }
+          control={<Switch checked={value || false} onChange={(e) => onChange(e.target.checked)} />}
           label={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.label || key}
         />
       );
-    } else if (typeof value === 'object' || (COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.type === 'object')) {
+    } else if (
+      typeof value === 'object' ||
+      COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.type === 'object'
+    ) {
       return (
         <JsonTextField
           label={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.label || key}
@@ -183,7 +199,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     const existingKeys = Object.keys(localConfig);
     const commonKeys = Object.keys(COMMON_FIELDS);
     const allKeys = new Set([...existingKeys, ...commonKeys]);
-    
+
     if (isAzureProvider) {
       return ['deployment_id', ...Array.from(allKeys).filter((key) => key !== 'deployment_id')];
     }
@@ -225,7 +241,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             </Typography>
 
             {configKeys.map((key) => {
-              if (customFields.find(f => f.key === key)) {
+              if (customFields.find((f) => f.key === key)) {
                 return null; // Skip if it's in custom fields
               }
 
@@ -239,14 +255,14 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                     key,
                     value,
                     (newValue) => setLocalConfig({ ...localConfig, [key]: newValue }),
-                    isRequired
+                    isRequired,
                   )}
                 </Box>
               );
             })}
 
             <Divider sx={{ my: 3 }} />
-            
+
             <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
               Custom Configuration
             </Typography>
@@ -260,10 +276,8 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                   sx={{ flex: 1 }}
                 />
                 <Box sx={{ flex: 2 }}>
-                  {renderFieldInput(
-                    field.key,
-                    field.value,
-                    (newValue) => updateCustomField(index, 'value', newValue)
+                  {renderFieldInput(field.key, field.value, (newValue) =>
+                    updateCustomField(index, 'value', newValue),
                   )}
                 </Box>
                 <IconButton onClick={() => handleRemoveCustomField(index)} sx={{ mt: 1 }}>
@@ -293,7 +307,8 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         ) : (
           <Box>
             <Typography variant="body2" sx={{ mb: 2 }}>
-              Edit the provider configuration in YAML format. This allows you to set any configuration field supported by the provider.
+              Edit the provider configuration in YAML format. This allows you to set any
+              configuration field supported by the provider.
             </Typography>
             {yamlError && (
               <Alert severity="error" sx={{ mb: 2 }}>
