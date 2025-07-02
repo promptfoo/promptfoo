@@ -1,4 +1,5 @@
 import { SimulatedUser, type Message } from '../../providers/simulatedUser';
+import type { ProviderResponse } from '../../types';
 import invariant from '../../util/invariant';
 import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
@@ -33,7 +34,7 @@ export default class RedteamSimulatedUserProvider extends SimulatedUser {
     return 'simulated-user-redteam';
   }
 
-  serializeOutput(messages: Message[], numRequests: number) {
+  serializeOutput(messages: Message[], numRequests: number, finalTargetResponse: ProviderResponse) {
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
       tokenUsage: {
@@ -44,6 +45,7 @@ export default class RedteamSimulatedUserProvider extends SimulatedUser {
         messages,
         redteamHistory: messagesToRedteamHistory(messages),
       },
+      guardrails: finalTargetResponse.guardrails,
     };
   }
 }

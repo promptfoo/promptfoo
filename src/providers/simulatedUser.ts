@@ -75,7 +75,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     targetProvider: ApiProvider,
     context: CallApiContextParams,
-  ): Promise<Message[]> {
+  ): Promise<ProviderResponse> {
     const targetPrompt = this.stateful
       ? messages[messages.length - 1].content
       : JSON.stringify(messages);
@@ -95,7 +95,7 @@ export class SimulatedUser implements ApiProvider {
     }
 
     logger.debug(`[SimulatedUser] Agent: ${response.output}`);
-    return [...messages, { role: 'assistant', content: String(response.output || '') }];
+    return response;
   }
 
   async callApi(
@@ -110,15 +110,19 @@ export class SimulatedUser implements ApiProvider {
     const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
-    let messages: Message[] = [];
+    const messages: Message[] = [];
     const maxTurns = this.maxTurns;
     let numRequests = 0;
+    let agentResponse: ProviderResponse | undefined;
+
     for (let i = 0; i < maxTurns; i++) {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
       const messagesToUser = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
+
+      // Check whether the judge has determined that the instruction goal is satisfied.
       if (
         lastMessage.content &&
         typeof lastMessage.content === 'string' &&
@@ -127,23 +131,27 @@ export class SimulatedUser implements ApiProvider {
         break;
       }
 
-      const messagesToAgent = await this.sendMessageToAgent(
+      messages.push(lastMessage);
+
+      agentResponse = await this.sendMessageToAgent(
         messagesToUser,
         context.originalProvider,
         context,
       );
-      messages = messagesToAgent;
+
+      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+
       numRequests += 1; // Only count the request to the agent.
     }
 
-    return this.serializeOutput(messages, numRequests);
+    return this.serializeOutput(messages, numRequests, agentResponse as ProviderResponse);
   }
 
   toString() {
     return 'AgentProvider';
   }
 
-  serializeOutput(messages: Message[], numRequests: number) {
+  serializeOutput(messages: Message[], numRequests: number, finalTargetResponse: ProviderResponse) {
     return {
       output: messages
         .map(
@@ -156,6 +164,7 @@ export class SimulatedUser implements ApiProvider {
       metadata: {
         messages,
       },
+      guardrails: finalTargetResponse.guardrails,
     };
   }
 }
