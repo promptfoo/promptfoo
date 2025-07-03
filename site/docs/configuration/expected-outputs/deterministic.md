@@ -610,7 +610,7 @@ assert:
 The `trace-span-count` assertion counts the number of spans in a trace that match a given pattern and checks if the count is within specified bounds. This is useful for validating that expected operations occurred in your LLM application.
 
 :::note
-Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/configuration/tracing) for setup instructions.
+Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
 :::
 
 Example:

@@ -19,7 +19,9 @@ function matchesPattern(spanName: string, pattern: string): boolean {
 }
 
 function calculatePercentile(durations: number[], percentile: number): number {
-  if (durations.length === 0) return 0;
+  if (durations.length === 0) {
+    return 0;
+  }
 
   const sorted = [...durations].sort((a, b) => a - b);
   const index = Math.ceil((percentile / 100) * sorted.length) - 1;
@@ -72,7 +74,21 @@ export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams)
   let pass = true;
   let reason = '';
 
-  if (percentile !== undefined) {
+  if (percentile === undefined) {
+    // Check all spans
+    const slowSpans = spanDurations.filter((s) => s.duration > max);
+
+    if (slowSpans.length > 0) {
+      pass = false;
+      const top3Slow = slowSpans.sort((a, b) => b.duration - a.duration).slice(0, 3);
+
+      reason = `${slowSpans.length} span(s) exceed duration threshold ${max}ms. `;
+      reason += `Slowest: ${top3Slow.map((s) => `${s.name} (${s.duration}ms)`).join(', ')}`;
+    } else {
+      const maxDuration = Math.max(...spanDurations.map((s) => s.duration));
+      reason = `All ${matchingSpans.length} spans matching pattern "${pattern}" completed within ${max}ms (max: ${maxDuration}ms)`;
+    }
+  } else {
     // Check percentile
     const durations = spanDurations.map((s) => s.duration);
     const percentileValue = calculatePercentile(durations, percentile);
@@ -88,20 +104,6 @@ export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams)
       reason += `Slowest spans: ${slowestSpans.map((s) => `${s.name} (${s.duration}ms)`).join(', ')}`;
     } else {
       reason = `${percentile}th percentile duration (${percentileValue}ms) is within threshold ${max}ms`;
-    }
-  } else {
-    // Check all spans
-    const slowSpans = spanDurations.filter((s) => s.duration > max);
-
-    if (slowSpans.length > 0) {
-      pass = false;
-      const top3Slow = slowSpans.sort((a, b) => b.duration - a.duration).slice(0, 3);
-
-      reason = `${slowSpans.length} span(s) exceed duration threshold ${max}ms. `;
-      reason += `Slowest: ${top3Slow.map((s) => `${s.name} (${s.duration}ms)`).join(', ')}`;
-    } else {
-      const maxDuration = Math.max(...spanDurations.map((s) => s.duration));
-      reason = `All ${matchingSpans.length} spans matching pattern "${pattern}" completed within ${max}ms (max: ${maxDuration}ms)`;
     }
   }
 
