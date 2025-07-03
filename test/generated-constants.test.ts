@@ -13,6 +13,10 @@ export const POSTHOG_KEY = process.env.PROMPTFOO_POSTHOG_KEY || '';
     const filePath = join(process.cwd(), 'src', 'generated-constants.ts');
     const actualContent = readFileSync(filePath, 'utf-8');
 
-    expect(actualContent).toBe(EXPECTED_CONTENT);
+    // Normalize line endings for cross-platform compatibility
+    const normalizedActual = actualContent.replace(/\r\n/g, '\n');
+    const normalizedExpected = EXPECTED_CONTENT.replace(/\r\n/g, '\n');
+
+    expect(normalizedActual).toBe(normalizedExpected);
   });
 });
