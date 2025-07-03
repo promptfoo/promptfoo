@@ -14,8 +14,6 @@ describe('useTelemetry', () => {
   const mockPostHog = {
     capture: vi.fn(),
     identify: vi.fn(),
-    setPersonProperties: vi.fn(),
-    isFeatureEnabled: vi.fn(),
   } as any;
 
   beforeEach(() => {
@@ -40,17 +38,7 @@ describe('useTelemetry', () => {
       });
 
       expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
-      expect(mockPostHog.capture).toHaveBeenCalledWith(
-        TEST_EVENT,
-        expect.objectContaining({
-          ...TEST_PROPS,
-          timestamp: expect.any(String),
-          userAgent: expect.any(String),
-          platform: 'web',
-          url: expect.any(String),
-          pathname: expect.any(String),
-        }),
-      );
+      expect(mockPostHog.capture).toHaveBeenCalledWith(TEST_EVENT, TEST_PROPS);
     });
 
     it('does not call posthog.capture when PostHog is not initialized', () => {
@@ -90,16 +78,7 @@ describe('useTelemetry', () => {
         result.current.recordEvent(TEST_EVENT);
       });
 
-      expect(mockPostHog.capture).toHaveBeenCalledWith(
-        TEST_EVENT,
-        expect.objectContaining({
-          timestamp: expect.any(String),
-          userAgent: expect.any(String),
-          platform: 'web',
-          url: expect.any(String),
-          pathname: expect.any(String),
-        }),
-      );
+      expect(mockPostHog.capture).toHaveBeenCalledWith(TEST_EVENT, {});
     });
   });
 
