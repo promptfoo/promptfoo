@@ -3,7 +3,7 @@ import { eq, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { tracesTable, spansTable } from '../database/tables';
 import logger from '../logger';
-import type { TraceData } from '../types';
+import type { TraceData } from '../types/tracing';
 
 export interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;

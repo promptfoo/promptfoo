@@ -18,11 +18,13 @@ import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { TraceData } from './tracing';
 
 export * from './prompts';
 export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
+export * from './tracing';
 
 export type { EnvOverrides };
 
@@ -531,22 +533,6 @@ export const AssertionSchema = z.object({
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
-
-export interface TraceSpan {
-  spanId: string;
-  parentSpanId?: string;
-  name: string;
-  startTime: number;
-  endTime?: number;
-  attributes?: Record<string, any>;
-  statusCode?: number;
-  statusMessage?: string;
-}
-
-export interface TraceData {
-  traceId: string;
-  spans: TraceSpan[];
-}
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
