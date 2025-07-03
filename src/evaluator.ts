@@ -23,6 +23,7 @@ import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,
+  isOtlpReceiverStarted,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
@@ -1612,6 +1613,11 @@ class Evaluator {
     try {
       return await this._runEvaluation();
     } finally {
+      // Add a delay to allow providers to finish exporting spans
+      if (isOtlpReceiverStarted()) {
+        logger.debug('[Evaluator] Waiting for span exports to complete...');
+        await sleep(1000); // Wait 1 second for any remaining spans to be exported
+      }
       // Stop OTLP receiver if it was started
       await stopOtlpReceiverIfNeeded();
     }
