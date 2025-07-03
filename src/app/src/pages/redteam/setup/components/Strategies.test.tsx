@@ -2,10 +2,10 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import { vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
-import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
