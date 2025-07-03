@@ -207,6 +207,25 @@ const redTeamSidebar = [
         type: 'doc',
         id: 'red-team/guardrails',
       },
+      {
+        type: 'category',
+        label: 'Model Scanner',
+        collapsed: true,
+        items: [
+          {
+            type: 'doc',
+            id: 'model-audit/index',
+          },
+          {
+            type: 'doc',
+            id: 'model-audit/usage',
+          },
+          {
+            type: 'doc',
+            id: 'model-audit/scanners',
+          },
+        ],
+      },
     ],
   },
   {
@@ -340,21 +359,6 @@ const sidebars = {
         type: 'generated-index',
       },
       items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
-    },
-    {
-      type: 'category',
-      label: 'Model scanning',
-      link: {
-        type: 'doc',
-        id: 'model-audit/index',
-      },
-      collapsed: true,
-      items: [
-        { type: 'doc', id: 'model-audit/installation' },
-        { type: 'doc', id: 'model-audit/usage' },
-        { type: 'doc', id: 'model-audit/scanner-overview' },
-        { type: 'doc', id: 'model-audit/scanners' },
-      ],
     },
     {
       type: 'category',

@@ -1,151 +1,180 @@
 ---
-title: Usage Guide
-description: ModelAudit CLI options, remote scanning, and integrations.
-keywords: [modelaudit usage, CLI options, cloud integration, MLflow, CI/CD security scanning]
-sidebar_label: Usage
-sidebar_position: 3
+sidebar_label: Advanced Usage
+sidebar_position: 120
 ---
 
-# Usage Guide
+# Advanced Usage
 
-Complete reference for ModelAudit CLI options and integrations.
-
-## Basic Usage
-
-```bash
-# Local scanning
-promptfoo scan-model ./model.pkl
-promptfoo scan-model ./models/
-
-# Remote scanning
-promptfoo scan-model hf://microsoft/resnet-50
-promptfoo scan-model s3://my-bucket/model.pt
-promptfoo scan-model models:/MyModel/1
-```
-
-## CLI Options
-
-| Option              | Description                         | Default   |
-| ------------------- | ----------------------------------- | --------- |
-| `--format`, `-f`    | Output format (`text` or `json`)    | `text`    |
-| `--output`, `-o`    | Output file path                    | stdout    |
-| `--blacklist`, `-b` | Additional blacklist patterns       | -         |
-| `--timeout`, `-t`   | Scan timeout in seconds             | `300`     |
-| `--verbose`, `-v`   | Enable verbose output               | `false`   |
-| `--max-file-size`   | Maximum file size to scan           | unlimited |
-| `--sbom`            | Generate Software Bill of Materials | -         |
-
-### Common Examples
-
-```bash
-# Export results
-promptfoo scan-model model.pkl --format json --output results.json
-
-# Add security patterns
-promptfoo scan-model model.pkl --blacklist "unsafe_.*" --blacklist "backdoor.*"
-
-# Set resource limits
-promptfoo scan-model models/ --max-file-size 1073741824 --timeout 600
-```
+This page covers advanced ModelAudit features including cloud storage integration, CI/CD workflows, and programmatic usage.
 
 ## Remote Model Scanning
 
-### HuggingFace
+ModelAudit can scan models directly from various remote sources without manual downloading.
+
+### HuggingFace URL Scanning
 
 ```bash
-# Public models
-promptfoo scan-model hf://microsoft/resnet-50
+# Standard HuggingFace URL
 promptfoo scan-model https://huggingface.co/bert-base-uncased
 
-# Private models
+# Short HuggingFace URL
+promptfoo scan-model https://hf.co/gpt2
+
+# HuggingFace protocol
+promptfoo scan-model hf://microsoft/resnet-50
+
+# Private models (requires HF_TOKEN environment variable)
 export HF_TOKEN=your_token_here
 promptfoo scan-model hf://your-org/private-model
 ```
 
 ### Cloud Storage
 
-<details>
-<summary>AWS S3</summary>
+#### Amazon S3
 
 ```bash
-export AWS_ACCESS_KEY_ID=your_key
-export AWS_SECRET_ACCESS_KEY=your_secret
-promptfoo scan-model s3://my-bucket/model.pt
+# Using environment variables
+export AWS_ACCESS_KEY_ID="your-access-key"
+export AWS_SECRET_ACCESS_KEY="your-secret-key"
+export AWS_DEFAULT_REGION="us-east-1"
+
+promptfoo scan-model s3://my-bucket/model.pkl
 ```
 
-</details>
-
-<details>
-<summary>Google Cloud Storage</summary>
+#### Google Cloud Storage
 
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
-promptfoo scan-model gs://my-bucket/model.h5
+# Using service account
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
+promptfoo scan-model gs://my-bucket/model.pt
 ```
 
-</details>
-
-<details>
-<summary>Cloudflare R2</summary>
+#### Cloudflare R2
 
 ```bash
-export AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com
+# R2 uses S3-compatible authentication
+export AWS_ACCESS_KEY_ID="your-r2-access-key"
+export AWS_SECRET_ACCESS_KEY="your-r2-secret-key"
+export AWS_ENDPOINT_URL="https://your-account.r2.cloudflarestorage.com"
+
 promptfoo scan-model r2://my-bucket/model.safetensors
 ```
 
-</details>
-
 ### Model Registries
 
-**MLflow:**
+#### MLflow
 
 ```bash
+# Set MLflow tracking URI
 export MLFLOW_TRACKING_URI=http://mlflow-server:5000
+
+# Scan specific version
 promptfoo scan-model models:/MyModel/1
-promptfoo scan-model models:/MyModel/Latest --registry-uri https://mlflow.company.com
+
+# Scan latest version
+promptfoo scan-model models:/MyModel/Latest
+
+# With custom registry URI
+promptfoo scan-model models:/MyModel/1 --registry-uri https://mlflow.company.com
 ```
 
-**JFrog Artifactory:**
+#### JFrog Artifactory
 
 ```bash
-export JFROG_API_TOKEN=your_token
+# Using API token (recommended)
+export JFROG_API_TOKEN=your_token_here
 promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl
+
+# Or pass directly
+promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl --jfrog-api-token YOUR_TOKEN
 ```
 
-**DVC (auto-resolves):**
+#### DVC Integration
+
+ModelAudit automatically resolves DVC pointer files:
 
 ```bash
+# Scans the actual model file referenced by the .dvc file
 promptfoo scan-model model.pkl.dvc
 ```
 
-## Blacklist Configuration
+## Configuration File
 
-Configure custom security patterns:
+For complex scanning requirements, you can use a configuration file with the standalone `modelaudit` command:
 
-```bash
-# Common patterns
-promptfoo scan-model model.pkl \
-  --blacklist "unsafe_.*" \
-  --blacklist "backdoor.*" \
-  --blacklist "trojan.*" \
-  --blacklist "exploit.*"
+```yaml
+# modelaudit-config.yaml
+blacklist_patterns:
+  - 'deepseek'
+  - 'qwen'
+
+scanners:
+  pickle:
+    max_opcodes: 2000000
+    suspicious_globals:
+      - 'os.*'
+      - 'subprocess.*'
+      - 'builtins.eval'
+      - 'importlib.*'
+
+  tensorflow:
+    suspicious_ops:
+      - 'ReadFile'
+      - 'WriteFile'
+      - 'PyFunc'
+      - 'ShellExecute'
+
+  keras:
+    suspicious_layer_types:
+      - 'Lambda'
+      - 'TFOpLambda'
+      - 'PyFunc'
+
+  manifest:
+    blacklist_patterns:
+      - 'unsafe_model'
+
+  zip:
+    max_zip_depth: 5
+    max_zip_entries: 10000
+    max_entry_size: 10485760
+
+  weight_distribution:
+    z_score_threshold: 3.0
+    cosine_similarity_threshold: 0.7
+    weight_magnitude_threshold: 3.0
+    llm_vocab_threshold: 10000
+    enable_llm_checks: false
+
+# Global settings
+max_file_size: 1073741824
+timeout: 600
 ```
 
-Pattern matching:
+Use the configuration file with:
 
-- `unsafe_*` matches `unsafe_model`, `unsafe_net`, etc.
-- `.*malicious.*` matches any name containing "malicious"
-- Case-insensitive matching
+```bash
+# Standalone command only
+modelaudit scan --config modelaudit-config.yaml path/to/models/
+```
 
 ## CI/CD Integration
 
 ### GitHub Actions
 
 ```yaml
+# .github/workflows/model-security.yml
 name: Model Security Scan
+
 on:
   push:
-    paths: ['models/**', '**/*.pkl', '**/*.h5', '**/*.pt']
+    paths:
+      - 'models/**'
+      - '**.pkl'
+      - '**.h5'
+      - '**.pb'
+      - '**.pt'
+      - '**.pth'
 
 jobs:
   scan:
@@ -153,125 +182,306 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
         run: |
           npm install -g promptfoo
           pip install modelaudit[all]
 
-      - name: Scan Models
-        run: |
-          promptfoo scan-model models/ \
-            --format json \
-            --output results.json \
-            --blacklist "unsafe.*"
+      - name: Scan models
+        run: promptfoo scan-model models/ --format json --output scan-results.json
 
-      - name: Check Results
+      - name: Check for critical issues
         run: |
-          if grep -q '"severity":"critical"' results.json; then
-            echo "🚨 Critical security issues found!"
+          if grep -q '"severity":"critical"' scan-results.json; then
+            echo "Critical security issues found in models!"
             exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: scan-results
-          path: results.json
+          name: model-scan-results
+          path: scan-results.json
 ```
 
-[View full CI/CD examples →](https://github.com/promptfoo/modelaudit-examples)
-
-### Exit Codes
-
-- `0`: Clean scan (no issues)
-- `1`: Issues found (review needed)
-- `2`: Scan error (file not found, etc.)
-
-## Web Interface
-
-Visual scanning interface with progress tracking:
-
-```bash
-promptfoo view
-# Navigate to http://localhost:15500/model-audit
-```
-
-## Advanced Configuration
-
-### Configuration File
+### GitLab CI
 
 ```yaml
-# modelaudit-config.yaml
-blacklist_patterns:
-  - 'unsafe_model'
-  - 'backdoor.*'
-
-max_file_size: 1073741824 # 1GB
-timeout: 600 # 10 minutes
-
-scanners:
-  pickle:
-    max_opcodes: 2000000
-  tensorflow:
-    suspicious_ops: ['ReadFile', 'WriteFile', 'PyFunc']
-  zip:
-    max_zip_depth: 5
-    max_entry_size: 10485760 # 10MB
+# .gitlab-ci.yml
+model_security_scan:
+  stage: test
+  image: python:3.10
+  script:
+    - pip install modelaudit[all]
+    - npm install -g promptfoo
+    - promptfoo scan-model models/ --format json --output scan-results.json
+    - if grep -q '"severity":"critical"' scan-results.json; then echo "Critical security issues found!"; exit 1; fi
+  artifacts:
+    paths:
+      - scan-results.json
+    when: always
+  only:
+    changes:
+      - models/**
+      - '**/*.pkl'
+      - '**/*.h5'
+      - '**/*.pb'
+      - '**/*.pt'
+      - '**/*.pth'
 ```
 
-Use with:
+### Pre-commit Hook
 
-```bash
-modelaudit scan --config modelaudit-config.yaml models/
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: local
+    hooks:
+      - id: modelaudit
+        name: ModelAudit
+        entry: promptfoo scan-model
+        language: system
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors|bin|tflite|msgpack|pmml|joblib|npy|gguf|ggml)$'
+        pass_filenames: true
 ```
 
-### Python API
+## Programmatic Usage
 
-Basic usage:
+You can use ModelAudit programmatically in your Python code:
 
 ```python
 from modelaudit.core import scan_model_directory_or_file
 
-# Scan model
-results = scan_model_directory_or_file("model.pkl")
+# Scan a single model
+results = scan_model_directory_or_file("path/to/model.pkl")
 
-# Check results
+# Scan a HuggingFace model URL
+results = scan_model_directory_or_file("https://huggingface.co/bert-base-uncased")
+
+# Check for issues
 if results["issues"]:
+    print(f"Found {len(results['issues'])} issues:")
     for issue in results["issues"]:
-        print(f"{issue['severity']}: {issue['message']}")
+        print(f"- {issue['severity'].upper()}: {issue['message']}")
+else:
+    print("No issues found!")
+
+# Scan with custom configuration
+config = {
+    "blacklist_patterns": ["unsafe_model", "malicious_net"],
+    "max_file_size": 1073741824,  # 1GB
+    "timeout": 600  # 10 minutes
+}
+
+results = scan_model_directory_or_file("path/to/models/", **config)
 ```
 
-[Full API documentation →](https://docs.promptfoo.dev/docs/model-audit/api)
+## JSON Output Format
 
-## Security Features
+When using `--format json`, ModelAudit outputs structured results:
 
-- **File Type Validation**: Detects spoofed extensions
-- **Resource Protection**: Prevents zip bombs and memory exhaustion
-- **Path Traversal Prevention**: Blocks malicious archive extractions
-- **Executable Detection**: Finds embedded PE, ELF, Mach-O files
+```json
+{
+  "scanner_names": ["pickle"],
+  "start_time": 1750168822.481906,
+  "bytes_scanned": 74,
+  "issues": [
+    {
+      "message": "Found REDUCE opcode - potential __reduce__ method execution",
+      "severity": "warning",
+      "location": "evil.pickle (pos 71)",
+      "details": {
+        "position": 71,
+        "opcode": "REDUCE"
+      },
+      "timestamp": 1750168822.482304
+    },
+    {
+      "message": "Suspicious module reference found: posix.system",
+      "severity": "critical",
+      "location": "evil.pickle (pos 28)",
+      "details": {
+        "module": "posix",
+        "function": "system",
+        "position": 28,
+        "opcode": "STACK_GLOBAL"
+      },
+      "timestamp": 1750168822.482378,
+      "why": "The 'os' module provides direct access to operating system functions."
+    }
+  ],
+  "has_errors": false,
+  "files_scanned": 1,
+  "duration": 0.0005328655242919922
+}
+```
+
+## Software Bill of Materials (SBOM)
+
+Generate CycloneDX-compliant SBOMs with license information:
+
+```bash
+promptfoo scan-model models/ --sbom model-sbom.json
+```
+
+The SBOM includes:
+
+- Component information (files, types, sizes, checksums)
+- License metadata (detected licenses, copyright holders)
+- Risk scoring based on scan findings
+- Model/dataset classification
+
+## Advanced Security Features
+
+### File Type Validation
+
+ModelAudit performs comprehensive file type validation:
+
+```bash
+# File type mismatches are flagged
+⚠ File type validation failed: extension indicates tensor_binary but magic bytes indicate pickle.
+   This could indicate file spoofing, corruption, or a security threat.
+```
+
+### Resource Exhaustion Protection
+
+Built-in protection against various attacks:
+
+- **Zip bombs**: Detects suspicious compression ratios (>100x)
+- **Decompression bombs**: Limits decompressed file sizes
+- **Memory exhaustion**: Enforces limits on array sizes and nested structures
+- **Infinite recursion**: Limits nesting depth in recursive formats
+- **DoS prevention**: Enforces timeouts and maximum file sizes
+
+### Path Traversal Protection
+
+Automatic protection in archives:
+
+```bash
+🔴 Archive entry ../../etc/passwd attempted path traversal outside the archive
+```
 
 ## Troubleshooting
 
-**Missing dependencies:**
+### Common Issues
 
-```bash
-pip install tensorflow h5py torch onnx  # Install as needed
+1. **Missing Dependencies**
+
+   ```
+   Error: h5py not installed, cannot scan Keras H5 files
+   ```
+
+   Solution: Install the required dependencies:
+
+   ```bash
+   pip install h5py tensorflow
+   ```
+
+2. **Timeout Errors**
+
+   ```
+   Error: Scan timeout after 300 seconds
+   ```
+
+   Solution: Increase the timeout:
+
+   ```bash
+   promptfoo scan-model model.pkl --timeout 600
+   ```
+
+3. **File Size Limits**
+
+   ```
+   Warning: File too large to scan: 2147483648 bytes (max: 1073741824)
+   ```
+
+   Solution: Increase the maximum file size:
+
+   ```bash
+   promptfoo scan-model model.pkl --max-file-size 3221225472
+   ```
+
+4. **Unknown Format**
+
+   ```
+   Warning: Unknown or unhandled format
+   ```
+
+   Solution: Ensure the file is in a supported format or create a custom scanner.
+
+5. **Binary File Format Detection**
+
+   ```
+   Info: Detected safetensors format in .bin file
+   ```
+
+   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner.
+
+## Extending ModelAudit
+
+### Creating Custom Scanners
+
+You can create custom scanners by extending the `BaseScanner` class:
+
+```python
+from modelaudit.scanners.base import BaseScanner, ScanResult, IssueSeverity
+
+class CustomModelScanner(BaseScanner):
+    """Scanner for custom model format"""
+    name = "custom_format"
+    description = "Scans custom model format for security issues"
+    supported_extensions = [".custom", ".mymodel"]
+
+    @classmethod
+    def can_handle(cls, path: str) -> bool:
+        """Check if this scanner can handle the given path"""
+        return path.endswith(tuple(cls.supported_extensions))
+
+    def scan(self, path: str) -> ScanResult:
+        """Scan the model file for security issues"""
+        result = self._create_result()
+
+        try:
+            # Your custom scanning logic here
+            with open(path, 'rb') as f:
+                content = f.read()
+
+            if b'malicious_pattern' in content:
+                result.add_issue(
+                    "Suspicious pattern found",
+                    severity=IssueSeverity.WARNING,
+                    location=path,
+                    details={"pattern": "malicious_pattern"}
+                )
+
+        except Exception as e:
+            result.add_issue(
+                f"Error scanning file: {str(e)}",
+                severity=IssueSeverity.CRITICAL,
+                location=path,
+                details={"exception": str(e)}
+            )
+
+        result.finish(success=True)
+        return result
 ```
 
-**Large file timeouts:**
+Register your custom scanner:
 
-```bash
-promptfoo scan-model large-model.pt --timeout 1200  # 20 minutes
+```python
+from modelaudit.scanners import SCANNER_REGISTRY
+from my_custom_scanner import CustomModelScanner
+
+# Register the custom scanner
+SCANNER_REGISTRY.append(CustomModelScanner)
+
+# Now you can use it
+from modelaudit.core import scan_model_directory_or_file
+results = scan_model_directory_or_file("path/to/custom_model.mymodel")
 ```
-
-**Memory issues:**
-
-```bash
-promptfoo scan-model model.pkl --max-file-size 3221225472  # 3GB limit
-```
-
-## Next Steps
-
-- **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities
-- **[Examples Repository](https://github.com/promptfoo/modelaudit-examples)** - Templates and integrations
-- **[API Reference](https://docs.promptfoo.dev/docs/model-audit/api)** - Python API documentation

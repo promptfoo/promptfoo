@@ -1,19 +1,23 @@
 ---
-title: Scanner Reference - ML Model Security Analysis
-description: Deep dive into ModelAudit's 15+ specialized scanners for PyTorch, TensorFlow, ONNX, Keras, GGUF and other model formats. Detect malicious code and backdoors.
+description: Complete guide to ModelAudit's security scanners for different ML model formats including PyTorch, TensorFlow, Keras, ONNX, GGUF, and more.
 keywords:
   [
-    model scanners,
-    pytorch scanner,
-    tensorflow scanner,
-    onnx scanner,
-    pickle security,
+    modelaudit,
+    model security,
+    AI security,
+    ML security scanning,
+    pickle scanner,
+    pytorch security,
+    tensorflow security,
+    keras security,
+    onnx security,
+    model vulnerability detection,
     malicious code detection,
     backdoor detection,
-    ml model analysis,
+    model file scanning,
   ]
 sidebar_label: Scanners
-sidebar_position: 5
+sidebar_position: 200
 ---
 
 # ModelAudit Scanners
@@ -553,5 +557,4 @@ This feature requires the `huggingface-hub` package to be installed.
 ## See Also
 
 - [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
-- [Usage Guide](./usage.md) - How to install and use ModelAudit
-- [Command Line Reference](./usage.md#cli-options) - CLI options and examples
+- [Advanced Usage](./usage.md) - Cloud storage, CI/CD integration, and programmatic usage
