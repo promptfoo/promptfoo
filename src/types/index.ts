@@ -18,11 +18,13 @@ import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { TraceData } from './tracing';
 
 export * from './prompts';
 export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
+export * from './tracing';
 
 export type { EnvOverrides };
 
@@ -544,6 +546,7 @@ export interface AssertionValueFunctionContext {
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
+  trace?: TraceData;
 }
 
 export type AssertionValueFunction = (
