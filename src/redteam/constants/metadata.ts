@@ -123,7 +123,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rbac: 'Tests role-based access control implementation',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Simulated user conversations over multiple turns',
+  [REDTEAM_SIMULATED_USER_STRATEGY_ID]:
+    'Multi-turn attack generation by simulating a conversation with a subtly malicious user',
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
