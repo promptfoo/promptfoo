@@ -912,6 +912,47 @@ describe('HttpProvider', () => {
 "trailing_comma": "problem",
 }`);
       });
+
+      it('should auto-escape newlines in JSON templates (YAML literal case)', () => {
+        // This is the real-world case: YAML literal string with unescaped newlines from red team
+        const body = '{\n  "message": "{{prompt}}"\n}';
+        const vars = {
+          prompt: 'Multi-line prompt\nwith actual newlines\nand more text',
+        };
+        const result = processJsonBody(body, vars);
+
+        // Should automatically escape the newlines and return parsed JSON object
+        expect(result).toEqual({
+          message: 'Multi-line prompt\nwith actual newlines\nand more text',
+        });
+      });
+
+      it('should auto-escape quotes and special chars in JSON templates', () => {
+        // Test various special characters that break JSON
+        const body = '{\n  "message": "{{prompt}}",\n  "role": "user"\n}';
+        const vars = {
+          prompt: 'Text with "quotes" and \ttabs and \nmore stuff',
+        };
+        const result = processJsonBody(body, vars);
+
+        // Should automatically escape and return parsed JSON object
+        expect(result).toEqual({
+          message: 'Text with "quotes" and \ttabs and \nmore stuff',
+          role: 'user',
+        });
+      });
+
+      it('should fall back gracefully when JSON template cannot be fixed', () => {
+        // Test case where even escaping cannot fix the JSON (structural issues)
+        const body = '{\n  "message": "{{prompt}}"\n  missing_comma: true\n}';
+        const vars = {
+          prompt: 'Some text with\nnewlines',
+        };
+        const result = processJsonBody(body, vars);
+
+        // Should fall back to returning the original rendered string (with literal newlines)
+        expect(result).toBe('{\n  "message": "Some text with\nnewlines"\n  missing_comma: true\n}');
+      });
     });
   });
 

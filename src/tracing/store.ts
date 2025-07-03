@@ -3,9 +3,9 @@ import { eq, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { tracesTable, spansTable } from '../database/tables';
 import logger from '../logger';
+import type { TraceData } from '../types/tracing';
 
-export interface TraceData {
-  traceId: string;
+export interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
   testCaseId: string;
   metadata?: Record<string, any>;
@@ -38,7 +38,7 @@ export class TraceStore {
     return this.db;
   }
 
-  async createTrace(trace: TraceData): Promise<void> {
+  async createTrace(trace: StoreTraceData): Promise<void> {
     try {
       logger.debug(
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,

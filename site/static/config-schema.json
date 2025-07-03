@@ -66,6 +66,9 @@
                             "AI21_API_KEY": {
                               "type": "string"
                             },
+                            "AIML_API_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
@@ -524,6 +527,7 @@
                                               "cost",
                                               "equals",
                                               "factuality",
+                                              "finish-reason",
                                               "g-eval",
                                               "gleu",
                                               "guardrails",
