@@ -204,7 +204,7 @@ Python snake_case fields are automatically mapped to camelCase:
 
 ## Using trace data
 
-When [tracing is enabled](/docs/configuration/tracing), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
 
 ```py
 def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:

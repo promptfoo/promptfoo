@@ -309,7 +309,7 @@ Output will always be a string, so if your [custom response parser](/docs/provid
 
 ## Using trace data
 
-When [tracing is enabled](/docs/configuration/tracing), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
 
 ```js
 module.exports = (output, context) => {
