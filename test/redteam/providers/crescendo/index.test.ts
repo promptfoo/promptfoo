@@ -130,7 +130,7 @@ describe('CrescendoProvider', () => {
 
     // Set up default tryUnblocking mock
     jest.mocked(tryUnblocking).mockReset();
-    jest.mocked(tryUnblocking).mockResolvedValue({ output: null });
+    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
   afterEach(() => {

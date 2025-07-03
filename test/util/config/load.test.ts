@@ -1111,7 +1111,7 @@ describe('resolveConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
-    mockExit = jest.spyOn(process, 'exit').mockImplementation((code?: number) => {
+    mockExit = jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
       throw new Error(`Process exited with code ${code}`);
     });
   });
@@ -1198,7 +1198,7 @@ describe('resolveConfigs', () => {
   });
 
   it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
-    jest.spyOn(process, 'exit').mockImplementation((code) => {
+    jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
       throw new Error(`Process exited with code ${code}`);
     });
     jest.mocked(isCI).mockReturnValue(false);

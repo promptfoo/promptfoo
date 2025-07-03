@@ -1242,27 +1242,34 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
   });
 
   it('should propagate non-quote-related CSV errors', async () => {
-    // Isolate this test by using jest.isolateModules
-    await jest.isolateModules(async () => {
-      // Mock csv-parse/sync to throw a different error
-      jest.doMock('csv-parse/sync', () => ({
-        parse: jest.fn().mockImplementation(() => {
-          const error = new Error('Some other CSV error');
-          (error as any).code = 'CSV_OTHER_ERROR';
-          throw error;
-        }),
-      }));
+    // Clear module cache to ensure fresh imports
+    jest.resetModules();
 
-      const csvContent = `label,query,expected_json_format,context
+    // Mock csv-parse/sync to throw a different error on every call
+    const parseMock = jest.fn().mockImplementation(() => {
+      const error = new Error('Some other CSV error');
+      (error as any).code = 'CSV_OTHER_ERROR';
+      throw error;
+    });
+
+    jest.doMock('csv-parse/sync', () => ({
+      parse: parseMock,
+    }));
+
+    const csvContent = `label,query,expected_json_format,context
 my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
 
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
 
-      // Import within isolated context
-      const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
-      await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
+    // Import after mocking
+    const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
 
-      jest.mocked(fs.readFileSync).mockRestore();
-    });
+    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
+
+    // Verify the mock was called (it should be called at least once, possibly twice due to retry logic)
+    expect(parseMock).toHaveBeenCalledTimes(2);
+
+    jest.mocked(fs.readFileSync).mockRestore();
+    jest.resetModules();
   });
 });
