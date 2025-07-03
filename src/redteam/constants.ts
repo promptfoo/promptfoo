@@ -26,7 +26,6 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'dataset:beavertails',
-  'bias:gender',
   'contracts',
   'dataset:cyberseceval',
   'dataset:donotanswer',
@@ -70,12 +69,17 @@ export const FOUNDATION_PLUGINS = [
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii', 'bias'] as const;
+export const COLLECTIONS = [
+  'default',
+  'foundation',
+  'harmful',
+  'pii',
+  'bias',
+  'guardrails-eval',
+] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
-  'bias:gender': 'Gender Bias',
-
   // MLCommons harm categories
   // https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-3/
   'harmful:child-exploitation': 'Child Exploitation',
@@ -159,6 +163,17 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:prioritization-error',
+  'medical:sycophancy',
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
+  'off-topic',
   'overreliance',
   'dataset:pliny',
   'prompt-extraction',
@@ -208,7 +223,8 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
-  | AgenticPlugin;
+  | AgenticPlugin
+  | DatasetPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
@@ -292,7 +308,6 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     plugins: [
       'harmful:misinformation-disinformation',
       'harmful:hate',
-      'bias:gender',
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
@@ -510,7 +525,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
     plugins: [
       'excessive-agency',
       'overreliance',
-      'pliny',
+      'dataset:pliny',
       'competitors',
       'imitation',
       'politics',
@@ -772,7 +787,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
   bias: {
     bias: {
-      plugins: ['politics', 'religion', 'bias:gender'],
+      plugins: ['politics', 'religion'],
       strategies: [],
     },
   },
@@ -863,6 +878,7 @@ export const ADDITIONAL_STRATEGIES = [
   'camelcase',
   'citation',
   'crescendo',
+  'emoji',
   'gcg',
   'goat',
   'hex',
@@ -887,7 +903,7 @@ export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
-  'other-encodings': ['camelcase', 'morse', 'piglatin'],
+  'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
 };
 
 const _ALL_STRATEGIES = [
@@ -902,14 +918,15 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
-  aegis: 'Tests handling of malicious prompts from the NVIDIA Aegis dataset',
+  'dataset:aegis': 'Tests handling of malicious prompts from the NVIDIA Aegis dataset',
   audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
-  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  'dataset:beavertails': 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
-  'bias:gender': 'Tests handling of gender bias, stereotypes, and discrimination',
+  bias: 'Tests for various types of bias in model outputs',
+
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
@@ -917,19 +934,20 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
-  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  'dataset:cyberseceval': "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access': 'Tests for exposed debugging interfaces and commands',
   default: 'Standard security testing plugins',
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
-  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
+  'dataset:donotanswer': 'Tests for vulnerabilities to Do Not Answer attacks',
+  emoji: 'Tests handling of text hidden using emoji variation selectors',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
-  harmbench: 'Tests for harmful content using the HarmBench dataset',
-  'toxic-chat': 'Tests handling of toxic prompts from the ToxicChat dataset',
+  'dataset:harmbench': 'Tests for harmful content using the HarmBench dataset',
+  'dataset:toxic-chat': 'Tests handling of toxic prompts from the ToxicChat dataset',
   harmful: 'Tests handling of malicious content across multiple categories',
   'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
@@ -984,7 +1002,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:social': 'Tests for PII exposure via social engineering',
   piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
   camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
-  pliny: 'Tests handling of Pliny prompt injections',
+  'dataset:pliny': 'Tests handling of Pliny prompt injections',
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
   'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
@@ -1002,28 +1020,41 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
-  unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
-  xstest: 'Tests for XSTest attacks',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  'dataset:unsafebench': 'Tests handling of unsafe image content from the UnsafeBench dataset',
+  'dataset:xstest': 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
+  'medical:anchoring-bias': 'Tests for anchoring bias in medical advice',
+  'medical:hallucination': 'Tests for medical hallucinations',
+  'medical:incorrect-knowledge': 'Tests for incorrect medical knowledge',
+  'medical:prioritization-error': 'Tests for medical prioritization errors',
+  'medical:sycophancy': 'Tests for medical sycophancy',
+  'financial:calculation-error': 'Tests for financial calculation errors',
+  'financial:compliance-violation': 'Tests for financial compliance violations',
+  'financial:data-leakage': 'Tests for financial data leakage',
+  'financial:hallucination': 'Tests for financial hallucinations',
+  'financial:sycophancy': 'Tests for financial sycophancy',
+  'off-topic': 'Tests for off-topic responses that ignore the request',
+  'guardrails-eval': 'Tests for evaluating guardrails and safety measures',
 };
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
   'ascii-smuggling': 'ASCII Smuggling',
-  aegis: 'Aegis Dataset',
+  'dataset:aegis': 'Aegis Dataset',
   audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
-  beavertails: 'BeaverTails Dataset',
-  'toxic-chat': 'ToxicChat Dataset',
+  'dataset:beavertails': 'BeaverTails Dataset',
+  'dataset:toxic-chat': 'ToxicChat Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
+  bias: 'Bias Detection',
   bola: 'Object-Level Authorization Bypass',
   camelcase: 'CamelCase Encoding',
   cca: 'Context Compliance Attack',
@@ -1032,20 +1063,20 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   contracts: 'Unauthorized Commitments',
   crescendo: 'Multi-Turn Crescendo',
   'cross-session-leak': 'Cross-Session Data Leakage',
-  cyberseceval: 'CyberSecEval Dataset',
+  'dataset:cyberseceval': 'CyberSecEval Dataset',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
-  donotanswer: 'Do Not Answer Dataset',
+  'dataset:donotanswer': 'Do Not Answer Dataset',
+  emoji: 'Emoji Smuggling',
   'excessive-agency': 'Excessive Agency',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
-  harmbench: 'HarmBench Dataset',
+  'dataset:harmbench': 'HarmBench Dataset',
   harmful: 'Malicious Content Suite',
-  'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -1098,21 +1129,39 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'pii:direct': 'PII via Direct Exposure',
   'pii:session': 'PII via Session Data',
   'pii:social': 'PII via Social Engineering',
-  pliny: 'Pliny',
+  'dataset:pliny': 'Pliny',
   policy: 'Policy Compliance',
   politics: 'Political Bias',
   'prompt-extraction': 'PromptExtraction',
+  'prompt-injection': 'Prompt Injection',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
+  retry: 'Regression Testing',
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
-  unsafebench: 'UnsafeBench',
-  xstest: 'XSTest',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
+  'tool-discovery': 'Tool Discovery',
+  'dataset:unsafebench': 'UnsafeBench',
+  'dataset:xstest': 'XSTest',
+  rot13: 'ROT13 Payload Encoding',
+  video: 'Video Content',
+  'medical:anchoring-bias': 'Medical Anchoring Bias',
+  'medical:hallucination': 'Medical Hallucination',
+  'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
+  'medical:prioritization-error': 'Medical Prioritization Error',
+  'medical:sycophancy': 'Medical Sycophancy',
+  'financial:calculation-error': 'Financial Calculation Error',
+  'financial:compliance-violation': 'Financial Compliance Violation',
+  'financial:data-leakage': 'Financial Data Leakage',
+  'financial:hallucination': 'Financial Hallucination',
+  'financial:sycophancy': 'Financial Sycophancy',
+  'off-topic': 'Off-Topic Response',
+  'guardrails-eval': 'Guardrails Evaluation',
 };
 
 export enum Severity {
@@ -1135,28 +1184,28 @@ export const severityDisplayNames: Record<Severity, string> = {
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   [MEMORY_POISONING_PLUGIN_ID]: Severity.High,
-  aegis: Severity.Medium,
+  'dataset:aegis': Severity.Medium,
   'ascii-smuggling': Severity.Low,
-  beavertails: Severity.Low,
+  'dataset:beavertails': Severity.Low,
   bfla: Severity.High,
+  bias: Severity.Low,
   bola: Severity.High,
   cca: Severity.High,
   mcp: Severity.High,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
-  cyberseceval: Severity.Medium,
-  donotanswer: Severity.Medium,
+  'dataset:cyberseceval': Severity.Medium,
+  'dataset:donotanswer': Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
   foundation: Severity.Medium,
   hallucination: Severity.Medium,
-  harmbench: Severity.Medium,
-  'toxic-chat': Severity.Medium,
+  'dataset:harmbench': Severity.Medium,
+  'dataset:toxic-chat': Severity.Medium,
   harmful: Severity.Medium,
-  'bias:gender': Severity.Low,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -1193,7 +1242,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'pii:direct': Severity.High,
   'pii:session': Severity.High,
   'pii:social': Severity.High,
-  pliny: Severity.Medium,
+  'dataset:pliny': Severity.Medium,
   policy: Severity.High,
   politics: Severity.Low,
   'prompt-extraction': Severity.Medium,
@@ -1208,8 +1257,20 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'system-prompt-override': Severity.High,
   'tool-discovery:multi-turn': Severity.Low,
   'tool-discovery': Severity.Low,
-  unsafebench: Severity.Medium,
-  xstest: Severity.Low,
+  'dataset:unsafebench': Severity.Medium,
+  'dataset:xstest': Severity.Low,
+  'medical:anchoring-bias': Severity.High,
+  'medical:hallucination': Severity.High,
+  'medical:incorrect-knowledge': Severity.High,
+  'medical:prioritization-error': Severity.High,
+  'medical:sycophancy': Severity.Medium,
+  'financial:calculation-error': Severity.High,
+  'financial:compliance-violation': Severity.High,
+  'financial:data-leakage': Severity.High,
+  'financial:hallucination': Severity.High,
+  'financial:sycophancy': Severity.Medium,
+  'off-topic': Severity.Low,
+  'guardrails-eval': Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1263,7 +1324,6 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
 
   'Trust & Safety': [
-    'bias:gender',
     'harmful:child-exploitation',
     'harmful:graphic-content',
     'harmful:harassment-bullying',
@@ -1287,19 +1347,32 @@ export const riskCategories: Record<string, Plugin[]> = {
     'policy',
     'politics',
     'religion',
+    'off-topic',
+    'medical:anchoring-bias',
+    'medical:hallucination',
+    'medical:incorrect-knowledge',
+    'medical:prioritization-error',
+    'medical:sycophancy',
+    'financial:calculation-error',
+    'financial:compliance-violation',
+    'financial:data-leakage',
+    'financial:hallucination',
+    'financial:sycophancy',
   ],
 
   Datasets: [
-    'aegis',
-    'beavertails',
-    'cyberseceval',
-    'donotanswer',
-    'harmbench',
-    'toxic-chat',
-    'pliny',
-    'unsafebench',
-    'xstest',
+    'dataset:aegis',
+    'dataset:beavertails',
+    'dataset:cyberseceval',
+    'dataset:donotanswer',
+    'dataset:harmbench',
+    'dataset:toxic-chat',
+    'dataset:pliny',
+    'dataset:unsafebench',
+    'dataset:xstest',
   ],
+
+  'Guardrails Evaluation': ['guardrails-eval'],
 };
 
 export const categoryDescriptions = {
@@ -1327,17 +1400,18 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
-  aegis: 'Aegis',
+  'dataset:aegis': 'Aegis',
   'ascii-smuggling': 'AsciiSmuggling',
-  beavertails: 'BeaverTails',
+  'dataset:beavertails': 'BeaverTails',
   bfla: 'BFLAEnforcement',
+  bias: 'Bias',
   bola: 'BOLAEnforcement',
   cca: 'CCAEnforcement',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
   'cross-session-leak': 'CrossSessionLeak',
-  cyberseceval: 'CyberSecEval',
-  donotanswer: 'DoNotAnswer',
+  'dataset:cyberseceval': 'CyberSecEval',
+  'dataset:donotanswer': 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
   mcp: 'MCP',
@@ -1347,10 +1421,9 @@ export const categoryAliases: Record<Plugin, string> = {
   'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Foundation',
   hallucination: 'Hallucination',
-  harmbench: 'Harmbench',
-  'toxic-chat': 'ToxicChat',
+  'dataset:harmbench': 'Harmbench',
+  'dataset:toxic-chat': 'ToxicChat',
   harmful: 'Harmful',
-  'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -1388,7 +1461,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'pii:direct': 'PIILeak',
   'pii:session': 'PIILeak',
   'pii:social': 'PIILeak',
-  pliny: 'Pliny',
+  'dataset:pliny': 'Pliny',
   policy: 'PolicyViolation',
   politics: 'PoliticalStatement',
   'prompt-extraction': 'PromptExtraction',
@@ -1401,8 +1474,20 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
-  unsafebench: 'UnsafeBench',
-  xstest: 'XSTest',
+  'dataset:unsafebench': 'UnsafeBench',
+  'dataset:xstest': 'XSTest',
+  'medical:anchoring-bias': 'MedicalAnchoringBias',
+  'medical:hallucination': 'MedicalHallucination',
+  'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
+  'medical:prioritization-error': 'MedicalPrioritizationError',
+  'medical:sycophancy': 'MedicalSycophancy',
+  'financial:calculation-error': 'FinancialCalculationError',
+  'financial:compliance-violation': 'FinancialComplianceViolation',
+  'financial:data-leakage': 'FinancialDataLeakage',
+  'financial:hallucination': 'FinancialHallucination',
+  'financial:sycophancy': 'FinancialSycophancy',
+  'off-topic': 'OffTopic',
+  'guardrails-eval': 'GuardrailsEvaluation',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1416,7 +1501,9 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 export const pluginDescriptions: Record<Plugin, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
-  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  'dataset:aegis': 'Tests handling of malicious prompts from the NVIDIA Aegis dataset',
+  'dataset:beavertails': 'Tests handling of malicious prompts from the BeaverTails dataset',
+  bias: 'Tests for various types of bias in model outputs',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
@@ -1425,8 +1512,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
-  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
-  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
+  'dataset:cyberseceval': "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  'dataset:donotanswer': 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
@@ -1437,11 +1524,10 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
-  harmbench:
+  'dataset:harmbench':
     'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
-  'toxic-chat': 'Tests handling of toxic user prompts from the ToxicChat dataset',
+  'dataset:toxic-chat': 'Tests handling of toxic user prompts from the ToxicChat dataset',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
-  'bias:gender': 'Tests handling of gender bias in responses, stereotypes, and discrimination',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -1480,7 +1566,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'pii:direct': 'Evaluates direct PII exposure vulnerabilities',
   'pii:session': 'Tests for PII leakage in session data',
   'pii:social': 'Assesses PII exposure through social engineering vectors',
-  pliny: 'Tests handling of Pliny prompt injections',
+  'dataset:pliny': 'Tests handling of Pliny prompt injections',
   policy: 'Validates compliance with custom security policies and controls',
   politics: 'Tests handling of political content and bias mitigation',
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
@@ -1493,10 +1579,26 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  unsafebench:
+  'dataset:unsafebench':
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
-  xstest:
+  'dataset:xstest':
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
+  'medical:anchoring-bias': 'Tests for anchoring bias in medical advice and diagnosis',
+  'medical:hallucination':
+    'Tests for medical hallucinations and factually incorrect medical information',
+  'medical:incorrect-knowledge': 'Tests for incorrect medical knowledge and misinformation',
+  'medical:prioritization-error': 'Tests for errors in medical treatment prioritization and triage',
+  'medical:sycophancy':
+    'Tests for medical sycophancy where the model agrees with incorrect medical information',
+  'financial:calculation-error': 'Tests for errors in financial calculations and computations',
+  'financial:compliance-violation': 'Tests for financial regulatory compliance violations',
+  'financial:data-leakage': 'Tests for leakage of sensitive financial data',
+  'financial:hallucination': 'Tests for financial hallucinations and incorrect financial advice',
+  'financial:sycophancy':
+    'Tests for financial sycophancy where the model agrees with incorrect financial information',
+  'off-topic': "Tests for off-topic responses that ignore or deflect from the user's request",
+  'guardrails-eval':
+    'Tests a collection of plugins designed to evaluate guardrails and safety measures',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -1509,6 +1611,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
+  emoji: 'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
@@ -1525,7 +1628,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
@@ -1545,6 +1648,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
+  emoji: 'Emoji Smuggling',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hex: 'Hex Encoding',
@@ -1584,3 +1688,6 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
 } as const;
 
 export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
+
+// Re-export from constants/plugins.ts
+export { BIAS_PLUGINS, GUARDRAILS_EVALUATION_PLUGINS, REDTEAM_DEFAULTS } from './constants/plugins';
