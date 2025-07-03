@@ -2,7 +2,7 @@ import path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../../../src/redteam/constants/strategies';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../../../src/redteam/constants/strategies';
 import { validateStrategies, loadStrategy } from '../../../src/redteam/strategies';
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types';
 
@@ -25,7 +25,7 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
-      { id: REDTEAM_SIMULATED_USER_STRATEGY_ID },
+      { id: REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -131,14 +131,14 @@ describe('loadStrategy', () => {
   });
 
   it('should load simulated user strategy', async () => {
-    const strategy = await loadStrategy(REDTEAM_SIMULATED_USER_STRATEGY_ID);
+    const strategy = await loadStrategy(REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID);
     expect(strategy).toBeDefined();
-    expect(strategy.id).toBe(REDTEAM_SIMULATED_USER_STRATEGY_ID);
+    expect(strategy.id).toBe(REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID);
     expect(typeof strategy.action).toBe('function');
   });
 
   it('should call simulated user strategy action with correct parameters', async () => {
-    const strategy = await loadStrategy(REDTEAM_SIMULATED_USER_STRATEGY_ID);
+    const strategy = await loadStrategy(REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID);
     const testCases: TestCaseWithPlugin[] = [
       { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
     ];

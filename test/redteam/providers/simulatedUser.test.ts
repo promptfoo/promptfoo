@@ -1,5 +1,5 @@
 import { SimulatedUser } from '../../../src/providers/simulatedUser';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../../../src/redteam/constants/strategies';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../../../src/redteam/constants/strategies';
 import RedteamSimulatedUserProvider from '../../../src/redteam/providers/mischievousUser';
 import type { CallApiContextParams, CallApiOptionsParams, Prompt } from '../../../src/types';
 
@@ -27,7 +27,7 @@ describe('RedteamSimulatedUserProvider', () => {
     const provider = new RedteamSimulatedUserProvider({
       injectVar: 'test_var',
     });
-    expect(provider.id()).toBe(`promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`);
+    expect(provider.id()).toBe(`promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`);
   });
 
   it('should call SimulatedUser with correct config', async () => {
@@ -62,7 +62,7 @@ describe('RedteamSimulatedUserProvider', () => {
     await provider.callApi('test prompt', context, options);
 
     expect(SimulatedUser).toHaveBeenCalledWith({
-      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      id: `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
         maxTurns: 5,
@@ -93,7 +93,7 @@ describe('RedteamSimulatedUserProvider', () => {
     await provider.callApi('test');
 
     expect(SimulatedUser).toHaveBeenCalledWith({
-      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      id: `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
         maxTurns: 5,
@@ -135,7 +135,7 @@ describe('RedteamSimulatedUserProvider', () => {
     await provider.callApi('test prompt', context, options);
 
     expect(SimulatedUser).toHaveBeenCalledWith({
-      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      id: `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
         maxTurns: 3,
@@ -177,7 +177,7 @@ describe('RedteamSimulatedUserProvider', () => {
     await provider.callApi('test prompt', context, options);
 
     expect(SimulatedUser).toHaveBeenCalledWith({
-      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      id: `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
         maxTurns: 2,
@@ -218,7 +218,7 @@ describe('RedteamSimulatedUserProvider', () => {
     await provider.callApi('test prompt', context, options);
 
     expect(SimulatedUser).toHaveBeenCalledWith({
-      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      id: `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
         maxTurns: 4,

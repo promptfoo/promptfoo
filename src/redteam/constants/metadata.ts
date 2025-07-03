@@ -734,7 +734,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
-  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Multi-turn conversations using a simulated user',
+  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]:
+    'Simulates a multi-turn conversation between a mischievous user and an agent',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
