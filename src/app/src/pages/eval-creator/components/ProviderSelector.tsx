@@ -582,38 +582,6 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
   ])
-  .concat([
-    {
-      id: 'aimlapi:openai/gpt-4o',
-      label: 'aimlapi: GPT 4o',
-      config: { temperature: 0.7, max_tokens: 128000 },
-    },
-    {
-      id: 'aimlapi:gpt-4o-mini',
-      label: 'aimlapi: GPT 4o Mini',
-      config: { temperature: 0.7, max_tokens: 128000 },
-    },
-    {
-      id: 'aimlapi:gpt-4-turbo',
-      label: 'aimlapi: GPT 4 Turbo',
-      config: { temperature: 0.7, max_tokens: 128000 },
-    },
-    {
-      id: 'aimlapi:chatgpt-4o-latest',
-      label: 'aimlapi: ChatGPT 4o Latest',
-      config: { temperature: 0.7, max_tokens: 128000 },
-    },
-    {
-      id: 'aimlapi:mistralai/Mixtral-8x7B-Instruct-v0.1',
-      label: 'aimlapi: Mixtral 8x7B Instruct v0.1',
-      config: { temperature: 0.7, max_tokens: 64000 },
-    },
-    {
-      id: 'aimlapi:google/gemini-2.5-pro-preview',
-      label: 'aimlapi: Gemini 2.5 Pro Preview',
-      config: { temperature: 0.7, max_tokens: 64000 },
-    },
-  ])
   .sort((a, b) => a.id.localeCompare(b.id));
 
 const PROVIDER_GROUPS: Record<string, string> = {
@@ -623,7 +591,6 @@ const PROVIDER_GROUPS: Record<string, string> = {
   'azure:': 'Azure',
   'openrouter:': 'OpenRouter',
   'replicate:': 'Replicate',
-  'aimlapi:': 'AI/ML API',
   'vertex:': 'Google Vertex AI',
 };
 
