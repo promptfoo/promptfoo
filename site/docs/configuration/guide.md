@@ -335,21 +335,9 @@ tests:
 
 ### Loading defaultTest from external files
 
-You can load `defaultTest` configuration from external files using the `file://` syntax. This is useful for:
-
-- Sharing test configurations across multiple projects
-- Keeping your main config file cleaner
-- Managing complex test configurations separately
+You can load `defaultTest` configuration from external files using the `file://` syntax:
 
 ```yaml
-# promptfooconfig.yaml
-prompts:
-  - file://prompt1.txt
-  - file://prompt2.txt
-providers:
-  - openai:gpt-4.1-mini
-  - vertex:gemini-2.0-flash-exp
-
 # Load defaultTest from external file
 defaultTest: file://shared/defaultTest.yaml
 
@@ -357,28 +345,9 @@ tests:
   - vars:
       language: French
       input: Hello world
-  - vars:
-      language: German
-      input: How's it going?
 ```
 
-The external file should contain a valid test case configuration:
-
-```yaml
-# shared/defaultTest.yaml
-vars:
-  template: 'A reusable prompt template'
-  system_message: 'You are a helpful assistant.'
-
-assert:
-  - type: llm-rubric
-    value: does not describe self as an AI, model, or chatbot
-  - type: cost
-    threshold: 0.001
-
-options:
-  provider: openai:gpt-4.1-mini
-```
+This allows sharing test configurations across multiple projects and keeping your main config file cleaner.
 
 ### YAML references
 
