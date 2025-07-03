@@ -1,9 +1,11 @@
 import { parse as csvParse } from 'csv-parse/sync';
 import * as fs from 'fs';
+import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
+import logger from '../logger';
 
 /**
  * Simple Nunjucks engine specifically for file paths
@@ -35,12 +37,16 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  *
  * @throws {Error} If the specified file does not exist.
  */
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+export function maybeLoadFromExternalFile(
+  filePath: string | object | Function | undefined | null,
+): any {
   if (Array.isArray(filePath)) {
-    return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path);
-      return content;
-    });
+    return filePath
+      .map((path) => {
+        const content: any = maybeLoadFromExternalFile(path);
+        return content;
+      })
+      .flat(); // Flatten arrays from glob patterns
   }
 
   if (typeof filePath !== 'string') {
@@ -54,6 +60,30 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
 
   const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
+
+  // Check for glob patterns - include ** for recursive matching
+  if (/[*?{}\[\]]|(\*\*)/.test(finalPath)) {
+    // Normalize path for Windows compatibility
+    const normalizedPath = finalPath.replace(/\\/g, '/');
+    logger.debug(`Loading files with glob pattern: ${normalizedPath}`);
+
+    const files = globSync(normalizedPath, { windowsPathsNoEscape: true });
+
+    if (files.length === 0) {
+      logger.warn(`No files found matching pattern: ${finalPath}`);
+      // Return empty array instead of throwing to allow optional patterns
+      return [];
+    }
+
+    logger.debug(`Found ${files.length} file(s) matching pattern: ${files.join(', ')}`);
+
+    // Always return an array for glob patterns to maintain consistency
+    return files.map((file) => {
+      logger.debug(`Loading file from glob match: ${file}`);
+      return maybeLoadFromExternalFile(`file://${file}`);
+    });
+  }
+
   if (!fs.existsSync(finalPath)) {
     throw new Error(`File does not exist: ${finalPath}`);
   }

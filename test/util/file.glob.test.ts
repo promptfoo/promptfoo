@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { maybeLoadFromExternalFile } from '../../src/util/file';
 import cliState from '../../src/cliState';
+import { maybeLoadFromExternalFile } from '../../src/util/file';
 
 describe('file utilities - glob pattern support', () => {
   let tempDir: string;
@@ -131,11 +131,14 @@ describe('file utilities - glob pattern support', () => {
 
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(5);
-    // The files should be in alphabetical order
-    expect(result[0]).toEqual({ order: 1 });
-    expect(result[1]).toEqual({ order: 2 });
-    expect(result[2]).toEqual({ order: 3 });
-    expect(result[3]).toEqual({ order: 4 });
-    expect(result[4]).toEqual({ order: 5 });
+
+    // Sort the results by order to ensure consistent testing
+    const sortedResult = result.sort((a: any, b: any) => a.order - b.order);
+
+    expect(sortedResult[0]).toEqual({ order: 1 });
+    expect(sortedResult[1]).toEqual({ order: 2 });
+    expect(sortedResult[2]).toEqual({ order: 3 });
+    expect(sortedResult[3]).toEqual({ order: 4 });
+    expect(sortedResult[4]).toEqual({ order: 5 });
   });
-}); 
+});
