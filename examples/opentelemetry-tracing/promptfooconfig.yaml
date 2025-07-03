@@ -12,12 +12,18 @@ tests:
     metadata:
       tracingEnabled: true
       testCaseId: 'test-case-1'
+    assert:
+      - type: javascript
+        value: file://trace-assertions.js
 
   - vars:
       topic: 'machine learning'
     metadata:
       tracingEnabled: true
       testCaseId: 'test-case-2'
+    assert:
+      - type: javascript
+        value: file://trace-assertions.js
 
 # Tracing configuration
 tracing:

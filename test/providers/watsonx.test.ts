@@ -61,6 +61,12 @@ describe('WatsonXProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    clearModelSpecsCache();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    clearModelSpecsCache();
   });
 
   describe('constructor', () => {
