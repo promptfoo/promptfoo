@@ -1,5 +1,5 @@
 ---
-sidebar_label: Custom policy
+sidebar_label: Custom Policy
 ---
 
 # Policy Plugin

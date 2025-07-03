@@ -35,6 +35,7 @@ async function loadPluginsFromConstants(): Promise<Set<string>> {
     'ADDITIONAL_PLUGINS',
     'CONFIG_REQUIRED_PLUGINS',
     'PII_PLUGINS',
+    'BIAS_PLUGINS',
   ];
 
   for (const arrayName of pluginArrays) {

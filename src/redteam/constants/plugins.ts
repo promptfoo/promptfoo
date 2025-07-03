@@ -32,7 +32,6 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
-  'bias:gender',
   'contracts',
   'cyberseceval',
   'donotanswer',
@@ -73,15 +72,87 @@ export const FOUNDATION_PLUGINS = [
   'religion',
 ] as const;
 
+export const GUARDRAILS_EVALUATION_PLUGINS = [
+  // === PROMPT INJECTION & JAILBREAKING ===
+  'ascii-smuggling',
+  'indirect-prompt-injection',
+  'cca',
+  'hijacking',
+  'system-prompt-override',
+  'beavertails',
+  'harmbench',
+  'pliny',
+  'donotanswer',
+  'prompt-extraction',
+
+  // === HARMFUL CONTENT ===
+  // WMD & Weapons
+  'harmful:chemical-biological-weapons',
+  'harmful:indiscriminate-weapons',
+  'harmful:weapons:ied',
+
+  // Violence & Crime
+  'harmful:violent-crime',
+  'harmful:sex-crime',
+  'harmful:non-violent-crime',
+  'harmful:graphic-content',
+  'harmful:unsafe-practices',
+
+  // Exploitation & Abuse
+  'harmful:child-exploitation',
+  'harmful:harassment-bullying',
+  'harmful:hate',
+  'harmful:self-harm',
+  'harmful:sexual-content',
+  'harmful:insults',
+  'harmful:profanity',
+
+  // Radicalization & Extremism
+  'harmful:radicalization',
+
+  // Cybercrime & Security
+  'harmful:cybercrime',
+  'harmful:cybercrime:malicious-code',
+
+  // Substances
+  'harmful:illegal-activities',
+  'harmful:illegal-drugs',
+  'harmful:illegal-drugs:meth',
+
+  // Information Integrity
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
+
+  // Legal & IP
+  'harmful:copyright-violations',
+  'harmful:intellectual-property',
+
+  // === SYSTEM SECURITY & INTEGRITY ===
+  'cyberseceval',
+  'excessive-agency',
+  'hallucination',
+  'overreliance',
+  'divergent-repetition',
+  'reasoning-dos',
+
+  // === PII & PRIVACY PROTECTION (UK/EU Compliance) ===
+  'harmful:privacy',
+] as const;
+
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
+export const COLLECTIONS = [
+  'default',
+  'foundation',
+  'harmful',
+  'pii',
+  'bias',
+  'guardrails-eval',
+] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
-  'bias:gender': 'Gender Bias',
-
   // MLCommons harm categories
   // https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-3/
   'harmful:child-exploitation': 'Child Exploitation',
@@ -136,7 +207,10 @@ export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
 
+export const BIAS_PLUGINS = ['bias:age', 'bias:disability', 'bias:gender', 'bias:race'] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
+export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -170,6 +244,11 @@ export const ADDITIONAL_PLUGINS = [
   'medical:incorrect-knowledge',
   'medical:prioritization-error',
   'medical:sycophancy',
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
   'off-topic',
   'overreliance',
   'pliny',
@@ -219,10 +298,16 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
+  | BiasPlugin
   | AgenticPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
-  ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
+  ...[
+    ...BASE_PLUGINS,
+    ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]),
+    ...PII_PLUGINS,
+    ...BIAS_PLUGINS,
+  ].sort(),
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [

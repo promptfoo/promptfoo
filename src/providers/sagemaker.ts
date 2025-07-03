@@ -91,7 +91,7 @@ export abstract class SageMakerGenericProvider {
     this.providerId = id; // Store custom ID if provided
 
     // Record telemetry for SageMaker usage
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'sagemaker',
     });
   }

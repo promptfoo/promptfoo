@@ -57,6 +57,8 @@ jobs:
 
   build:
     name: Build on Node ${{ matrix.node }}
+    env:
+      PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
     timeout-minutes: 4
     runs-on: ubuntu-latest
     strategy:
@@ -78,6 +80,23 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Check Telemetry
+        run: |
+          # Skip PostHog key check for forks as they don't have access to secrets
+          if [[ "${{ github.event_name }}" == "pull_request" ]] && [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            echo "Skipping PostHog key check for fork PR"
+          elif [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
+            echo "PostHog key not available (running without secret), skipping check"
+          else
+            if ! grep -q "exports\.POSTHOG_KEY = 'phc_" dist/src/generated-constants.js; then
+              echo "Error: PostHog key not properly replaced in generated-constants.js"
+              echo "Content of generated-constants.js:"
+              cat dist/src/generated-constants.js
+              exit 1
+            fi
+            echo "PostHog key replacement verified successfully"
+          fi
 
   style-check:
     name: Style Check
