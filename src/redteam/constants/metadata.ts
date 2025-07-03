@@ -1,6 +1,6 @@
 import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
 import type { Plugin } from './plugins';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from './strategies';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from './strategies';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
@@ -123,8 +123,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rbac: 'Tests role-based access control implementation',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  [REDTEAM_SIMULATED_USER_STRATEGY_ID]:
-    'Multi-turn attack generation by simulating a conversation with a subtly malicious user',
+  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]:
+    'Simulates a multi-turn conversation between a mischievous user and an agent',
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
@@ -252,7 +252,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
-  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Simulated User',
+  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]: 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
@@ -772,7 +772,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
-  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Simulated User',
+  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]: 'Mischievous User',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',

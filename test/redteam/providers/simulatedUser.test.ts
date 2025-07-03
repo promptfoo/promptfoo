@@ -1,6 +1,6 @@
 import { SimulatedUser } from '../../../src/providers/simulatedUser';
 import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../../../src/redteam/constants/strategies';
-import RedteamSimulatedUserProvider from '../../../src/redteam/providers/simulatedUser';
+import RedteamSimulatedUserProvider from '../../../src/redteam/providers/mischievousUser';
 import type { CallApiContextParams, CallApiOptionsParams, Prompt } from '../../../src/types';
 
 jest.mock('../../../src/providers/simulatedUser');

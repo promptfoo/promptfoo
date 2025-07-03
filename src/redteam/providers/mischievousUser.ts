@@ -1,19 +1,19 @@
 import { SimulatedUser, type Message } from '../../providers/simulatedUser';
 import type { ProviderResponse, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../constants/strategies';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
-const PROVIDER_ID = `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`;
+const PROVIDER_ID = `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`;
 
-type RedteamSimulatedUserConfig = {
+type Config = {
   injectVar: string;
   maxTurns?: number;
   stateful?: boolean;
 };
 
-export default class RedteamSimulatedUserProvider extends SimulatedUser {
-  constructor(config: RedteamSimulatedUserConfig) {
+export default class RedteamMischievousUserProvider extends SimulatedUser {
+  constructor(config: Config) {
     invariant(config.injectVar, 'Expected injectVar to be set');
 
     super({
@@ -31,7 +31,7 @@ export default class RedteamSimulatedUserProvider extends SimulatedUser {
   }
 
   get taskId() {
-    return 'simulated-user-redteam';
+    return 'mischievous-user-redteam';
   }
 
   serializeOutput(

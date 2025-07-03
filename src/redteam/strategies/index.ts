@@ -6,7 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -19,6 +19,7 @@ import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
+import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
@@ -28,7 +29,6 @@ import { addRot13 } from './rot13';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
-import { addSimulatedUser } from './simulatedUser';
 import { addCompositeTestCases } from './singleTurnComposite';
 
 export interface Strategy {
@@ -113,10 +113,10 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: REDTEAM_SIMULATED_USER_STRATEGY_ID,
+    id: REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding simulated user test cases to ${testCases.length} test cases`);
-      const newTestCases = addSimulatedUser(testCases, injectVar, config);
+      const newTestCases = addMischievousUser(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} simulated user test cases`);
       return newTestCases;
     },

@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../redteam/constants/strategies';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../redteam/constants/strategies';
 import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
@@ -11,8 +11,8 @@ import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
+import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
-import RedteamSimulatedUserProvider from '../redteam/providers/simulatedUser';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -1042,13 +1042,13 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath === `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      providerPath === `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      return new RedteamSimulatedUserProvider(providerOptions.config);
+      return new RedteamMischievousUserProvider(providerOptions.config);
     },
   },
   {

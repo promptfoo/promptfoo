@@ -1,12 +1,12 @@
 ---
-sidebar_label: Simulated User
-title: Simulated User Strategy
-description: Multi-turn red teaming strategy that simulates a user conversation
+sidebar_label: Mischievous User
+title: Mischievous User Strategy
+description: Multi-turn red teaming strategy that simulates a mischievous user conversation
 ---
 
-# Simulated User Strategy
+# Mischievous User Strategy
 
-The **Simulated User** strategy uses the simulated user provider to create a multi-turn conversation with your application. It is inspired by the [Tau-bench](https://github.com/sierra-research/tau-bench) approach.
+The **Mischievous User** strategy uses the simulated user provider to create a multi-turn conversation with your application. It is inspired by the [Tau-bench](https://github.com/sierra-research/tau-bench) approach.
 
 ## Implementation
 
@@ -15,7 +15,7 @@ Enable it in your `promptfooconfig.yaml`:
 ```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
-    - id: simulated-user
+    - id: mischievous-user
       config:
         maxTurns: 5
         stateful: false # Sends the entire conversation history with each turn (Default)
@@ -28,5 +28,3 @@ The strategy sends user instructions stored in the variable specified by `inject
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [GOAT Strategy](goat.md)
 - [Crescendo Strategy](multi-turn.md)
-
-For more information on the provider itself, see [Simulated User Provider](/docs/providers/simulated-user).

@@ -98,7 +98,7 @@ redteam:
   strategies:
     - goat
     - crescendo
-    - simulated-user
+    - mischievous-user
 ```
 
 ## Implementation Guide

@@ -10,7 +10,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '@promptfoo/redteam/constants';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '@promptfoo/redteam/constants';
 import {
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
@@ -94,7 +94,7 @@ export default function StrategyConfigDialog({
       strategy === 'pandamonium' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
-      strategy === REDTEAM_SIMULATED_USER_STRATEGY_ID
+      strategy === REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID
     ) {
       onSave(strategy, localConfig);
     } else if (strategy === 'multilingual') {
