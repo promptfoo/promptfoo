@@ -98,65 +98,32 @@ ModelAudit automatically resolves DVC pointer files:
 promptfoo scan-model model.pkl.dvc
 ```
 
-## Configuration File
+## Configuration Options
 
-For complex scanning requirements, you can use a configuration file with the standalone `modelaudit` command:
-
-```yaml
-# modelaudit-config.yaml
-blacklist_patterns:
-  - 'deepseek'
-  - 'qwen'
-
-scanners:
-  pickle:
-    max_opcodes: 2000000
-    suspicious_globals:
-      - 'os.*'
-      - 'subprocess.*'
-      - 'builtins.eval'
-      - 'importlib.*'
-
-  tensorflow:
-    suspicious_ops:
-      - 'ReadFile'
-      - 'WriteFile'
-      - 'PyFunc'
-      - 'ShellExecute'
-
-  keras:
-    suspicious_layer_types:
-      - 'Lambda'
-      - 'TFOpLambda'
-      - 'PyFunc'
-
-  manifest:
-    blacklist_patterns:
-      - 'unsafe_model'
-
-  zip:
-    max_zip_depth: 5
-    max_zip_entries: 10000
-    max_entry_size: 10485760
-
-  weight_distribution:
-    z_score_threshold: 3.0
-    cosine_similarity_threshold: 0.7
-    weight_magnitude_threshold: 3.0
-    llm_vocab_threshold: 10000
-    enable_llm_checks: false
-
-# Global settings
-max_file_size: 1073741824
-timeout: 600
-```
-
-Use the configuration file with:
+ModelAudit's behavior can be customized through command-line options. While configuration files are not currently supported, you can achieve similar results using CLI flags:
 
 ```bash
-# Standalone command only
-modelaudit scan --config modelaudit-config.yaml path/to/models/
+# Set blacklist patterns
+modelaudit scan models/ \
+  --blacklist "deepseek" \
+  --blacklist "qwen" \
+  --blacklist "unsafe_model"
+
+# Set resource limits
+modelaudit scan models/ \
+  --max-file-size 1073741824 \
+  --max-total-size 5368709120 \
+  --timeout 600
+
+# Combine multiple options
+modelaudit scan models/ \
+  --blacklist "suspicious_pattern" \
+  --max-file-size 1073741824 \
+  --timeout 600 \
+  --verbose
 ```
+
+Note: Advanced scanner-specific configurations (like pickle opcodes limits or weight distribution thresholds) are currently hardcoded and cannot be modified via CLI.
 
 ## CI/CD Integration
 
@@ -318,7 +285,13 @@ When using `--format json`, ModelAudit outputs structured results:
   ],
   "has_errors": false,
   "files_scanned": 1,
-  "duration": 0.0005328655242919922
+  "duration": 0.0005328655242919922,
+  "assets": [
+    {
+      "path": "evil.pickle",
+      "type": "pickle"
+    }
+  ]
 }
 ```
 

@@ -227,7 +227,7 @@ JAX and Flax models can use various checkpoint formats, from simple pickle files
 
 ## NumPy Scanner
 
-**File types:** `.npy`
+**File types:** `.npy`, `.npz`
 
 This scanner validates NumPy binary array files for integrity issues and potential security risks.
 
