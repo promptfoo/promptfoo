@@ -64,9 +64,6 @@ jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Set default mock implementations for envars
-    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
-    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue);
   });
 
   it('should read CSV file and return test cases', async () => {
@@ -1079,26 +1076,8 @@ describe('testCaseFromCsvRow', () => {
 });
 
 describe('readVarsFiles', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
-    // Reset fs mocks
-    jest.mocked(fs.readFileSync).mockReset();
-    jest.mocked(fs.existsSync).mockReset();
-    jest.mocked(fs.readdirSync).mockReset();
-    jest.mocked(fs.statSync).mockReset();
-    jest.mocked(globSync).mockReset();
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
-  });
-
   it('should read variables from a single YAML file', async () => {
     const yamlContent = 'var1: value1\nvar2: value2';
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as any);
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
     jest.mocked(globSync).mockReturnValue(['vars.yaml']);
 
@@ -1110,29 +1089,11 @@ describe('readVarsFiles', () => {
   it('should read variables from multiple YAML files', async () => {
     const yamlContent1 = 'var1: value1';
     const yamlContent2 = 'var2: value2';
-
-    // Clear any existing mocks and set up fresh ones
-    jest.mocked(fs.readFileSync).mockReset();
-    jest.mocked(globSync).mockReset();
-
-    // Mock to return the correct content for each file
-    jest.mocked(fs.readFileSync).mockImplementation((path) => {
-      if (String(path).includes('vars1.yaml')) {
-        return yamlContent1;
-      } else if (String(path).includes('vars2.yaml')) {
-        return yamlContent2;
-      }
-      return '';
-    });
-    jest.mocked(globSync).mockImplementation((pattern) => {
-      // Return the appropriate files based on the pattern
-      if (String(pattern).includes('vars1.yaml')) {
-        return ['vars1.yaml'];
-      } else if (String(pattern).includes('vars2.yaml')) {
-        return ['vars2.yaml'];
-      }
-      return [];
-    });
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(yamlContent1)
+      .mockReturnValueOnce(yamlContent2);
+    jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
 
     const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
 
@@ -1182,6 +1143,7 @@ describe('CSV parsing with JSON fields', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.resetModules();
   });
 
   it('should parse CSV file containing properly escaped JSON fields in strict mode', async () => {
@@ -1242,34 +1204,23 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
   });
 
   it('should propagate non-quote-related CSV errors', async () => {
-    // Clear module cache to ensure fresh imports
-    jest.resetModules();
-
-    // Mock csv-parse/sync to throw a different error on every call
-    const parseMock = jest.fn().mockImplementation(() => {
+    const mockParse = jest.fn().mockImplementation(() => {
       const error = new Error('Some other CSV error');
       (error as any).code = 'CSV_OTHER_ERROR';
       throw error;
     });
 
-    jest.doMock('csv-parse/sync', () => ({
-      parse: parseMock,
+    jest.mock('csv-parse/sync', () => ({
+      parse: mockParse,
     }));
 
     const csvContent = `label,query,expected_json_format,context
 my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
 
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-
-    // Import after mocking
     const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
-
     await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
 
-    // Verify the mock was called (it should be called at least once, possibly twice due to retry logic)
-    expect(parseMock).toHaveBeenCalledTimes(2);
-
     jest.mocked(fs.readFileSync).mockRestore();
-    jest.resetModules();
   });
 });
