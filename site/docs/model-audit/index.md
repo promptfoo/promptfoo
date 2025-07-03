@@ -77,17 +77,10 @@ pip install modelaudit[tensorflow,h5,pytorch]
 # For all dependencies
 pip install modelaudit[all]
 
-# Additional optional dependencies:
-pip install modelaudit[yaml]        # For YAML manifest scanning
-pip install modelaudit[dill]        # For enhanced pickle support (dill serialization)
-pip install modelaudit[joblib]      # For Joblib model scanning (includes scikit-learn)
-pip install modelaudit[flax]        # For Flax msgpack scanning
-pip install modelaudit[tflite]      # For TensorFlow Lite model scanning
-pip install modelaudit[cloud]       # For S3/GCS/R2 cloud storage support
-pip install modelaudit[mlflow]      # For MLflow registry scanning
-
-# For NumPy 1.x compatibility (if you need all ML frameworks to work)
-pip install modelaudit[numpy1]
+# Or install specific components:
+pip install modelaudit[tensorflow,h5,pytorch]  # Core ML frameworks
+pip install modelaudit[cloud,mlflow]           # Remote model access
+pip install modelaudit[numpy1]                 # NumPy 1.x compatibility
 ```
 
 **Development installation:**
@@ -142,9 +135,6 @@ promptfoo scan-model gs://my-bucket/model.h5
 # Scan from MLflow registry
 promptfoo scan-model models:/MyModel/1
 
-# Scan from JFrog Artifactory
-promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pt --jfrog-api-token YOUR_TOKEN
-
 # Scan multiple models and directories
 promptfoo scan-model model.pkl model2.h5 models_directory
 
@@ -163,6 +153,8 @@ promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709
 # Generate Software Bill of Materials
 promptfoo scan-model model.pkl --sbom sbom.json
 ```
+
+See the [Usage Guide](./usage.md) for detailed authentication setup for cloud storage, JFrog, and other remote sources.
 
 :::info Alternative Installation and Usage
 
@@ -340,5 +332,5 @@ The `doctor` command provides:
 
 ## Next Steps
 
-- **[Advanced Usage](./usage.md)** - Cloud storage, CI/CD integration, and troubleshooting
+- **[Usage Guide](./usage.md)** - Cloud storage, CI/CD integration, and advanced features
 - **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities and security checks

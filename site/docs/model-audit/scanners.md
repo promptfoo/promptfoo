@@ -28,25 +28,16 @@ ModelAudit includes specialized scanners for different model formats and file ty
 
 **File types:** `.pkl`, `.pickle`, `.dill`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`
 
-The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It supports standard pickle files as well as dill-serialized files (an extended pickle format). It automatically detects pickle-formatted `.bin` files and performs deep content analysis to detect embedded executables.
+The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It supports standard pickle files as well as dill-serialized files (an extended pickle format).
 
-**What it checks for:**
+**Key checks:**
 
 - Suspicious module imports (e.g., `os`, `subprocess`, `sys`)
-- Potentially dangerous functions (e.g., `eval`, `exec`, `system`)
-- Malicious serialization patterns often used in pickle exploits
-- Encoded payloads that might contain hidden code
-- Suspicious string patterns that could indicate code injection
-- Dangerous pickle opcodes (REDUCE, INST, OBJ, NEWOBJ, STACK_GLOBAL)
-- Code execution patterns in STACK_GLOBAL operations
-- Anomalous opcode sequences suggesting malicious intent
-
-**Features:**
-
-- **ML Context Detection**: Framework detection for major ML libraries and model architectures
-- **Pattern Analysis**: Distinguishes between legitimate ML operations (like `torch.nn` imports) and actual security threats
-- **Binary Analysis**: Scans additional binary content in `.bin` files for embedded executables with PE file detection including DOS stub validation
-- **Opcode Analysis**: Context-aware evaluation of dangerous opcodes (REDUCE, INST, OBJ)
+- Dangerous functions (e.g., `eval`, `exec`, `system`)
+- Malicious pickle opcodes (REDUCE, INST, OBJ, NEWOBJ, STACK_GLOBAL)
+- Encoded payloads and suspicious string patterns
+- Embedded executables in binary content
+- ML context detection to reduce false positives
 
 **Why it matters:**
 Pickle files are a common serialization format for ML models but can execute arbitrary code during unpickling. Attackers can craft malicious pickle files that execute harmful commands when loaded.
@@ -57,12 +48,12 @@ Pickle files are a common serialization format for ML models but can execute arb
 
 This scanner examines TensorFlow models saved in the SavedModel format.
 
-**What it checks for:**
+**Key checks:**
 
 - Suspicious TensorFlow operations that could access files or the system
-- Potentially harmful Python function calls embedded in the graph
+- Python function calls embedded in the graph
 - Operations that allow arbitrary code execution (e.g., `PyFunc`)
-- File I/O operations that might read from or write to unexpected locations
+- File I/O operations that might access unexpected locations
 - Execution operations that could run system commands
 
 **Why it matters:**
@@ -74,13 +65,13 @@ TensorFlow models can contain operations that interact with the filesystem or ex
 
 This scanner examines TensorFlow Lite model files, which are optimized for mobile and embedded devices.
 
-**What it checks for:**
+**Key checks:**
 
 - Custom operations that could contain malicious code
 - Flex delegate operations that enable full TensorFlow ops execution
-- Model metadata that could contain executable content or malicious payloads
+- Model metadata that could contain executable content
 - Suspicious operator configurations or patterns
-- Buffer validation to detect tampering or corruption
+- Buffer validation to detect tampering
 
 **Why it matters:**
 While TensorFlow Lite models are generally safer than full TensorFlow models due to their limited operator set, they can still include custom operations or use the Flex delegate to access the full TensorFlow runtime, potentially introducing security risks. Malicious actors could embed harmful code in custom ops or metadata.
@@ -91,16 +82,15 @@ While TensorFlow Lite models are generally safer than full TensorFlow models due
 
 This scanner examines NVIDIA TensorRT engine files, which are optimized inference engines for NVIDIA GPUs.
 
-**What it checks for:**
+**Key checks:**
 
-- Suspicious file paths (`/tmp/`, `../`) that might indicate unauthorized access attempts
+- Suspicious file paths (`/tmp/`, `../`) that might indicate unauthorized access
 - Embedded shared library references (`.so` files) that could contain malicious code
-- Python import statements or execution commands embedded in the engine
 - Script execution patterns (`exec`, `eval`) that could run arbitrary code
 - Unauthorized plugin references that might load malicious extensions
 
 **Why it matters:**
-TensorRT engines are binary files that can contain custom plugins and operations. While generally safer than pickle files, they could potentially be crafted to include malicious plugins or reference unauthorized system resources. The scanner helps detect engines that might attempt to load external libraries or execute system commands during inference.
+TensorRT engines can contain custom plugins and operations. While generally safer than pickle files, they could be crafted to include malicious plugins or reference unauthorized system resources.
 
 ## Keras H5 Scanner
 
@@ -108,9 +98,9 @@ TensorRT engines are binary files that can contain custom plugins and operations
 
 This scanner analyzes Keras models stored in HDF5 format.
 
-**What it checks for:**
+**Key checks:**
 
-- Potentially unsafe Lambda layers that could contain arbitrary Python code
+- Unsafe Lambda layers that could contain arbitrary Python code
 - Suspicious layer configurations with embedded code
 - Custom layers or metrics that might execute malicious code
 - Dangerous string patterns in model configurations
@@ -124,12 +114,12 @@ Keras models with Lambda layers can contain arbitrary Python code that executes 
 
 This scanner examines ONNX (Open Neural Network Exchange) model files for security issues and integrity problems.
 
-**What it checks for:**
+**Key checks:**
 
-- **Custom operators**: Identifies custom operator domains that might contain malicious functionality
-- **External data integrity**: Validates external data file references and prevents path traversal attacks
-- **Tensor validation**: Checks tensor sizes and data integrity to detect corruption or tampering
-- **File size mismatches**: Detects discrepancies between expected and actual tensor data sizes
+- Custom operators that might contain malicious functionality
+- External data file references and path traversal attempts
+- Tensor size and data integrity validation
+- File size mismatches that could indicate tampering
 
 **Why it matters:**
 ONNX models can reference external data files and custom operators. Malicious actors could exploit these features to include harmful custom operations or manipulate external data references to access unauthorized files on the system.
@@ -206,24 +196,16 @@ Flax models serialized as msgpack files can potentially contain embedded code or
 
 This scanner analyzes JAX checkpoint files in various serialization formats, including Orbax checkpoints and JAX-specific pickle files.
 
-**What it checks for:**
+**Key checks:**
 
-- **JAX-specific threats**: Dangerous JAX operations like experimental callbacks (`jax.experimental.host_callback.call`, `jax.debug.callback`)
-- **Orbax metadata analysis**: Custom restore functions and suspicious patterns in checkpoint metadata
-- **Pickle-based checkpoints**: Dangerous pickle opcodes when JAX models are saved as pickle files
-- **Directory-based checkpoints**: Validates Orbax checkpoint directory structure and metadata files
-- **Resource limits**: Enforces size limits to prevent denial-of-service attacks from oversized checkpoints
-- **JAX compilation threats**: Detects patterns that might abuse JAX compilation for system access
-
-**Features:**
-
-- **Multi-format support**: Handles both file-based and directory-based JAX checkpoints
-- **Orbax integration**: Specialized handling for Orbax checkpoint formats with metadata validation
-- **JAX context detection**: Identifies files that are likely JAX checkpoints based on content analysis
-- **NumPy validation**: Safely validates NumPy arrays within JAX checkpoints without executing pickle code
+- Dangerous JAX operations like experimental callbacks (`jax.experimental.host_callback.call`)
+- Custom restore functions in Orbax checkpoint metadata
+- Dangerous pickle opcodes in JAX-serialized files
+- Directory-based checkpoint structure validation
+- Resource limits to prevent denial-of-service attacks
 
 **Why it matters:**
-JAX and Flax models can use various checkpoint formats, from simple pickle files to complex Orbax directory structures. These checkpoints may contain custom restore functions or JAX-specific operations that could be exploited. Orbax checkpoints in particular can include metadata with arbitrary restore functions, and JAX's experimental callbacks can be misused for system access.
+JAX checkpoints can contain custom restore functions or experimental callbacks that could be exploited. Orbax checkpoints may include metadata with arbitrary restore functions that execute during model loading.
 
 ## NumPy Scanner
 
@@ -401,142 +383,36 @@ This allows ModelAudit to automatically apply the correct scanner based on the a
 
 ## License Checking and Compliance
 
-ModelAudit includes comprehensive license detection and compliance checking capabilities that work across all file formats. This feature helps organizations understand their legal obligations and identify potential licensing issues before model deployment.
+ModelAudit includes license detection across all file formats to help organizations identify legal obligations before deployment.
 
-### License Detection Features
+**Key features:**
 
-- **Header Analysis**: Scans file headers for license declarations (SPDX-License-Identifier, Copyright notices, etc.)
-- **License File Detection**: Identifies LICENSE, COPYING, and other license files in project directories
-- **Multi-license Support**: Handles files with multiple license declarations
-- **SPDX Compatibility**: Recognizes standard SPDX license identifiers
+- **License Detection**: Scans headers, LICENSE files, and metadata for license information
+- **AGPL Warnings**: Alerts about network copyleft obligations
+- **Commercial Restrictions**: Identifies non-commercial licenses
+- **Unlicensed Content**: Flags large datasets without clear licensing
+- **SBOM Generation**: Creates CycloneDX-compliant Software Bill of Materials
 
-### Compliance Checking
-
-#### AGPL Network Service Warnings
-
-Detects AGPL (Affero General Public License) components that may trigger network copyleft obligations:
+**Example warnings:**
 
 ```text
 ⚠️ AGPL license detected: Component is under AGPL-3.0
    This may require source code disclosure if used in network services
-```
 
-#### Commercial Use Restrictions
-
-Identifies licenses that restrict commercial use:
-
-```text
 🚨 Non-commercial license detected: Creative Commons NonCommercial
    This component cannot be used for commercial purposes
 ```
 
-#### Unlicensed Dataset Detection
-
-Flags datasets and data files without clear licensing:
-
-```text
-⚠️ Large dataset with unspecified licenses detected
-   Files: 1,247 data files (45.2 MB) may need license review
-```
-
-### Software Bill of Materials (SBOM) Generation
-
-ModelAudit can generate CycloneDX-compliant SBOMs with comprehensive license metadata:
+**Generate SBOM:**
 
 ```bash
-# Generate SBOM with license information
-modelaudit scan ./models/ --sbom model-sbom.json
+promptfoo scan-model ./models/ --sbom model-sbom.json
 ```
 
-#### SBOM Contents
+The SBOM includes component information, license metadata, risk scores, and copyright details in CycloneDX format.
 
-The generated SBOM includes:
-
-- **Component Information**: File paths, types, sizes, and checksums
-- **License Metadata**: Detected licenses, copyright holders, and license files
-- **Risk Scoring**: Security risk scores based on scan findings
-- **Properties**: Model/dataset classification, copyright information, compliance flags
-
-#### Example SBOM Entry
-
-```json
-{
-  "components": [
-    {
-      "name": "model.pkl",
-      "type": "file",
-      "licenses": [
-        {
-          "expression": "MIT"
-        }
-      ],
-      "properties": [
-        {
-          "name": "is_model",
-          "value": "true"
-        },
-        {
-          "name": "copyright_holders",
-          "value": "Acme Corp, University Research Lab"
-        },
-        {
-          "name": "risk_score",
-          "value": "2"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "a1b2c3..."
-        }
-      ]
-    }
-  ]
-}
-```
-
-### License Issue Types
-
-ModelAudit reports different types of license-related issues:
-
-| Issue Type                  | Severity | Description                                              |
-| --------------------------- | -------- | -------------------------------------------------------- |
-| **AGPL Detection**          | WARNING  | Components under AGPL that may require source disclosure |
-| **Commercial Restrictions** | WARNING  | Non-commercial licenses that prohibit commercial use     |
-| **Copyleft Obligations**    | INFO     | Strong copyleft licenses with distribution requirements  |
-| **Unlicensed Content**      | WARNING  | Large datasets or models without clear licensing         |
-| **License Conflicts**       | WARNING  | Conflicting license requirements in the same project     |
-
-### Integration with CI/CD
-
-Use license checking in continuous integration:
-
-```yaml
-# Check for license compliance issues
-- name: License Compliance Check
-  run: |
-    modelaudit scan ./models/ --format json --output scan-results.json
-    # Check for license-related critical issues
-    if grep -q '"type":"license_warning".*"severity":"critical"' scan-results.json; then
-      echo "Critical license issues found!"
-      exit 1
-    fi
-```
-
-### Configuration
-
-License checking can be configured through scanner settings:
-
-```yaml
-license_checker:
-  enable_agpl_warnings: true
-  enable_commercial_warnings: true
-  min_dataset_size_mb: 1.0 # Minimum size to check for licensing
-  enable_unlicensed_dataset_detection: true
-```
-
-**Why this matters:**
-Open-source AI/ML projects often combine components with different licenses. AGPL components require source code disclosure when used in network services. Non-commercial licenses can block commercial deployment. Large datasets may lack clear licensing, creating legal risks. The license checker helps identify these issues early in the development process.
+**Why it matters:**
+AI/ML projects often combine components with different licenses. AGPL requires source disclosure for network services, non-commercial licenses block commercial use, and unlicensed datasets create legal risks.
 
 ## HuggingFace URL Support
 

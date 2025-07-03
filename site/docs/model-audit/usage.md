@@ -1,9 +1,9 @@
 ---
-sidebar_label: Advanced Usage
+sidebar_label: Usage
 sidebar_position: 120
 ---
 
-# Advanced Usage
+# Usage Guide
 
 This page covers advanced ModelAudit features including cloud storage integration, CI/CD workflows, and programmatic usage.
 
