@@ -1,10 +1,9 @@
-import { disableCache } from '../../../src/cache';
+import { disableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 jest.mock('../../../src/cache');
 
-const { fetchWithCache } = require('../../../src/cache');
 const mockFetchWithCache = jest.mocked(fetchWithCache);
 
 describe('OpenAI Chat Provider - Redteam Guardrails', () => {
