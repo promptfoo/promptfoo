@@ -490,3 +490,5 @@ export default {
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
 };
+
+export { ASSERTIONS_MAX_CONCURRENCY, nunjucks };
