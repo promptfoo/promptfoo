@@ -102,6 +102,13 @@ scenarios:
   - file://path/to/your/scenario.yaml
 ```
 
+You can also load multiple scenarios at once using glob patterns:
+
+```yaml
+scenarios:
+  - file://scenarios/*.yaml
+```
+
 The external file should follow the same structure as inline scenarios.
 
 This functionality allows you to easily run a wide range of tests without having to manually create each one. It also keeps your configuration file cleaner and easier to read.
