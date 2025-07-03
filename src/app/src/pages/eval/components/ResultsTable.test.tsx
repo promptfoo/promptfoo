@@ -406,3 +406,160 @@ describe('ResultsTable Row Navigation', () => {
     });
   });
 });
+
+describe('ResultsTable Loading Indicator', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: true,
+    }));
+  });
+
+  it('displays loading spinner and message when isFetching is true', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('Loading filtered results...')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'failures' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('displays "No results found" message when isFetching transitions to false and filteredResultsCount is 0', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      filteredResultsCount: 0,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.queryByText('Loading filtered results...')).toBeNull();
+    expect(screen.getByText('No results found for the current filters.')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Layout Stability', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 0,
+    }));
+  });
+
+  it('displays loading indicator when isFetching is true', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: true,
+      filteredResultsCount: 0,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('Loading filtered results...')).toBeInTheDocument();
+  });
+
+  it('displays the table when isFetching is false', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 0,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+});
