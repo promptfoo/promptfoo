@@ -2410,5 +2410,14 @@ describe('OpenAiResponsesProvider', () => {
       'gpt-4.5-preview-2025-02-27',
     );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('codex-mini-latest');
+    // Deep research models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'o3-deep-research-2025-06-26',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-deep-research');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'o4-mini-deep-research-2025-06-26',
+    );
   });
 });

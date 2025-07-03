@@ -42,6 +42,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
     'codex-mini-latest',
+    // Deep research models
+    'o3-deep-research',
+    'o3-deep-research-2025-06-26',
+    'o4-mini-deep-research',
+    'o4-mini-deep-research-2025-06-26',
   ];
 
   config: OpenAiCompletionOptions;
