@@ -12,11 +12,12 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   type Plugin,
-  type Strategy,
   Severity,
+  type Strategy,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -270,6 +271,8 @@ export const RedteamConfigSchema = z
         expandCollection([...PII_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
+      } else if (id === 'guardrails-eval') {
+        expandCollection([...GUARDRAILS_EVALUATION_PLUGINS], config, numTests, severity);
       }
     };
 

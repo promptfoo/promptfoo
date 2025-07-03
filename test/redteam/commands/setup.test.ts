@@ -17,7 +17,6 @@ jest.mock('../../../src/util/config/manage', () => ({
 }));
 jest.mock('../../../src/telemetry', () => ({
   record: jest.fn(),
-  send: jest.fn(),
 }));
 
 describe('redteamSetupCommand', () => {

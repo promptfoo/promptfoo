@@ -53,7 +53,6 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
   });
-  await telemetry.send();
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
@@ -110,7 +109,6 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     numAssertionsGenerated: results.length,
     provider: options.provider || 'default',
   });
-  await telemetry.send();
 }
 
 function validateAssertionType(value: string, previous: string) {
