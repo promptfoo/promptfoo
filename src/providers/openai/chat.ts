@@ -360,7 +360,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (data.error) {
       await data.deleteFromCache?.();
 
-      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
+      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam, this.modelName);
 
       return {
         error: formatOpenAiError(data),
@@ -376,7 +376,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
 
       // Check for guardrails in redteam context
-      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
+      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam, this.modelName);
 
       if (guardrails) {
         return {

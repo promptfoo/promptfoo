@@ -8,6 +8,7 @@ import {
   OPENAI_CHAT_MODELS,
   hasContentFilterFinishReason,
   buildGuardrailResponse,
+  isReasoningModel,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -468,8 +469,8 @@ describe('formatOpenAiError', () => {
     expect(result).toContain('API error: Error message');
     expect(result).not.toContain('Type:');
     expect(result).not.toContain('Code:');
+      });
   });
-});
 
 describe('hasContentFilterFinishReason', () => {
   it('should detect content_filter finish_reason', () => {
@@ -487,7 +488,7 @@ describe('buildGuardrailResponse', () => {
       buildGuardrailResponse({ error: { code: 'content_policy_violation' } }, false),
     ).toBeUndefined();
     expect(
-      buildGuardrailResponse({ choices: [{ finish_reason: 'content_filter' }] }, false),
+      buildGuardrailResponse({ choices: [{ finish_reason: 'content_filter' }] }, false, 'o3-mini'),
     ).toBeUndefined();
   });
 
@@ -496,13 +497,50 @@ describe('buildGuardrailResponse', () => {
     expect(result).toEqual({ flagged: true, flaggedInput: true });
   });
 
-  it('should detect content_filter finish_reason in redteam', () => {
-    const result = buildGuardrailResponse({ choices: [{ finish_reason: 'content_filter' }] }, true);
+  it('should detect content_filter finish_reason in redteam for reasoning models', () => {
+    const result = buildGuardrailResponse(
+      { choices: [{ finish_reason: 'content_filter' }] },
+      true,
+      'o3-mini',
+    );
     expect(result).toEqual({ flagged: true, flaggedOutput: true });
+  });
+
+  it('should NOT detect content_filter for non-reasoning models', () => {
+    const result = buildGuardrailResponse(
+      { choices: [{ finish_reason: 'content_filter' }] },
+      true,
+      'gpt-4o',
+    );
+    expect(result).toBeUndefined();
   });
 
   it('should return undefined for other cases in redteam', () => {
     expect(buildGuardrailResponse({ error: { code: 'rate_limit' } }, true)).toBeUndefined();
-    expect(buildGuardrailResponse({ choices: [{ finish_reason: 'stop' }] }, true)).toBeUndefined();
+    expect(
+      buildGuardrailResponse({ choices: [{ finish_reason: 'stop' }] }, true, 'o3-mini'),
+    ).toBeUndefined();
+  });
+});
+
+describe('isReasoningModel', () => {
+  it('should identify reasoning models correctly', () => {
+    // Reasoning models
+    expect(isReasoningModel('o1')).toBe(true);
+    expect(isReasoningModel('o1-mini')).toBe(true);
+    expect(isReasoningModel('o1-preview')).toBe(true);
+    expect(isReasoningModel('o1-pro')).toBe(true);
+    expect(isReasoningModel('o3')).toBe(true);
+    expect(isReasoningModel('o3-mini')).toBe(true);
+    expect(isReasoningModel('o3-pro')).toBe(true);
+    expect(isReasoningModel('o4')).toBe(true);
+    expect(isReasoningModel('o4-mini')).toBe(true);
+    expect(isReasoningModel('codex-mini-latest')).toBe(true);
+
+    // Non-reasoning models
+    expect(isReasoningModel('gpt-4')).toBe(false);
+    expect(isReasoningModel('gpt-4o')).toBe(false);
+    expect(isReasoningModel('gpt-4o-mini')).toBe(false);
+    expect(isReasoningModel('gpt-3.5-turbo')).toBe(false);
   });
 });

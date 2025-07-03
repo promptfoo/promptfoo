@@ -251,7 +251,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     if (data.error) {
       await data.deleteFromCache?.();
 
-      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
+      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam, this.modelName);
 
       return {
         error: formatOpenAiError(data),
@@ -265,7 +265,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     try {
       // Check for guardrails in redteam context
-      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
+      const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam, this.modelName);
 
       if (guardrails) {
         const choice = data.choices?.[0];

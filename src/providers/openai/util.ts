@@ -367,8 +367,18 @@ export function calculateOpenAICost(
 }
 
 /**
+ * Checks if a model is a reasoning model (o1, o3, o4 series, and codex-mini-latest).
+ */
+export function isReasoningModel(modelName: string): boolean {
+  return (
+    /^(o1|o3|o4)(-mini|-preview|-pro)?/.test(modelName) ||
+    modelName === 'codex-mini-latest'
+  );
+}
+
+/**
  * Checks if an OpenAI response indicates content was filtered by guardrails.
- * This applies to reasoning models (o1, o3) and other models that support content filtering.
+ * This only applies to reasoning models (o1, o3, o4 series).
  */
 export function hasContentFilterFinishReason(data: any): boolean {
   if (!data?.choices || !Array.isArray(data.choices)) {
@@ -385,18 +395,19 @@ export function hasContentFilterFinishReason(data: any): boolean {
 export function buildGuardrailResponse(
   data: any,
   isRedteam: boolean,
+  modelName?: string,
 ): { flagged: boolean; flaggedInput?: boolean; flaggedOutput?: boolean } | undefined {
   if (!isRedteam) {
     return undefined;
   }
 
-  // Check for content policy violation error
+  // Check for content policy violation error (applies to all models)
   if (data.error?.code === 'content_policy_violation') {
     return { flagged: true, flaggedInput: true };
   }
 
-  // Check for content_filter finish_reason
-  if (hasContentFilterFinishReason(data)) {
+  // Check for content_filter finish_reason (only for reasoning models)
+  if (modelName && isReasoningModel(modelName) && hasContentFilterFinishReason(data)) {
     return { flagged: true, flaggedOutput: true };
   }
 
