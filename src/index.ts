@@ -41,7 +41,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   // Resolve defaultTest from file reference if needed
   let resolvedDefaultTest = testSuite.defaultTest;
   if (typeof testSuite.defaultTest === 'string' && testSuite.defaultTest.startsWith('file://')) {
-    resolvedDefaultTest = maybeLoadFromExternalFile(testSuite.defaultTest);
+    resolvedDefaultTest = await maybeLoadFromExternalFile(testSuite.defaultTest);
   }
 
   const constructedTestSuite: TestSuite = {

@@ -845,9 +845,8 @@ class Evaluator {
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
-        Array.isArray(
-          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.assert : [],
-        ) || true,
+        typeof testSuite.defaultTest !== 'object' ||
+          Array.isArray(testSuite.defaultTest?.assert || []),
         `defaultTest.assert is not an array in test case #${index + 1}`,
       );
       invariant(

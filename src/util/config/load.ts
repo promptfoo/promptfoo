@@ -531,7 +531,7 @@ export async function resolveConfigs(
     // Set basePath in cliState temporarily for file resolution
     const originalBasePath = cliState.basePath;
     cliState.basePath = basePath;
-    const loaded = maybeLoadFromExternalFile(defaultTestRaw);
+    const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     cliState.basePath = originalBasePath;
     processedDefaultTest = loaded as Partial<TestCase>;
   } else if (defaultTestRaw) {
