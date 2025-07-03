@@ -554,6 +554,9 @@
                                               "rouge-n",
                                               "similar",
                                               "starts-with",
+                                              "trace-error-spans",
+                                              "trace-span-count",
+                                              "trace-span-duration",
                                               "webhook"
                                             ]
                                           },
