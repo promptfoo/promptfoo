@@ -200,14 +200,14 @@ providers:
   - id: sagemaker:{args.task.replace("-", ":")}:{args.endpoint_name}
     config:
       region: {region}
-      modelType: {"openai" if "llama" in args.model_id.lower() else "custom"}
+      modelType: {"llama" if "llama" in args.model_id.lower() else "custom"}
       maxTokens: 256
       temperature: 0.7
 """)
 
     logger.info("\nOr use the test script:")
     logger.info(
-        f"node test-sagemaker-provider.js --endpoint={args.endpoint_name} --region={region} --model-type={'openai' if 'llama' in args.model_id.lower() else 'custom'}"
+        f"node test-sagemaker-provider.js --endpoint={args.endpoint_name} --region={region} --model-type={'llama' if 'llama' in args.model_id.lower() else 'custom'}"
     )
 
     logger.info(
