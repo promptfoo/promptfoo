@@ -26,9 +26,9 @@ ModelAudit includes specialized scanners for different model formats and file ty
 
 ## Pickle Scanner
 
-**File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`
+**File types:** `.pkl`, `.pickle`, `.dill`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`
 
-The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It automatically detects pickle-formatted `.bin` files and performs deep content analysis to detect embedded executables.
+The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It supports standard pickle files as well as dill-serialized files (an extended pickle format). It automatically detects pickle-formatted `.bin` files and performs deep content analysis to detect embedded executables.
 
 **What it checks for:**
 
@@ -152,7 +152,7 @@ PyTorch models are essentially ZIP archives containing pickled objects, which ca
 
 ## GGUF/GGML Scanner
 
-**File types:** `.gguf`, `.ggml`
+**File types:** `.gguf`, `.ggml`, `.ggmf`, `.ggjt`, `.ggla`, `.ggsa`
 
 This scanner validates GGUF (GPT-Generated Unified Format) and GGML model files commonly used for large language models like LLaMA, Alpaca, and other quantized models.
 

@@ -26,6 +26,10 @@ promptfoo scan-model hf://microsoft/resnet-50
 # Private models (requires HF_TOKEN environment variable)
 export HF_TOKEN=your_token_here
 promptfoo scan-model hf://your-org/private-model
+
+# Using .env file (create a .env file in your project root)
+echo "HF_TOKEN=your_token_here" > .env
+promptfoo scan-model hf://your-org/private-model
 ```
 
 ### Cloud Storage
@@ -87,6 +91,10 @@ promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl
 
 # Or pass directly
 promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl --jfrog-api-token YOUR_TOKEN
+
+# Using .env file (recommended for CI/CD)
+echo "JFROG_API_TOKEN=your_token_here" > .env
+promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl
 ```
 
 #### DVC Integration

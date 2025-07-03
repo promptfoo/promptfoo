@@ -76,13 +76,44 @@ pip install modelaudit[tensorflow,h5,pytorch]
 
 # For all dependencies
 pip install modelaudit[all]
+
+# Additional optional dependencies:
+pip install modelaudit[yaml]        # For YAML manifest scanning
+pip install modelaudit[dill]        # For enhanced pickle support (dill serialization)
+pip install modelaudit[joblib]      # For Joblib model scanning (includes scikit-learn)
+pip install modelaudit[flax]        # For Flax msgpack scanning
+pip install modelaudit[tflite]      # For TensorFlow Lite model scanning
+pip install modelaudit[cloud]       # For S3/GCS/R2 cloud storage support
+pip install modelaudit[mlflow]      # For MLflow registry scanning
+
+# For NumPy 1.x compatibility (if you need all ML frameworks to work)
+pip install modelaudit[numpy1]
+```
+
+**Development installation:**
+
+```bash
+git clone https://github.com/promptfoo/modelaudit.git
+cd modelaudit
+
+# Using Rye (recommended)
+rye sync --features all
+
+# Or using pip
+pip install -e .[all]
 ```
 
 ### Docker
 
 ```bash
-# Pull and run
+# Pull from GitHub Container Registry
 docker pull ghcr.io/promptfoo/modelaudit:latest
+
+# Use specific variants
+docker pull ghcr.io/promptfoo/modelaudit:latest-full        # All ML frameworks
+docker pull ghcr.io/promptfoo/modelaudit:latest-tensorflow  # TensorFlow only
+
+# Run with Docker
 docker run --rm -v $(pwd):/data ghcr.io/promptfoo/modelaudit:latest scan /data/model.pkl
 ```
 
@@ -111,6 +142,9 @@ promptfoo scan-model gs://my-bucket/model.h5
 # Scan from MLflow registry
 promptfoo scan-model models:/MyModel/1
 
+# Scan from JFrog Artifactory
+promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pt --jfrog-api-token YOUR_TOKEN
+
 # Scan multiple models and directories
 promptfoo scan-model model.pkl model2.h5 models_directory
 
@@ -138,16 +172,19 @@ promptfoo scan-model model.pkl --sbom sbom.json
 
 ### Options
 
-| Option              | Description                                                      |
-| ------------------- | ---------------------------------------------------------------- |
-| `--blacklist`, `-b` | Additional blacklist patterns to check against model names       |
-| `--format`, `-f`    | Output format (`text` or `json`) [default: text]                 |
-| `--output`, `-o`    | Output file path (prints to stdout if not specified)             |
-| `--timeout`, `-t`   | Scan timeout in seconds [default: 300]                           |
-| `--verbose`, `-v`   | Enable verbose output                                            |
-| `--max-file-size`   | Maximum file size to scan in bytes [default: unlimited]          |
-| `--max-total-size`  | Maximum total bytes to scan before stopping [default: unlimited] |
-| `--sbom`            | Generate CycloneDX Software Bill of Materials with license info  |
+| Option                 | Description                                                      |
+| ---------------------- | ---------------------------------------------------------------- |
+| `--blacklist`, `-b`    | Additional blacklist patterns to check against model names       |
+| `--format`, `-f`       | Output format (`text` or `json`) [default: text]                 |
+| `--output`, `-o`       | Output file path (prints to stdout if not specified)             |
+| `--timeout`, `-t`      | Scan timeout in seconds [default: 300]                           |
+| `--verbose`, `-v`      | Enable verbose output                                            |
+| `--max-file-size`      | Maximum file size to scan in bytes [default: unlimited]          |
+| `--max-total-size`     | Maximum total bytes to scan before stopping [default: unlimited] |
+| `--sbom`               | Generate CycloneDX Software Bill of Materials with license info  |
+| `--registry-uri`       | MLflow registry URI (only used for MLflow model URIs)            |
+| `--jfrog-api-token`    | JFrog API token for authentication                               |
+| `--jfrog-access-token` | JFrog access token for authentication                            |
 
 ## Web Interface
 
@@ -172,15 +209,15 @@ ModelAudit can scan:
 - **TensorRT engines** (`.engine`, `.plan`)
 - **Keras models** (`.h5`, `.keras`, `.hdf5`)
 - **ONNX models** (`.onnx`)
-- **GGUF/GGML models** (`.gguf`, `.ggml`) - popular for LLaMA and quantized LLMs
+- **GGUF/GGML models** (`.gguf`, `.ggml`, `.ggmf`, `.ggjt`, `.ggla`, `.ggsa`) - popular for LLaMA and quantized LLMs
 - **Flax/JAX models** (`.msgpack`, `.flax`, `.orbax`, `.jax`)
 - **JAX checkpoints** (`.ckpt`, `.checkpoint`, `.orbax-checkpoint`)
-- **Pickle files** (`.pkl`, `.pickle`, `.bin`, `.ckpt`)
+- **Pickle files** (`.pkl`, `.pickle`, `.dill`, `.bin`, `.ckpt`)
 - **Joblib files** (`.joblib`)
 - **NumPy arrays** (`.npy`, `.npz`)
 - **SafeTensors models** (`.safetensors`)
 - **PMML models** (`.pmml`)
-- **Container manifests** (`.manifest`)
+- **Container manifests** (`.manifest`) with OCI/Docker layer scanning
 - **ZIP archives** (`.zip`, `.npz`) with recursive content scanning
 - **Binary model files** (`.bin`) with auto-detection
 - **Model configuration files** (`.json`, `.yaml`, etc.)
@@ -194,7 +231,8 @@ The scanner looks for various security issues, including:
 - **Suspicious Operations**: Identifying risky TensorFlow operations and custom ONNX operators
 - **Unsafe Layers**: Finding potentially unsafe Keras Lambda layers
 - **Blacklisted Names**: Checking for models with names matching suspicious patterns
-- **Dangerous Serialization**: Detecting unsafe pickle opcodes and patterns
+- **Dangerous Serialization**: Detecting unsafe pickle opcodes, nested pickle payloads, and decode-exec chains
+- **Enhanced Dill/Joblib Security**: ML-aware scanning with format validation and bypass prevention
 - **Encoded Payloads**: Looking for suspicious strings that might indicate hidden code
 - **Risky Configurations**: Identifying dangerous settings in model architectures
 - **XML Security**: Detecting XXE attacks and malicious content in PMML files
@@ -204,6 +242,7 @@ The scanner looks for various security issues, including:
 - **Weight Anomalies**: Statistical analysis to detect potential backdoors
 - **Format Integrity**: Validating file format structure
 - **License Compliance**: Detecting AGPL obligations and commercial restrictions
+- **DVC Integration**: Automatic resolution and scanning of DVC-tracked models
 
 ## Interpreting Results
 
@@ -213,6 +252,13 @@ The scan results are classified by severity:
 - **WARNING**: Potential issues that require review
 - **INFO**: Informational findings, not necessarily security concerns
 - **DEBUG**: Additional details (only shown with `--verbose`)
+
+Some issues include a "Why" explanation to help understand the security risk:
+
+```
+1. suspicious_model.pkl (pos 28): [CRITICAL] Suspicious module reference found: posix.system
+   Why: The 'os' module provides direct access to operating system functions.
+```
 
 ## Integration in Workflows
 
@@ -273,15 +319,24 @@ pip install mlflow
 
 ### NumPy Compatibility
 
-ModelAudit supports both NumPy 1.x and 2.x:
+ModelAudit supports both NumPy 1.x and 2.x. Use the `doctor` command to diagnose scanner compatibility:
 
 ```bash
-# Check which scanners loaded
+# Check system diagnostics and scanner status
+modelaudit doctor
+
+# Show details about failed scanners
 modelaudit doctor --show-failed
 
-# Force NumPy 1.x if needed
+# Force NumPy 1.x if needed for full compatibility
 pip install modelaudit[numpy1]
 ```
+
+The `doctor` command provides:
+
+- Python and NumPy version information
+- Scanner loading status (available, loaded, failed)
+- Recommendations for fixing compatibility issues
 
 ## Next Steps
 
