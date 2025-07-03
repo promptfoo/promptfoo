@@ -1,8 +1,0 @@
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Quick demo of the AIMLAPI provider answering a geography question
-
-providers:
-  - aimlapi:gpt-4o
-
-prompts:
-  - What is the capital of France?
