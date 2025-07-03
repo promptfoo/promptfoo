@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: External defaultTest configuration example
+
+# Load default test configuration from external file
+defaultTest: file://shared/defaultTest.yaml
+
+prompts:
+  - |
+    You are a helpful assistant that answers questions concisely.
+
+    User: {{question}}
+    Assistant:
+
+providers:
+  - openai:o4-mini
+  - openai:gpt-4.1
+
+tests:
+  # These test cases will inherit all assertions and options from defaultTest
+  - vars:
+      question: What is the capital of France?
+    # Additional assertions specific to this test
+    assert:
+      - type: icontains
+        value: Paris
+
+  - vars:
+      question: Explain photosynthesis in one sentence.
+    assert:
+      - type: contains-any
+        value:
+          - sunlight
+          - plants
+          - energy
+          - carbon dioxide
+
+  - vars:
+      question: What is 2 + 2?
+    assert:
+      - type: icontains
+        value: '4'
+
+  # This test overrides the provider from defaultTest
+  - vars:
+      question: Write a haiku about programming.
+    options:
+      provider: openai:gpt-4.1
+    assert:
+      - type: javascript
+        value: |
+          // Check if output resembles a haiku (3 lines)
+          const lines = output.trim().split('\n').filter(line => line.trim().length > 0);
+          return lines.length === 3 ? 1 : 0;
