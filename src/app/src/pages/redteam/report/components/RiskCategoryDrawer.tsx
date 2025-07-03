@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
@@ -122,6 +123,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   numFailed,
   strategyStats,
 }) => {
+  const navigate = useNavigate();
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
@@ -212,7 +214,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {
-              window.location.href = url;
+              navigate(url);
             }
           }}
         >

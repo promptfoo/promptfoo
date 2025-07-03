@@ -1,6 +1,6 @@
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
 import type { Message } from '../../../../src/redteam/providers/shared';
-import { redteamProviderManager } from '../../../../src/redteam/providers/shared';
+import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
@@ -13,6 +13,11 @@ jest.mock('../../../../src/providers/promptfoo', () => ({
 
 jest.mock('../../../../src/util/server', () => ({
   checkServerFeatureSupport: jest.fn(),
+}));
+
+jest.mock('../../../../src/redteam/providers/shared', () => ({
+  ...jest.requireActual('../../../../src/redteam/providers/shared'),
+  tryUnblocking: jest.fn(),
 }));
 
 describe('MemorySystem', () => {
@@ -75,8 +80,6 @@ describe('CrescendoProvider', () => {
     callApi: jest.fn(),
   };
 
-  let mockUnblockingProvider: any;
-
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -87,9 +90,6 @@ describe('CrescendoProvider', () => {
       redteamProvider: mockRedTeamProvider,
       stateful: true,
     });
-
-    // Get the mocked unblocking provider instance
-    mockUnblockingProvider = (crescendoProvider as any).unblockingProvider;
 
     jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async ({ jsonOnly }) => {
       return jsonOnly ? mockRedTeamProvider : mockScoringProvider;
@@ -149,11 +149,9 @@ describe('CrescendoProvider', () => {
         });
 
       // Mock unblocking analysis - detects blocking question
-      mockUnblockingProvider.callApi.mockResolvedValue({
-        output: {
-          isBlocking: true,
-          unblockingAnswer: 'Our company registration number is REG123456789',
-        },
+      jest.mocked(tryUnblocking).mockResolvedValue({
+        success: true,
+        unblockingPrompt: 'Our company registration number is REG123456789',
       });
 
       // Mock scoring (non-blocking after unblocking)
@@ -167,14 +165,12 @@ describe('CrescendoProvider', () => {
 
       const result = await crescendoProvider.callApi(prompt, context);
 
-      expect(mockUnblockingProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('"conversationObjective":"test objective"'),
-        expect.objectContaining({
-          prompt: expect.objectContaining({
-            label: 'unblocking',
-          }),
-        }),
-      );
+      expect(tryUnblocking).toHaveBeenCalledWith({
+        messages: expect.any(Array),
+        lastResponse: 'What is your company registration number?',
+        goal: 'test objective',
+        purpose: 'e-commerce platform',
+      });
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2); // Original + unblocking response
       expect(result.metadata?.stopReason).toBe('Internal evaluator success');
@@ -201,11 +197,8 @@ describe('CrescendoProvider', () => {
       });
 
       // Mock unblocking analysis - no blocking detected
-      mockUnblockingProvider.callApi.mockResolvedValue({
-        output: {
-          isBlocking: false,
-          unblockingAnswer: undefined,
-        },
+      jest.mocked(tryUnblocking).mockResolvedValue({
+        success: false,
       });
 
       mockScoringProvider.callApi.mockResolvedValue({
@@ -243,8 +236,8 @@ describe('CrescendoProvider', () => {
       });
 
       // Mock unblocking provider error
-      mockUnblockingProvider.callApi.mockResolvedValue({
-        error: 'Unblocking analysis failed',
+      jest.mocked(tryUnblocking).mockResolvedValue({
+        success: false,
       });
 
       mockScoringProvider.callApi.mockResolvedValue({
@@ -282,11 +275,9 @@ describe('CrescendoProvider', () => {
         output: 'Which bank do you use for settlements?',
       });
 
-      mockUnblockingProvider.callApi.mockResolvedValue({
-        output: {
-          isBlocking: true,
-          unblockingAnswer: 'We use Wells Fargo for our settlement processing',
-        },
+      jest.mocked(tryUnblocking).mockResolvedValue({
+        success: true,
+        unblockingPrompt: 'We use Wells Fargo for our settlement processing',
       });
 
       mockScoringProvider.callApi.mockResolvedValue({
@@ -299,10 +290,12 @@ describe('CrescendoProvider', () => {
 
       await crescendoProvider.callApi(prompt, context);
 
-      expect(mockUnblockingProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('"purpose":"financial services platform"'),
-        expect.any(Object),
-      );
+      expect(tryUnblocking).toHaveBeenCalledWith({
+        messages: expect.any(Array),
+        lastResponse: 'Which bank do you use for settlements?',
+        goal: 'test objective',
+        purpose: 'financial services platform',
+      });
     });
   });
 
