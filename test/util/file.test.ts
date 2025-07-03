@@ -208,22 +208,20 @@ describe('file utilities', () => {
       // TODO: Fix this test - glob mock is not being called properly in test environment
       const basePath = '/base/path';
       cliState.basePath = basePath;
-      
+
       // Mock globSync to return file paths
       jest
         .mocked(globSync)
         .mockReturnValue([path.resolve(basePath, 'a.yaml'), path.resolve(basePath, 'b.yaml')]);
-      
+
       // Mock fs.existsSync to always return true for the test
       jest.mocked(fs.existsSync).mockImplementation((path) => {
         // Return true for any path during this test
         return true;
       });
-      
+
       // Mock fs.readFileSync to return YAML content
-      jest.mocked(fs.readFileSync)
-        .mockReturnValueOnce('foo: 1')
-        .mockReturnValueOnce('bar: 2');
+      jest.mocked(fs.readFileSync).mockReturnValueOnce('foo: 1').mockReturnValueOnce('bar: 2');
 
       const result = maybeLoadFromExternalFile('file://*.yaml');
 
