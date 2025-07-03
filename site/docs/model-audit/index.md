@@ -83,19 +83,6 @@ pip install modelaudit[cloud,mlflow]           # Remote model access
 pip install modelaudit[numpy1]                 # NumPy 1.x compatibility
 ```
 
-**Development installation:**
-
-```bash
-git clone https://github.com/promptfoo/modelaudit.git
-cd modelaudit
-
-# Using Rye (recommended)
-rye sync --features all
-
-# Or using pip
-pip install -e .[all]
-```
-
 ### Docker
 
 ```bash
@@ -154,7 +141,7 @@ promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709
 promptfoo scan-model model.pkl --sbom sbom.json
 ```
 
-See the [Usage Guide](./usage.md) for detailed authentication setup for cloud storage, JFrog, and other remote sources.
+See the [Advanced Usage](./usage.md) guide for detailed authentication setup for cloud storage, JFrog, and other remote sources.
 
 :::info Alternative Installation and Usage
 
@@ -191,29 +178,43 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 - Live scanning progress and tabbed results display with severity color coding
 - Scan history and automatic installation detection
 
-## Supported Model Formats
+## Supported Formats
 
-ModelAudit can scan:
+ModelAudit supports scanning 15+ model formats across major ML frameworks:
 
-- **PyTorch models** (`.pt`, `.pth`, `.bin`)
-- **TensorFlow SavedModel** format (`.pb` files and directories)
-- **TensorFlow Lite models** (`.tflite`)
-- **TensorRT engines** (`.engine`, `.plan`)
-- **Keras models** (`.h5`, `.keras`, `.hdf5`)
-- **ONNX models** (`.onnx`)
-- **GGUF/GGML models** (`.gguf`, `.ggml`, `.ggmf`, `.ggjt`, `.ggla`, `.ggsa`) - popular for LLaMA and quantized LLMs
-- **Flax/JAX models** (`.msgpack`, `.flax`, `.orbax`, `.jax`)
-- **JAX checkpoints** (`.ckpt`, `.checkpoint`, `.orbax-checkpoint`)
-- **Pickle files** (`.pkl`, `.pickle`, `.dill`, `.bin`, `.ckpt`)
-- **Joblib files** (`.joblib`)
-- **NumPy arrays** (`.npy`, `.npz`)
-- **SafeTensors models** (`.safetensors`)
-- **PMML models** (`.pmml`)
-- **Container manifests** (`.manifest`) with OCI/Docker layer scanning
-- **ZIP archives** (`.zip`, `.npz`) with recursive content scanning
-- **Binary model files** (`.bin`) with auto-detection
-- **Model configuration files** (`.json`, `.yaml`, etc.)
-- **Remote models** from HuggingFace, S3, GCS, MLflow, and more
+### Model Formats
+
+| Format                    | Extensions                                           | Description                                             |
+| ------------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| **PyTorch**               | `.pt`, `.pth`, `.bin`                                | PyTorch model files and checkpoints                     |
+| **TensorFlow SavedModel** | `.pb`, directories                                   | TensorFlow's standard model format                      |
+| **TensorFlow Lite**       | `.tflite`                                            | Mobile-optimized TensorFlow models                      |
+| **TensorRT**              | `.engine`, `.plan`                                   | NVIDIA GPU-optimized inference engines                  |
+| **Keras**                 | `.h5`, `.keras`, `.hdf5`                             | Keras/TensorFlow models in HDF5 format                  |
+| **ONNX**                  | `.onnx`                                              | Open Neural Network Exchange format                     |
+| **SafeTensors**           | `.safetensors`                                       | Hugging Face's secure tensor format                     |
+| **GGUF/GGML**             | `.gguf`, `.ggml`, `.ggmf`, `.ggjt`, `.ggla`, `.ggsa` | Quantized models (LLaMA, Mistral, etc.)                 |
+| **Flax/JAX**              | `.msgpack`, `.flax`, `.orbax`, `.jax`                | JAX-based model formats                                 |
+| **JAX Checkpoints**       | `.ckpt`, `.checkpoint`, `.orbax-checkpoint`          | JAX training checkpoints                                |
+| **Pickle**                | `.pkl`, `.pickle`, `.dill`                           | Python serialization (includes Dill)                    |
+| **Joblib**                | `.joblib`                                            | Scikit-learn and general ML serialization               |
+| **NumPy**                 | `.npy`, `.npz`                                       | NumPy array storage formats                             |
+| **PMML**                  | `.pmml`                                              | Predictive Model Markup Language (XML)                  |
+| **ZIP Archives**          | `.zip`                                               | Compressed model archives with recursive scanning       |
+| **Container Manifests**   | `.manifest`                                          | OCI/Docker layer scanning                               |
+| **Binary Files**          | `.bin`                                               | Auto-detected format (PyTorch, ONNX, SafeTensors, etc.) |
+
+### Remote Sources
+
+| Source                   | URL Format                                           | Example                                                 |
+| ------------------------ | ---------------------------------------------------- | ------------------------------------------------------- |
+| **HuggingFace Hub**      | `https://huggingface.co/`, `https://hf.co/`, `hf://` | `hf://microsoft/resnet-50`                              |
+| **Amazon S3**            | `s3://`                                              | `s3://my-bucket/model.pt`                               |
+| **Google Cloud Storage** | `gs://`                                              | `gs://my-bucket/model.h5`                               |
+| **Cloudflare R2**        | `r2://`                                              | `r2://my-bucket/model.safetensors`                      |
+| **MLflow Registry**      | `models:/`                                           | `models:/MyModel/1`                                     |
+| **JFrog Artifactory**    | `https://*.jfrog.io/`                                | `https://company.jfrog.io/artifactory/models/model.pkl` |
+| **DVC**                  | `.dvc` files                                         | `model.pkl.dvc`                                         |
 
 ## Security Checks Performed
 
@@ -332,5 +333,5 @@ The `doctor` command provides:
 
 ## Next Steps
 
-- **[Usage Guide](./usage.md)** - Cloud storage, CI/CD integration, and advanced features
+- **[Advanced Usage](./usage.md)** - Cloud storage, CI/CD integration, and advanced features
 - **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities and security checks

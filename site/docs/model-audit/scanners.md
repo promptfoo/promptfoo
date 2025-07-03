@@ -130,7 +130,7 @@ ONNX models can reference external data files and custom operators. Malicious ac
 
 This scanner examines PyTorch model files, which are ZIP archives containing pickled data.
 
-**What it checks for:**
+**Key checks:**
 
 - Malicious pickle files embedded within the PyTorch model
 - Python code files included in the model archive
@@ -146,7 +146,7 @@ PyTorch models are essentially ZIP archives containing pickled objects, which ca
 
 This scanner validates GGUF (GPT-Generated Unified Format) and GGML model files commonly used for large language models like LLaMA, Alpaca, and other quantized models.
 
-**What it checks for:**
+**Key checks:**
 
 - **Header validation**: Verifies file format integrity and header structure
 - **Metadata security**: Scans JSON metadata for suspicious content and path traversal attempts
@@ -163,7 +163,7 @@ GGUF/GGML files are increasingly popular for distributing large language models.
 
 This scanner analyzes joblib serialized files, which are commonly used by ML libraries for model persistence.
 
-**What it checks for:**
+**Key checks:**
 
 - **Compression bomb detection**: Identifies files with suspicious compression ratios that could cause resource exhaustion
 - **Embedded pickle analysis**: Decompresses and scans embedded pickle content for malicious code
@@ -179,7 +179,7 @@ Joblib files often contain compressed pickle data, inheriting the same security 
 
 This scanner analyzes Flax/JAX model files serialized in MessagePack format and other JAX-specific formats.
 
-**What it checks for:**
+**Key checks:**
 
 - Suspicious MessagePack structures that could exploit deserializers
 - Embedded code objects or executable content
@@ -213,7 +213,7 @@ JAX checkpoints can contain custom restore functions or experimental callbacks t
 
 This scanner validates NumPy binary array files for integrity issues and potential security risks.
 
-**What it checks for:**
+**Key checks:**
 
 - **Array validation**: Checks array dimensions and data types for malicious manipulation
 - **Header integrity**: Validates NumPy file headers and magic numbers
@@ -230,7 +230,7 @@ While NumPy files are generally safer than pickle files, they can still be craft
 
 This scanner examines OCI (Open Container Initiative) and Docker manifest files that contain embedded model files in compressed layers.
 
-**What it checks for:**
+**Key checks:**
 
 - **Layer extraction**: Safely extracts and scans model files from `.tar.gz` layers
 - **Manifest validation**: Parses JSON and YAML manifest formats
@@ -246,7 +246,7 @@ Container images are increasingly used to distribute ML models and datasets. The
 
 This scanner analyzes model configuration files and manifests.
 
-**What it checks for:**
+**Key checks:**
 
 - Blacklisted model names that might indicate known vulnerable models
 - Suspicious configuration patterns related to:
@@ -265,7 +265,7 @@ Model configuration files can contain settings that lead to insecure behavior, s
 
 This scanner examines raw PyTorch binary tensor files that contain serialized weight data. It performs binary content scanning to detect various threats.
 
-**What it checks for:**
+**Key checks:**
 
 - Embedded code patterns (imports, function calls, eval/exec)
 - Executable file signatures (Windows PE with DOS stub validation, Linux ELF, macOS Mach-O)
@@ -284,7 +284,7 @@ While `.bin` files typically contain raw tensor data, attackers could embed mali
 
 This scanner examines ZIP archives and their contents recursively.
 
-**What it checks for:**
+**Key checks:**
 
 - **Directory traversal attacks:** Detects entries with paths containing ".." or absolute paths that could overwrite system files
 - **Zip bombs:** Identifies files with suspicious compression ratios (>100x) that could cause resource exhaustion
@@ -301,7 +301,7 @@ ZIP archives are commonly used to distribute models and datasets. Malicious acto
 
 This scanner analyzes neural network weight distributions to detect potential backdoors or trojaned models by identifying statistical anomalies.
 
-**What it checks for:**
+**Key checks:**
 
 - **Outlier neurons:** Detects output neurons with abnormally high weight magnitudes using Z-score analysis
 - **Dissimilar weight vectors:** Identifies neurons whose weight patterns are significantly different from others in the same layer (using cosine similarity)
@@ -328,7 +328,7 @@ Large language models with vocabulary layers (>10,000 outputs) use more conserva
 
 This scanner examines SafeTensors format files, which are designed to be a safer alternative to pickle files.
 
-**What it checks for:**
+**Key checks:**
 
 - **Header validation**: Verifies SafeTensors format structure and JSON header integrity
 - **Metadata security**: Scans metadata for suspicious content, encoded payloads, and unusually large sections
@@ -344,7 +344,7 @@ While SafeTensors is designed to be safer than pickle files, the metadata sectio
 
 This scanner performs security checks on PMML (Predictive Model Markup Language) files to detect potential XML External Entity (XXE) attacks, malicious scripts, and suspicious external references.
 
-**What it checks for:**
+**Key checks:**
 
 - **XXE Attack Prevention**: Detects `<!DOCTYPE`, `<!ENTITY`, `<!ELEMENT`, and `<!ATTLIST` declarations that could enable XML External Entity attacks
 - **Safe XML Parsing**: Uses defusedxml when available for secure XML parsing; warns when using unsafe parsers
@@ -429,8 +429,3 @@ ModelAudit can scan models directly from HuggingFace URLs without manual downloa
 - `hf://user/model`
 
 This feature requires the `huggingface-hub` package to be installed.
-
-## See Also
-
-- [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
-- [Advanced Usage](./usage.md) - Cloud storage, CI/CD integration, and programmatic usage
