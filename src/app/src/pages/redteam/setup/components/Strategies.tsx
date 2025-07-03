@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Box, Typography, Button, Tooltip } from '@mui/material';
+import { Box, Typography, Button, Tooltip, Link } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
   ALL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
+  AGENTIC_STRATEGIES,
+  DEFAULT_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -18,6 +21,7 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
+import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 import {
   STRATEGY_PRESETS,
   PRESET_IDS,
@@ -42,11 +46,20 @@ interface CustomPreset {
 
 type PresetWithName = StrategyPreset | CustomPreset;
 
+// Define recommended strategies based on DEFAULT_STRATEGIES for consistency
+const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;
+
+// UI-friendly description overrides
+const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
+  basic:
+    'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
+};
+
 const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id !== 'default').map(
   (id) => ({
     id,
     name: strategyDisplayNames[id] || id,
-    description: strategyDescriptions[id],
+    description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
   }),
 );
 
@@ -67,15 +80,39 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
   }, [recordEvent]);
 
-  // Separate single vs. multi-turn
-  const { singleTurnStrategies, multiTurnStrategies } = useMemo(() => {
+  // Categorize strategies by type
+  const categorizedStrategies = useMemo(() => {
+    const recommended = availableStrategies.filter((s) =>
+      RECOMMENDED_STRATEGIES.includes(s.id as any),
+    );
+
+    const allAgentic = availableStrategies.filter((s) => AGENTIC_STRATEGIES.includes(s.id as any));
+
+    // Split agentic into single-turn and multi-turn
+    const agenticSingleTurn = allAgentic.filter(
+      (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
+    );
+
+    const agenticMultiTurn = allAgentic.filter((s) => MULTI_TURN_STRATEGIES.includes(s.id as any));
+
+    const multiModal = availableStrategies.filter((s) =>
+      MULTI_MODAL_STRATEGIES.includes(s.id as any),
+    );
+
+    // Get other strategies that aren't in the above categories
+    const other = availableStrategies.filter(
+      (s) =>
+        !RECOMMENDED_STRATEGIES.includes(s.id as any) &&
+        !AGENTIC_STRATEGIES.includes(s.id as any) &&
+        !MULTI_MODAL_STRATEGIES.includes(s.id as any),
+    );
+
     return {
-      singleTurnStrategies: availableStrategies.filter(
-        (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
-      ),
-      multiTurnStrategies: availableStrategies.filter((s) =>
-        MULTI_TURN_STRATEGIES.includes(s.id as any),
-      ),
+      recommended,
+      agenticSingleTurn,
+      agenticMultiTurn,
+      multiModal,
+      other,
     };
   }, []);
 
@@ -329,9 +366,25 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Strategy Configuration
-      </Typography>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+          Strategy Configuration
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <HelpOutlineIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+          <Typography variant="body2" color="text.secondary">
+            Strategies modify how prompts are delivered to test different attack vectors.{' '}
+            <Link
+              href="https://www.promptfoo.dev/docs/red-team/strategies/"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ color: 'primary.main' }}
+            >
+              Learn more about strategies
+            </Link>
+          </Typography>
+        </Box>
+      </Box>
 
       <Box
         sx={{
@@ -375,25 +428,70 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         />
       )}
 
-      {/* Single-turn strategies */}
-      <StrategySection
-        title="Single-turn Strategies"
-        strategies={singleTurnStrategies}
-        selectedIds={selectedStrategyIds}
-        onToggle={handleStrategyToggle}
-        onConfigClick={handleConfigClick}
-        onSelectNone={handleSelectNoneInSection}
-      />
+      {/* Recommended strategies */}
+      {categorizedStrategies.recommended.length > 0 && (
+        <StrategySection
+          title="Recommended Strategies"
+          description="Core strategies that provide comprehensive coverage for most use cases"
+          strategies={categorizedStrategies.recommended}
+          selectedIds={selectedStrategyIds}
+          onToggle={handleStrategyToggle}
+          onConfigClick={handleConfigClick}
+          onSelectNone={handleSelectNoneInSection}
+        />
+      )}
 
-      {/* Multi-turn strategies */}
-      <StrategySection
-        title="Multi-turn Strategies"
-        strategies={multiTurnStrategies}
-        selectedIds={selectedStrategyIds}
-        onToggle={handleStrategyToggle}
-        onConfigClick={handleConfigClick}
-        onSelectNone={handleSelectNoneInSection}
-      />
+      {/* Agentic strategies */}
+      {categorizedStrategies.agenticSingleTurn.length > 0 && (
+        <StrategySection
+          title="Agentic Strategies (Single-turn)"
+          description="Advanced AI-powered strategies that dynamically adapt their attack patterns"
+          strategies={categorizedStrategies.agenticSingleTurn}
+          selectedIds={selectedStrategyIds}
+          onToggle={handleStrategyToggle}
+          onConfigClick={handleConfigClick}
+          onSelectNone={handleSelectNoneInSection}
+        />
+      )}
+
+      {/* Multi-turn agentic strategies */}
+      {categorizedStrategies.agenticMultiTurn.length > 0 && (
+        <StrategySection
+          title="Agentic Strategies (Multi-turn)"
+          description="AI-powered strategies that evolve across multiple conversation turns"
+          strategies={categorizedStrategies.agenticMultiTurn}
+          selectedIds={selectedStrategyIds}
+          onToggle={handleStrategyToggle}
+          onConfigClick={handleConfigClick}
+          onSelectNone={handleSelectNoneInSection}
+        />
+      )}
+
+      {/* Multi-modal strategies */}
+      {categorizedStrategies.multiModal.length > 0 && (
+        <StrategySection
+          title="Multi-modal Strategies"
+          description="Test handling of non-text content including audio, video, and images"
+          strategies={categorizedStrategies.multiModal}
+          selectedIds={selectedStrategyIds}
+          onToggle={handleStrategyToggle}
+          onConfigClick={handleConfigClick}
+          onSelectNone={handleSelectNoneInSection}
+        />
+      )}
+
+      {/* Other strategies */}
+      {categorizedStrategies.other.length > 0 && (
+        <StrategySection
+          title="Other Strategies"
+          description="Additional specialized strategies for specific attack vectors and edge cases"
+          strategies={categorizedStrategies.other}
+          selectedIds={selectedStrategyIds}
+          onToggle={handleStrategyToggle}
+          onConfigClick={handleConfigClick}
+          onSelectNone={handleSelectNoneInSection}
+        />
+      )}
 
       {/* Additional system config section, if needed */}
       {showSystemConfig && (

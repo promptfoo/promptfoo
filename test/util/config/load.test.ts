@@ -74,6 +74,7 @@ jest.mock('../../../src/util/testCaseReader', () => ({
 describe('combineConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
     jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
     jest.mocked(globSync).mockImplementation((pathOrGlob) => {
       const filePart =
@@ -84,6 +85,10 @@ describe('combineConfigs', () => {
             : pathOrGlob;
       return [filePart];
     });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('reads from existing configs', async () => {
@@ -1105,8 +1110,19 @@ describe('dereferenceConfig', () => {
 });
 
 describe('resolveConfigs', () => {
+  let mockExit: jest.SpyInstance;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
+    mockExit = jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
+      throw new Error(`Process exited with code ${code}`);
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    mockExit.mockRestore();
   });
 
   it('should set cliState.basePath', async () => {
@@ -1120,6 +1136,7 @@ describe('resolveConfigs', () => {
         providers: ['openai:foobar'],
       }),
     );
+    jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await resolveConfigs(cmdObj, defaultConfig);
 
@@ -1185,7 +1202,7 @@ describe('resolveConfigs', () => {
   });
 
   it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
-    jest.spyOn(process, 'exit').mockImplementation((code) => {
+    jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
       throw new Error(`Process exited with code ${code}`);
     });
     jest.mocked(isCI).mockReturnValue(false);
@@ -1211,6 +1228,7 @@ describe('resolveConfigs', () => {
     };
 
     jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
       'Process exited with code 1',
@@ -1229,6 +1247,7 @@ describe('resolveConfigs', () => {
     };
 
     jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     expect(
       async () => await resolveConfigs(cmdObj, defaultConfig, 'DatasetGeneration'),
@@ -1239,6 +1258,11 @@ describe('resolveConfigs', () => {
 describe('readConfig', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should read JSON config file', async () => {
@@ -1373,8 +1397,8 @@ describe('readConfig', () => {
       tests: [{ vars: { text: 'test text' } }],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockConfig));
-    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(dereferencedConfig);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValueOnce(dereferencedConfig);
 
     const result = await readConfig('config.yaml');
     expect(result).toEqual(dereferencedConfig);
@@ -1392,9 +1416,9 @@ describe('readConfig', () => {
       providers: [{ invalid: true }],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockConfig));
-    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(dereferencedConfig);
-    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValueOnce(dereferencedConfig);
+    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
 
     await readConfig('config.yaml');
 
