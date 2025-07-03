@@ -673,7 +673,7 @@ describe('AnthropicMessagesProvider', () => {
           .mockImplementation()
           .mockResolvedValue({
             content: [{ type: 'text', text: 'Test response' }],
-            stop_reason: undefined,
+            stop_reason: undefined as any,
             usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
           } as Anthropic.Messages.Message);
 

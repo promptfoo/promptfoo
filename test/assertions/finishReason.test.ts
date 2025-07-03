@@ -64,7 +64,7 @@ describe('finishReason assertion', () => {
 
   it('should throw for non-string assertion value', () => {
     const params: Partial<AssertionParams> = {
-      assertion: { type: 'finish-reason', value: 123 },
+      assertion: { type: 'finish-reason', value: 123 as any },
       providerResponse: { finishReason: 'stop' },
     };
 
@@ -76,7 +76,7 @@ describe('finishReason assertion', () => {
   it('should throw for non-string renderedValue', () => {
     const params: Partial<AssertionParams> = {
       assertion: { type: 'finish-reason', value: 'stop' },
-      renderedValue: 123,
+      renderedValue: 123 as any,
       providerResponse: { finishReason: 'stop' },
     };
 
