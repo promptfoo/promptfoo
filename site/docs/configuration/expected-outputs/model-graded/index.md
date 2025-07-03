@@ -18,11 +18,13 @@ Output-based:
 - [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
 
-RAG-based (requires `query` and/or `context` vars):
+RAG-based (requires `query` and context via variables or `contextTransform`):
 
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output uses the context
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+
+For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
 ## Examples (output-based)
 
@@ -83,9 +85,9 @@ tests:
 
 ## Examples (RAG-based)
 
-RAG metrics require variables named `context` and `query`. You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
+RAG metrics require a `query` and context (provided via test variables or extracted using `contextTransform`). You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
 
-Here's an example config of a RAG-based knowledge bot that evaluates RAG context metrics:
+Here's an example config using context variables:
 
 ```yaml
 prompts:
@@ -127,6 +129,31 @@ tests:
       - type: context-relevance
         threshold: 0.9
       - type: context-faithfulness
+        threshold: 0.9
+```
+
+Alternatively, if your RAG system returns context in the response, you can use `contextTransform`:
+
+```yaml
+prompts:
+  - |
+    You are an internal corporate chatbot.
+    Respond to this query: {{query}}
+providers:
+  - openai:gpt-4
+tests:
+  - vars:
+      query: What is the max purchase that doesn't require approval?
+    assert:
+      - type: context-recall
+        contextTransform: 'output.context'
+        threshold: 0.9
+        value: max purchase price without approval is $500
+      - type: context-relevance
+        contextTransform: 'output.context'
+        threshold: 0.9
+      - type: context-faithfulness
+        contextTransform: 'output.context'
         threshold: 0.9
 ```
 

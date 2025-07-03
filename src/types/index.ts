@@ -531,6 +531,9 @@ export const AssertionSchema = z.object({
 
   // Process the output before running the assertion
   transform: z.string().optional(),
+
+  // Extract context from the output using a transform
+  contextTransform: z.string().optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
