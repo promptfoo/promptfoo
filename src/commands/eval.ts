@@ -178,7 +178,7 @@ export async function doEval(
       config.providers.length > 0 &&
       typeof config.providers[0] === 'object' &&
       config.providers[0].id === 'http' &&
-      config.providers[0].config.url === 'https://redpanda-internal-rag-example.promptfoo.app/chat'
+      config.providers[0].config.url.includes('promptfoo.app')
     ) {
       telemetry.record('feature_used', {
         feature: 'redteam_run_with_example',

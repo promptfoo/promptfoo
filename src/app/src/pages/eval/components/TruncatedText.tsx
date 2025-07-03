@@ -80,6 +80,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   return (
     <div style={{ position: 'relative' }}>
       <div
+        id="eval-output-cell-text"
         style={{
           cursor: isOverLength ? 'pointer' : 'normal',
           position: 'relative',

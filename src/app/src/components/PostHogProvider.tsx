@@ -55,6 +55,12 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
           },
           session_recording: {
             maskAllInputs: true,
+            maskTextFn(text, element) {
+              if (!['eval-output-cell', 'eval-output-cell-text'].includes(element?.id ?? '')) {
+                return text;
+              }
+              return '*'.repeat(text.trim().length);
+            },
           },
           opt_out_capturing_by_default: process.env.NODE_ENV === 'development',
           advanced_disable_decide: false,

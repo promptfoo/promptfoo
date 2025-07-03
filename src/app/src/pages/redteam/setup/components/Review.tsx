@@ -233,13 +233,10 @@ export default function Review() {
       targetType: config.target.id,
     });
 
-    if (
-      config.target.id === 'http' &&
-      config.target.config.url === 'https://redpanda-internal-rag-example.promptfoo.app/chat'
-    ) {
+    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
       // Track report export
       recordEvent('webui_action', {
-        action: 'redteam_config_run_with_example',
+        action: 'redteam_run_with_example',
       });
     }
     // Track funnel milestone - evaluation started
