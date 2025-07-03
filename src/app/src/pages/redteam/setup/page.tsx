@@ -284,6 +284,15 @@ export default function RedTeamSetupPage() {
 
   const lastSavedConfig = useRef<string>('');
 
+  // Track funnel on initial load
+  useEffect(() => {
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_setup_started',
+      source: 'webui',
+    });
+  }, []);
+
   // Handle browser back/forward
   useEffect(() => {
     const hash = location.hash.replace('#', '');
@@ -327,6 +336,16 @@ export default function RedTeamSetupPage() {
     updateHash(newValue);
     setValue(newValue);
     window.scrollTo({ top: 0 });
+
+    // Track funnel progress
+    const steps = ['targets', 'purpose', 'plugins', 'strategies', 'review'];
+    if (newValue < steps.length) {
+      recordEvent('funnel', {
+        type: 'redteam',
+        step: `webui_setup_${steps[newValue]}_viewed`,
+        source: 'webui',
+      });
+    }
   };
 
   const closeSetupModal = () => {
@@ -341,6 +360,17 @@ export default function RedTeamSetupPage() {
       numStrategies: config.strategies.length,
       targetType: config.target.id,
     });
+
+    // Track funnel milestone
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_setup_configured',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
     try {
       const response = await callApi('/configs', {
         method: 'POST',
