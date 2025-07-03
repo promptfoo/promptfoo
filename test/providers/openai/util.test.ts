@@ -473,7 +473,9 @@ describe('formatOpenAiError', () => {
 
 describe('hasContentFilterFinishReason', () => {
   it('should detect content_filter finish_reason', () => {
-    expect(hasContentFilterFinishReason({ choices: [{ finish_reason: 'content_filter' }] })).toBe(true);
+    expect(hasContentFilterFinishReason({ choices: [{ finish_reason: 'content_filter' }] })).toBe(
+      true,
+    );
     expect(hasContentFilterFinishReason({ choices: [{ finish_reason: 'stop' }] })).toBe(false);
     expect(hasContentFilterFinishReason({})).toBe(false);
   });
@@ -481,8 +483,12 @@ describe('hasContentFilterFinishReason', () => {
 
 describe('buildGuardrailResponse', () => {
   it('should return undefined when not in redteam context', () => {
-    expect(buildGuardrailResponse({ error: { code: 'content_policy_violation' } }, false)).toBeUndefined();
-    expect(buildGuardrailResponse({ choices: [{ finish_reason: 'content_filter' }] }, false)).toBeUndefined();
+    expect(
+      buildGuardrailResponse({ error: { code: 'content_policy_violation' } }, false),
+    ).toBeUndefined();
+    expect(
+      buildGuardrailResponse({ choices: [{ finish_reason: 'content_filter' }] }, false),
+    ).toBeUndefined();
   });
 
   it('should detect content_policy_violation errors in redteam', () => {

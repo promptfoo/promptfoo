@@ -250,12 +250,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
-      
+
       const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
-      
+
       return {
         error: formatOpenAiError(data),
-        ...(guardrails && { 
+        ...(guardrails && {
           guardrails,
           tokenUsage: getTokenUsage(data, cached),
           raw: data,
@@ -266,7 +266,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     try {
       // Check for guardrails in redteam context
       const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
-      
+
       if (guardrails) {
         const choice = data.choices?.[0];
         return {

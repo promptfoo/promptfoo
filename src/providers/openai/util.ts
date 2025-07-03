@@ -374,10 +374,8 @@ export function hasContentFilterFinishReason(data: any): boolean {
   if (!data?.choices || !Array.isArray(data.choices)) {
     return false;
   }
-  
-  return data.choices.some(
-    (choice: any) => choice.finish_reason === 'content_filter'
-  );
+
+  return data.choices.some((choice: any) => choice.finish_reason === 'content_filter');
 }
 
 /**
@@ -386,7 +384,7 @@ export function hasContentFilterFinishReason(data: any): boolean {
  */
 export function buildGuardrailResponse(
   data: any,
-  isRedteam: boolean
+  isRedteam: boolean,
 ): { flagged: boolean; flaggedInput?: boolean; flaggedOutput?: boolean } | undefined {
   if (!isRedteam) {
     return undefined;

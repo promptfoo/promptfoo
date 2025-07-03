@@ -32,10 +32,12 @@ describe('OpenAI Chat Provider - Redteam Guardrails', () => {
     it('should capture content_filter finish_reason as guardrails', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
-          choices: [{ 
-            message: { content: 'Filtered' },
-            finish_reason: 'content_filter'
-          }],
+          choices: [
+            {
+              message: { content: 'Filtered' },
+              finish_reason: 'content_filter',
+            },
+          ],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         },
         cached: false,
@@ -80,10 +82,12 @@ describe('OpenAI Chat Provider - Redteam Guardrails', () => {
     it('should preserve all metadata with guardrails', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
-          choices: [{ 
-            message: { content: 'Content' },
-            finish_reason: 'content_filter'
-          }],
+          choices: [
+            {
+              message: { content: 'Content' },
+              finish_reason: 'content_filter',
+            },
+          ],
           usage: { total_tokens: 100, prompt_tokens: 80, completion_tokens: 20 },
           model: 'gpt-4o-mini',
         },
@@ -112,10 +116,12 @@ describe('OpenAI Chat Provider - Redteam Guardrails', () => {
     it('should NOT capture guardrails outside redteam context', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
-          choices: [{ 
-            message: { content: 'Normal response' },
-            finish_reason: 'content_filter'
-          }],
+          choices: [
+            {
+              message: { content: 'Normal response' },
+              finish_reason: 'content_filter',
+            },
+          ],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         },
         cached: false,
@@ -152,4 +158,4 @@ describe('OpenAI Chat Provider - Redteam Guardrails', () => {
       expect(result.error).toContain('content_policy_violation');
     });
   });
-}); 
+});

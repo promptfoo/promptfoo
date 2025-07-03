@@ -15,7 +15,12 @@ import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS, buildGuardrailResponse } from './util';
+import {
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_CHAT_MODELS,
+  buildGuardrailResponse,
+} from './util';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -354,12 +359,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     logger.debug(`\tcompletions API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
-      
+
       const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
-      
+
       return {
         error: formatOpenAiError(data),
-        ...(guardrails && { 
+        ...(guardrails && {
           guardrails,
           tokenUsage: getTokenUsage(data, cached),
           raw: data,
@@ -369,10 +374,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     try {
       const message = data.choices[0].message;
-      
+
       // Check for guardrails in redteam context
       const guardrails = buildGuardrailResponse(data, !!cliState.config?.redteam);
-      
+
       if (guardrails) {
         return {
           output: data.choices[0].message?.content || 'Content was filtered by OpenAI',
@@ -388,7 +393,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           raw: data,
         };
       }
-      
+
       if (message.refusal) {
         return {
           output: message.refusal,
