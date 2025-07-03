@@ -170,6 +170,21 @@ export async function doEval(
       );
     }
 
+    // TODO(faizan): Crazy condition to see when we run the example redteam config.
+    // Remove this once we have a better way to track this.
+    if (
+      config.redteam &&
+      Array.isArray(config.providers) &&
+      config.providers.length > 0 &&
+      typeof config.providers[0] === 'object' &&
+      config.providers[0].id === 'http' &&
+      config.providers[0].config.url === 'https://redpanda-internal-rag-example.promptfoo.app/chat'
+    ) {
+      telemetry.record('feature_used', {
+        feature: 'redteam_run_with_example',
+      });
+    }
+
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {

@@ -41,7 +41,7 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
   }, [isInitialized, email, userId]);
 
   useEffect(() => {
-    if (POSTHOG_KEY && typeof window !== 'undefined' && !DISABLE_TELEMETRY) {
+    if (POSTHOG_KEY && typeof window !== 'undefined' && DISABLE_TELEMETRY !== 'true') {
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
@@ -53,11 +53,11 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
             dom_event_allowlist: ['click'],
             url_allowlist: [],
           },
-          disable_session_recording: true,
           session_recording: {
             maskAllInputs: true,
           },
           opt_out_capturing_by_default: process.env.NODE_ENV === 'development',
+          advanced_disable_decide: false,
         });
       } catch (error) {
         console.error('Failed to initialize PostHog:', error);
@@ -70,7 +70,7 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
     isInitialized,
   };
 
-  if (DISABLE_TELEMETRY) {
+  if (DISABLE_TELEMETRY === 'true') {
     return children;
   }
 

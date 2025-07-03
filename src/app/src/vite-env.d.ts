@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly VITE_PROMPTFOO_VERSION: string;
   readonly VITE_PUBLIC_BASENAME: string;
   readonly VITE_PROMPTFOO_DISABLE_TELEMETRY: string;
+  readonly VITE_POSTHOG_KEY: string;
+  readonly VITE_POSTHOG_HOST: string;
 }
 
 interface ImportMeta {
