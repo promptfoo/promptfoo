@@ -105,6 +105,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   assertIndex,
+  traceId,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -113,6 +114,7 @@ export async function runAssertion({
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
+  traceId?: string;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -140,6 +142,23 @@ export async function runAssertion({
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
+
+  // Add trace data if traceId is available
+  if (traceId) {
+    try {
+      const { getTraceStore } = await import('../tracing/store');
+      const traceStore = getTraceStore();
+      const traceData = await traceStore.getTrace(traceId);
+      if (traceData) {
+        context.trace = {
+          traceId: traceData.traceId,
+          spans: traceData.spans || [],
+        };
+      }
+    } catch (error) {
+      logger.debug(`Failed to fetch trace data for assertion: ${error}`);
+    }
+  }
 
   // Render assertion values
   let renderedValue = assertion.value;
@@ -321,6 +340,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -328,6 +348,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -384,6 +405,7 @@ export async function runAssertions({
         test,
         latencyMs,
         assertIndex: index,
+        traceId,
       });
 
       assertResult.addResult({
