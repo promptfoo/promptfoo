@@ -335,19 +335,7 @@ tests:
 
 ### Loading defaultTest from external files
 
-You can load `defaultTest` configuration from external files using the `file://` syntax:
-
-```yaml
-# Load defaultTest from external file
-defaultTest: file://shared/defaultTest.yaml
-
-tests:
-  - vars:
-      language: French
-      input: Hello world
-```
-
-This allows sharing test configurations across multiple projects and keeping your main config file cleaner.
+You can load `defaultTest` configuration from external files using `defaultTest: file://path/to/config.yaml` for sharing test configurations across projects.
 
 ### YAML references
 
