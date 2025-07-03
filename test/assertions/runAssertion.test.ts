@@ -17,6 +17,7 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
 }));
 
+// Causes a SIGSEGV in github actions.
 jest.mock('better-sqlite3');
 
 jest.mock('proxy-agent', () => ({
