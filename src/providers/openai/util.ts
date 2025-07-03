@@ -370,10 +370,7 @@ export function calculateOpenAICost(
  * Checks if a model is a reasoning model (o1, o3, o4 series, and codex-mini-latest).
  */
 export function isReasoningModel(modelName: string): boolean {
-  return (
-    /^(o1|o3|o4)(-mini|-preview|-pro)?/.test(modelName) ||
-    modelName === 'codex-mini-latest'
-  );
+  return /^(o1|o3|o4)(-mini|-preview|-pro)?/.test(modelName) || modelName === 'codex-mini-latest';
 }
 
 /**

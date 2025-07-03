@@ -469,8 +469,8 @@ describe('formatOpenAiError', () => {
     expect(result).toContain('API error: Error message');
     expect(result).not.toContain('Type:');
     expect(result).not.toContain('Code:');
-      });
   });
+});
 
 describe('hasContentFilterFinishReason', () => {
   it('should detect content_filter finish_reason', () => {
