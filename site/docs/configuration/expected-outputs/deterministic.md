@@ -20,6 +20,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
+| [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
@@ -909,6 +910,145 @@ The F-score will be calculated automatically after the eval completes. A score c
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
+
+### Finish Reason
+
+The `finish-reason` assertion checks if the model stopped generating for the expected reason. This is useful for validating that the model completed naturally, hit token limits, triggered content filters, or made tool calls as expected.
+
+#### Standard Finish Reasons
+
+Models can stop generating for various reasons, which are normalized to these standard values:
+
+- **`stop`**: Natural completion (reached end of response, stop sequence matched)
+- **`length`**: Token limit reached (max_tokens exceeded, context length reached)
+- **`content_filter`**: Content filtering triggered due to safety policies
+- **`tool_calls`**: Model made function/tool calls
+
+#### Basic Usage
+
+```yaml
+assert:
+  - type: finish-reason
+    value: stop # Expects natural completion
+```
+
+#### Common Examples
+
+**Test for natural completion:**
+
+```yaml
+tests:
+  - vars:
+      prompt: 'Write a short poem about nature'
+    assert:
+      - type: finish-reason
+        value: stop # Should complete naturally
+```
+
+**Test for token limit:**
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      max_tokens: 10 # Very short limit
+tests:
+  - vars:
+      prompt: 'Write a very long essay about artificial intelligence'
+    assert:
+      - type: finish-reason
+        value: length # Should hit token limit
+```
+
+**Test for tool usage:**
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      tools:
+        - name: get_weather
+          description: Get current weather
+tests:
+  - vars:
+      prompt: 'What is the weather like in San Francisco?'
+    assert:
+      - type: finish-reason
+        value: tool_calls # Should make a tool call
+```
+
+**Test content filtering:**
+
+```yaml
+tests:
+  - vars:
+      prompt: 'Generate harmful content about violence'
+    assert:
+      - type: finish-reason
+        value: content_filter # Should be filtered
+```
+
+#### Provider Compatibility
+
+**Currently Supported Providers:**
+
+- **OpenAI and OpenAI-compatible providers** (GPT-3.5, GPT-4, Azure OpenAI, etc.)
+- **Anthropic** (Claude models)
+
+The assertion automatically normalizes provider-specific values:
+
+- **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+
+:::note
+Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
+:::
+
+#### Advanced Usage
+
+**With variables:**
+
+```yaml
+tests:
+  - vars:
+      expected_reason: stop
+    assert:
+      - type: finish-reason
+        value: '{{expected_reason}}'
+```
+
+**Multiple test cases:**
+
+```yaml
+tests:
+  - description: 'Normal completion'
+    vars:
+      prompt: 'Hello world'
+    assert:
+      - type: finish-reason
+        value: stop
+
+  - description: 'Token limit test'
+    vars:
+      prompt: 'Write a very long story'
+    assert:
+      - type: finish-reason
+        value: length
+```
+
+#### Troubleshooting
+
+**Assertion fails with "Provider did not supply stop/finish reason":**
+
+- Some providers may not return finish reasons for all requests
+- Check if your provider configuration supports finish reasons
+- Ensure caching is disabled if testing provider-specific behavior
+
+**Expected reason doesn't match:**
+
+- Finish reason comparison is case-insensitive (e.g., `stop`, `Stop`, and `STOP` are all valid)
+- Standard normalized values: `stop`, `length`, `content_filter`, `tool_calls`
+- Check provider documentation for specific finish reason values
 
 ### Is-Refusal
 

@@ -148,7 +148,9 @@ describe('init command', () => {
 
     it('should throw an error if downloadDirectory fails', async () => {
       jest.spyOn(fs, 'mkdir').mockResolvedValue(undefined);
-      jest.mocked(init.downloadDirectory).mockRejectedValue(new Error('Download failed'));
+
+      // Mock fetch to simulate downloadDirectory failure
+      mockFetch.mockRejectedValue(new Error('Network error'));
 
       await expect(init.downloadExample('example', '/path/to/target')).rejects.toThrow(
         'Failed to download example: Network error',
