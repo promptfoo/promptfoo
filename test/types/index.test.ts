@@ -635,19 +635,26 @@ describe('TestSuiteConfigSchema', () => {
       }
     });
 
-    it('should reject defaultTest with description field', () => {
-      const invalidConfig = {
+    it('should accept defaultTest with description field (it will be stripped)', () => {
+      const configWithDescription = {
         providers: ['openai:gpt-4'],
         prompts: ['Test prompt'],
         tests: [{ vars: { test: 'value' } }],
         defaultTest: {
-          description: 'This should not be allowed',
+          description: 'This will be stripped by omit()',
           assert: [{ type: 'equals', value: 'test' }],
         },
       };
 
-      const result = TestSuiteConfigSchema.safeParse(invalidConfig);
-      expect(result.success).toBe(false);
+      const result = TestSuiteConfigSchema.safeParse(configWithDescription);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        // The description field should be stripped from the parsed result
+        expect(result.data.defaultTest).toEqual({
+          assert: [{ type: 'equals', value: 'test' }],
+        });
+        expect((result.data.defaultTest as any).description).toBeUndefined();
+      }
     });
   });
 

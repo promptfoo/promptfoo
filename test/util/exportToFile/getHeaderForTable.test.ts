@@ -1,6 +1,6 @@
-import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
-import Eval from '../../../src/models/eval';
+import type Eval from '../../../src/models/eval';
 import type { TestCase } from '../../../src/types';
+import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 
 describe('getHeaderForTable', () => {
   let mockEval: Eval;
@@ -164,7 +164,7 @@ describe('getHeaderForTable', () => {
     const header = getHeaderForTable(mockEval);
 
     // Count occurrences of commonVar
-    const commonVarCount = header.vars.filter(name => name === 'commonVar').length;
+    const commonVarCount = header.vars.filter((name) => name === 'commonVar').length;
     expect(commonVarCount).toBe(1);
 
     // All vars should be present
@@ -173,4 +173,4 @@ describe('getHeaderForTable', () => {
     expect(header.vars).toContain('test1Var');
     expect(header.vars).toContain('test2Var');
   });
-}); 
+});

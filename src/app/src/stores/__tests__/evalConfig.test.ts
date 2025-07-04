@@ -21,9 +21,9 @@ describe('evalConfig store', () => {
   describe('defaultTest handling', () => {
     it('should accept string defaultTest', () => {
       const stringDefaultTest = 'file://path/to/defaultTest.yaml';
-      
+
       useStore.getState().setDefaultTest(stringDefaultTest);
-      
+
       expect(useStore.getState().defaultTest).toBe(stringDefaultTest);
     });
 
@@ -33,16 +33,16 @@ describe('evalConfig store', () => {
         vars: { foo: 'bar' },
         options: { provider: 'openai:gpt-4' },
       };
-      
+
       useStore.getState().setDefaultTest(objectDefaultTest as any);
-      
+
       expect(useStore.getState().defaultTest).toEqual(objectDefaultTest);
     });
 
     it('should handle undefined defaultTest', () => {
       // Set to undefined explicitly
       useStore.getState().setDefaultTest(undefined as any);
-      
+
       // When set to undefined, it becomes undefined
       expect(useStore.getState().defaultTest).toBeUndefined();
     });
@@ -52,28 +52,28 @@ describe('evalConfig store', () => {
         assert: [{ type: 'equals' as const, value: 'test' }],
         vars: { foo: 'bar' },
       };
-      
+
       useStore.getState().setDefaultTest(objectDefaultTest as any);
       expect(useStore.getState().defaultTest).toEqual(objectDefaultTest);
-      
+
       const stringDefaultTest = 'file://new/path/defaultTest.yaml';
       useStore.getState().setDefaultTest(stringDefaultTest);
-      
+
       expect(useStore.getState().defaultTest).toBe(stringDefaultTest);
     });
 
     it('should update from string to object defaultTest', () => {
       const stringDefaultTest = 'file://path/to/defaultTest.yaml';
-      
+
       useStore.getState().setDefaultTest(stringDefaultTest);
       expect(useStore.getState().defaultTest).toBe(stringDefaultTest);
-      
+
       const objectDefaultTest = {
         assert: [{ type: 'contains' as const, value: 'new' }],
         metadata: { suite: 'test' },
       };
       useStore.getState().setDefaultTest(objectDefaultTest as any);
-      
+
       expect(useStore.getState().defaultTest).toEqual(objectDefaultTest);
     });
   });
@@ -81,14 +81,14 @@ describe('evalConfig store', () => {
   describe('getTestSuite', () => {
     it('should return config with string defaultTest', () => {
       const stringDefaultTest = 'file://shared/defaultTest.yaml';
-      
+
       useStore.getState().setDescription('Test config');
       useStore.getState().setProviders([{ id: 'openai:gpt-4' }]);
       useStore.getState().setPrompts(['Test prompt']);
       useStore.getState().setDefaultTest(stringDefaultTest);
-      
+
       const config = useStore.getState().getTestSuite();
-      
+
       expect(config.defaultTest).toBe(stringDefaultTest);
       expect(config.description).toBe('Test config');
     });
@@ -98,14 +98,14 @@ describe('evalConfig store', () => {
         assert: [{ type: 'equals' as const, value: 'test' }],
         vars: { foo: 'bar' },
       };
-      
+
       useStore.getState().setDescription('Test config');
       useStore.getState().setProviders([{ id: 'openai:gpt-4' }]);
       useStore.getState().setPrompts(['Test prompt']);
       useStore.getState().setDefaultTest(objectDefaultTest as any);
-      
+
       const config = useStore.getState().getTestSuite();
-      
+
       expect(config.defaultTest).toEqual(objectDefaultTest);
     });
   });
@@ -130,7 +130,7 @@ describe('evalConfig store', () => {
         assert: [{ type: 'equals' as const, value: 'expected' }],
         vars: { test: 'value' },
       };
-      
+
       const config = {
         description: 'Test suite',
         defaultTest: defaultTestObj as any,
@@ -142,4 +142,4 @@ describe('evalConfig store', () => {
       expect(useStore.getState().defaultTest).toEqual(defaultTestObj);
     });
   });
-}); 
+});
