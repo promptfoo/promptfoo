@@ -88,7 +88,7 @@ describe('CustomTargetConfiguration', () => {
   });
 
   it('handles config save from dialog', async () => {
-    const { rerender } = renderWithTheme(<CustomTargetConfiguration {...defaultProps} />);
+    renderWithTheme(<CustomTargetConfiguration {...defaultProps} />);
 
     const configButton = screen.getByRole('button', { name: /Configure Provider Settings/i });
     fireEvent.click(configButton);

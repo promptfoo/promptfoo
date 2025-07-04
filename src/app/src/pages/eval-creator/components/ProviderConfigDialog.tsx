@@ -115,21 +115,21 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         // Update all form fields, including removing cleared ones
         Object.keys(COMMON_FIELDS).forEach((key) => {
           if (key in localConfig) {
-            if (localConfig[key] !== undefined) {
-              configToSave[key] = localConfig[key];
-            } else {
+            if (localConfig[key] === undefined) {
               // Field was cleared, remove it
               delete configToSave[key];
+            } else {
+              configToSave[key] = localConfig[key];
             }
           }
         });
 
         // Handle deployment_id for Azure providers
         if (isAzureProvider && 'deployment_id' in localConfig) {
-          if (localConfig.deployment_id !== undefined) {
-            configToSave.deployment_id = localConfig.deployment_id;
-          } else {
+          if (localConfig.deployment_id === undefined) {
             delete configToSave.deployment_id;
+          } else {
+            configToSave.deployment_id = localConfig.deployment_id;
           }
         }
       }
@@ -300,14 +300,16 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
       <DialogTitle>
-        Provider Configuration
-        <Typography
-          variant="subtitle1"
-          color="text.secondary"
-          sx={{ mt: 1, fontSize: '0.9rem', fontFamily: 'monospace' }}
-        >
-          {providerId}
-        </Typography>
+        <Box>
+          Provider Configuration
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.5, fontSize: '0.9rem', fontFamily: 'monospace' }}
+          >
+            {providerId}
+          </Typography>
+        </Box>
       </DialogTitle>
       <DialogContent>
         <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
