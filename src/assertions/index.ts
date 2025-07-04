@@ -79,6 +79,9 @@ import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleTraceErrorSpans } from './traceErrorSpans';
+import { handleTraceSpanCount } from './traceSpanCount';
+import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
@@ -310,6 +313,9 @@ export async function runAssertion({
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
+    'trace-error-spans': handleTraceErrorSpans,
+    'trace-span-count': handleTraceSpanCount,
+    'trace-span-duration': handleTraceSpanDuration,
     webhook: handleWebhook,
     pi: handlePiScorer,
   };
