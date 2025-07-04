@@ -788,6 +788,47 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+// Create a partial TestCase schema without description for defaultTest
+const DefaultTestSchema = z
+  .object({
+    vars: VarsSchema.optional(),
+    provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
+    providerOutput: z.union([z.string(), z.object({})]).optional(),
+    assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
+    assertScoringFunction: z
+      .union([
+        z
+          .string()
+          .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS?.join('|')}|py)(?::[\\w.]+)?$`)),
+        z.custom<ScoringFunction>(),
+      ])
+      .optional(),
+    options: z
+      .intersection(
+        z.intersection(PromptConfigSchema, OutputConfigSchema),
+        z.intersection(
+          GradingConfigSchema,
+          z.object({
+            disableVarExpansion: z.boolean().optional(),
+            disableConversationVar: z.boolean().optional(),
+            runSerially: z.boolean().optional(),
+          }),
+        ),
+      )
+      .optional(),
+    threshold: z.number().optional(),
+    metadata: z
+      .intersection(
+        MetadataSchema,
+        z.object({
+          pluginConfig: z.custom<PluginConfig>().optional(),
+          strategyConfig: z.custom<StrategyConfig>().optional(),
+        }),
+      )
+      .optional(),
+  })
+  .strict();
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -817,7 +858,7 @@ export const TestSuiteSchema = z.object({
       z.string().refine((val) => val.startsWith('file://'), {
         message: 'defaultTest string must start with file://',
       }),
-      TestCaseSchema.partial().omit({ description: true }),
+      DefaultTestSchema,
     ])
     .optional(),
 
@@ -954,7 +995,7 @@ export const TestSuiteConfigSchema = z.object({
       z.string().refine((val) => val.startsWith('file://'), {
         message: 'defaultTest string must start with file://',
       }),
-      TestCaseSchema.partial().omit({ description: true }),
+      DefaultTestSchema,
     ])
     .optional(),
 

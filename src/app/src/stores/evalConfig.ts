@@ -1,3 +1,5 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type {
   DerivedMetric,
   EnvOverrides,
@@ -7,9 +9,7 @@ import type {
   TestCase,
   UnifiedConfig,
   Scenario,
-} from '@promptfoo/types';
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+} from '../../../types';
 
 export interface State {
   env: EnvOverrides;

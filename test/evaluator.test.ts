@@ -2915,3 +2915,119 @@ describe('formatVarsForDisplay', () => {
     // Should fit as much as possible within the limit
   });
 });
+
+describe('Evaluator with external defaultTest', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should handle string defaultTest gracefully', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt {{var}}', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      defaultTest: 'file://path/to/defaultTest.yaml' as any, // String should have been resolved before reaching evaluator
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Should handle gracefully even if string wasn't resolved
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].vars).toEqual({ var: 'value' });
+  });
+
+  it('should apply object defaultTest properties correctly', async () => {
+    const defaultTest = {
+      assert: [{ type: 'equals' as const, value: 'expected' }],
+      vars: { defaultVar: 'defaultValue' },
+      options: { provider: 'test-provider' },
+      metadata: { suite: 'test-suite' },
+      threshold: 0.8,
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        { vars: { testVar: 'testValue' } },
+        {
+          vars: { testVar: 'override' },
+          assert: [{ type: 'contains' as const, value: 'exp' }],
+          threshold: 0.9,
+        },
+      ],
+      defaultTest,
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // First test should inherit all defaultTest properties
+    const firstResult = summary.results[0] as any;
+    expect(firstResult.test.assert).toEqual(defaultTest.assert);
+    expect(firstResult.test.vars).toEqual({
+      defaultVar: 'defaultValue',
+      testVar: 'testValue',
+    });
+    expect(firstResult.test.threshold).toBe(0.8);
+    expect(firstResult.test.metadata).toEqual({ suite: 'test-suite' });
+
+    // Second test should merge/override appropriately
+    const secondResult = summary.results[1] as any;
+    expect(secondResult.test.assert).toEqual([
+      ...defaultTest.assert,
+      { type: 'contains' as const, value: 'exp' },
+    ]);
+    expect(secondResult.test.threshold).toBe(0.9); // Override
+  });
+
+  it('should handle invariant check for defaultTest.assert array', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      defaultTest: {
+        assert: 'not-an-array' as any, // Invalid type
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Should throw or handle gracefully
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow();
+  });
+
+  it('should correctly merge defaultTest with test case when defaultTest is object', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test {{var}}', label: 'test' }],
+      tests: [
+        {
+          vars: { var: 'test1' },
+          options: { transformVars: 'vars.transformed = true; return vars;' },
+        },
+      ],
+      defaultTest: {
+        vars: { defaultVar: 'default' },
+        options: {
+          provider: 'default-provider',
+          transformVars: 'vars.defaultTransform = true; return vars;',
+        },
+        assert: [{ type: 'not-equals' as const, value: '' }],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Test case transformVars should override defaultTest transformVars
+    const result = summary.results[0] as any;
+    expect(result.test.options?.transformVars).toBe('vars.transformed = true; return vars;');
+    // But other options should be merged
+    expect(result.test.options?.provider).toBe('default-provider');
+  });
+});
