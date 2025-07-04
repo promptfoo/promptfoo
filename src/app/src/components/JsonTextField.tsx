@@ -6,8 +6,8 @@ interface JsonTextFieldProps extends Omit<TextFieldProps, 'onChange'> {
   onChange?: (parsed: any) => void;
 }
 
-const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, ...props }) => {
-  const [value, setValue] = React.useState('');
+const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, defaultValue, ...props }) => {
+  const [value, setValue] = React.useState(defaultValue || '');
   const [error, setError] = React.useState(false);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,7 +29,7 @@ const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, ...props }) => 
     <TextField
       {...props}
       error={error}
-      helperText={error ? 'Invalid JSON' : ''}
+      helperText={error ? 'Invalid JSON' : props.helperText}
       value={value}
       onChange={handleChange}
     />
