@@ -4,22 +4,10 @@ import Paper from '@mui/material/Paper';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import type { TraceData, TraceSpan } from '@promptfoo/types';
 
-interface SpanData {
-  spanId: string;
-  parentSpanId?: string | null;
-  name: string;
-  startTime: number;
-  endTime?: number | null;
-  attributes?: Record<string, any> | null;
-  statusCode?: number | null;
-  statusMessage?: string | null;
-}
-
-interface TraceData {
-  traceId: string;
-  spans: SpanData[];
-}
+// Use TraceSpan from base types
+type SpanData = TraceSpan;
 
 interface TraceTimelineProps {
   trace: TraceData;
@@ -32,7 +20,7 @@ interface ProcessedSpan extends SpanData {
   children: ProcessedSpan[];
 }
 
-const getSpanStatus = (statusCode?: number | null): { color: string; label: string } => {
+const getSpanStatus = (statusCode?: number): { color: string; label: string } => {
   // From SpanStatusCode in @opentelemetry/api
   if (statusCode === 1) {
     return { color: 'success', label: 'OK' };

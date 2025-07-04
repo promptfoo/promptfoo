@@ -40,6 +40,7 @@ export type EnvVars = {
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
+  PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
@@ -154,6 +155,9 @@ export type EnvVars = {
   // AI21
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
+
+  // AIML API
+  AIML_API_KEY?: string;
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;

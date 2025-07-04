@@ -20,6 +20,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
+| [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
@@ -38,6 +39,9 @@ These metrics are created by logical tests that are run on LLM output.
 | [regex](#regex)                                                 | output matches regex                                               |
 | rouge-n                                                         | Rouge-N score is above a given threshold                           |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
+| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
+| [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
+| [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 
 :::tip
@@ -601,6 +605,129 @@ assert:
     value: 'Yes'
 ```
 
+### Trace-Span-Count
+
+The `trace-span-count` assertion counts the number of spans in a trace that match a given pattern and checks if the count is within specified bounds. This is useful for validating that expected operations occurred in your LLM application.
+
+:::note
+Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
+:::
+
+Example:
+
+```yaml
+assert:
+  # Ensure at least one LLM call was made
+  - type: trace-span-count
+    value:
+      pattern: '*llm*'
+      min: 1
+
+  # Ensure no more than 5 database queries
+  - type: trace-span-count
+    value:
+      pattern: '*database*'
+      max: 5
+
+  # Ensure exactly 2-4 retrieval operations
+  - type: trace-span-count
+    value:
+      pattern: '*retriev*'
+      min: 2
+      max: 4
+```
+
+The `pattern` field supports glob-style matching:
+
+- `*` matches any sequence of characters
+- `?` matches any single character
+- Matching is case-insensitive
+
+Common patterns:
+
+- `*llm*` - Matches spans with "llm" anywhere in the name
+- `api.*` - Matches spans starting with "api."
+- `*.error` - Matches spans ending with ".error"
+
+### Trace-Span-Duration
+
+The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
+
+Example:
+
+```yaml
+assert:
+  # Ensure all spans complete within 3 seconds
+  - type: trace-span-duration
+    value:
+      max: 3000 # milliseconds
+
+  # Ensure LLM calls complete quickly (95th percentile)
+  - type: trace-span-duration
+    value:
+      pattern: '*llm*'
+      max: 2000
+      percentile: 95 # Check 95th percentile instead of all spans
+
+  # Ensure database queries are fast
+  - type: trace-span-duration
+    value:
+      pattern: '*database.query*'
+      max: 100
+```
+
+Key features:
+
+- `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
+- `max`: Maximum allowed duration in milliseconds
+- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+
+The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
+
+### Trace-Error-Spans
+
+The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
+
+Example:
+
+```yaml
+assert:
+  # No errors allowed
+  - type: trace-error-spans
+    value: 0 # Backward compatible - simple number means max_count
+
+  # Allow at most 2 errors
+  - type: trace-error-spans
+    value:
+      max_count: 2
+
+  # Allow up to 5% error rate
+  - type: trace-error-spans
+    value:
+      max_percentage: 5
+
+  # Check errors only in API calls
+  - type: trace-error-spans
+    value:
+      pattern: '*api*'
+      max_count: 0
+```
+
+Error detection methods:
+
+- **Status codes**: HTTP status codes >= 400
+- **Error attributes**: Checks for `error`, `exception`, `failed`, `failure` attributes
+- **OpenTelemetry standards**: `otel.status_code: ERROR`, `status.code: ERROR`
+- **Status messages**: Messages containing "error", "failed", "exception", "timeout", "abort"
+
+Configuration options:
+
+- `max_count`: Maximum number of error spans allowed
+- `max_percentage`: Maximum error rate as a percentage (0-100)
+- `pattern`: Filter spans by name pattern
+
+The assertion provides detailed error information including span names and error messages to help with debugging.
+
 ### Webhook
 
 The `webhook` assertion sends the LLM output to a specified webhook URL for custom validation. The webhook should return a JSON object with a `pass` property set to `true` or `false`.
@@ -909,6 +1036,145 @@ The F-score will be calculated automatically after the eval completes. A score c
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
+
+### Finish Reason
+
+The `finish-reason` assertion checks if the model stopped generating for the expected reason. This is useful for validating that the model completed naturally, hit token limits, triggered content filters, or made tool calls as expected.
+
+#### Standard Finish Reasons
+
+Models can stop generating for various reasons, which are normalized to these standard values:
+
+- **`stop`**: Natural completion (reached end of response, stop sequence matched)
+- **`length`**: Token limit reached (max_tokens exceeded, context length reached)
+- **`content_filter`**: Content filtering triggered due to safety policies
+- **`tool_calls`**: Model made function/tool calls
+
+#### Basic Usage
+
+```yaml
+assert:
+  - type: finish-reason
+    value: stop # Expects natural completion
+```
+
+#### Common Examples
+
+**Test for natural completion:**
+
+```yaml
+tests:
+  - vars:
+      prompt: 'Write a short poem about nature'
+    assert:
+      - type: finish-reason
+        value: stop # Should complete naturally
+```
+
+**Test for token limit:**
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      max_tokens: 10 # Very short limit
+tests:
+  - vars:
+      prompt: 'Write a very long essay about artificial intelligence'
+    assert:
+      - type: finish-reason
+        value: length # Should hit token limit
+```
+
+**Test for tool usage:**
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      tools:
+        - name: get_weather
+          description: Get current weather
+tests:
+  - vars:
+      prompt: 'What is the weather like in San Francisco?'
+    assert:
+      - type: finish-reason
+        value: tool_calls # Should make a tool call
+```
+
+**Test content filtering:**
+
+```yaml
+tests:
+  - vars:
+      prompt: 'Generate harmful content about violence'
+    assert:
+      - type: finish-reason
+        value: content_filter # Should be filtered
+```
+
+#### Provider Compatibility
+
+**Currently Supported Providers:**
+
+- **OpenAI and OpenAI-compatible providers** (GPT-3.5, GPT-4, Azure OpenAI, etc.)
+- **Anthropic** (Claude models)
+
+The assertion automatically normalizes provider-specific values:
+
+- **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+
+:::note
+Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
+:::
+
+#### Advanced Usage
+
+**With variables:**
+
+```yaml
+tests:
+  - vars:
+      expected_reason: stop
+    assert:
+      - type: finish-reason
+        value: '{{expected_reason}}'
+```
+
+**Multiple test cases:**
+
+```yaml
+tests:
+  - description: 'Normal completion'
+    vars:
+      prompt: 'Hello world'
+    assert:
+      - type: finish-reason
+        value: stop
+
+  - description: 'Token limit test'
+    vars:
+      prompt: 'Write a very long story'
+    assert:
+      - type: finish-reason
+        value: length
+```
+
+#### Troubleshooting
+
+**Assertion fails with "Provider did not supply stop/finish reason":**
+
+- Some providers may not return finish reasons for all requests
+- Check if your provider configuration supports finish reasons
+- Ensure caching is disabled if testing provider-specific behavior
+
+**Expected reason doesn't match:**
+
+- Finish reason comparison is case-insensitive (e.g., `stop`, `Stop`, and `STOP` are all valid)
+- Standard normalized values: `stop`, `length`, `content_filter`, `tool_calls`
+- Check provider documentation for specific finish reason values
 
 ### Is-Refusal
 

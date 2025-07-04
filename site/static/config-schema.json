@@ -66,6 +66,9 @@
                             "AI21_API_KEY": {
                               "type": "string"
                             },
+                            "AIML_API_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
@@ -524,6 +527,7 @@
                                               "cost",
                                               "equals",
                                               "factuality",
+                                              "finish-reason",
                                               "g-eval",
                                               "gleu",
                                               "guardrails",
@@ -553,6 +557,9 @@
                                               "rouge-n",
                                               "similar",
                                               "starts-with",
+                                              "trace-error-spans",
+                                              "trace-span-count",
+                                              "trace-span-duration",
                                               "webhook"
                                             ]
                                           },
@@ -586,6 +593,9 @@
                                         "type": "string"
                                       },
                                       "transform": {
+                                        "type": "string"
+                                      },
+                                      "contextTransform": {
                                         "type": "string"
                                       }
                                     },
