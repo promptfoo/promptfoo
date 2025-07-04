@@ -111,7 +111,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       } else {
         // Save from form editor - merge with original config to preserve non-form fields
         configToSave = { ...originalConfigRef.current };
-        
+
         // Update all form fields, including removing cleared ones
         Object.keys(COMMON_FIELDS).forEach((key) => {
           if (key in localConfig) {
@@ -123,7 +123,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             }
           }
         });
-        
+
         // Handle deployment_id for Azure providers
         if (isAzureProvider && 'deployment_id' in localConfig) {
           if (localConfig.deployment_id !== undefined) {
@@ -170,7 +170,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     Object.keys(COMMON_FIELDS).forEach((key) => {
       formConfig[key] = config[key]; // This will be undefined if not in config
     });
-    
+
     // Add deployment_id for Azure providers
     if (isAzureProvider) {
       formConfig.deployment_id = config.deployment_id;
@@ -196,7 +196,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       Object.keys(COMMON_FIELDS).forEach((key) => {
         newLocalConfig[key] = parsed[key]; // This will be undefined if not in parsed
       });
-      
+
       if (isAzureProvider) {
         newLocalConfig.deployment_id = parsed.deployment_id;
       }
