@@ -30,14 +30,14 @@ describe('CustomTargetConfiguration', () => {
     renderWithTheme(<CustomTargetConfiguration {...defaultProps} />);
 
     expect(screen.getByText('Custom Target Configuration')).toBeInTheDocument();
-    expect(screen.getByLabelText('Target ID')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Target ID/i })).toBeInTheDocument();
     expect(screen.getByText('Provider Configuration')).toBeInTheDocument();
   });
 
   it('updates target ID when changed', async () => {
     renderWithTheme(<CustomTargetConfiguration {...defaultProps} />);
 
-    const targetIdInput = screen.getByLabelText('Target ID');
+    const targetIdInput = screen.getByRole('textbox', { name: /Target ID/i });
     fireEvent.change(targetIdInput, { target: { value: 'openai:gpt-4' } });
 
     await waitFor(() => {
@@ -68,7 +68,6 @@ describe('CustomTargetConfiguration', () => {
     renderWithTheme(<CustomTargetConfiguration {...propsWithConfig} />);
 
     expect(screen.getByText('Current Configuration:')).toBeInTheDocument();
-    // Check that the JSON configuration is displayed
     expect(screen.getByText(/"temperature": 0.7/)).toBeInTheDocument();
     expect(screen.getByText(/"max_tokens": 1024/)).toBeInTheDocument();
   });
@@ -80,27 +79,30 @@ describe('CustomTargetConfiguration', () => {
     fireEvent.click(configButton);
 
     await waitFor(() => {
-      // The dialog should be opened (mocked in tests)
-      expect(screen.getByText('Provider Configuration')).toBeInTheDocument();
+      const dialogTitle = screen.getByRole('heading', {
+        name: /Provider Configuration/i,
+        level: 2,
+      });
+      expect(dialogTitle).toBeInTheDocument();
     });
   });
 
   it('handles config save from dialog', async () => {
     const { rerender } = renderWithTheme(<CustomTargetConfiguration {...defaultProps} />);
 
-    // Click configure button to open dialog
     const configButton = screen.getByRole('button', { name: /Configure Provider Settings/i });
     fireEvent.click(configButton);
 
-    // Wait for dialog to open
     await waitFor(() => {
-      expect(screen.getByText('Provider Configuration')).toBeInTheDocument();
+      const dialogTitle = screen.getByRole('heading', {
+        name: /Provider Configuration/i,
+        level: 2,
+      });
+      expect(dialogTitle).toBeInTheDocument();
     });
 
-    // Mock saving configuration
     const newConfig = { temperature: 0.9, apiKey: 'new-key' };
 
-    // Since the dialog is mocked, we simulate the save action
     defaultProps.updateCustomTarget('config', newConfig);
     defaultProps.setRawConfigJson(JSON.stringify(newConfig, null, 2));
 
