@@ -105,6 +105,27 @@ providers:
 - Each entry can be a local launch or a remote URL (if supported).
 - All tools from all servers will be available to the provider.
 - You can specify different headers for each server when using URL connections.
+- You can also connect to the same server multiple times if needed:
+
+```yaml
+providers:
+  - id: anthropic:claude-3-5-sonnet-20241022
+    config:
+      mcp:
+        enabled: true
+        servers:
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-memory']
+            name: memory
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-filesystem']
+            name: filesystem
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-github']
+            name: github
+```
+
+This configuration connects a single provider to multiple MCP servers, giving it access to memory storage, filesystem operations, and GitHub integration simultaneously.
 
 ## Using Multiple MCP Servers
 
