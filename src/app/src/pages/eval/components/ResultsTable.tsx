@@ -21,8 +21,10 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
@@ -190,6 +192,14 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  // Track if this is the initial load
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  useEffect(() => {
+    if (table && !hasLoadedOnce) {
+      setHasLoadedOnce(true);
+    }
+  }, [table, hasLoadedOnce]);
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1009,201 +1019,247 @@ function ResultsTable({
           </Box>
         )}
 
-      <table
-        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-        style={{
-          wordBreak,
-        }}
-      >
-        <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
-          {stickyHeader && isCollapsed && (
-            <div className="header-dismiss">
-              <IconButton
-                onClick={() => setStickyHeader(false)}
-                size="small"
-                sx={{ color: 'text.primary' }}
+      <Box sx={{ position: 'relative' }}>
+        {/* Show linear progress for updates (not initial load) */}
+        {isFetching && hasLoadedOnce && (
+          <LinearProgress
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 2,
+              zIndex: 10,
+            }}
+          />
+        )}
+
+        {/* Show skeleton loader only for initial load */}
+        {isFetching && !hasLoadedOnce ? (
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '40px',
+              borderRadius: '4px',
+              marginTop: '20px',
+              marginBottom: '20px',
+            }}
+          >
+            <CircularProgress size={32} />
+            <Typography variant="body1" sx={{ marginLeft: '12px' }}>
+              Loading results...
+            </Typography>
+          </Box>
+        ) : (
+          <>
+            <table
+              className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+              style={{
+                wordBreak,
+                opacity: isFetching ? 0.6 : 1,
+                transition: 'opacity 0.2s ease-in-out',
+              }}
+            >
+              <thead
+                className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}
               >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </div>
-          )}
-          {reactTable.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  colSpan={header.colSpan}
-                  style={{
-                    width: header.getSize(),
-                  }}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  <div
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                  />
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {reactTable.getRowModel().rows.map((row, rowIndex) => {
-            let colBorderDrawn = false;
-
-            return (
-              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
-                {row.getVisibleCells().map((cell) => {
-                  const isMetadataCol =
-                    cell.column.id.startsWith('Variable') || cell.column.id === 'description';
-                  const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
-                  if (shouldDrawColBorder) {
-                    colBorderDrawn = true;
-                  }
-                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
-
-                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
-                  const value = cell.getValue();
-                  if (
-                    typeof value === 'string' &&
-                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                      value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
-                  ) {
-                    const imgSrc = value.startsWith('data:')
-                      ? value
-                      : `data:image/jpeg;base64,${value}`;
-                    cellContent = (
-                      <>
-                        <img
-                          src={imgSrc}
-                          alt="Base64 encoded image"
-                          style={{
-                            maxWidth: '100%',
-                            height: 'auto',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => toggleLightbox(imgSrc)}
+                {stickyHeader && isCollapsed && (
+                  <div className="header-dismiss">
+                    <IconButton
+                      onClick={() => setStickyHeader(false)}
+                      size="small"
+                      sx={{ color: 'text.primary' }}
+                    >
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </div>
+                )}
+                {reactTable.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id} className="header">
+                    {headerGroup.headers.map((header) => (
+                      <th
+                        key={header.id}
+                        colSpan={header.colSpan}
+                        style={{
+                          width: header.getSize(),
+                        }}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
                         />
-                        {lightboxOpen && lightboxImage === imgSrc && (
-                          <div className="lightbox" onClick={() => toggleLightbox()}>
-                            <img
-                              src={lightboxImage}
-                              alt="Lightbox"
-                              style={{
-                                maxWidth: '90%',
-                                maxHeight: '90vh',
-                                objectFit: 'contain',
-                              }}
-                            />
-                          </div>
-                        )}
-                      </>
-                    );
-                  }
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                {reactTable.getRowModel().rows.map((row, rowIndex) => {
+                  let colBorderDrawn = false;
 
                   return (
-                    <td
-                      key={cell.id}
-                      style={{
-                        width: cell.column.getSize(),
-                      }}
-                      className={`${isMetadataCol ? 'variable' : ''} ${
-                        shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
-                    >
-                      {cellContent}
-                    </td>
+                    <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
+                      {row.getVisibleCells().map((cell) => {
+                        const isMetadataCol =
+                          cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                        const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
+                        if (shouldDrawColBorder) {
+                          colBorderDrawn = true;
+                        }
+                        const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+
+                        let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+                        const value = cell.getValue();
+                        if (
+                          typeof value === 'string' &&
+                          (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
+                            value.match(/^\/[0-9A-Za-z+/]{4}.*/))
+                        ) {
+                          const imgSrc = value.startsWith('data:')
+                            ? value
+                            : `data:image/jpeg;base64,${value}`;
+                          cellContent = (
+                            <>
+                              <img
+                                src={imgSrc}
+                                alt="Base64 encoded image"
+                                style={{
+                                  maxWidth: '100%',
+                                  height: 'auto',
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() => toggleLightbox(imgSrc)}
+                              />
+                              {lightboxOpen && lightboxImage === imgSrc && (
+                                <div className="lightbox" onClick={() => toggleLightbox()}>
+                                  <img
+                                    src={lightboxImage}
+                                    alt="Lightbox"
+                                    style={{
+                                      maxWidth: '90%',
+                                      maxHeight: '90vh',
+                                      objectFit: 'contain',
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </>
+                          );
+                        }
+
+                        return (
+                          <td
+                            key={cell.id}
+                            style={{
+                              width: cell.column.getSize(),
+                            }}
+                            className={`${isMetadataCol ? 'variable' : ''} ${
+                              shouldDrawRowBorder ? 'first-prompt-row' : ''
+                            } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
+                          >
+                            {cellContent}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   );
                 })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {pageCount > 1 && (
-        <Box
-          className="pagination"
-          mx={1}
-          sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
-        >
-          <Button
-            onClick={() => {
-              setPagination((prev) => ({
-                ...prev,
-                pageIndex: Math.max(prev.pageIndex - 1, 0),
-              }));
-              clearRowIdFromUrl();
-              window.scrollTo(0, 0);
-            }}
-            disabled={reactTable.getState().pagination.pageIndex === 0}
-            variant="contained"
-          >
-            Previous
-          </Button>
-          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            Page
-            <TextField
-              size="small"
-              type="number"
-              value={reactTable.getState().pagination.pageIndex + 1}
-              onChange={(e) => {
-                const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                setPagination((prev) => ({
-                  ...prev,
-                  pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                }));
-                clearRowIdFromUrl();
-              }}
-              InputProps={{
-                style: { width: '60px', textAlign: 'center' },
-              }}
-              variant="outlined"
-            />
-            <span>of {pageCount}</span>
-          </Typography>
+              </tbody>
+            </table>
+            {pageCount > 1 && (
+              <Box
+                className="pagination"
+                mx={1}
+                sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
+              >
+                <Button
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: Math.max(prev.pageIndex - 1, 0),
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={reactTable.getState().pagination.pageIndex === 0 || isFetching}
+                  variant="contained"
+                >
+                  Previous
+                </Button>
+                <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Page
+                  <TextField
+                    size="small"
+                    type="number"
+                    disabled={isFetching}
+                    value={reactTable.getState().pagination.pageIndex + 1}
+                    onChange={(e) => {
+                      const page = e.target.value ? Number(e.target.value) - 1 : 0;
+                      setPagination((prev) => ({
+                        ...prev,
+                        pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
+                      }));
+                      clearRowIdFromUrl();
+                    }}
+                    InputProps={{
+                      style: { width: '60px', textAlign: 'center' },
+                    }}
+                    variant="outlined"
+                  />
+                  <span>of {pageCount}</span>
+                </Typography>
 
-          <Button
-            onClick={() => {
-              setPagination((prev) => ({
-                ...prev,
-                pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
-              }));
-              clearRowIdFromUrl();
-              window.scrollTo(0, 0);
-            }}
-            disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-            variant="contained"
-          >
-            Next
-          </Button>
-          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Select
-              value={pagination.pageSize}
-              onChange={(e) => {
-                setPagination((prev) => ({
-                  ...prev,
-                  pageSize: Number(e.target.value),
-                }));
-                window.scrollTo(0, 0);
-              }}
-              displayEmpty
-              inputProps={{ 'aria-label': 'Results per page' }}
-              size="small"
-              sx={{ m: 1, minWidth: 80 }}
-            >
-              <MenuItem value={10}>10</MenuItem>
-              <MenuItem value={50}>50</MenuItem>
-              <MenuItem value={100}>100</MenuItem>
-              <MenuItem value={500}>500</MenuItem>
-              <MenuItem value={1000}>1000</MenuItem>
-            </Select>
-            <span>results per page</span>
-          </Typography>
-        </Box>
-      )}
+                <Button
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={
+                    reactTable.getState().pagination.pageIndex + 1 >= pageCount || isFetching
+                  }
+                  variant="contained"
+                >
+                  Next
+                </Button>
+                <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Select
+                    value={pagination.pageSize}
+                    disabled={isFetching}
+                    onChange={(e) => {
+                      setPagination((prev) => ({
+                        ...prev,
+                        pageSize: Number(e.target.value),
+                      }));
+                      window.scrollTo(0, 0);
+                    }}
+                    displayEmpty
+                    inputProps={{ 'aria-label': 'Results per page' }}
+                    size="small"
+                    sx={{ m: 1, minWidth: 80 }}
+                  >
+                    <MenuItem value={10}>10</MenuItem>
+                    <MenuItem value={50}>50</MenuItem>
+                    <MenuItem value={100}>100</MenuItem>
+                    <MenuItem value={500}>500</MenuItem>
+                    <MenuItem value={1000}>1000</MenuItem>
+                  </Select>
+                  <span>results per page</span>
+                </Typography>
+              </Box>
+            )}
+          </>
+        )}
+      </Box>
     </div>
   );
 }

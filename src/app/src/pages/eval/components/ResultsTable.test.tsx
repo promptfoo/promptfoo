@@ -1090,3 +1090,166 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     expect(expectedGradingResult.componentResults[1].assertion?.type).toBe('contains');
   });
 });
+
+describe('ResultsTable Loading Indicator', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: true,
+    }));
+  });
+
+  it('displays loading spinner and message when isFetching is true', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    // The table exists from the mock, so hasLoadedOnce is true and we see LinearProgress
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    // The table should be visible but with reduced opacity
+    const table = screen.getByRole('table');
+    expect(table).toBeInTheDocument();
+    expect(table).toHaveStyle({ opacity: '0.6' });
+  });
+});
+
+describe('ResultsTable', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'failures' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('displays "No results found" message when isFetching transitions to false and filteredResultsCount is 0', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      filteredResultsCount: 0,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.queryByText('Loading filtered results...')).toBeNull();
+    expect(screen.getByText('No results found for the current filters.')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Layout Stability', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 0,
+    }));
+  });
+
+  it('displays loading indicator when isFetching is true', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: true,
+      filteredResultsCount: 0,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    // When table exists and is fetching, we show a LinearProgress bar and the table with reduced opacity
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveStyle({ opacity: '0.6' });
+  });
+
+  it('displays the table when isFetching is false', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 0,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+});
