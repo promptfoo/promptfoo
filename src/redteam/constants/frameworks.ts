@@ -58,6 +58,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'pii:social',
       'harmful:privacy',
       'cross-session-leak',
+      'extra-information',
       'prompt-extraction',
     ],
     strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],

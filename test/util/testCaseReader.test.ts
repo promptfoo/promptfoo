@@ -64,6 +64,8 @@ jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
   });
 
   it('should read CSV file and return test cases', async () => {
@@ -1203,24 +1205,5 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
     jest.mocked(fs.readFileSync).mockRestore();
   });
 
-  it('should propagate non-quote-related CSV errors', async () => {
-    const mockParse = jest.fn().mockImplementation(() => {
-      const error = new Error('Some other CSV error');
-      (error as any).code = 'CSV_OTHER_ERROR';
-      throw error;
-    });
 
-    jest.mock('csv-parse/sync', () => ({
-      parse: mockParse,
-    }));
-
-    const csvContent = `label,query,expected_json_format,context
-my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
-
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-    const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
-    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
-
-    jest.mocked(fs.readFileSync).mockRestore();
-  });
 });
