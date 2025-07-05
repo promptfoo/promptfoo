@@ -298,7 +298,7 @@ providers:
   - id: file://multi_agent_provider.py
     label: "Multi-Agent System"
     
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1
     label: "Single Agent"
     config:
       systemPrompt: |

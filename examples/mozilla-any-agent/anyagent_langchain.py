@@ -8,7 +8,7 @@ import os
 agent = AnyAgent.create(
     "langchain",  # Use LangChain framework
     AgentConfig(
-        model_id="gpt-4o-mini",
+        model_id="gpt-4.1",
         instructions="You are a helpful assistant."
     )
 )

@@ -40,7 +40,7 @@ from any_agent.tools import search_web, visit_webpage
 agent = AnyAgent.create(
     "tinyagent",
     AgentConfig(
-        model_id="gpt-4o-mini",
+        model_id="gpt-4.1",
         instructions="You are a helpful assistant. Use tools when needed.",
         tools=[search_web, visit_webpage]
     )
@@ -68,7 +68,7 @@ Create similar files for other frameworks:
 agent = AnyAgent.create(
     "langchain",  # Different framework
     AgentConfig(
-        model_id="gpt-4o-mini",
+        model_id="gpt-4.1",
         instructions="You are a helpful assistant. Use tools when needed.",
         tools=[search_web, visit_webpage]
     )
@@ -170,7 +170,7 @@ def calculate_investment_return(
 agent = AnyAgent.create(
     "langchain",
     AgentConfig(
-        model_id="gpt-4o-mini",
+        model_id="gpt-4.1",
         instructions="You are a financial advisor assistant.",
         tools=[get_stock_price, calculate_investment_return]
     )
@@ -232,7 +232,7 @@ def call_api(prompt, options, context):
     agent = AnyAgent.create(
         framework,
         AgentConfig(
-            model_id="gpt-4o-mini",
+            model_id="o4-mini",
             instructions="You are a helpful assistant.",
             tools=[]
         )
@@ -381,7 +381,7 @@ mcp_server = MCPServer("path/to/mcp/server")
 agent = AnyAgent.create(
     "langchain",
     AgentConfig(
-        model_id="gpt-4o-mini",
+        model_id="gpt-4.1",
         mcp_servers=[mcp_server]
     )
 )

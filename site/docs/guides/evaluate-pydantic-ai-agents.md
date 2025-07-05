@@ -52,7 +52,7 @@ def check_order_status(ctx: RunContext, order_id: str) -> dict:
 
 # Create agent
 agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:o4-mini",
     output_type=CustomerResponse,
     system_prompt=(
         "You are a helpful customer service agent. "
@@ -184,19 +184,19 @@ def create_agent(prompt: str) -> Agent:
     """Create agent with appropriate output type"""
     if "order" in prompt.lower():
         return Agent(
-            "openai:gpt-4o-mini",
+            "openai:gpt-4.1",
             output_type=OrderDetails,
             system_prompt="Extract order information"
         )
     elif "product" in prompt.lower():
         return Agent(
-            "openai:gpt-4o-mini",
+            "openai:gpt-4.1",
             output_type=ProductInfo,
             system_prompt="Provide product information"
         )
     else:
         return Agent(
-            "openai:gpt-4o-mini",
+            "openai:o4-mini",
             output_type=GeneralResponse,
             system_prompt="Provide general assistance"
         )
@@ -283,9 +283,9 @@ Use promptfoo to compare how different models perform with structured outputs:
 ```yaml
 providers:
   - id: file://pydantic_agent.py
-    label: "GPT-4o Mini"
+    label: "O4 Mini"
     config:
-      model: "openai:gpt-4o-mini"
+      model: "openai:o4-mini"
   
   - id: file://pydantic_agent.py
     label: "GPT-4o"
