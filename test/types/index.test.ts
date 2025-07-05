@@ -584,6 +584,85 @@ describe('TestSuiteConfigSchema', () => {
     });
   });
 
+  describe('outputPath validation', () => {
+    it('should provide specific error message for invalid handler extension', () => {
+      const config = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        outputPath: 'file://handler.txt:processResults',
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+      expect(result.error?.errors[0].message).toContain(
+        'Output handler "file://handler.txt:processResults"',
+      );
+      expect(result.error?.errors[0].message).toContain('has invalid extension ".txt"');
+      expect(result.error?.errors[0].message).toContain(
+        'Handler files must have .js, .mjs, .ts, .cjs, .mts, .cts, or .py extension',
+      );
+    });
+
+    it('should allow valid output file formats', () => {
+      const validFormats = ['csv', 'json', 'jsonl', 'yaml', 'yml', 'txt', 'html'];
+
+      validFormats.forEach((format) => {
+        const config = {
+          providers: ['provider1'],
+          prompts: ['prompt1'],
+          outputPath: `output.${format}`,
+        };
+
+        const result = TestSuiteConfigSchema.safeParse(config);
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it('should allow handler files with valid extensions', () => {
+      const validHandlers = [
+        'file://handler.js',
+        'file://handler.mjs',
+        'file://handler.ts',
+        'file://handler.py',
+        'handler.js:processResults',
+        'path/to/handler.py:custom_function',
+      ];
+
+      validHandlers.forEach((handler) => {
+        const config = {
+          providers: ['provider1'],
+          prompts: ['prompt1'],
+          outputPath: handler,
+        };
+
+        const result = TestSuiteConfigSchema.safeParse(config);
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it('should allow Google Sheets URLs', () => {
+      const config = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        outputPath: 'https://docs.google.com/spreadsheets/d/1234567890/edit',
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should allow arrays of output paths', () => {
+      const config = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        outputPath: ['results.json', 'file://handler.js', 'output.csv'],
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+  });
+
   for (const file of configFiles) {
     it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');

@@ -378,8 +378,17 @@ export async function doEval(
       (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
     );
     if (paths.length) {
-      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+      try {
+        await writeMultipleOutputs(paths, evalRecord, shareableUrl);
+        logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+      } catch (error) {
+        logger.error(
+          chalk.red(
+            `Failed to write output: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+        // Continue execution - don't fail the entire eval run due to output handler errors
+      }
     }
 
     printBorder();
@@ -850,6 +859,22 @@ export function evalCommand(
       }
 
       for (const maybeFilePath of validatedOpts.output ?? []) {
+        // Skip validation for handler paths (file:// prefix or script files)
+        const isHandlerPath =
+          maybeFilePath.startsWith('file://') ||
+          maybeFilePath.endsWith('.js') ||
+          maybeFilePath.endsWith('.mjs') ||
+          maybeFilePath.endsWith('.ts') ||
+          maybeFilePath.endsWith('.py') ||
+          maybeFilePath.includes('.js:') ||
+          maybeFilePath.includes('.py:') ||
+          maybeFilePath.includes('.mjs:') ||
+          maybeFilePath.includes('.ts:');
+
+        if (isHandlerPath) {
+          continue;
+        }
+
         const { data: extension } = OutputFileExtension.safeParse(
           maybeFilePath.split('.').pop()?.toLowerCase(),
         );

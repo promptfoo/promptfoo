@@ -908,6 +908,30 @@ export const TestSuiteSchema = z.object({
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
+// Helper functions for output path validation
+function parseOutputPath(path: string): { filePath: string; hasFunction: boolean; ext: string } {
+  let filePath = path.startsWith('file://') ? path.slice('file://'.length) : path;
+  let hasFunction = false;
+
+  // Check for function name (e.g., file.py:function_name)
+  const colonIndex = filePath.lastIndexOf(':');
+  if (colonIndex > 1 && !(/^[A-Za-z]:/.test(filePath) && colonIndex === 1)) {
+    const afterColon = filePath.substring(colonIndex + 1);
+    if (afterColon && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(afterColon)) {
+      hasFunction = true;
+      filePath = filePath.substring(0, colonIndex);
+    }
+  }
+
+  const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
+  return { filePath, hasFunction, ext };
+}
+
+function isHandlerExtension(ext: string): boolean {
+  const HANDLER_EXTENSIONS = ['.js', '.mjs', '.ts', '.cjs', '.mts', '.cts', '.py'];
+  return HANDLER_EXTENSIONS.includes(ext);
+}
+
 export const TestSuiteConfigSchema = z.object({
   // Optional tags to describe the test suite
   tags: z.record(z.string(), z.string()).optional(),
@@ -951,7 +975,37 @@ export const TestSuiteConfigSchema = z.object({
   defaultTest: TestCaseSchema.partial().omit({ description: true }).optional(),
 
   // Path to write output. Writes to console/web viewer if not set.
-  outputPath: z.union([z.string(), z.array(z.string())]).optional(),
+  outputPath: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .superRefine((val, ctx) => {
+      if (!val) {
+        return;
+      }
+      const paths = Array.isArray(val) ? val : [val];
+
+      for (const path of paths) {
+        // Skip Google Sheets URLs
+        if (path.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
+          continue;
+        }
+
+        // Parse the path to extract file and potential function name
+        const parsedPath = parseOutputPath(path);
+
+        // If it has a function name or handler extension, validate as handler
+        if (
+          (parsedPath.hasFunction || isHandlerExtension(parsedPath.ext)) &&
+          !isHandlerExtension(parsedPath.ext)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Output handler "${path}" has invalid extension "${parsedPath.ext}". Handler files must have .js, .mjs, .ts, .cjs, .mts, .cts, or .py extension.`,
+          });
+        }
+        // Non-handler paths are allowed (directories, standard output formats, etc.)
+      }
+    }),
 
   // Determines whether or not sharing is enabled.
   sharing: z
@@ -1128,11 +1182,43 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
 export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
 
-// File exported as --output option
+/**
+ * Type for output handler functions that process evaluation results
+ *
+ * @param data - The evaluation results and metadata
+ * @returns Promise or value that resolves when processing is complete
+ *
+ * @example
+ * ```javascript
+ * // JavaScript handler
+ * module.exports = async function handleResults(data) {
+ *   console.log(`Eval ${data.evalId}: ${data.results.stats.successes}/${data.results.stats.total} passed`);
+ *   // Send to monitoring, database, etc.
+ * };
+ * ```
+ *
+ * @example
+ * ```python
+ * # Python handler
+ * def handle_output(data):
+ *     print(f"Eval {data['evalId']}: {data['results']['stats']['successes']}/{data['results']['stats']['total']} passed")
+ *     # Process results, send alerts, etc.
+ * ```
+ */
+export type OutputHandler = (data: OutputFile) => void | Promise<void>;
+
+/**
+ * Structure passed to output handlers and saved to output files
+ * Contains complete evaluation results and configuration
+ */
 export interface OutputFile {
+  /** Unique identifier for this evaluation run */
   evalId: string | null;
+  /** Complete evaluation results including all test outcomes */
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
+  /** Configuration used for this evaluation */
   config: Partial<UnifiedConfig>;
+  /** URL for sharing results (if sharing is enabled) */
   shareableUrl: string | null;
 }
 
