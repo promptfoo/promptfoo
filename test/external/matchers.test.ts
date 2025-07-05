@@ -222,7 +222,7 @@ describe('matchesConversationRelevance', () => {
         output: 'Paris',
       },
     ];
-    const customRubric = 'Custom rubric template with {{messages}}';
+    const customRubric = 'Custom rubric template with {{ messages | dump(2) }}';
 
     await matchesConversationRelevance(messages, 0.5, { messages }, { rubricPrompt: customRubric });
     const prompt = mockProvider.callApi.mock.calls[0][0];

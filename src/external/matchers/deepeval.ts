@@ -3,8 +3,9 @@
 import dedent from 'dedent';
 import { getAndCheckProvider, fail } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
-import type { GradingConfig, GradingResult } from '../../types';
+import type { GradingConfig, GradingResult, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
+import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
@@ -14,34 +15,9 @@ export interface Message {
   output: string | object;
 }
 
-function fromVars(vars?: Record<string, string | object>) {
-  if (!vars) {
-    return {};
-  }
-
-  const ret: Record<string, string> = {};
-  for (const [key, value] of Object.entries(vars)) {
-    if (typeof value === 'object') {
-      ret[key] = JSON.stringify(value, null, 2);
-    } else {
-      ret[key] = JSON.stringify(value, null, 2).slice(1, -1);
-    }
-  }
-
-  return ret;
-}
-
-function parseJsonResponse(output: string): any {
-  const match = output.match(/```(?:json)?([^`]+)```/);
-  if (match) {
-    output = match[1].trim();
-  }
-
-  try {
-    return JSON.parse(output);
-  } catch (err) {
-    throw new Error(`Failed to parse LLM output (${output}) as JSON: ${err}`);
-  }
+interface VerdictResult {
+  verdict: 'yes' | 'no';
+  reason?: string;
 }
 
 export async function matchesConversationRelevance(
@@ -57,17 +33,14 @@ export async function matchesConversationRelevance(
     'conversation relevancy check',
   );
 
-  const tokensUsed = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-  };
+  // First, render any variables within the messages themselves
+  const renderedMessages = messages.map(msg => ({
+    input: typeof msg.input === 'string' && vars ? nunjucks.renderString(msg.input, vars) : msg.input,
+    output: typeof msg.output === 'string' && vars ? nunjucks.renderString(msg.output, vars) : msg.output,
+  }));
 
   // Generate verdict using LLM
-  const rubricPrompt =
-    grading?.rubricPrompt ||
-    dedent`Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST \`output\` is relevant to the LAST \`input\` in messages. The JSON will have 2 fields: 'verdict' and 'reason'.
+  const defaultRubricPrompt = dedent`Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST \`output\` is relevant to the LAST \`input\` in messages. The JSON will have 2 fields: 'verdict' and 'reason'.
   The 'verdict' key should STRICTLY be either 'yes' or 'no', which states whether the last \`output\` is relevant to the last \`input\`. 
   Provide a 'reason' ONLY if the answer is 'no'. 
   You MUST USE the previous messages (if any) provided in the list of messages to make an informed judgement on relevancy.
@@ -81,21 +54,17 @@ export async function matchesConversationRelevance(
   - Vague LLM responses to vague inputs, such as greetings DOES NOT count as irrelevant to the conversation.
   **
   Messages:
-  ${JSON.stringify(messages, null, 2)}
+  {{ messages | dump(2) }}
   JSON:`;
 
+  const rubricPrompt = grading?.rubricPrompt || defaultRubricPrompt;
+  
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    ...fromVars(vars),
-  });
+  const promptText = nunjucks.renderString(rubricPrompt, { messages: renderedMessages, ...(vars || {}) });
 
   const resp = await textProvider.callApi(promptText);
   if (resp.error || !resp.output) {
-    tokensUsed.total += resp.tokenUsage?.total || 0;
-    tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
-    tokensUsed.completion += resp.tokenUsage?.completion || 0;
-    tokensUsed.cached += resp.tokenUsage?.cached || 0;
-    return fail(resp.error || 'No output', tokensUsed);
+    return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(
@@ -104,7 +73,12 @@ export async function matchesConversationRelevance(
   );
 
   try {
-    const result = parseJsonResponse(resp.output);
+    const jsonObjects = extractJsonObjects(resp.output);
+    if (jsonObjects.length === 0) {
+      throw new Error('No JSON object found in response');
+    }
+    
+    const result = jsonObjects[0] as VerdictResult;
     const pass = result.verdict === 'yes';
     const score = pass ? 1 : 0;
 
@@ -112,12 +86,7 @@ export async function matchesConversationRelevance(
       pass: score >= threshold - Number.EPSILON,
       score,
       reason: result.reason || `Response ${pass ? 'is' : 'is not'} relevant to the input`,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        cached: resp.tokenUsage?.cached || 0,
-      },
+      tokensUsed: resp.tokenUsage as TokenUsage,
     };
   } catch (err) {
     return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
