@@ -1123,8 +1123,12 @@ describe('ResultsTable Loading Indicator', () => {
 
   it('displays loading spinner and message when isFetching is true', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Loading filtered results...')).toBeInTheDocument();
+    // The table exists from the mock, so hasLoadedOnce is true and we see LinearProgress
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    // The table should be visible but with reduced opacity
+    const table = screen.getByRole('table');
+    expect(table).toBeInTheDocument();
+    expect(table).toHaveStyle({ opacity: '0.6' });
   });
 });
 
@@ -1223,7 +1227,9 @@ describe('ResultsTable Layout Stability', () => {
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Loading filtered results...')).toBeInTheDocument();
+    // When table exists and is fetching, we show a LinearProgress bar and the table with reduced opacity
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveStyle({ opacity: '0.6' });
   });
 
   it('displays the table when isFetching is false', () => {

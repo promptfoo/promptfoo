@@ -24,6 +24,7 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
@@ -191,6 +192,14 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+  
+  // Track if this is the initial load
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  useEffect(() => {
+    if (table && !hasLoadedOnce) {
+      setHasLoadedOnce(true);
+    }
+  }, [table, hasLoadedOnce]);
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1010,29 +1019,47 @@ function ResultsTable({
           </Box>
         )}
 
-      {isFetching ? (
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: '40px',
-            borderRadius: '4px',
-            marginTop: '20px',
-            marginBottom: '20px',
-          }}
-        >
-          <CircularProgress size={32} />
-          <Typography variant="body1" sx={{ marginLeft: '12px' }}>
-            Loading filtered results...
-          </Typography>
-        </Box>
-      ) : (
-        <>
+      <Box sx={{ position: 'relative' }}>
+        {/* Show linear progress for updates (not initial load) */}
+        {isFetching && hasLoadedOnce && (
+          <LinearProgress 
+            sx={{ 
+              position: 'absolute', 
+              top: 0, 
+              left: 0, 
+              right: 0,
+              height: 2,
+              zIndex: 10 
+            }} 
+          />
+        )}
+        
+        {/* Show skeleton loader only for initial load */}
+        {isFetching && !hasLoadedOnce ? (
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '40px',
+              borderRadius: '4px',
+              marginTop: '20px',
+              marginBottom: '20px',
+            }}
+          >
+            <CircularProgress size={32} />
+            <Typography variant="body1" sx={{ marginLeft: '12px' }}>
+              Loading results...
+            </Typography>
+          </Box>
+        ) : (
+          <>
           <table
             className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
             style={{
               wordBreak,
+              opacity: isFetching ? 0.6 : 1,
+              transition: 'opacity 0.2s ease-in-out',
             }}
           >
             <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
@@ -1158,7 +1185,7 @@ function ResultsTable({
                   clearRowIdFromUrl();
                   window.scrollTo(0, 0);
                 }}
-                disabled={reactTable.getState().pagination.pageIndex === 0}
+                disabled={reactTable.getState().pagination.pageIndex === 0 || isFetching}
                 variant="contained"
               >
                 Previous
@@ -1168,6 +1195,7 @@ function ResultsTable({
                 <TextField
                   size="small"
                   type="number"
+                  disabled={isFetching}
                   value={reactTable.getState().pagination.pageIndex + 1}
                   onChange={(e) => {
                     const page = e.target.value ? Number(e.target.value) - 1 : 0;
@@ -1194,7 +1222,7 @@ function ResultsTable({
                   clearRowIdFromUrl();
                   window.scrollTo(0, 0);
                 }}
-                disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+                disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount || isFetching}
                 variant="contained"
               >
                 Next
@@ -1202,6 +1230,7 @@ function ResultsTable({
               <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Select
                   value={pagination.pageSize}
+                  disabled={isFetching}
                   onChange={(e) => {
                     setPagination((prev) => ({
                       ...prev,
@@ -1225,7 +1254,8 @@ function ResultsTable({
             </Box>
           )}
         </>
-      )}
+        )}
+      </Box>
     </div>
   );
 }
