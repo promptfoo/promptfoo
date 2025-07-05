@@ -635,6 +635,303 @@ def call_api(prompt, options, context):
     return {"output": f"Echo: {prompt}"}
 ```
 
+## Using Mozilla Any-Agent Framework
+
+[Mozilla's Any-Agent](https://github.com/mozilla-ai/any-agent) provides a unified interface for multiple agent frameworks (LangChain, OpenAI Agents, Smolagents, TinyAgents, etc.), making it ideal for comparing agent performance with Promptfoo.
+
+### Basic Any-Agent Provider
+
+Here's how to create a Promptfoo provider using Any-Agent:
+
+```python
+# anyagent_provider.py
+from any_agent import AnyAgent, AgentConfig
+from any_agent.tools import search_web, visit_webpage
+
+# Initialize agent with your chosen framework
+agent = AnyAgent.create(
+    "langchain",  # or "tinyagent", "smolagents", "openai"
+    AgentConfig(
+        model_id="gpt-4o-mini",
+        instructions="You are a helpful assistant. Use tools when needed.",
+        tools=[search_web, visit_webpage]
+    )
+)
+
+def call_api(prompt, options, context):
+    """Promptfoo provider using Any-Agent."""
+    try:
+        # Run the agent
+        trace = agent.run(prompt)
+        
+        return {
+            "output": str(trace.final_output),
+            "metadata": {
+                "framework": "langchain",
+                "tools_used": getattr(trace, 'tools_used', [])
+            }
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "output": ""
+        }
+```
+
+### Comparing Multiple Frameworks
+
+Any-Agent's strength is switching between frameworks with minimal code changes:
+
+```yaml
+# promptfooconfig.yaml
+providers:
+  - id: file://anyagent_tiny.py
+    label: "TinyAgents"
+    
+  - id: file://anyagent_langchain.py
+    label: "LangChain"
+    
+  - id: file://anyagent_smolagents.py
+    label: "Smolagents"
+    
+  - id: file://anyagent_openai.py
+    label: "OpenAI Agents"
+
+tests:
+  - vars:
+      prompt: "What is the current population of Paris?"
+    assert:
+      - type: contains
+        value: "million"
+```
+
+Each provider file only differs in the framework name:
+
+```python
+# anyagent_tiny.py
+agent = AnyAgent.create("tinyagent", config)
+
+# anyagent_langchain.py  
+agent = AnyAgent.create("langchain", config)
+
+# anyagent_smolagents.py
+agent = AnyAgent.create("smolagents", config)
+
+# anyagent_openai.py
+agent = AnyAgent.create("openai", config)
+```
+
+### Custom Tools with Any-Agent
+
+You can create custom tools that work across all frameworks:
+
+```python
+from any_agent import tool
+
+@tool
+def calculate_compound_interest(principal: float, rate: float, years: int) -> float:
+    """Calculate compound interest."""
+    return principal * (1 + rate) ** years
+
+# Use in agent configuration
+agent = AnyAgent.create(
+    "langchain",
+    AgentConfig(
+        model_id="gpt-4o-mini",
+        tools=[calculate_compound_interest, search_web]
+    )
+)
+```
+
+### Complete Example
+
+See our [Mozilla Any-Agent example](/examples/mozilla-any-agent/) for a comprehensive guide on:
+- Setting up Any-Agent with Promptfoo
+- Comparing multiple agent frameworks
+- Using built-in and custom tools
+- Evaluating agent performance across frameworks
+
+### Benefits
+
+Using Any-Agent with Promptfoo allows you to:
+1. **Compare frameworks objectively** - Same prompts, same tools, different implementations
+2. **Switch frameworks easily** - Change one line to test a different framework
+3. **Use consistent tooling** - Tools work across all supported frameworks
+4. **Leverage Promptfoo's evaluation** - Get detailed metrics on each framework's performance
+
+## Using PydanticAI Framework
+
+[PydanticAI](https://ai.pydantic.dev/) is a Python agent framework that provides structured outputs and type safety for AI applications. It's particularly useful when you need consistent, validated responses from your agents.
+
+### Basic PydanticAI Provider
+
+Here's how to create a Promptfoo provider using PydanticAI:
+
+```python
+# pydantic_provider.py
+from pydantic import BaseModel
+from pydantic_ai import Agent, RunContext
+import asyncio
+
+# Define structured output
+class CustomerResponse(BaseModel):
+    """Structured customer service response"""
+    intent: str
+    response: str
+    requires_followup: bool
+    sentiment: str
+
+# Define tools
+def check_order_status(ctx: RunContext, order_id: str) -> dict:
+    """Check order status (mock implementation)"""
+    return {
+        "order_id": order_id,
+        "status": "shipped",
+        "tracking": "ABC123"
+    }
+
+# Create agent
+agent = Agent(
+    "openai:gpt-4o-mini",
+    output_type=CustomerResponse,
+    system_prompt="You are a helpful customer service agent.",
+)
+agent.tool(check_order_status)
+
+def call_api(prompt, options, context):
+    """Promptfoo provider using PydanticAI."""
+    try:
+        # Run the agent
+        result = asyncio.run(agent.run(prompt))
+        
+        # Return structured output
+        return {
+            "output": result.output.model_dump(),
+            "metadata": {
+                "model": "gpt-4o-mini",
+                "structured": True
+            }
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "output": {}
+        }
+```
+
+### Testing Structured Outputs
+
+PydanticAI excels at providing consistent, validated outputs. Here's how to test them:
+
+```yaml
+# promptfooconfig.yaml
+providers:
+  - id: file://pydantic_provider.py
+    label: "PydanticAI Agent"
+
+defaultTest:
+  assert:
+    - type: is-json
+      value:
+        type: object
+        properties:
+          intent:
+            type: string
+          response:
+            type: string
+          requires_followup:
+            type: boolean
+          sentiment:
+            type: string
+        required: ['intent', 'response', 'requires_followup', 'sentiment']
+
+tests:
+  - vars:
+      prompt: "Where is my order #12345?"
+    assert:
+      - type: javascript
+        value: output.intent === 'order_inquiry'
+      
+  - vars:
+      prompt: "I'm very upset about the delay!"
+    assert:
+      - type: javascript
+        value: output.sentiment === 'negative' && output.requires_followup === true
+```
+
+### Advanced PydanticAI Features
+
+#### Multiple Output Types
+
+```python
+from typing import Union
+
+class FAQResponse(BaseModel):
+    question: str
+    answer: str
+    category: str
+
+class OrderResponse(BaseModel):
+    order_id: str
+    status: str
+    next_steps: list[str]
+
+# Agent with dynamic output types
+def create_agent(output_type: type[BaseModel]):
+    return Agent(
+        "openai:gpt-4o-mini",
+        output_type=output_type,
+        system_prompt="Provide structured responses."
+    )
+
+def call_api(prompt, options, context):
+    config = options.get('config', {})
+    
+    # Determine output type based on prompt
+    if "order" in prompt.lower():
+        agent = create_agent(OrderResponse)
+    else:
+        agent = create_agent(FAQResponse)
+    
+    result = asyncio.run(agent.run(prompt))
+    return {"output": result.output.model_dump()}
+```
+
+#### Streaming Responses
+
+```python
+async def stream_response(prompt):
+    """Stream responses for real-time feedback."""
+    async with agent.run_stream(prompt) as stream:
+        chunks = []
+        async for chunk in stream:
+            chunks.append(chunk)
+        
+        # Get final result
+        result = await stream.get_result()
+        return result.output
+
+def call_api(prompt, options, context):
+    result = asyncio.run(stream_response(prompt))
+    return {"output": result.model_dump()}
+```
+
+### Complete Example
+
+See our [PydanticAI example](/examples/pydantic-ai/) for a working demonstration that includes:
+- Weather agent with structured outputs
+- Tool usage with mock implementations
+- JSON schema validation
+- Multiple assertion types
+
+### Benefits of PydanticAI
+
+1. **Type Safety** - Guaranteed structured outputs with Pydantic validation
+2. **Tool Integration** - Easy tool definition with automatic parameter validation
+3. **Async Support** - Built for modern async Python applications
+4. **Model Agnostic** - Works with OpenAI, Anthropic, and other providers
+5. **Testing Friendly** - Structured outputs make assertions predictable
+
 ## Next Steps
 
 - Learn about [custom assertions](/docs/configuration/expected-outputs/)

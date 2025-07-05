@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Mozilla Any-Agent framework comparison
+
+providers:
+  - id: file://anyagent_tiny.py
+    label: "TinyAgents"
+    
+  - id: file://anyagent_langchain.py
+    label: "LangChain"
+
+tests:
+  # Test 1: Simple conversation
+  - vars:
+      prompt: "What is the capital of France?"
+    assert:
+      - type: contains
+        value: "Paris"
+        
+  # Test 2: Creative response
+  - vars:
+      prompt: "Write a haiku about artificial intelligence"
+    assert:
+      - type: javascript
+        value: |
+          // Check if response has 3 lines (basic haiku structure)
+          const lines = output.split('\n').filter(line => line.trim().length > 0);
+          return lines.length >= 3;
+          
+  # Test 3: Math question
+  - vars:
+      prompt: "What is 15 + 27?"
+    assert:
+      - type: contains
+        value: "42"
+        
+  # Test 4: Programming joke
+  - vars:
+      prompt: "Tell me a joke about programming"
+    assert:
+      - type: contains-any
+        value: ["joke", "funny", "laugh", "programmer", "code", "bug", "debug"]
+
+# Configuration options
+options:
+  # Add delay between API calls to avoid rate limits
+  delay: 1000
+  
+  # Show detailed output
+  verbose: true
+  
+  # Number of times to run each test
+  repeat: 1
+  
+  # Output format
+  output: table 

@@ -39,7 +39,7 @@ def get_weather(ctx: RunContext, location: str) -> dict:
     return {"location": location, "temperature": "21°C", "description": "Clear"}
 
 
-def get_weather_agent(model: str = "openai:gpt-4.1-mini") -> Agent:
+def get_weather_agent(model: str = "openai:gpt-4o-mini") -> Agent:
     """Create a weather agent with structured output"""
     agent = Agent(
         model,
@@ -56,7 +56,7 @@ def get_weather_agent(model: str = "openai:gpt-4.1-mini") -> Agent:
 
 
 async def run_weather_agent(
-    query: str, model: str = "openai:gpt-4.1-mini"
+    query: str, model: str = "openai:gpt-4o-mini"
 ) -> WeatherResponse:
     """Run the weather agent with a query"""
     try:

@@ -1,0 +1,2 @@
+# Mozilla Any-Agent Example Requirements
+any-agent[all]>=0.9.0 
