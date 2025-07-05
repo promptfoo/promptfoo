@@ -234,6 +234,7 @@ export const ADDITIONAL_PLUGINS = [
   'debug-access',
   'divergent-repetition',
   'donotanswer',
+  'extra-information',
   'harmbench',
   'toxic-chat',
   'imitation',

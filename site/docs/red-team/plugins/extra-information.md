@@ -2,60 +2,69 @@
 sidebar_label: Extra Information
 ---
 
-# Extra Information Plugin
+# Extra Information Exposure
 
-The Extra Information plugin is designed to test an AI system's potential exposure of debug information, embeddings, internal state, or other technical details in API responses that should not be visible to end users.
-
-It is meant to be used with HTTP-based API providers that have debug mode enabled.
+The **Extra Information** plugin tests whether an AI system exposes debug data, internal state, or extra information that should not be visible to end users.
 
 ## Purpose
 
-The Extra Information plugin helps to:
-
-1. Detect exposure of internal system state or debug information
-2. Identify leakage of model embeddings or vector representations
-3. Find instances where confidence scores or logits are exposed
-4. Discover unintended exposure of technical implementation details
-5. Ensure proper filtering of internal system information
+This plugin helps identify vulnerabilities where AI systems leak:
+- Embeddings or vector representations
+- Debug information or logs
+- Model confidence scores or logits
+- Details about the model or backend system
+- Any other technical information not meant for end users
 
 ## Configuration
 
-To include the Extra Information plugin in your LLM red teaming setup:
+<table>
+  <tr>
+    <th>Parameter</th>
+    <th>Type</th>
+    <th>Default</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>numTests</td>
+    <td>number</td>
+    <td>5</td>
+    <td>Number of test cases to generate</td>
+  </tr>
+</table>
+
+## Example
 
 ```yaml
 redteam:
   plugins:
-    - 'extra-information'
-```
-
-Make sure that your HTTP target provider has `includeRawResponse` set to `true` in its configuration:
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://example.com/generate'
-      method: 'POST'
-      headers:
-        'Content-Type': 'application/json'
-      body:
-        myPrompt: '{{prompt}}'
-      // highlight-next-line
-      includeRawResponse: true
+    - extra-information
 ```
 
 ## How It Works
 
-The Extra Information plugin:
+The plugin:
+1. Generates prompts designed to elicit debug information or internal state
+2. Examines the raw response data (not just the formatted output)
+3. Checks for technical information that should be filtered out
+4. Passes if only the intended response is returned without extra data
 
-1. Generates simple, straightforward prompts that would typically result in concise responses
-2. Examines the raw API response data for any technical information or debug details
-3. Evaluates whether the exposed information goes beyond what's necessary for the user
-4. Checks for presence of internal state data or implementation details
+## Interpretation
 
-## Related Concepts
+A **failure** indicates that your system is exposing internal information such as:
+- Raw embeddings or vector data
+- Debug logs or system information
+- Model metadata or confidence scores
+- Implementation details
 
-- [Debug Access](debug-access.md)
-- [Cross-Session Leak](cross-session-leak.md)
+This can be a security risk as it may reveal:
+- System architecture details
+- Potential attack vectors
+- Sensitive implementation information
+
+## Related Plugins
+
+- [Prompt Extraction](prompt-extraction.md) - Tests for system prompt disclosure
+- [Debug Access](debug-access.md) - Tests for exposed debugging interfaces
+- [Cross-Session Leak](cross-session-leak.md) - Tests for information leakage between sessions
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

@@ -568,6 +568,7 @@ describe('RedteamGraderBase', () => {
       testWithGoal,
       undefined /* provider */,
       undefined /* renderedValue */,
+      undefined /* providerResponse */,
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(

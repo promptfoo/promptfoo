@@ -108,6 +108,6 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
         rubric: this.rubric,
       };
     }
-    return super.getResult(prompt, llmOutput, test, provider, undefined);
+    return super.getResult(prompt, llmOutput, test, provider, undefined, undefined);
   }
 }

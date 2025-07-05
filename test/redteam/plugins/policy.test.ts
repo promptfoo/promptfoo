@@ -154,6 +154,8 @@ describe('PolicyViolationGrader', () => {
       'test output',
       testWithoutPolicy,
       mockProvider,
+      undefined,
+      undefined,
     );
 
     expect(result).toEqual({
@@ -189,6 +191,8 @@ describe('PolicyViolationGrader', () => {
       'test output',
       testWithExtraMetadata,
       mockProvider,
+      undefined,
+      undefined,
     );
 
     expect(result.grade).toBeDefined();
@@ -217,7 +221,7 @@ describe('PolicyViolationGrader', () => {
       .mockRejectedValueOnce(new Error('Grading failed'));
 
     await expect(
-      grader.getResult('test prompt', 'test output', testCase, mockProvider),
+      grader.getResult('test prompt', 'test output', testCase, mockProvider, undefined, undefined),
     ).rejects.toThrow('Grading failed');
   });
 
@@ -237,7 +241,7 @@ describe('PolicyViolationGrader', () => {
       rubric: 'Some rubric',
     } as any);
 
-    const result = await grader.getResult('test prompt', '', testCase, mockProvider);
+    const result = await grader.getResult('test prompt', '', testCase, mockProvider, undefined, undefined);
 
     expect(result).toEqual({
       grade: expect.objectContaining({
@@ -268,7 +272,7 @@ describe('PolicyViolationGrader', () => {
         rubric: 'rubric',
       } as any);
 
-    const result = await grader.getResult('prompt', 'output', testCase, mockProvider);
+    const result = await grader.getResult('prompt', 'output', testCase, mockProvider, undefined, undefined);
 
     expect(result).toEqual({
       grade: expect.objectContaining({
@@ -290,6 +294,7 @@ describe('PolicyViolationGrader', () => {
       }),
       mockProvider,
       undefined,
+      undefined,
     );
   });
 
@@ -310,7 +315,7 @@ describe('PolicyViolationGrader', () => {
         rubric: 'No specific policy provided',
       } as any);
 
-    const result = await grader.getResult('prompt', 'output', testCase, mockProvider);
+    const result = await grader.getResult('prompt', 'output', testCase, mockProvider, undefined, undefined);
 
     expect(result).toEqual({
       grade: expect.objectContaining({
@@ -331,6 +336,7 @@ describe('PolicyViolationGrader', () => {
         }),
       }),
       mockProvider,
+      undefined,
       undefined,
     );
   });
