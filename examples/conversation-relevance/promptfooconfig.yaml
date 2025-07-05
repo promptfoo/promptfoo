@@ -8,6 +8,9 @@ providers:
     config:
       temperature: 0
 
+prompts:
+  - "You are a helpful assistant. Answer the user's questions accurately and stay on topic."
+
 tests:
   # Example 1: Single turn conversation - tests basic relevance
   - description: 'Single turn - relevant response'
@@ -25,55 +28,47 @@ tests:
         - input: 'What is the capital of France?'
           output: 'The capital of France is Paris.'
         - input: 'What is its population?'
-          output: 'Paris has a population of approximately 2.2 million people in the city proper.'
-        - input: 'Tell me about its famous landmarks.'
-          output: 'Paris is famous for the Eiffel Tower, Louvre Museum, and Notre-Dame Cathedral.'
+          output: 'Paris has a population of approximately 2.1 million people in the city proper.'
+        - input: 'What are some famous landmarks there?'
+          output: 'Famous landmarks in Paris include the Eiffel Tower, Louvre Museum, Notre-Dame Cathedral, and Arc de Triomphe.'
+      prompt: 'Tell me more about the Louvre.'
+      output: "The Louvre is the world's largest art museum, housing over 35,000 works including the Mona Lisa and Venus de Milo."
     assert:
       - type: conversation-relevance
         threshold: 0.8
-        config:
-          windowSize: 3
 
-  # Example 3: Conversation that goes off-topic (should fail)
-  - description: 'Multi-turn - irrelevant response'
+  # Example 3: Off-topic response - should fail
+  - description: 'Off-topic response - should fail'
     vars:
       _conversation:
-        - input: 'What is 2+2?'
-          output: '2+2 equals 4.'
-        - input: 'What about 3+3?'
-          output: 'The capital of France is Paris.' # Completely irrelevant
-        - input: 'Can you solve 5+5?'
-          output: '5+5 equals 10.'
+        - input: 'What is the capital of France?'
+          output: 'The capital of France is Paris.'
+      prompt: 'What is 3 + 3?'
+      output: 'The capital of France is Paris.'
     assert:
       - type: conversation-relevance
         threshold: 0.8
-        config:
-          windowSize: 2
 
-  # Example 4: Vague greetings (should pass)
-  - description: 'Greetings - vague but acceptable'
+  # Example 4: Vague greeting - should pass
+  - description: 'Vague greeting - should pass'
     vars:
-      _conversation:
-        - input: 'Hi there!'
-          output: 'Hello! How can I help you today?'
-        - input: 'How are you?'
-          output: "I'm doing well, thank you! How about you?"
+      prompt: 'Hello'
+      output: 'Hello! How can I help you today?'
     assert:
       - type: conversation-relevance
         threshold: 0.8
 
   # Example 5: Context-dependent conversation
-  - description: 'Travel planning - context maintained'
+  - description: 'Context-dependent conversation'
     vars:
       _conversation:
-        - input: "I'm planning a trip to Japan."
-          output: 'Japan is wonderful! When are you planning to visit?'
-        - input: 'Next spring. What should I see?'
-          output: 'Spring is perfect for cherry blossoms! Visit Tokyo, Kyoto, and Mount Fuji.'
-        - input: 'What about food?'
-          output: 'Try sushi, ramen, tempura, and wagyu beef. Street food markets are amazing too!'
+        - input: "I'm looking for a good Italian restaurant"
+          output: "I'd be happy to help you find a good Italian restaurant! What city are you in?"
+        - input: "I'm in New York"
+          output: "Great! New York has many excellent Italian restaurants. What's your budget range?"
+      prompt: "Something mid-range would be perfect"
+      output: "For mid-range Italian in NYC, I recommend Carbone in Greenwich Village or L'Artusi in the West Village. Both offer authentic Italian cuisine with great atmosphere."
     assert:
       - type: conversation-relevance
-        threshold: 0.9
-        config:
-          windowSize: 3
+        threshold: 0.8
+        windowSize: 3
