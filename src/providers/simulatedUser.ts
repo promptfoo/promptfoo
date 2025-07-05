@@ -5,6 +5,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  TokenUsage,
 } from '../types';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -21,28 +22,44 @@ export type AgentProviderOptions = ProviderOptions & {
     userProvider?: ProviderOptions;
     instructions?: string;
     maxTurns?: number;
+    stateful?: boolean;
   };
 };
 
+/**
+ * TODO(Will): Ideally this class is an Abstract Base Class that's implemented by the
+ * Redteam and Non-Redteam SimulatedUser Providers. Address this in a follow-up PR.
+ */
 export class SimulatedUser implements ApiProvider {
   private readonly identifier: string;
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
+  private readonly stateful: boolean;
 
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
+    this.stateful = config.stateful ?? false;
   }
 
   id() {
     return this.identifier;
   }
 
+  /**
+   * Non-Redteam SimulatedUserProvider uses the 'tau' task.
+   */
+  get taskId() {
+    return 'tau';
+  }
+
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
   ): Promise<Message[]> {
+    logger.debug('[SimulatedUser] Sending message to simulated user (tau) provider');
+
     const flippedMessages = messages.map((message) => {
       return {
         role: message.role === 'user' ? 'assistant' : 'user',
@@ -58,22 +75,32 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToAgent(
     messages: Message[],
     targetProvider: ApiProvider,
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<Message[]> {
-    const response = await targetProvider.callApi(
-      JSON.stringify([{ role: 'system', content: prompt }, ...messages]),
-      context,
-    );
+    context: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    const targetPrompt = this.stateful
+      ? messages[messages.length - 1].content
+      : JSON.stringify(messages);
+
+    logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
+
+    const response = await targetProvider.callApi(targetPrompt, context);
+
+    if (response.sessionId) {
+      context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
+      context.vars.sessionId = response.sessionId;
+    }
+
     if (targetProvider.delay) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
       await sleep(targetProvider.delay);
     }
-    logger.debug(`Agent: ${response.output}`);
-    return [...messages, { role: 'assistant', content: String(response.output || '') }];
+
+    logger.debug(`[SimulatedUser] Agent: ${response.output}`);
+    return response;
   }
 
   async callApi(
+    // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
@@ -81,17 +108,30 @@ export class SimulatedUser implements ApiProvider {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
-    const userProvider = new PromptfooSimulatedUserProvider({
-      instructions,
-    });
+    const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
 
-    logger.debug(`Formatted user instructions: ${instructions}`);
-    let messages: Message[] = [];
+    logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
+    const messages: Message[] = [];
     const maxTurns = this.maxTurns;
-    let numRequests = 0;
+
+    const totalTokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 0,
+      cached: 0,
+    };
+
+    let agentResponse: ProviderResponse | undefined;
+
     for (let i = 0; i < maxTurns; i++) {
+      logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
+
+      // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
       const messagesToUser = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
+
+      // Check whether the judge has determined that the instruction goal is satisfied.
       if (
         lastMessage.content &&
         typeof lastMessage.content === 'string' &&
@@ -100,32 +140,50 @@ export class SimulatedUser implements ApiProvider {
         break;
       }
 
-      const messagesToAgent = await this.sendMessageToAgent(
+      messages.push(lastMessage);
+
+      agentResponse = await this.sendMessageToAgent(
         messagesToUser,
         context.originalProvider,
-        prompt,
         context,
       );
-      messages = messagesToAgent;
-      numRequests += 1; // Only count the request to the agent.
+
+      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+
+      if (agentResponse.tokenUsage) {
+        totalTokenUsage.total += agentResponse.tokenUsage.total ?? 0;
+        totalTokenUsage.prompt += agentResponse.tokenUsage.prompt ?? 0;
+        totalTokenUsage.completion += agentResponse.tokenUsage.completion ?? 0;
+        totalTokenUsage.numRequests += agentResponse.tokenUsage.numRequests ?? 1;
+        totalTokenUsage.cached += agentResponse.tokenUsage.cached ?? 0;
+      } else {
+        totalTokenUsage.numRequests += 1;
+      }
     }
 
+    return this.serializeOutput(messages, totalTokenUsage, agentResponse as ProviderResponse);
+  }
+
+  toString() {
+    return 'AgentProvider';
+  }
+
+  serializeOutput(
+    messages: Message[],
+    tokenUsage: TokenUsage,
+    finalTargetResponse: ProviderResponse,
+  ) {
     return {
       output: messages
         .map(
           (message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`,
         )
         .join('\n---\n'),
-      tokenUsage: {
-        numRequests,
-      },
+      tokenUsage,
       metadata: {
         messages,
       },
+      guardrails: finalTargetResponse.guardrails,
     };
-  }
-
-  toString() {
-    return 'AgentProvider';
   }
 }

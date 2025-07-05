@@ -51,7 +51,7 @@ For each turn:
 3. The simulated user generates the next message based on their instructions
 4. This continues until either:
    - The maximum number of turns is reached
-   - The agent includes "###STOP###" in its response
+   - The agent determines that the conversation has reached a natural conclusion
 
 ## Configuration Options
 

@@ -6,6 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -18,6 +19,7 @@ import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
+import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
@@ -107,6 +109,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding simulated user test cases to ${testCases.length} test cases`);
+      const newTestCases = addMischievousUser(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} simulated user test cases`);
       return newTestCases;
     },
   },

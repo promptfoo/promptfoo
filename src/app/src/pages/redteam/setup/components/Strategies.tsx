@@ -13,6 +13,7 @@ import {
   DEFAULT_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
+  MULTI_MODAL_STRATEGIES,
 } from '@promptfoo/redteam/constants';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -21,7 +22,6 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 import {
   STRATEGY_PRESETS,
   PRESET_IDS,
@@ -542,6 +542,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           })
         }
         onSave={updateStrategyConfig}
+        strategyData={
+          availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
+        }
       />
     </Box>
   );

@@ -6,7 +6,7 @@ description: Gradually escalate prompt harm over multiple conversation turns to 
 
 # Multi-turn Jailbreaks Strategy
 
-The Crescendo strategy is a multi-turn jailbreak technique that gradually escalates the potential harm of prompts, exploiting the fuzzy boundary between acceptable and unacceptable responses.
+Multi-turn jailbreak strategies gradually escalate the potential harm of prompts, exploiting the fuzzy boundary between acceptable and unacceptable responses.
 
 Because it is multi-turn, it can surface vulnerabilities that only emerge after multiple interactions.
 
@@ -17,6 +17,8 @@ You can use it with the following configuration:
 ```yaml title="promptfooconfig.yaml"
 strategies:
   - crescendo
+  - goat
+  - mischievous-user
 ```
 
 Or tune it with the following parameters:
@@ -29,12 +31,21 @@ strategies:
       maxBacktracks: 5
       stateful: false # Sends the entire conversation history with each turn (Default)
       continueAfterSuccess: false # Stop after first successful attack (Default)
+  - id: goat
+    config:
+      maxTurns: 5
+      stateful: false
+      continueAfterSuccess: false
+  - id: mischievous-user
+    config:
+      maxTurns: 5
+      stateful: false
 ```
 
 Increasing the number of turns and backtracks will make the strategy more aggressive, but it will also take longer to complete and cost more.
 
 :::danger
-This strategy is relatively high cost. We recommend running it on a smaller number of tests and plugins, with a cheaper provider, or prefer a simpler [iterative](iterative.md) strategy.
+Multi-turn strategies are relatively high cost. We recommend running it on a smaller number of tests and plugins, with a cheaper provider, or prefer a simpler [iterative](iterative.md) strategy.
 :::
 
 :::warning
@@ -65,9 +76,9 @@ When `continueAfterSuccess: true`:
 - The strategy only stops when `maxTurns` is reached
 - This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
 
-## How It Works
+## How They Work
 
-The Crescendo strategy operates by:
+The multi-turn strategies operate by:
 
 1. Starting with a relatively innocuous prompt related to a potentially sensitive topic.
 2. Gradually increasing the complexity, specificity, or potential harm of subsequent prompts.
@@ -97,7 +108,8 @@ The backtracking automation also saves an enormous amount of time compared to ma
 
 ## Related Concepts
 
-- [GOAT Strategy](goat.md) - Another multi-turn jailbreaking approach
+- [GOAT Strategy](goat.md) - Multi-turn jailbreak with a generative offensive agent tester
+- [Mischievous User Strategy](mischievous-user.md) - Multi-turn conversations with a mischievous user
 - [Iterative Jailbreaks](iterative.md) - Single-turn version of this approach
 - [Tree-based Jailbreaks](tree.md) - Alternative approach to jailbreaking
 - [The Crescendo Attack](https://crescendo-the-multiturn-jailbreak.github.io//) from Microsoft Research

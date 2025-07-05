@@ -86,6 +86,9 @@ strategies:
   - id: 'crescendo'
     config:
       stateful: true
+  - id: 'mischievous-user'
+    config:
+      stateful: true
 ```
 
 ## Test Execution

@@ -185,14 +185,14 @@ describe('PromptfooSimulatedUserProvider', () => {
     instructions: 'test instructions',
   };
 
-  const provider = new PromptfooSimulatedUserProvider(options);
+  const provider = new PromptfooSimulatedUserProvider(options, 'test-id');
 
   it('should return correct id', () => {
     expect(provider.id()).toBe('test-agent');
   });
 
   it('should return default id if not provided', () => {
-    const defaultProvider = new PromptfooSimulatedUserProvider();
+    const defaultProvider = new PromptfooSimulatedUserProvider({}, 'test-id');
     expect(defaultProvider.id()).toBe('promptfoo:agent');
   });
 

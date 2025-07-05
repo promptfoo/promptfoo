@@ -26,13 +26,14 @@ describe('strategies constants', () => {
   });
 
   it('should have correct multi-turn strategies', () => {
-    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat']);
+    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'mischievous-user']);
   });
 
   it('should have correct agentic strategies', () => {
     expect(AGENTIC_STRATEGIES).toEqual([
       'crescendo',
       'goat',
+      'mischievous-user',
       'jailbreak',
       'jailbreak:tree',
       'pandamonium',
@@ -63,6 +64,7 @@ describe('strategies constants', () => {
       'crescendo',
       'gcg',
       'goat',
+      'mischievous-user',
       'hex',
       'homoglyph',
       'image',
