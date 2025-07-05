@@ -1204,6 +1204,4 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
 
     jest.mocked(fs.readFileSync).mockRestore();
   });
-
-
 });

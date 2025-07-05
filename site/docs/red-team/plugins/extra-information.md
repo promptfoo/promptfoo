@@ -9,6 +9,7 @@ The **Extra Information** plugin tests whether an AI system exposes debug data, 
 ## Purpose
 
 This plugin helps identify vulnerabilities where AI systems leak:
+
 - Embeddings or vector representations
 - Debug information or logs
 - Model confidence scores or logits
@@ -43,6 +44,7 @@ redteam:
 ## How It Works
 
 The plugin:
+
 1. Generates prompts designed to elicit debug information or internal state
 2. Examines the raw response data (not just the formatted output)
 3. Checks for technical information that should be filtered out
@@ -51,12 +53,14 @@ The plugin:
 ## Interpretation
 
 A **failure** indicates that your system is exposing internal information such as:
+
 - Raw embeddings or vector data
 - Debug logs or system information
 - Model metadata or confidence scores
 - Implementation details
 
 This can be a security risk as it may reveal:
+
 - System architecture details
 - Potential attack vectors
 - Sensitive implementation information

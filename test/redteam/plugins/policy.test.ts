@@ -241,7 +241,14 @@ describe('PolicyViolationGrader', () => {
       rubric: 'Some rubric',
     } as any);
 
-    const result = await grader.getResult('test prompt', '', testCase, mockProvider, undefined, undefined);
+    const result = await grader.getResult(
+      'test prompt',
+      '',
+      testCase,
+      mockProvider,
+      undefined,
+      undefined,
+    );
 
     expect(result).toEqual({
       grade: expect.objectContaining({
@@ -272,7 +279,14 @@ describe('PolicyViolationGrader', () => {
         rubric: 'rubric',
       } as any);
 
-    const result = await grader.getResult('prompt', 'output', testCase, mockProvider, undefined, undefined);
+    const result = await grader.getResult(
+      'prompt',
+      'output',
+      testCase,
+      mockProvider,
+      undefined,
+      undefined,
+    );
 
     expect(result).toEqual({
       grade: expect.objectContaining({
@@ -315,7 +329,14 @@ describe('PolicyViolationGrader', () => {
         rubric: 'No specific policy provided',
       } as any);
 
-    const result = await grader.getResult('prompt', 'output', testCase, mockProvider, undefined, undefined);
+    const result = await grader.getResult(
+      'prompt',
+      'output',
+      testCase,
+      mockProvider,
+      undefined,
+      undefined,
+    );
 
     expect(result).toEqual({
       grade: expect.objectContaining({
