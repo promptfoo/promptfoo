@@ -457,6 +457,9 @@ export const BaseAssertionTypesSchema = z.enum([
   'rouge-n',
   'similar',
   'starts-with',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
   'webhook',
 ]);
 
@@ -531,6 +534,9 @@ export const AssertionSchema = z.object({
 
   // Process the output before running the assertion
   transform: z.string().optional(),
+
+  // Extract context from the output using a transform
+  contextTransform: z.string().optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -551,7 +557,7 @@ export type AssertionValueFunction = (
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
-export type AssertionValue = string | string[] | object | AssertionValueFunction;
+export type AssertionValue = string | string[] | number | object | AssertionValueFunction;
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 

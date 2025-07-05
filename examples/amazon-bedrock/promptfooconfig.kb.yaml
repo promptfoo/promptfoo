@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Knowledge Base RAG using AWS Bedrock
+description: Knowledge Base RAG with contextTransform evaluation
 
 prompts:
   - |
@@ -7,12 +7,12 @@ prompts:
     {{prompt}}
 
 providers:
-  # Knowledge Base provider with Claude 4
+  # Knowledge Base provider with Claude 4 (cross-region inference profile)
   - id: bedrock:kb:us.anthropic.claude-sonnet-4-20250514-v1:0
     label: Claude 4 KB
     config:
       region: us-east-2
-      knowledgeBaseId: 'HYKSGW6CJS' # Replace with your actual Knowledge Base ID
+      knowledgeBaseId: '0VMCLLCVGB' # knowledge-base-quick-start-kjmvw
       temperature: 0.0
       max_tokens: 1000
   # Compare with regular Bedrock Claude 4 (without KB)
@@ -24,12 +24,34 @@ providers:
       max_tokens: 1000
 tests:
   - vars:
-      prompt: 'What is promptfoo and what problem does it solve?'
+      prompt: 'How do I set up my first promptfoo configuration file?'
   - vars:
-      prompt: 'How do I evaluate prompts with promptfoo?'
+      prompt: 'What authentication is required for OpenAI and Anthropic providers?'
   - vars:
-      prompt: 'What providers and models does promptfoo support?'
+      prompt: 'How can I compare GPT-4 vs Claude performance?'
   - vars:
-      prompt: 'How can I use assertions in promptfoo to test responses?'
+      prompt: 'What types of assertions can I use to automatically grade LLM outputs?'
   - vars:
-      prompt: 'What are some advanced features of promptfoo for enterprise users?'
+      prompt: 'How do I evaluate RAG systems with context-based assertions?'
+
+  # Example using contextTransform to extract context from Knowledge Base citations
+  - vars:
+      prompt: 'How do I set up my first promptfoo configuration file?'
+      query: 'How do I set up my first promptfoo configuration file?'
+    assert:
+      # Basic content assertions
+      - type: contains
+        value: 'yaml'
+      - type: contains
+        value:
+          'prompts'
+
+          # Context-based assertions using contextTransform to extract from citations
+      # This demonstrates the key contextTransform feature: extracting context from provider responses
+      - type: context-faithfulness
+        contextTransform: 'context?.metadata?.citations?.flatMap(c => c.retrievedReferences || []).map(r => r.content?.text || "").filter(t => t.length > 0).join("\\n\\n") || "No citations found"'
+        threshold: 0.1
+
+      - type: context-relevance
+        contextTransform: 'context?.metadata?.citations?.[0]?.retrievedReferences?.[0]?.content?.text || "No context found"'
+        threshold: 0.1

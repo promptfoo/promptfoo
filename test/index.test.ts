@@ -74,6 +74,7 @@ describe('index.ts exports', () => {
   const expectedNamedExports = [
     'assertions',
     'cache',
+    'doRedteamRun',
     'evaluate',
     'generateTable',
     'guardrails',
@@ -151,6 +152,7 @@ describe('index.ts exports', () => {
     expect(index.default).toEqual({
       assertions: index.assertions,
       cache: index.cache,
+      doRedteamRun: index.doRedteamRun,
       evaluate: index.evaluate,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
