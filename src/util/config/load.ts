@@ -417,6 +417,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       if (typeof prev === 'string') {
         return prev;
       }
+      // If neither prev nor curr has defaultTest, return undefined
+      if (!prev && !curr.defaultTest) {
+        return undefined;
+      }
       // Otherwise merge objects
       const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
       const prevObj = typeof prev === 'object' ? prev : {};
@@ -606,7 +610,10 @@ export async function resolveConfigs(
   );
 
   // Parse testCases for each scenario
-  if (fileConfig.scenarios) {
+  if (
+    fileConfig.scenarios &&
+    (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
+  ) {
     fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
   }
   if (Array.isArray(fileConfig.scenarios)) {

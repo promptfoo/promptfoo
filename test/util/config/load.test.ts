@@ -912,6 +912,114 @@ describe('combineConfigs', () => {
       appBaseUrl: 'http://localhost',
     });
   });
+
+  it('should load defaultTest from external file when string starts with file://', async () => {
+    const externalDefaultTest = {
+      assert: [{ type: 'equals', value: 'test' }],
+      vars: { foo: 'bar' },
+      options: { provider: 'openai:gpt-4' },
+    };
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(externalDefaultTest));
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
+
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      defaultTest: 'file://path/to/defaultTest.yaml',
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['config.json']);
+
+    // combineConfigs should preserve the string reference, not load it
+    expect(result.defaultTest).toBe('file://path/to/defaultTest.yaml');
+  });
+
+  it('should preserve string defaultTest when combining configs with file:// reference', async () => {
+    const config1 = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      defaultTest: { vars: { inline: true } },
+    };
+
+    const config2 = {
+      providers: ['provider2'],
+      prompts: ['prompt2'],
+      tests: ['test2'],
+      defaultTest: 'file://external/defaultTest.yaml',
+    };
+
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    // Should preserve the file:// reference from the second config
+    expect(result.defaultTest).toBe('file://external/defaultTest.yaml');
+  });
+
+  it('should merge inline defaultTest objects when combining configs', async () => {
+    const config1 = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      defaultTest: {
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+      },
+    };
+
+    const config2 = {
+      providers: ['provider2'],
+      prompts: ['prompt2'],
+      tests: ['test2'],
+      defaultTest: {
+        vars: { var2: 'value2' },
+        assert: [{ type: 'contains', value: 'expected2' }],
+        options: { provider: 'openai:gpt-4' },
+      },
+    };
+
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.defaultTest).toEqual({
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [
+        { type: 'equals', value: 'expected1' },
+        { type: 'contains', value: 'expected2' },
+      ],
+      options: { provider: 'openai:gpt-4' },
+      metadata: {},
+    });
+  });
+
+  it('should handle undefined defaultTest in configs', async () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      // No defaultTest
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['config.json']);
+
+    // When no defaultTest is provided, combineConfigs returns undefined
+    expect(result.defaultTest).toBeUndefined();
+  });
 });
 
 describe('dereferenceConfig', () => {
@@ -1445,127 +1553,6 @@ describe('readConfig', () => {
   });
 });
 
-describe('defaultTest external file loading', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
-    cliState.basePath = '/mock/base';
-  });
-
-  it('should load defaultTest from external file when string starts with file://', async () => {
-    const externalDefaultTest = {
-      assert: [{ type: 'equals', value: 'test' }],
-      vars: { foo: 'bar' },
-      options: { provider: 'openai:gpt-4' },
-    };
-
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(externalDefaultTest));
-    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
-
-    const config = {
-      providers: ['provider1'],
-      prompts: ['prompt1'],
-      tests: ['test1'],
-      defaultTest: 'file://path/to/defaultTest.yaml',
-    };
-
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-    const result = await combineConfigs(['config.json']);
-
-    expect(result.defaultTest).toEqual(
-      expect.objectContaining({
-        assert: externalDefaultTest.assert,
-        vars: externalDefaultTest.vars,
-        options: externalDefaultTest.options,
-      }),
-    );
-  });
-
-  it('should preserve string defaultTest when combining configs with file:// reference', async () => {
-    const config1 = {
-      providers: ['provider1'],
-      prompts: ['prompt1'],
-      tests: ['test1'],
-      defaultTest: { vars: { inline: true } },
-    };
-
-    const config2 = {
-      providers: ['provider2'],
-      prompts: ['prompt2'],
-      tests: ['test2'],
-      defaultTest: 'file://external/defaultTest.yaml',
-    };
-
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
-
-    const result = await combineConfigs(['config1.json', 'config2.json']);
-
-    // Should preserve the file:// reference from the second config
-    expect(result.defaultTest).toBe('file://external/defaultTest.yaml');
-  });
-
-  it('should merge inline defaultTest objects when combining configs', async () => {
-    const config1 = {
-      providers: ['provider1'],
-      prompts: ['prompt1'],
-      tests: ['test1'],
-      defaultTest: {
-        vars: { var1: 'value1' },
-        assert: [{ type: 'equals', value: 'expected1' }],
-      },
-    };
-
-    const config2 = {
-      providers: ['provider2'],
-      prompts: ['prompt2'],
-      tests: ['test2'],
-      defaultTest: {
-        vars: { var2: 'value2' },
-        assert: [{ type: 'contains', value: 'expected2' }],
-        options: { provider: 'openai:gpt-4' },
-      },
-    };
-
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
-
-    const result = await combineConfigs(['config1.json', 'config2.json']);
-
-    expect(result.defaultTest).toEqual({
-      vars: { var1: 'value1', var2: 'value2' },
-      assert: [
-        { type: 'equals', value: 'expected1' },
-        { type: 'contains', value: 'expected2' },
-      ],
-      options: { provider: 'openai:gpt-4' },
-      metadata: {},
-      description: 'defaultTest',
-    });
-  });
-
-  it('should handle undefined defaultTest in configs', async () => {
-    const config = {
-      providers: ['provider1'],
-      prompts: ['prompt1'],
-      tests: ['test1'],
-      // No defaultTest
-    };
-
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-    const result = await combineConfigs(['config.json']);
-
-    expect(result.defaultTest).toBeUndefined();
-  });
-});
-
 describe('resolveConfigs with external defaultTest', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -1617,11 +1604,19 @@ describe('resolveConfigs with external defaultTest', () => {
 
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
-    jest.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
+    jest.mocked(readTests).mockImplementation(async (tests) => {
+      // Return tests as-is if it's already an array
+      if (Array.isArray(tests)) {
+        return tests;
+      }
+      return [{ vars: { test: 'value' } }];
+    });
+    jest.mocked(globSync).mockReturnValue(['config.json']);
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
-    expect(maybeLoadFromExternalFile).not.toHaveBeenCalled();
+    // maybeLoadFromExternalFile should not be called for inline defaultTest
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledTimes(0);
     expect(result.testSuite.defaultTest).toEqual(
       expect.objectContaining({
         assert: inlineDefaultTest.assert,

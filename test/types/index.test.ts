@@ -595,9 +595,7 @@ describe('TestSuiteConfigSchema', () => {
 
       const result = TestSuiteConfigSchema.safeParse(validConfig);
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.defaultTest).toBe('file://path/to/defaultTest.yaml');
-      }
+      expect(result.data!.defaultTest).toBe('file://path/to/defaultTest.yaml');
     });
 
     it('should reject string defaultTest not starting with file://', () => {
@@ -626,13 +624,11 @@ describe('TestSuiteConfigSchema', () => {
 
       const result = TestSuiteConfigSchema.safeParse(validConfig);
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.defaultTest).toEqual({
-          assert: [{ type: 'contains', value: 'test' }],
-          vars: { default: true },
-          threshold: 0.8,
-        });
-      }
+      expect(result.data!.defaultTest).toEqual({
+        assert: [{ type: 'contains', value: 'test' }],
+        vars: { default: true },
+        threshold: 0.8,
+      });
     });
 
     it('should accept defaultTest with description field (it will be stripped)', () => {
@@ -648,13 +644,11 @@ describe('TestSuiteConfigSchema', () => {
 
       const result = TestSuiteConfigSchema.safeParse(configWithDescription);
       expect(result.success).toBe(true);
-      if (result.success) {
-        // The description field should be stripped from the parsed result
-        expect(result.data.defaultTest).toEqual({
-          assert: [{ type: 'equals', value: 'test' }],
-        });
-        expect((result.data.defaultTest as any).description).toBeUndefined();
-      }
+      // The description field should be stripped from the parsed result
+      expect(result.data!.defaultTest).toEqual({
+        assert: [{ type: 'equals', value: 'test' }],
+      });
+      expect((result.data!.defaultTest as any).description).toBeUndefined();
     });
   });
 
@@ -842,9 +836,7 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(validConfig);
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.defaultTest).toBe('file://path/to/defaultTest.yaml');
-      }
+      expect(result.data!.defaultTest).toBe('file://path/to/defaultTest.yaml');
     });
 
     it('should reject string defaultTest not starting with file://', () => {
@@ -862,11 +854,9 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(invalidConfig);
       expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.errors[0].message).toContain(
-          'defaultTest string must start with file://',
-        );
-      }
+      expect(result.error!.errors[0].message).toContain(
+        'defaultTest string must start with file://',
+      );
     });
 
     it('should accept object defaultTest', () => {
@@ -888,14 +878,12 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(validConfig);
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.defaultTest).toEqual(
-          expect.objectContaining({
-            assert: [{ type: 'equals', value: 'test' }],
-            vars: { foo: 'bar' },
-          }),
-        );
-      }
+      expect(result.data!.defaultTest).toEqual(
+        expect.objectContaining({
+          assert: [{ type: 'equals', value: 'test' }],
+          vars: { foo: 'bar' },
+        }),
+      );
     });
 
     it('should accept undefined defaultTest', () => {
@@ -912,9 +900,7 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(validConfig);
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.defaultTest).toBeUndefined();
-      }
+      expect(result.data!.defaultTest).toBeUndefined();
     });
   });
 });

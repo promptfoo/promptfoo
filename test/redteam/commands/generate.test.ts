@@ -981,6 +981,8 @@ describe('doGenerateRedteam with external defaultTest', () => {
       config: 'test-config.yaml',
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
+      cache: false,
+      defaultConfig: {},
     };
 
     const existingConfig = {
@@ -993,18 +995,35 @@ describe('doGenerateRedteam with external defaultTest', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
     jest.mocked(readConfig).mockResolvedValue(existingConfig);
 
+    // Mock synthesize to return test cases
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      injectVar: 'input',
+    });
+
     await doGenerateRedteam(options);
 
-    // Should convert string defaultTest to object before updating
-    const writeCall = jest.mocked(fs.writeFileSync).mock.calls[0];
-    const writtenConfig = yaml.load(writeCall[1] as string) as any;
-
-    expect(writtenConfig.defaultTest).toEqual({
-      metadata: {
-        purpose: 'Test purpose',
-        entities: ['entity1', 'entity2'],
-      },
-    });
+    // Check that writePromptfooConfig was called with the correct defaultTest
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          metadata: expect.objectContaining({
+            purpose: 'Test purpose',
+            entities: ['entity1', 'entity2'],
+          }),
+        }),
+      }),
+      'test-config.yaml',
+      expect.any(Array),
+    );
   });
 
   it('should merge with existing object defaultTest', async () => {
@@ -1013,6 +1032,8 @@ describe('doGenerateRedteam with external defaultTest', () => {
       config: 'test-config.yaml',
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
+      cache: false,
+      defaultConfig: {},
     };
 
     const existingConfig = {
@@ -1028,19 +1049,36 @@ describe('doGenerateRedteam with external defaultTest', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
     jest.mocked(readConfig).mockResolvedValue(existingConfig);
 
+    // Mock synthesize to return test cases
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      injectVar: 'input',
+    });
+
     await doGenerateRedteam(options);
 
-    const writeCall = jest.mocked(fs.writeFileSync).mock.calls[0];
-    const writtenConfig = yaml.load(writeCall[1] as string) as any;
-
-    expect(writtenConfig.defaultTest).toEqual({
-      assert: [{ type: 'equals', value: 'test' }],
-      vars: { foo: 'bar' },
-      metadata: {
-        purpose: 'Test purpose',
-        entities: ['entity1', 'entity2'],
-      },
-    });
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          assert: [{ type: 'equals', value: 'test' }],
+          vars: { foo: 'bar' },
+          metadata: expect.objectContaining({
+            purpose: 'Test purpose',
+            entities: ['entity1', 'entity2'],
+          }),
+        }),
+      }),
+      'test-config.yaml',
+      expect.any(Array),
+    );
   });
 
   it('should handle undefined defaultTest', async () => {
@@ -1049,6 +1087,8 @@ describe('doGenerateRedteam with external defaultTest', () => {
       config: 'test-config.yaml',
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
+      cache: false,
+      defaultConfig: {},
     };
 
     const existingConfig = {
@@ -1061,16 +1101,33 @@ describe('doGenerateRedteam with external defaultTest', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
     jest.mocked(readConfig).mockResolvedValue(existingConfig);
 
+    // Mock synthesize to return test cases
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      injectVar: 'input',
+    });
+
     await doGenerateRedteam(options);
 
-    const writeCall = jest.mocked(fs.writeFileSync).mock.calls[0];
-    const writtenConfig = yaml.load(writeCall[1] as string) as any;
-
-    expect(writtenConfig.defaultTest).toEqual({
-      metadata: {
-        purpose: 'Test purpose',
-        entities: ['entity1', 'entity2'],
-      },
-    });
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          metadata: expect.objectContaining({
+            purpose: 'Test purpose',
+            entities: ['entity1', 'entity2'],
+          }),
+        }),
+      }),
+      'test-config.yaml',
+      expect.any(Array),
+    );
   });
 });

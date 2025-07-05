@@ -19,6 +19,104 @@ import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } fr
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 
+jest.mock('../src/util/transform', () => ({
+  TransformInputType: {
+    OUTPUT: 'output',
+    VARS: 'vars',
+  },
+  transform: jest.fn().mockImplementation(async (code, input, context, skipWrap, inputType) => {
+    if (typeof code === 'string' && code.includes('vars.transformed = true')) {
+      return { ...input, transformed: true };
+    }
+    if (typeof code === 'string' && code.includes('vars.defaultTransform = true')) {
+      return { ...input, defaultTransform: true };
+    }
+    // Handle the test transform cases
+    if (typeof code === 'string') {
+      // Handle simple concatenation transforms
+      if (code === 'output + " postprocessed"') {
+        return input + ' postprocessed';
+      }
+      // Handle JSON parsing transforms
+      if (code === 'JSON.parse(output).value') {
+        try {
+          return JSON.parse(input).value;
+        } catch {
+          return input;
+        }
+      }
+      // Handle template literal transforms
+      if (code === '`Transformed: ${output}`') {
+        return `Transformed: ${input}`;
+      }
+      if (code === '`ProviderTransformed: ${output}`') {
+        return `ProviderTransformed: ${input}`;
+      }
+      if (code === '`Provider: ${output}`') {
+        return `Provider: ${input}`;
+      }
+      if (code === '`Test: ${output}`') {
+        return `Test: ${input}`;
+      }
+      if (code === '"testTransformed " + output') {
+        return 'testTransformed ' + input;
+      }
+      if (code === '"defaultTestTransformed " + output') {
+        return 'defaultTestTransformed ' + input;
+      }
+      // Handle transformVars cases
+      if (code.includes('{ ...vars')) {
+        if (code.includes('toUpperCase()')) {
+          return { ...input, name: input.name.toUpperCase() };
+        }
+        if (code.includes('vars.age + 5')) {
+          return { ...input, age: input.age + 5 };
+        }
+      }
+      // Handle transformVars with return statement and context
+      if (code.includes('return {') && code.includes('context.uuid')) {
+        return {
+          ...input,
+          id: context?.uuid || 'mock-uuid',
+          hasPrompt: Boolean(context?.prompt),
+        };
+      }
+      // Handle transform with "Test: " prefix
+      if (code === '"Test: " + output') {
+        return 'Test: ' + input;
+      }
+      if (code === '"Provider: " + output') {
+        return 'Provider: ' + input;
+      }
+      if (code === '"Transform: " + output') {
+        return 'Transform: ' + input;
+      }
+      // Handle multiple transforms concatenation
+      if (code === 'output + "-provider-test"') {
+        return input + '-provider-test';
+      }
+      if (code === 'output + "-provider"') {
+        return input + '-provider';
+      }
+      if (code === 'output + "-test"') {
+        return input + '-test';
+      }
+      // Handle template literal transforms with backticks
+      if (code === '`Transform: ${output}`') {
+        return `Transform: ${input}`;
+      }
+      if (code === '`Postprocess: ${output}`') {
+        return `Postprocess: ${input}`;
+      }
+      // Handle transformVars with test2UpperCase
+      if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
+        return { ...input, test2UpperCase: input.test2.toUpperCase() };
+      }
+    }
+    return input;
+  }),
+}));
+
 jest.mock('../src/util/fileReference', () => ({
   ...jest.requireActual('../src/util/fileReference'),
   processConfigFileReferences: jest.fn().mockImplementation(async (config) => {
@@ -1569,7 +1667,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-transform'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
       transform: '`Provider: ${output}`',
     };
@@ -2967,21 +3065,21 @@ describe('Evaluator with external defaultTest', () => {
 
     // First test should inherit all defaultTest properties
     const firstResult = summary.results[0] as any;
-    expect(firstResult.test.assert).toEqual(defaultTest.assert);
-    expect(firstResult.test.vars).toEqual({
+    expect(firstResult.testCase.assert).toEqual(defaultTest.assert);
+    expect(firstResult.testCase.vars).toEqual({
       defaultVar: 'defaultValue',
       testVar: 'testValue',
     });
-    expect(firstResult.test.threshold).toBe(0.8);
-    expect(firstResult.test.metadata).toEqual({ suite: 'test-suite' });
+    expect(firstResult.testCase.threshold).toBe(0.8);
+    expect(firstResult.testCase.metadata).toEqual({ suite: 'test-suite' });
 
     // Second test should merge/override appropriately
     const secondResult = summary.results[1] as any;
-    expect(secondResult.test.assert).toEqual([
+    expect(secondResult.testCase.assert).toEqual([
       ...defaultTest.assert,
       { type: 'contains' as const, value: 'exp' },
     ]);
-    expect(secondResult.test.threshold).toBe(0.9); // Override
+    expect(secondResult.testCase.threshold).toBe(0.9); // Override
   });
 
   it('should handle invariant check for defaultTest.assert array', async () => {
@@ -2997,7 +3095,9 @@ describe('Evaluator with external defaultTest', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
     // Should throw or handle gracefully
-    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow();
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      'defaultTest.assert is not an array in test case #1',
+    );
   });
 
   it('should correctly merge defaultTest with test case when defaultTest is object', async () => {
@@ -3026,8 +3126,8 @@ describe('Evaluator with external defaultTest', () => {
 
     // Test case transformVars should override defaultTest transformVars
     const result = summary.results[0] as any;
-    expect(result.test.options?.transformVars).toBe('vars.transformed = true; return vars;');
+    expect(result.testCase.options?.transformVars).toBe('vars.transformed = true; return vars;');
     // But other options should be merged
-    expect(result.test.options?.provider).toBe('default-provider');
+    expect(result.testCase.options?.provider).toBe('default-provider');
   });
 });

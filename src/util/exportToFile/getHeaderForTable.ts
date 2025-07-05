@@ -9,6 +9,15 @@ export function getHeaderForTable(eval_: Eval) {
     }
   }
 
+  // Collect vars from actual evaluation results
+  for (const result of eval_.results) {
+    if (result.test?.vars) {
+      for (const varName of Object.keys(result.test.vars)) {
+        varsForHeader.add(varName);
+      }
+    }
+  }
+
   // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
   const tests = eval_.config.tests;
   let testsArray: any[] = [];
