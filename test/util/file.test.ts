@@ -159,7 +159,7 @@ describe('file utilities', () => {
 
       const result = maybeLoadFromExternalFile('file://scenarios/*.yaml');
       expect(result).toEqual([mockData1, mockData2]);
-      expect(globSync).toHaveBeenCalledWith('/mock/base/path/scenarios/*.yaml', {
+      expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'scenarios/*.yaml'), {
         windowsPathsNoEscape: true,
       });
     });
@@ -198,7 +198,7 @@ describe('file utilities', () => {
       jest.mocked(globSync).mockReturnValue([]);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent/*.yaml')).toThrow(
-        'No files found matching pattern: /mock/base/path/nonexistent/*.yaml',
+        `No files found matching pattern: ${path.resolve('/mock/base/path', 'nonexistent/*.yaml')}`,
       );
     });
 
@@ -206,7 +206,7 @@ describe('file utilities', () => {
       jest.mocked(fs.existsSync).mockReturnValue(false);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent.yaml')).toThrow(
-        'File does not exist: /mock/base/path/nonexistent.yaml',
+        `File does not exist: ${path.resolve('/mock/base/path', 'nonexistent.yaml')}`,
       );
     });
 
