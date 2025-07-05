@@ -16,8 +16,9 @@ import invariant from '../../util/invariant';
 function addTypos(text: string, typoRate: number = 0.1): string {
   const chars = text.split('');
   const numTypos = Math.max(1, Math.floor(text.length * typoRate));
+  let changesApplied = 0;
 
-  for (let i = 0; i < numTypos; i++) {
+  for (let i = 0; i < numTypos && changesApplied < numTypos; i++) {
     if (chars.length === 0) {
       break;
     }
@@ -30,16 +31,29 @@ function addTypos(text: string, typoRate: number = 0.1): string {
         // Insert random character
         const randomChar = String.fromCharCode(97 + Math.floor(Math.random() * 26)); // a-z
         chars.splice(pos, 0, randomChar);
+        changesApplied++;
         break;
       }
       case 1: // Delete character
         if (chars.length > 1) {
           chars.splice(pos, 1);
+          changesApplied++;
+        } else if (numTypos === 1 && changesApplied === 0) {
+          // If this is our only chance and we can't delete, insert instead
+          const randomChar = String.fromCharCode(97 + Math.floor(Math.random() * 26));
+          chars.splice(0, 0, randomChar);
+          changesApplied++;
         }
         break;
       case 2: // Swap adjacent characters
         if (pos < chars.length - 1) {
           [chars[pos], chars[pos + 1]] = [chars[pos + 1], chars[pos]];
+          changesApplied++;
+        } else if (numTypos === 1 && changesApplied === 0) {
+          // If this is our only chance and we can't swap, insert instead
+          const randomChar = String.fromCharCode(97 + Math.floor(Math.random() * 26));
+          chars.splice(pos, 0, randomChar);
+          changesApplied++;
         }
         break;
     }
