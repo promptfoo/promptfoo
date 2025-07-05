@@ -12,9 +12,6 @@ import { maybeLoadToolsFromExternalFile } from '../../util';
 import type { OpenAiCompletionOptions } from './types';
 import { OPENAI_REALTIME_MODELS } from './util';
 
-// Define supported Realtime models
-export { OPENAI_REALTIME_MODELS } from './util';
-
 export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   modalities?: string[];
   instructions?: string;

@@ -203,5 +203,3 @@ export const CustomPoliciesSection = () => {
     </Box>
   );
 };
-
-export default memo(CustomPoliciesSection);

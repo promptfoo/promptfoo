@@ -20,7 +20,6 @@ import {
   type NunjucksFilterMap,
   type TestCase,
   type OutputFile,
-  type CompletedPrompt,
   type CsvRow,
   isApiProvider,
   isProviderOptions,
@@ -28,6 +27,7 @@ import {
   ResultFailureReason,
 } from '../types';
 import invariant from '../util/invariant';
+import type { StandaloneEval } from './database';
 import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
@@ -228,18 +228,6 @@ export function setupEnv(envPath: string | undefined) {
   }
 }
 
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-  uuid: string;
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-};
-
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
   if (isApiProvider(provider)) {
     return provider.id();
@@ -372,3 +360,5 @@ export function maybeLoadToolsFromExternalFile(
 ): any {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }
+
+export type { StandaloneEval };

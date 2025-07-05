@@ -114,7 +114,7 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
   return rawRequest;
 }
 
-export async function generateSignature(
+async function generateSignature(
   privateKeyPathOrKey: string,
   signatureTimestamp: number,
   signatureDataTemplate: string,
@@ -139,25 +139,19 @@ export async function generateSignature(
   }
 }
 
-export function needsSignatureRefresh(
-  timestamp: number,
-  validityMs: number,
-  bufferMs?: number,
-): boolean {
+function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?: number): boolean {
   const now = Date.now();
   const timeElapsed = now - timestamp;
   const effectiveBufferMs = bufferMs ?? Math.floor(validityMs * 0.1); // Default to 10% of validity time
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
-export const TokenEstimationConfigSchema = z.object({
+const TokenEstimationConfigSchema = z.object({
   enabled: z.boolean().default(false),
   multiplier: z.number().min(0.01).default(1.3),
 });
 
-export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
-
-export const HttpProviderConfigSchema = z.object({
+const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
@@ -200,7 +194,7 @@ export const HttpProviderConfigSchema = z.object({
     .optional(),
 });
 
-export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {

@@ -9,7 +9,7 @@ import cliState from '../cliState';
  * Simple Nunjucks engine specifically for file paths
  * This function is separate from the main getNunjucksEngine to avoid circular dependencies
  */
-export function getNunjucksEngineForFilePath(): nunjucks.Environment {
+function getNunjucksEngineForFilePath(): nunjucks.Environment {
   const env = nunjucks.configure({
     autoescape: false,
   });
@@ -107,3 +107,5 @@ export function maybeLoadConfigFromExternalFile(config: any): any {
   }
   return maybeLoadFromExternalFile(config);
 }
+
+export { getNunjucksEngineForFilePath };

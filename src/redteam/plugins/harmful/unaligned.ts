@@ -6,8 +6,6 @@ import { sleep } from '../../../util/time';
 import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
 import { createTestCase } from './common';
 
-export const PLUGIN_ID = 'promptfoo:redteam:harmful';
-
 export async function getHarmfulTests(
   { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,

@@ -5,7 +5,7 @@ export type CategoryStats = Record<
   string,
   { pass: number; total: number; passWithFilter?: number }
 >;
-export type PluginCategories = {
+type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];
   untested: string[];

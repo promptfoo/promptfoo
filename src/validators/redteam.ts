@@ -23,11 +23,7 @@ import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '..
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-export const pluginOptions: string[] = [
-  ...COLLECTIONS,
-  ...REDTEAM_ALL_PLUGINS,
-  ...ALIASED_PLUGINS,
-].sort();
+const pluginOptions: string[] = [...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].sort();
 /**
  * Schema for individual redteam plugins
  */
@@ -83,7 +79,7 @@ export const RedteamPluginSchema = z.union([
   RedteamPluginObjectSchema,
 ]);
 
-export const strategyIdSchema = z
+const strategyIdSchema = z
   .union([
     z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
       if (!ALL_STRATEGIES.includes(val as Strategy)) {

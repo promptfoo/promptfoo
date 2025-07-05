@@ -11,7 +11,7 @@ import type {
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export interface State {
+interface State {
   env: EnvOverrides;
   testCases: TestCase[];
   description: string;

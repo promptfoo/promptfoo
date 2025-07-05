@@ -44,11 +44,11 @@ export function novaOutputFromMessage(response: AmazonResponse) {
     .join('\n\n');
 }
 
-export interface TextBlockParam {
+interface TextBlockParam {
   text: string;
 }
 
-export interface ImageBlockParam {
+interface ImageBlockParam {
   image: {
     format: 'jpeg' | 'png' | 'gif' | 'webp';
     source: {
@@ -57,19 +57,19 @@ export interface ImageBlockParam {
   };
 }
 
-export interface ToolUseBlockParam {
+interface ToolUseBlockParam {
   id: string;
   input: unknown;
   name: string;
 }
 
-export interface ToolResultBlockParam {
+interface ToolResultBlockParam {
   toolUseId: string;
   content?: string | Array<TextBlockParam | ImageBlockParam>;
   status?: string;
 }
 
-export interface MessageParam {
+interface MessageParam {
   content:
     | string
     | Array<TextBlockParam | ImageBlockParam | ToolUseBlockParam | ToolResultBlockParam>;

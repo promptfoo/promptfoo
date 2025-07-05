@@ -40,7 +40,7 @@ export function isLoggedIntoCloud(): boolean {
   return !!userEmail && !isCI();
 }
 
-export interface EmailStatusResult {
+interface EmailStatusResult {
   status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'no_email';
   message?: string;
   email?: string;

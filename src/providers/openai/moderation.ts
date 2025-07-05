@@ -8,7 +8,7 @@ import type {
 } from '../../types';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
-export const OPENAI_MODERATION_MODELS = [
+const OPENAI_MODERATION_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'omni-moderation-2024-09-26', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'text-moderation-latest', maxTokens: 32768, capabilities: ['text'] },
@@ -16,9 +16,9 @@ export const OPENAI_MODERATION_MODELS = [
   { id: 'text-moderation-007', maxTokens: 32768, capabilities: ['text'] },
 ];
 
-export type OpenAIModerationModelId = string;
+type OpenAIModerationModelId = string;
 
-export type ModerationCategory =
+type ModerationCategory =
   | 'sexual'
   | 'sexual/minors'
   | 'harassment'
@@ -65,7 +65,7 @@ export type ImageInput = {
   };
 };
 
-export type ModerationInput = string | (TextInput | ImageInput)[];
+type ModerationInput = string | (TextInput | ImageInput)[];
 
 export function isTextInput(input: TextInput | ImageInput): input is TextInput {
   return input.type === 'text';
@@ -75,7 +75,7 @@ export function isImageInput(input: TextInput | ImageInput): input is ImageInput
   return input.type === 'image_url';
 }
 
-export interface OpenAIModerationConfig {
+interface OpenAIModerationConfig {
   apiKey?: string;
   headers?: Record<string, string>;
   passthrough?: Record<string, any>;
