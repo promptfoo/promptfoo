@@ -4,6 +4,8 @@ import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { handleConversationRelevance } from '../external/assertions/deepeval';
+import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -265,13 +267,14 @@ export async function runAssertion({
     'context-faithfulness': handleContextFaithfulness,
     'context-recall': handleContextRecall,
     'context-relevance': handleContextRelevance,
+    'conversation-relevance': handleConversationRelevance,
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
     'finish-reason': handleFinishReason,
+    'g-eval': handleGEval,
     gleu: handleGleuScore,
     guardrails: handleGuardrails,
-    'g-eval': handleGEval,
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
@@ -308,6 +311,7 @@ export async function runAssertion({
     moderation: handleModeration,
     perplexity: handlePerplexity,
     'perplexity-score': handlePerplexityScore,
+    pi: handlePiScorer,
     python: handlePython,
     regex: handleRegex,
     'rouge-n': handleRougeScore,
@@ -317,7 +321,6 @@ export async function runAssertion({
     'trace-span-count': handleTraceSpanCount,
     'trace-span-duration': handleTraceSpanDuration,
     webhook: handleWebhook,
-    pi: handlePiScorer,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
@@ -489,4 +492,5 @@ export default {
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
+  matchesConversationRelevance,
 };
