@@ -1,6 +1,14 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Mozilla Any-Agent framework comparison
 
+# Enable tracing for OpenTelemetry
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
 providers:
   - id: file://anyagent_tiny.py
     label: "TinyAgents"

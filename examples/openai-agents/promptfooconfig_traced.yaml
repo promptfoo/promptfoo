@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Agents evaluation with OpenTelemetry tracing
+
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+providers:
+  - id: openai-agents-traced
+    python: agent_provider_traced.py
+
+prompts:
+  - "{{query}}"
+
+tests:
+  # Test agent routing
+  - vars:
+      query: "I need help with my bill"
+    assert:
+      - type: javascript
+        value: output.includes('billing') || output.includes('Billing')
+      - type: javascript
+        value: metadata.agent === 'Billing Specialist'
+  
+  # Test technical support routing
+  - vars:
+      query: "My app keeps crashing"
+    assert:
+      - type: javascript
+        value: metadata.agent === 'Technical Support'
+      - type: llm-rubric
+        value: "Response should address technical issues"
+  
+  # Test order status function
+  - vars:
+      query: "What's the status of order 12345?"
+    assert:
+      - type: contains
+        value: "shipped"
+      - type: javascript
+        value: output.includes('12345')
+  
+  # Test general inquiry handling
+  - vars:
+      query: "What are your business hours?"
+    assert:
+      - type: javascript
+        value: metadata.agent === 'Customer Service Triage'
+      - type: llm-rubric
+        value: "Response should be helpful and professional" 

@@ -1,45 +1,52 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: PydanticAI agent evaluation
+description: Evaluating PydanticAI agents with structured outputs
+
+# Enable tracing for OpenTelemetry
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
 
 prompts:
-  - '{{query}}'
+  - "{{query}}"
 
 providers:
-  - id: file://provider.py
-    label: PydanticAI Weather Agent
-
-defaultTest:
-  assert:
-    - type: is-json
-      value:
-        type: object
-        properties:
-          location:
-            type: string
-          temperature:
-            type: string
-          description:
-            type: string
-        required: ['location', 'temperature', 'description']
+  - id: pydantic-ai-agent
+    python: pydantic_ai_provider.py
 
 tests:
-  - description: 'Basic weather query with JavaScript assertion'
-    vars:
-      query: "What's the weather like in London?"
+  - vars:
+      query: "I need help with my account login"
     assert:
-      - type: javascript
-        value: output.location.toLowerCase().includes('london') && output.temperature !== 'N/A'
-
-  - description: 'Structured output validation with Python assertion'
-    vars:
-      query: 'Weather in New York'
-    assert:
-      - type: python
-        value: "'new york' in output.get('location', '').lower() and output.get('temperature', '').endswith(('°C', '°F'))"
-
-  - description: 'Weather quality assessment with LLM rubric'
-    vars:
-      query: 'Weather in Tokyo'
-    assert:
+      - type: contains
+        value: "Category: support"
       - type: llm-rubric
-        value: 'The weather response should be realistic and include proper temperature units. The location should be correctly identified as Tokyo.'
+        value: "The response should be helpful and address the login issue"
+
+  - vars:
+      query: "I want to cancel my subscription"
+    assert:
+      - type: contains
+        value: "billing"
+      - type: llm-rubric
+        value: "The response should acknowledge the cancellation request"
+
+  - vars:
+      query: "Your service is terrible and I'm very upset!"
+    assert:
+      - type: contains
+        value: "Sentiment: negative"
+      - type: contains
+        value: "Needs Escalation: true"
+      - type: llm-rubric
+        value: "The response should be empathetic and professional"
+
+  - vars:
+      query: "How do I update my shipping address?"
+    assert:
+      - type: contains
+        value: "Category: support"
+      - type: llm-rubric
+        value: "The response should provide clear instructions"

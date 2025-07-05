@@ -420,6 +420,104 @@ def call_api_debug(prompt, options, context):
     }
 ```
 
+## OpenTelemetry Tracing
+
+Monitor agent execution with OpenTelemetry tracing support.
+
+### 1. Enable Tracing
+
+Add to `promptfooconfig.yaml`:
+
+```yaml
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+```
+
+### 2. Add Tracing to Provider
+
+```javascript
+const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
+const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+
+// Setup tracing
+const provider = new NodeTracerProvider();
+const exporter = new OTLPTraceExporter({
+  url: 'http://localhost:4318/v1/traces',
+});
+provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+provider.register();
+
+const tracer = trace.getTracer('openai.agents');
+
+async function callApi(prompt, { vars }, promptfooContext) {
+  // Extract trace context if provided
+  if (promptfooContext?.traceparent) {
+    const activeContext = trace.propagation.extract(context.active(), {
+      traceparent: promptfooContext.traceparent,
+    });
+
+    return context.with(activeContext, async () => {
+      const span = tracer.startSpan('openai.agent.call');
+      
+      try {
+        span.setAttribute('agent.framework', 'openai-agents-sdk');
+        span.setAttribute('prompt.text', prompt);
+        
+        // Track agent execution
+        const runSpan = tracer.startSpan('agent.run', { parent: span });
+        const result = await runAgent(prompt, vars);
+        runSpan.end();
+        
+        span.setAttribute('response.length', result.length);
+        span.setStatus({ code: SpanStatusCode.OK });
+        
+        return { output: result };
+      } catch (error) {
+        span.recordException(error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.message,
+        });
+        throw error;
+      } finally {
+        span.end();
+      }
+    });
+  }
+  
+  // Run without tracing
+  return { output: await runAgent(prompt, vars) };
+}
+```
+
+### 3. Install Dependencies
+
+```bash
+npm install @opentelemetry/api @opentelemetry/sdk-trace-node \
+  @opentelemetry/exporter-trace-otlp-http @opentelemetry/sdk-trace-base
+```
+
+### 4. View Traces
+
+Run evaluation and view traces:
+
+```bash
+promptfoo eval
+promptfoo view
+```
+
+The trace timeline shows:
+- Agent initialization
+- Tool calls with timing
+- Streaming chunks (if applicable)
+- Error locations and stack traces
+
 ## Next Steps
 
 - Try the [complete OpenAI Agents example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents)

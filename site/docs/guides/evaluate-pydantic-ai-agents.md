@@ -321,4 +321,179 @@ A successful evaluation shows:
 
 - Try the [complete PydanticAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/pydantic-ai)
 - Learn about [testing other agent frameworks](/docs/guides/evaluate-any-agent-framework)
-- Explore [red teaming agents](/docs/guides/llm-redteaming) 
+- Explore [red teaming agents](/docs/guides/llm-redteaming)
+
+## OpenTelemetry Tracing
+
+Promptfoo supports OpenTelemetry tracing to help you understand agent execution flow and performance.
+
+### 1. Enable Tracing in Configuration
+
+Add tracing configuration to your `promptfooconfig.yaml`:
+
+```yaml
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318  # Default OTLP HTTP port
+```
+
+### 2. Add Tracing to Your Provider
+
+Update your provider to support tracing:
+
+```python
+from opentelemetry import trace
+from opentelemetry.propagate import extract
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+# Setup OpenTelemetry
+provider = TracerProvider()
+exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
+provider.add_span_processor(SimpleSpanProcessor(exporter))
+trace.set_tracer_provider(provider)
+tracer = trace.get_tracer("pydantic_ai.agent")
+
+def call_api(prompt, options, context):
+    """Promptfoo provider with tracing"""
+    # Extract trace context if provided
+    if 'traceparent' in context:
+        ctx = extract({"traceparent": context["traceparent"]})
+        with tracer.start_as_current_span("pydantic_ai.call", context=ctx) as span:
+            span.set_attribute("agent.framework", "pydantic_ai")
+            span.set_attribute("prompt.text", prompt)
+            
+            try:
+                # Run agent with tracing
+                with tracer.start_as_current_span("agent.run"):
+                    result = agent.run_sync(prompt)
+                
+                span.set_attribute("response.success", True)
+                return {"output": result.data.model_dump()}
+            except Exception as e:
+                span.record_exception(e)
+                span.set_attribute("response.success", False)
+                return {"error": str(e)}
+    else:
+        # Run without tracing
+        result = agent.run_sync(prompt)
+        return {"output": result.data.model_dump()}
+```
+
+### 3. Install OpenTelemetry Dependencies
+
+```bash
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+```
+
+### 4. View Traces
+
+Run evaluation with tracing:
+
+```bash
+promptfoo eval
+promptfoo view
+```
+
+In the web UI, click the magnifying glass icon on any test result to view the trace timeline showing:
+- Agent execution flow
+- Tool calls and their duration
+- Nested spans for multi-step operations
+- Error locations and stack traces
+
+## Common Evaluation Scenarios
+
+### 1. Customer Service Agent
+
+```python
+class ServiceResponse(BaseModel):
+    response: str
+    category: str  # support, billing, general
+    sentiment: str  # positive, neutral, negative
+    needs_escalation: bool
+
+# Test emotional intelligence
+tests:
+  - vars:
+      message: "I'm frustrated with your service!"
+    assert:
+      - type: python
+        value: |
+          output['sentiment'] == 'negative' and
+          output['needs_escalation'] == True
+      - type: llm-rubric
+        value: "Response should be empathetic and professional"
+```
+
+### 2. Code Generation Agent
+
+```python
+class CodeOutput(BaseModel):
+    code: str
+    language: str
+    explanation: str
+    complexity: str  # simple, moderate, complex
+
+# Test code quality
+tests:
+  - vars:
+      task: "Write a function to reverse a string"
+    assert:
+      - type: python
+        value: |
+          # Test the generated code
+          exec(output['code'])
+          reverse_string("hello") == "olleh"
+```
+
+### 3. Data Analysis Agent
+
+```python
+class AnalysisResult(BaseModel):
+    findings: List[str]
+    recommendations: List[str]
+    confidence_score: float
+    visualizations: List[str]
+
+# Test analysis depth
+tests:
+  - vars:
+      data: "Sales increased 20% in Q3"
+    assert:
+      - type: javascript
+        value: |
+          output.findings.length >= 2 &&
+          output.recommendations.length >= 1 &&
+          output.confidence_score > 0.7
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Import Errors**: Ensure your provider can import the agent module
+   ```bash
+   export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+   ```
+
+2. **Async/Sync Mismatch**: Use `run_sync()` for synchronous providers
+   ```python
+   result = agent.run_sync(prompt)  # Not agent.run()
+   ```
+
+3. **Model Access**: Set API keys before running
+   ```bash
+   export OPENAI_API_KEY="your-key"
+   promptfoo eval
+   ```
+
+## Next Steps
+
+- Explore [PydanticAI documentation](https://ai.pydantic.dev/)
+- Learn about [advanced Promptfoo assertions](/docs/configuration/expected-outputs)
+- Set up [continuous evaluation](/docs/guides/evaluate-deployments) in CI/CD
+- Compare with other frameworks using [side-by-side evaluation](/docs/guides/evaluate-any-agent-framework) 
