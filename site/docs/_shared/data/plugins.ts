@@ -231,6 +231,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description: 'Tests object-property-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #3)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/bopla/',
+    name: 'Object-Property-Level Authorization Bypass',
+    pluginId: 'bopla',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description:
       'Simulates Context Compliance Attacks to test whether an AI system can be tricked into generating restricted content using manipulated chat history.',
     label: 'security',
@@ -1530,6 +1545,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description: 'Tests for unrestricted resource consumption vulnerabilities (OWASP API Security Top 10 #4)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/resource-consumption/',
+    name: 'Resource Consumption',
+    pluginId: 'resource-consumption',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to execute shell commands through the model',
     label: 'technical',
     link: '/docs/red-team/plugins/shell-injection/',
@@ -1631,6 +1661,21 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests for unrestricted access to sensitive business flows (OWASP API Security Top 10 #6)',
+    label: 'technical',
+    link: '/docs/red-team/plugins/unrestricted-access/',
+    name: 'Unrestricted Access',
+    pluginId: 'unrestricted-access',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
