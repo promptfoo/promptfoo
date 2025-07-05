@@ -24,6 +24,10 @@ RAG-based (requires `query` and context via variables or `contextTransform`):
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
 
+Conversational:
+
+- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - ensure that responses remain relevant throughout a conversation
+
 For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
 ## Examples (output-based)
