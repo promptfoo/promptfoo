@@ -1185,7 +1185,7 @@ describe('resolveConfigs', () => {
           modelName: 'gpt-4',
         }),
       ],
-      scenarios: scenarios,
+      scenarios,
       tests: externalTests,
       defaultTest: expect.objectContaining({
         metadata: {},

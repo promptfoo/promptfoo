@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../../src/cliState';
 import {
@@ -13,8 +15,6 @@ import {
   isVideoFile,
   isAudioFile,
 } from '../../src/util/fileExtensions';
-import { globSync } from 'glob';
-import yaml from 'js-yaml';
 
 jest.mock('fs', () => ({
   ...jest.requireActual('fs'),
@@ -92,8 +92,6 @@ describe('file utilities', () => {
 
   describe('maybeLoadFromExternalFile', () => {
     const mockFileContent = 'test content';
-    const mockJsonContent = '{"key": "value"}';
-    const mockYamlContent = 'key: value';
     const originalBasePath = cliState.basePath;
 
     beforeEach(() => {
@@ -109,8 +107,8 @@ describe('file utilities', () => {
 
     it('should return non-string inputs as-is', () => {
       expect(maybeLoadFromExternalFile({ foo: 'bar' })).toEqual({ foo: 'bar' });
-      expect(maybeLoadFromExternalFile(null)).toBe(null);
-      expect(maybeLoadFromExternalFile(undefined)).toBe(undefined);
+      expect(maybeLoadFromExternalFile(null)).toBeNull();
+      expect(maybeLoadFromExternalFile(undefined)).toBeUndefined();
     });
 
     it('should return strings that do not start with file:// as-is', () => {
@@ -152,9 +150,10 @@ describe('file utilities', () => {
       const mockFiles = ['/mock/base/path/scenario1.yaml', '/mock/base/path/scenario2.yaml'];
       const mockData1 = { test: 'scenario1' };
       const mockData2 = { test: 'scenario2' };
-      
+
       jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest.mocked(fs.readFileSync)
+      jest
+        .mocked(fs.readFileSync)
         .mockReturnValueOnce(yaml.dump(mockData1))
         .mockReturnValueOnce(yaml.dump(mockData2));
 
@@ -169,9 +168,10 @@ describe('file utilities', () => {
       const mockFiles = ['/mock/base/path/data1.json', '/mock/base/path/data2.json'];
       const mockData1 = { id: 1 };
       const mockData2 = { id: 2 };
-      
+
       jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest.mocked(fs.readFileSync)
+      jest
+        .mocked(fs.readFileSync)
         .mockReturnValueOnce(JSON.stringify(mockData1))
         .mockReturnValueOnce(JSON.stringify(mockData2));
 
@@ -183,9 +183,10 @@ describe('file utilities', () => {
       const mockFiles = ['/mock/base/path/tests1.yaml', '/mock/base/path/tests2.yaml'];
       const mockData1 = [{ test: 'a' }, { test: 'b' }];
       const mockData2 = [{ test: 'c' }, { test: 'd' }];
-      
+
       jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest.mocked(fs.readFileSync)
+      jest
+        .mocked(fs.readFileSync)
         .mockReturnValueOnce(yaml.dump(mockData1))
         .mockReturnValueOnce(yaml.dump(mockData2));
 
@@ -197,7 +198,7 @@ describe('file utilities', () => {
       jest.mocked(globSync).mockReturnValue([]);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent/*.yaml')).toThrow(
-        'No files found matching pattern: /mock/base/path/nonexistent/*.yaml'
+        'No files found matching pattern: /mock/base/path/nonexistent/*.yaml',
       );
     });
 
@@ -205,7 +206,7 @@ describe('file utilities', () => {
       jest.mocked(fs.existsSync).mockReturnValue(false);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent.yaml')).toThrow(
-        'File does not exist: /mock/base/path/nonexistent.yaml'
+        'File does not exist: /mock/base/path/nonexistent.yaml',
       );
     });
 
@@ -213,7 +214,8 @@ describe('file utilities', () => {
       const mockData1 = { key: 'value1' };
       const mockData2 = { key: 'value2' };
       jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync)
+      jest
+        .mocked(fs.readFileSync)
         .mockReturnValueOnce(JSON.stringify(mockData1))
         .mockReturnValueOnce(JSON.stringify(mockData2));
 

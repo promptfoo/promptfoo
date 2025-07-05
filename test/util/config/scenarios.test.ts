@@ -1,8 +1,15 @@
 import * as fs from 'fs';
-import * as path from 'path';
-import yaml from 'js-yaml';
 import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import { validateAssertions } from '../../../src/assertions/validateAssertions';
 import cliState from '../../../src/cliState';
+import { readPrompts, readProviderPromptMap } from '../../../src/prompts';
+import { loadApiProviders } from '../../../src/providers';
+import { readFilters } from '../../../src/util';
+// Import after mocking
+import { resolveConfigs } from '../../../src/util/config/load';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('fs');
 jest.mock('glob');
@@ -21,15 +28,6 @@ jest.mock('../../../src/util', () => ({
 }));
 jest.mock('../../../src/assertions/validateAssertions');
 
-// Import after mocking
-import { resolveConfigs } from '../../../src/util/config/load';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
-import { readPrompts, readProviderPromptMap } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
-import { readTests } from '../../../src/util/testCaseReader';
-import { readFilters } from '../../../src/util';
-import { validateAssertions } from '../../../src/assertions/validateAssertions';
-
 describe('Scenario loading with glob patterns', () => {
   const originalBasePath = cliState.basePath;
 
@@ -40,9 +38,9 @@ describe('Scenario loading with glob patterns', () => {
     // Setup default mocks
     jest.mocked(readPrompts).mockResolvedValue([{ raw: 'Test prompt', label: 'Test prompt' }]);
     jest.mocked(readProviderPromptMap).mockReturnValue({});
-    jest.mocked(loadApiProviders).mockResolvedValue([
-      { id: () => 'openai:gpt-3.5-turbo', callApi: jest.fn() } as any,
-    ]);
+    jest
+      .mocked(loadApiProviders)
+      .mockResolvedValue([{ id: () => 'openai:gpt-3.5-turbo', callApi: jest.fn() } as any]);
     jest.mocked(readTests).mockResolvedValue([]);
     jest.mocked(readFilters).mockResolvedValue({});
     jest.mocked(validateAssertions).mockImplementation(() => {});
@@ -95,9 +93,9 @@ describe('Scenario loading with glob patterns', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    // Check if maybeLoadFromExternalFile was called
-    expect(maybeLoadFromExternalFile).toHaveBeenCalled();
-    
+    // Check if maybeLoadFromExternalFile was called with the expected argument
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/*.yaml']);
+
     // Verify scenarios are flattened correctly
     expect(testSuite.scenarios).toHaveLength(2);
     expect(testSuite.scenarios![0]).toEqual(scenario1);
@@ -211,4 +209,4 @@ describe('Scenario loading with glob patterns', () => {
     expect(testSuite.scenarios![1]).toEqual(globScenarios[0]);
     expect(testSuite.scenarios![2]).toEqual(globScenarios[1]);
   });
-}); 
+});
