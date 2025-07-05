@@ -24,7 +24,7 @@ describe('getHeaderForTable', () => {
 
     mockEval.results = [
       {
-        test: {
+        testCase: {
           vars: {
             testVar1: 'test1',
             defaultVar1: 'override1',
@@ -32,7 +32,7 @@ describe('getHeaderForTable', () => {
         } as TestCase,
       },
       {
-        test: {
+        testCase: {
           vars: {
             testVar2: 'test2',
             testVar3: 'test3',
@@ -56,7 +56,7 @@ describe('getHeaderForTable', () => {
 
     mockEval.results = [
       {
-        test: {
+        testCase: {
           vars: {
             var1: 'value1',
             var2: 'value2',
@@ -77,7 +77,7 @@ describe('getHeaderForTable', () => {
 
     mockEval.results = [
       {
-        test: {
+        testCase: {
           vars: {
             var1: 'value1',
             var2: 'value2',
@@ -100,7 +100,7 @@ describe('getHeaderForTable', () => {
 
     mockEval.results = [
       {
-        test: {
+        testCase: {
           vars: {
             var1: 'value1',
           },
@@ -121,7 +121,7 @@ describe('getHeaderForTable', () => {
 
     mockEval.results = [
       {
-        test: {
+        testCase: {
           vars: {
             var1: 'value1',
           },
@@ -144,7 +144,7 @@ describe('getHeaderForTable', () => {
 
     mockEval.results = [
       {
-        test: {
+        testCase: {
           vars: {
             commonVar: 'override1',
             test1Var: 'value1',
@@ -152,7 +152,7 @@ describe('getHeaderForTable', () => {
         } as TestCase,
       },
       {
-        test: {
+        testCase: {
           vars: {
             commonVar: 'override2',
             test2Var: 'value2',
