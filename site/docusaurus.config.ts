@@ -488,6 +488,7 @@ const config: Config = {
         id: 'releases',
         routeBasePath: 'releases',
         path: './releases',
+        authorsMapPath: '../blog/authors.yml',
         blogTitle: 'Release Notes',
         blogDescription: 'promptfoo release notes and updates',
         blogSidebarCount: 0,
