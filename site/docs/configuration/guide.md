@@ -333,6 +333,10 @@ tests:
       shared_var: 'override shared content' # Optionally override defaults
 ```
 
+### Loading defaultTest from external files
+
+You can load `defaultTest` configuration from external files using `defaultTest: file://path/to/config.yaml` for sharing test configurations across projects.
+
 ### YAML references
 
 promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.

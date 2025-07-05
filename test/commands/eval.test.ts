@@ -383,3 +383,165 @@ describe('Provider Token Tracking', () => {
     expect(claudeUsage).toEqual(providerUsageData['anthropic:claude-3']);
   });
 });
+
+describe('doEval with external defaultTest', () => {
+  const defaultConfig = {} as UnifiedConfig;
+  const defaultConfigPath = 'config.yaml';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+        defaultTest: undefined,
+      },
+      basePath: path.resolve('/'),
+    });
+  });
+
+  it('should handle grader option with string defaultTest', async () => {
+    const cmdObj = { grader: 'test-grader' };
+    const mockProvider = {
+      id: () => 'test-grader',
+      callApi: async () => ({ output: 'test' }),
+    } as ApiProvider;
+
+    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: 'file://defaultTest.yaml', // String defaultTest
+    };
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    // Should convert string defaultTest to object before setting grader
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          options: expect.objectContaining({
+            provider: mockProvider,
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should handle var option with string defaultTest', async () => {
+    const cmdObj = { var: { key: 'value' } };
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: 'file://defaultTest.yaml', // String defaultTest
+    };
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    // Should convert string defaultTest to object before setting vars
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          vars: expect.objectContaining({
+            key: 'value',
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should handle both grader and var options with object defaultTest', async () => {
+    const cmdObj = {
+      grader: 'test-grader',
+      var: { key: 'value' },
+    };
+
+    const mockProvider = {
+      id: () => 'test-grader',
+      callApi: async () => ({ output: 'test' }),
+    } as ApiProvider;
+
+    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: {
+        assert: [{ type: 'equals' as const, value: 'test' }],
+        vars: { existing: 'var' },
+      },
+    };
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          assert: [{ type: 'equals' as const, value: 'test' }],
+          vars: { existing: 'var', key: 'value' },
+          options: expect.objectContaining({
+            provider: mockProvider,
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should not modify defaultTest when no grader or var options', async () => {
+    const cmdObj = {};
+
+    const originalDefaultTest = {
+      assert: [{ type: 'equals' as const, value: 'test' }],
+      vars: { foo: 'bar' },
+    };
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: originalDefaultTest,
+    };
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: originalDefaultTest,
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+});

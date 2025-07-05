@@ -359,9 +359,13 @@ export abstract class RedteamGraderBase {
       provider: await redteamProviderManager.getProvider({
         provider:
           // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
-          cliState.config?.defaultTest?.provider ||
-          cliState.config?.defaultTest?.options?.provider?.text ||
-          cliState.config?.defaultTest?.options?.provider,
+          (typeof cliState.config?.defaultTest === 'object' &&
+            cliState.config?.defaultTest?.provider) ||
+          (typeof cliState.config?.defaultTest === 'object' &&
+            cliState.config?.defaultTest?.options?.provider?.text) ||
+          (typeof cliState.config?.defaultTest === 'object' &&
+            cliState.config?.defaultTest?.options?.provider) ||
+          undefined,
         jsonOnly: true,
       }),
     });

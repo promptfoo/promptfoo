@@ -355,12 +355,14 @@ export async function doGenerateRedteam(
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};
+    const existingDefaultTest =
+      typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
       defaultTest: {
-        ...(existingYaml.defaultTest || {}),
+        ...existingDefaultTest,
         metadata: {
-          ...(existingYaml.defaultTest?.metadata || {}),
+          ...(existingDefaultTest?.metadata || {}),
           purpose,
           entities,
         },
@@ -428,10 +430,12 @@ export async function doGenerateRedteam(
     } else if (existingTests) {
       testsArray = [existingTests];
     }
+    const existingConfigDefaultTest =
+      typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
     existingConfig.defaultTest = {
-      ...(existingConfig.defaultTest || {}),
+      ...existingConfigDefaultTest,
       metadata: {
-        ...(existingConfig.defaultTest?.metadata || {}),
+        ...(existingConfigDefaultTest?.metadata || {}),
         purpose,
         entities,
       },
