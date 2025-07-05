@@ -11,8 +11,8 @@ export function getHeaderForTable(eval_: Eval) {
 
   // Collect vars from actual evaluation results
   for (const result of eval_.results) {
-    if (result.test?.vars) {
-      for (const varName of Object.keys(result.test.vars)) {
+    if (result.testCase?.vars) {
+      for (const varName of Object.keys(result.testCase.vars)) {
         varsForHeader.add(varName);
       }
     }

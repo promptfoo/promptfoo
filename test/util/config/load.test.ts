@@ -1604,13 +1604,7 @@ describe('resolveConfigs with external defaultTest', () => {
 
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
-    jest.mocked(readTests).mockImplementation(async (tests) => {
-      // Return tests as-is if it's already an array
-      if (Array.isArray(tests)) {
-        return tests;
-      }
-      return [{ vars: { test: 'value' } }];
-    });
+    jest.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
     jest.mocked(globSync).mockReturnValue(['config.json']);
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
