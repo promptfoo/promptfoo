@@ -66,7 +66,7 @@ tests:
           output: "I'd be happy to help you find a good Italian restaurant! What city are you in?"
         - input: "I'm in New York"
           output: "Great! New York has many excellent Italian restaurants. What's your budget range?"
-      prompt: "Something mid-range would be perfect"
+      prompt: 'Something mid-range would be perfect'
       output: "For mid-range Italian in NYC, I recommend Carbone in Greenwich Village or L'Artusi in the West Village. Both offer authentic Italian cuisine with great atmosphere."
     assert:
       - type: conversation-relevance

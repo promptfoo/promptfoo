@@ -30,12 +30,12 @@ The assertion works with the special `_conversation` variable that contains an a
 tests:
   - vars:
       _conversation:
-        - input: "What is the capital of France?"
-          output: "The capital of France is Paris."
-        - input: "What is its population?"
-          output: "Paris has a population of about 2.2 million people."
-        - input: "Tell me about famous landmarks there."
-          output: "Paris is famous for the Eiffel Tower, Louvre Museum, and Notre-Dame Cathedral."
+        - input: 'What is the capital of France?'
+          output: 'The capital of France is Paris.'
+        - input: 'What is its population?'
+          output: 'Paris has a population of about 2.2 million people.'
+        - input: 'Tell me about famous landmarks there.'
+          output: 'Paris is famous for the Eiffel Tower, Louvre Museum, and Notre-Dame Cathedral.'
     assert:
       - type: conversation-relevance
         threshold: 0.8
@@ -52,7 +52,7 @@ assert:
   - type: conversation-relevance
     threshold: 0.8
     config:
-      windowSize: 3  # Default is 5
+      windowSize: 3 # Default is 5
 ```
 
 ### Custom grading rubric
@@ -76,8 +76,8 @@ assert:
 ```yaml
 tests:
   - vars:
-      prompt: "What is machine learning?"
-      output: "Machine learning is a type of artificial intelligence that enables computers to learn from data."
+      prompt: 'What is machine learning?'
+      output: 'Machine learning is a type of artificial intelligence that enables computers to learn from data.'
     assert:
       - type: conversation-relevance
         threshold: 0.8
@@ -90,11 +90,11 @@ tests:
   - vars:
       _conversation:
         - input: "I'm planning a trip to Japan."
-          output: "That sounds exciting! When are you planning to visit?"
-        - input: "Next spring. What should I see?"
-          output: "Spring is perfect for cherry blossoms! Visit Tokyo, Kyoto, and Mount Fuji."
-        - input: "What about food recommendations?"
-          output: "Try sushi, ramen, tempura, and wagyu beef. Street food markets are amazing too!"
+          output: 'That sounds exciting! When are you planning to visit?'
+        - input: 'Next spring. What should I see?'
+          output: 'Spring is perfect for cherry blossoms! Visit Tokyo, Kyoto, and Mount Fuji.'
+        - input: 'What about food recommendations?'
+          output: 'Try sushi, ramen, tempura, and wagyu beef. Street food markets are amazing too!'
     assert:
       - type: conversation-relevance
         threshold: 0.9
@@ -110,12 +110,12 @@ This example shows how the metric catches irrelevant responses:
 tests:
   - vars:
       _conversation:
-        - input: "What is 2+2?"
-          output: "2+2 equals 4."
-        - input: "What about 3+3?"
-          output: "The capital of France is Paris."  # Irrelevant response
-        - input: "Can you solve 5+5?"
-          output: "5+5 equals 10."
+        - input: 'What is 2+2?'
+          output: '2+2 equals 4.'
+        - input: 'What about 3+3?'
+          output: 'The capital of France is Paris.' # Irrelevant response
+        - input: 'Can you solve 5+5?'
+          output: '5+5 equals 10.'
     assert:
       - type: conversation-relevance
         threshold: 0.8
@@ -133,9 +133,9 @@ The metric is designed to handle vague inputs appropriately. Vague responses to 
 tests:
   - vars:
       _conversation:
-        - input: "Hi there!"
-          output: "Hello! How can I help you today?"
-        - input: "How are you?"
+        - input: 'Hi there!'
+          output: 'Hello! How can I help you today?'
+        - input: 'How are you?'
           output: "I'm doing well, thank you! How are you?"
     assert:
       - type: conversation-relevance
@@ -169,4 +169,4 @@ defaultTest:
 
 - [Context relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) - For evaluating if context is relevant to a query
 - [Answer relevance](/docs/configuration/expected-outputs/model-graded/answer-relevance) - For evaluating if an answer is relevant to a question
-- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) - Overview of all model-graded assertions 
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) - Overview of all model-graded assertions

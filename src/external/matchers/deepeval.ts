@@ -34,9 +34,11 @@ export async function matchesConversationRelevance(
   );
 
   // First, render any variables within the messages themselves
-  const renderedMessages = messages.map(msg => ({
-    input: typeof msg.input === 'string' && vars ? nunjucks.renderString(msg.input, vars) : msg.input,
-    output: typeof msg.output === 'string' && vars ? nunjucks.renderString(msg.output, vars) : msg.output,
+  const renderedMessages = messages.map((msg) => ({
+    input:
+      typeof msg.input === 'string' && vars ? nunjucks.renderString(msg.input, vars) : msg.input,
+    output:
+      typeof msg.output === 'string' && vars ? nunjucks.renderString(msg.output, vars) : msg.output,
   }));
 
   // Generate verdict using LLM
@@ -58,9 +60,12 @@ export async function matchesConversationRelevance(
   JSON:`;
 
   const rubricPrompt = grading?.rubricPrompt || defaultRubricPrompt;
-  
+
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
-  const promptText = nunjucks.renderString(rubricPrompt, { messages: renderedMessages, ...(vars || {}) });
+  const promptText = nunjucks.renderString(rubricPrompt, {
+    messages: renderedMessages,
+    ...(vars || {}),
+  });
 
   const resp = await textProvider.callApi(promptText);
   if (resp.error || !resp.output) {
@@ -77,7 +82,7 @@ export async function matchesConversationRelevance(
     if (jsonObjects.length === 0) {
       throw new Error('No JSON object found in response');
     }
-    
+
     const result = jsonObjects[0] as VerdictResult;
     const pass = result.verdict === 'yes';
     const score = pass ? 1 : 0;
