@@ -3,6 +3,7 @@ import React from 'react';
 import { useStore } from '@app/stores/evalConfig';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import type {
+  DerivedMetric,
   ProviderOptions,
   TestCase,
   EvaluateOptions,
@@ -65,6 +66,7 @@ const defaultStoreValues = {
   prompts: [] as any[],
   testCases: [] as TestCase[],
   defaultTest: {} as TestCase,
+  derivedMetrics: [] as DerivedMetric[],
   env: {} as EnvOverrides,
   evaluateOptions: {} as EvaluateOptions,
   scenarios: [] as Scenario[],
@@ -146,6 +148,7 @@ describe('EvaluateTestSuiteCreator', () => {
       prompts: ['Test Prompt {{var}}'],
       testCases: [{ vars: { var: 'value' } }] as TestCase[],
       defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
+      derivedMetrics: [{ name: 'precision', value: 'formula' }] as DerivedMetric[],
       env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
       evaluateOptions: { maxConcurrency: 5 } as EvaluateOptions,
       scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
@@ -172,6 +175,7 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(currentState.prompts).toEqual(defaultStoreValues.prompts);
     expect(currentState.testCases).toEqual(defaultStoreValues.testCases);
     expect(currentState.defaultTest).toEqual(defaultStoreValues.defaultTest);
+    expect(currentState.derivedMetrics).toEqual(defaultStoreValues.derivedMetrics);
     expect(currentState.env).toEqual(defaultStoreValues.env);
     expect(currentState.evaluateOptions).toEqual(defaultStoreValues.evaluateOptions);
     expect(currentState.scenarios).toEqual(defaultStoreValues.scenarios);
@@ -186,6 +190,7 @@ describe('EvaluateTestSuiteCreator', () => {
       prompts: ['Test Prompt {{var}}'],
       testCases: [{ vars: { var: 'value' } }] as TestCase[],
       defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
+      derivedMetrics: [{ name: 'precision', value: 'formula' }] as DerivedMetric[],
       env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
       evaluateOptions: { maxConcurrency: 5 } as EvaluateOptions,
       scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
@@ -212,6 +217,7 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(currentState.prompts).toEqual(defaultStoreValues.prompts);
     expect(currentState.testCases).toEqual(defaultStoreValues.testCases);
     expect(currentState.defaultTest).toEqual(defaultStoreValues.defaultTest);
+    expect(currentState.derivedMetrics).toEqual(defaultStoreValues.derivedMetrics);
     expect(currentState.env).toEqual(defaultStoreValues.env);
     expect(currentState.evaluateOptions).toEqual(defaultStoreValues.evaluateOptions);
     expect(currentState.scenarios).toEqual(defaultStoreValues.scenarios);

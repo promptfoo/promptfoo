@@ -28,6 +28,7 @@ strategies:
       maxTurns: 5
       maxBacktracks: 5
       stateful: false # Sends the entire conversation history with each turn (Default)
+      continueAfterSuccess: false # Stop after first successful attack (Default)
 ```
 
 Increasing the number of turns and backtracks will make the strategy more aggressive, but it will also take longer to complete and cost more.
@@ -39,6 +40,30 @@ This strategy is relatively high cost. We recommend running it on a smaller numb
 :::warning
 If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
+
+### Continue After Success
+
+By default, both Crescendo and GOAT strategies stop immediately upon finding a successful attack. You can configure them to continue searching for additional successful attacks until `maxTurns` is reached:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - id: crescendo
+    config:
+      maxTurns: 10
+      continueAfterSuccess: true
+
+  - id: goat
+    config:
+      maxTurns: 8
+      continueAfterSuccess: true
+```
+
+When `continueAfterSuccess: true`:
+
+- The strategy will continue generating attacks even after finding successful ones
+- All successful attacks are recorded in the metadata
+- The strategy only stops when `maxTurns` is reached
+- This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
 
 ## How It Works
 

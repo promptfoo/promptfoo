@@ -15,7 +15,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import useTheme from '@mui/material/styles/useTheme';
-import { ResultFailureReason } from '@promptfoo/types';
+import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
@@ -104,7 +104,7 @@ function DownloadMenu() {
 
     // Find the failed tests
     const failedTests = table.body
-      .filter((row) => row.outputs.some((output) => !output.pass))
+      .filter((row) => row.outputs.some((output) => !output?.pass))
       .map((row) => row.test);
 
     if (failedTests.length === 0) {
@@ -132,8 +132,8 @@ function DownloadMenu() {
       return;
     }
     const formattedData = table.body.map((row) => ({
-      chosen: row.outputs.filter((output) => output.pass).map((output) => output.text),
-      rejected: row.outputs.filter((output) => !output.pass).map((output) => output.text),
+      chosen: row.outputs.filter((output) => output?.pass).map((output) => output!.text),
+      rejected: row.outputs.filter((output) => output && !output.pass).map((output) => output.text),
       vars: row.test.vars,
       providers: table.head.prompts.map((prompt) => prompt.provider),
       prompts: table.head.prompts.map((prompt) => prompt.label || prompt.display || prompt.raw),
@@ -170,14 +170,16 @@ function DownloadMenu() {
     table.body.forEach((row) => {
       const rowValues = [
         ...row.vars,
-        ...row.outputs.map(
-          ({ pass, text, failureReason: failureType }) =>
-            (pass
-              ? '[PASS] '
-              : failureType === ResultFailureReason.ASSERT
-                ? '[FAIL] '
-                : '[ERROR] ') + text,
-        ),
+        ...row.outputs
+          .filter((output): output is EvaluateTableOutput => output != null)
+          .map(
+            ({ pass, text, failureReason: failureType }) =>
+              (pass
+                ? '[PASS] '
+                : failureType === ResultFailureReason.ASSERT
+                  ? '[FAIL] '
+                  : '[ERROR] ') + text,
+          ),
       ];
       csvRows.push(rowValues);
     });
@@ -197,22 +199,22 @@ function DownloadMenu() {
     type TableRow = (typeof table.body)[number];
 
     const humanEvalCases = table.body
-      .filter((row): row is TableRow => row.outputs.some((output) => output.pass !== null))
+      .filter((row): row is TableRow => row.outputs.some((output) => output != null))
       .map((row) => ({
         vars: {
           ...row.test.vars,
-          output: row.outputs[0].text.includes('---')
-            ? row.outputs[0].text.split('---\n')[1]
-            : row.outputs[0].text,
-          redteamFinalPrompt: row.outputs[0].metadata?.redteamFinalPrompt,
-          ...(row.outputs[0].gradingResult?.comment
-            ? { comment: row.outputs[0].gradingResult.comment }
+          output: row.outputs[0]?.text.includes('---')
+            ? row.outputs[0]!.text.split('---\n')[1]
+            : (row.outputs[0]?.text ?? ''),
+          redteamFinalPrompt: row.outputs[0]?.metadata?.redteamFinalPrompt,
+          ...(row.outputs[0]?.gradingResult?.comment
+            ? { comment: row.outputs[0]!.gradingResult!.comment }
             : {}),
         },
         assert: [
           {
             type: 'javascript',
-            value: `${row.outputs[0].pass ? '' : '!'}JSON.parse(output).pass`,
+            value: `${row.outputs[0]?.pass ? '' : '!'}JSON.parse(output).pass`,
           },
         ],
         metadata: row.test.metadata,
@@ -438,7 +440,7 @@ function DownloadMenu() {
                 color="secondary"
                 fullWidth
                 disabled={
-                  !table || table.body.every((row) => row.outputs.every((output) => output.pass))
+                  !table || table.body.every((row) => row.outputs.every((output) => output?.pass))
                 }
               >
                 Download Failed Tests Config

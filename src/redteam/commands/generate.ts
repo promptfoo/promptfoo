@@ -14,7 +14,8 @@ import { VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getProviderIds, loadApiProviders } from '../../providers';
+import { getProviderIds } from '../../providers';
+import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
@@ -32,9 +33,9 @@ import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  type Plugin,
   REDTEAM_MODEL,
   type Severity,
-  type Plugin,
 } from '../constants';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type {
@@ -139,13 +140,6 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
-    const providers = await loadApiProviders(resolved.config.providers ?? []);
-
-    invariant(
-      providers.length === 1,
-      'Generation can only be run with a single provider. Please specify a single provider in the config file.',
-    );
-
     try {
       // If the provider is a cloud provider, check for plugin severity overrides:
       const providerId = getProviderIds(resolved.config.providers!)[0];
@@ -189,8 +183,8 @@ export async function doGenerateRedteam(
     numTestsExisting: (testSuite.tests || []).length,
     plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
-  await telemetry.send();
 
   let plugins;
 
@@ -235,11 +229,14 @@ export async function doGenerateRedteam(
 
   // override plugins with command line options
   if (Array.isArray(options.plugins) && options.plugins.length > 0) {
-    plugins = options.plugins.map((plugin) => ({
-      id: plugin.id,
-      numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
-      ...(plugin.config && { config: plugin.config }),
-    }));
+    plugins = options.plugins.map((plugin) => {
+      const pluginConfig = {
+        id: plugin.id,
+        numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
+        ...(plugin.config && { config: plugin.config }),
+      };
+      return pluginConfig;
+    });
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
 
@@ -494,8 +491,9 @@ export async function doGenerateRedteam(
     numTestsGenerated: redteamTests.length,
     plugins: plugins.map((p) => p.id),
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
-  await telemetry.send();
+
   return ret;
 }
 

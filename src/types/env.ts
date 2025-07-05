@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const ProviderEnvOverridesSchema = z.object({
   AI21_API_BASE_URL: z.string().optional(),
   AI21_API_KEY: z.string().optional(),
+  AIML_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().optional(),
   AWS_BEDROCK_REGION: z.string().optional(),
@@ -38,6 +39,7 @@ export const ProviderEnvOverridesSchema = z.object({
   HELICONE_API_KEY: z.string().optional(),
   HF_API_TOKEN: z.string().optional(),
   HF_TOKEN: z.string().optional(),
+  HYPERBOLIC_API_KEY: z.string().optional(),
   HUGGING_FACE_HUB_TOKEN: z.string().optional(),
   JFROG_API_KEY: z.string().optional(),
   LAMBDA_API_KEY: z.string().optional(),

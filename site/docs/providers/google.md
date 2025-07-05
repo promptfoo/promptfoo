@@ -102,12 +102,29 @@ Safety settings can be configured to control content filtering:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
           probability: BLOCK_ONLY_HIGH # or other thresholds
 ```
+
+### System Instructions
+
+Configure system-level instructions for the model:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro
+    config:
+      # Direct text
+      systemInstruction: 'You are a helpful assistant'
+
+      # Or load from file
+      systemInstruction: file://system-instruction.txt
+```
+
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
@@ -257,6 +274,8 @@ providers:
           mode: 'auto' # or 'none' to disable
 ```
 
+For practical examples of function calling with Google AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution patterns that work with Google AI Studio models.
+
 ### Structured Output
 
 You can constrain the model to output structured JSON responses in two ways:
@@ -374,7 +393,7 @@ Promptfoo now supports Google's WebSocket-based Live API, which enables low-late
 
 ### Using the Live Provider
 
-Access the Live API by specifying the model with the 'live' service type:
+Access the Google Live API by specifying the model with the 'live' service type:
 
 ```yaml
 providers:
@@ -395,7 +414,7 @@ providers:
 
 ### Function Calling Example
 
-The Live API supports function calling, allowing you to define tools that the model can use:
+The Google Live API supports function calling, allowing you to define tools that the model can use:
 
 ```yaml
 providers:
@@ -440,7 +459,7 @@ Where `tools.json` contains function declarations and built-in tools:
 
 ### Built-in Tools
 
-The Live API includes several built-in tools:
+The Google Live API includes several built-in tools:
 
 1. **Code Execution**: Execute Python code directly in the model's runtime
 
@@ -457,6 +476,40 @@ The Live API includes several built-in tools:
    }
    ```
 
+### Audio Generation
+
+Evaluate audio generation with the Google Live provider:
+
+1. Basic audio generation:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.0-flash-live-001'
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {} # Enable transcription
+      speechConfig:
+        voiceConfig:
+          prebuiltVoiceConfig:
+            voiceName: 'Charon'
+      timeoutMs: 30000
+```
+
+2. Specifying additional options, such as enabling affective dialog:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.5-flash-exp-native-audio-thinking-dialog'
+    config:
+      apiVersion: 'v1alpha' # Required for affective dialog
+      generationConfig:
+        response_modalities: ['audio']
+        enableAffectiveDialog: true
+```
+
+Other configuration options are available, such as setting proactive audio, setting the language code, and more. Read more about sending and receiving audio for Gemini in the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#send-receive-audio).
+
 ### Getting Started
 
 Try the examples:
@@ -467,6 +520,9 @@ promptfoo init --example google-live
 
 # Function calling and tools example
 promptfoo init --example google-live-tools
+
+# Audio generation example
+promptfoo init --example google-live-audio
 ```
 
 ### Limitations
@@ -476,4 +532,4 @@ promptfoo init --example google-live-tools
 - Rate limits of 3 concurrent sessions per API key apply
 - Maximum of 4M tokens per minute
 
-For more details, see the [Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+For more details, see the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live).

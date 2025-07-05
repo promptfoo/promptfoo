@@ -8,6 +8,7 @@ import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } fro
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
+import type { CallbackContext } from '../openai/types';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
@@ -194,7 +195,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    context?: CallbackContext,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -223,9 +228,13 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      // Execute the callback with explicit context
+      logger.debug(
+        `Executing function '${functionName}' with args: ${args}${
+          context ? ` and context: ${JSON.stringify(context)}` : ''
+        }`,
+      );
+      const result = await callback(args, context);
 
       // Format the result
       if (result === undefined || result === null) {
@@ -397,9 +406,35 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           );
         } else {
           if (completedRun.last_error) {
-            result = {
-              error: `Thread run failed: ${completedRun.last_error.code || ''} - ${completedRun.last_error.message}`,
-            };
+            // Check if the error is a content filter error
+            const errorCode = completedRun.last_error.code || '';
+            const errorMessage = completedRun.last_error.message || '';
+
+            if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
+              const lowerErrorMessage = errorMessage.toLowerCase();
+              const isInputFiltered =
+                lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+              const isOutputFiltered =
+                lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
+
+              // Ensure mutual exclusivity - prioritize input if both are detected
+              const flaggedInput = isInputFiltered;
+              const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
+
+              result = {
+                output:
+                  "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+                guardrails: {
+                  flagged: true,
+                  flaggedInput,
+                  flaggedOutput,
+                },
+              };
+            } else {
+              result = {
+                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
+              };
+            }
           } else {
             result = {
               error: `Thread run failed with status: ${completedRun.status}`,
@@ -432,6 +467,25 @@ export class AzureAssistantProvider extends AzureGenericProvider {
    */
   private formatError(err: any): ProviderResponse {
     const errorMessage = err.message || String(err);
+
+    // Handle content filter errors
+    if (this.isContentFilterError(errorMessage)) {
+      const lowerErrorMessage = errorMessage.toLowerCase();
+      const isInputFiltered =
+        lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+      const isOutputFiltered =
+        lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
+
+      return {
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: isInputFiltered,
+          flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered), // Default to output if neither is explicitly mentioned
+        },
+      };
+    }
 
     // Format specific error types
     if (
@@ -486,6 +540,14 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         // For error responses, delete from cache to avoid reusing
         await result.deleteFromCache?.();
 
+        // Check for content filter errors in the response data
+        if (result.data && typeof result.data === 'object' && 'error' in result.data) {
+          const errorData = result.data as any;
+          if (errorData.error?.code === 'content_filter') {
+            throw new Error(`Content filter triggered: ${errorData.error.message}`);
+          }
+        }
+
         // Handle error response
         throw new Error(
           `API error: ${result.status} ${result.statusText}${
@@ -528,6 +590,19 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   /**
    * Helper methods to check for specific error types
    */
+  private isContentFilterError(errorMessage: string): boolean {
+    const lowerErrorMessage = errorMessage.toLowerCase();
+    return (
+      lowerErrorMessage.includes('content_filter') ||
+      lowerErrorMessage.includes('content filter') ||
+      lowerErrorMessage.includes('filtered due to') ||
+      lowerErrorMessage.includes('content filtering') ||
+      lowerErrorMessage.includes('inappropriate content') ||
+      lowerErrorMessage.includes('safety guidelines') ||
+      lowerErrorMessage.includes('guardrail')
+    );
+  }
+
   private isRateLimitError(errorMessage: string): boolean {
     return (
       errorMessage.includes('rate limit') ||
@@ -713,6 +788,14 @@ export class AzureAssistantProvider extends AzureGenericProvider {
               }
             }
 
+            // Build context for function callbacks
+            const callbackContext: CallbackContext = {
+              threadId,
+              runId,
+              assistantId: this.deploymentName, // Azure uses deploymentName as the assistant ID
+              provider: 'azure',
+            };
+
             // Process tool calls that have matching callbacks
             const toolOutputs = await Promise.all(
               functionCallsWithCallbacks.map(async (toolCall) => {
@@ -722,10 +805,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                 try {
                   logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
 
-                  // Use our new executeFunctionCallback method
+                  // Use our new executeFunctionCallback method with context
                   const outputResult = await this.executeFunctionCallback(
                     functionName,
                     functionArgs,
+                    callbackContext,
                   );
 
                   logger.debug(`Function ${functionName} result: ${outputResult}`);
@@ -779,8 +863,33 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           if (run.status !== 'completed') {
             // Return error for failed runs
             if (run.last_error) {
+              const errorCode = run.last_error.code || '';
+              const errorMessage = run.last_error.message || '';
+
+              if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
+                const lowerErrorMessage = errorMessage.toLowerCase();
+                const isInputFiltered =
+                  lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+                const isOutputFiltered =
+                  lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
+
+                // Ensure mutual exclusivity - prioritize input if both are detected
+                const flaggedInput = isInputFiltered;
+                const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
+
+                return {
+                  output:
+                    "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+                  guardrails: {
+                    flagged: true,
+                    flaggedInput,
+                    flaggedOutput,
+                  },
+                };
+              }
+
               return {
-                error: `Thread run failed: ${run.last_error.code || ''} - ${run.last_error.message}`,
+                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
               };
             }
 

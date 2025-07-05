@@ -222,19 +222,16 @@ pipeline {
 Common issues and solutions:
 
 1. **Permission issues:**
-
    - Ensure Jenkins has appropriate permissions to install global npm packages
    - Verify cache directory permissions
    - Check API key credential permissions
 
 2. **Pipeline timeout:**
-
    - Adjust the timeout in pipeline options
    - Consider splitting evaluations into smaller batches
    - Monitor API rate limits
 
 3. **Cache problems:**
-
    - Verify cache path exists and is writable
    - Check disk space availability
    - Clear cache if needed: `rm -rf ~/.promptfoo/cache/*`

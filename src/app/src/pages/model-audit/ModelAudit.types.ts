@@ -8,6 +8,7 @@ export interface ScanOptions {
   blacklist: string[];
   timeout: number;
   maxFileSize?: number;
+  maxTotalSize?: number;
   verbose: boolean;
 }
 

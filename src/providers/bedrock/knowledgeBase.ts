@@ -85,7 +85,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     this.kbConfig = options.config || { knowledgeBaseId: '' };
 
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'knowledge_base',
       provider: 'bedrock',
     });
@@ -142,22 +142,40 @@ export class AwsBedrockKnowledgeBaseProvider
     const client = await this.getKnowledgeBaseClient();
 
     // Prepare the request parameters
-    const modelArn =
-      this.kbConfig.modelArn ||
-      (this.modelName.includes(':')
-        ? this.modelName.includes('arn:aws:bedrock')
-          ? this.modelName // Already has full ARN format
-          : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`
-        : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`);
+    let modelArn = this.kbConfig.modelArn;
+
+    if (!modelArn) {
+      if (this.modelName.includes('arn:aws:bedrock')) {
+        modelArn = this.modelName; // Already has full ARN format
+      } else if (
+        this.modelName.startsWith('us.') ||
+        this.modelName.startsWith('eu.') ||
+        this.modelName.startsWith('apac.')
+      ) {
+        // This is a cross-region inference profile - use inference-profile ARN format
+        // Note: We'll use the modelName directly as the inference profile ID since Knowledge Bases
+        // expect the inference profile ID, not a full ARN for these
+        modelArn = this.modelName;
+      } else {
+        // Regular foundation model
+        modelArn = `arn:aws:bedrock:${this.getRegion()}::foundation-model/${this.modelName}`;
+      }
+    }
+
+    const knowledgeBaseConfiguration: any = {
+      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+    };
+
+    // Only include modelArn if explicitly configured or if it's a valid model
+    if (this.kbConfig.modelArn || this.modelName !== 'default') {
+      knowledgeBaseConfiguration.modelArn = modelArn;
+    }
 
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
       retrieveAndGenerateConfiguration: {
         type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration: {
-          knowledgeBaseId: this.kbConfig.knowledgeBaseId,
-          modelArn,
-        },
+        knowledgeBaseConfiguration,
       },
     };
 

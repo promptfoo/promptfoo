@@ -18,7 +18,7 @@ import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
-import { getLastMessageContent, messagesToRedteamHistory } from './shared';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -26,6 +26,12 @@ import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached';
+  successfulAttacks?: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+  }>;
+  totalSuccessfulAttacks?: number;
 }
 
 /**
@@ -45,10 +51,16 @@ interface GoatConfig {
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   stateful: boolean;
+  continueAfterSuccess: boolean;
 }
 
 export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
+  private successfulAttacks: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+  }> = [];
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -60,6 +72,7 @@ export default class GoatProvider implements ApiProvider {
       injectVar?: string;
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+      continueAfterSuccess?: boolean;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -72,12 +85,14 @@ export default class GoatProvider implements ApiProvider {
       stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:
         options.excludeTargetOutputFromAgenticAttackGeneration ?? false,
+      continueAfterSuccess: options.continueAfterSuccess ?? false,
     };
     logger.debug(
       `[GOAT] Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
         maxTurns: options.maxTurns,
         stateful: options.stateful,
+        continueAfterSuccess: options.continueAfterSuccess,
       })}`,
     );
   }
@@ -87,6 +102,9 @@ export default class GoatProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
+    // Reset successful attacks array for each new call
+    this.successfulAttacks = [];
+
     let response: Response | undefined = undefined;
     logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
@@ -121,6 +139,71 @@ export default class GoatProvider implements ApiProvider {
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
+        // Handle unblocking logic BEFORE attack (skip on first turn)
+        if (turn > 0 && previousTargetOutput) {
+          const unblockingResult = await tryUnblocking({
+            messages,
+            lastResponse: previousTargetOutput,
+            goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
+            purpose: context?.test?.metadata?.purpose,
+          });
+
+          if (unblockingResult.tokenUsage) {
+            totalTokenUsage.total += unblockingResult.tokenUsage.total || 0;
+            totalTokenUsage.prompt += unblockingResult.tokenUsage.prompt || 0;
+            totalTokenUsage.completion += unblockingResult.tokenUsage.completion || 0;
+            totalTokenUsage.numRequests += unblockingResult.tokenUsage.numRequests ?? 1;
+            totalTokenUsage.cached += unblockingResult.tokenUsage.cached || 0;
+          }
+
+          if (unblockingResult.success && unblockingResult.unblockingPrompt) {
+            logger.debug(
+              `[GOAT] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
+            );
+
+            messages.push({ role: 'user', content: unblockingResult.unblockingPrompt });
+
+            const unblockingTargetPrompt = this.config.stateful
+              ? unblockingResult.unblockingPrompt
+              : JSON.stringify(messages);
+
+            const unblockingResponse = await targetProvider.callApi(
+              unblockingTargetPrompt,
+              context,
+              options,
+            );
+
+            if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
+              logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+              await sleep(targetProvider.delay);
+            }
+
+            if (unblockingResponse.tokenUsage) {
+              totalTokenUsage.total += unblockingResponse.tokenUsage.total || 0;
+              totalTokenUsage.prompt += unblockingResponse.tokenUsage.prompt || 0;
+              totalTokenUsage.completion += unblockingResponse.tokenUsage.completion || 0;
+              totalTokenUsage.numRequests += unblockingResponse.tokenUsage.numRequests ?? 1;
+              totalTokenUsage.cached += unblockingResponse.tokenUsage.cached || 0;
+            } else {
+              totalTokenUsage.numRequests += 1;
+            }
+
+            const unblockingOutput =
+              typeof unblockingResponse.output === 'string'
+                ? unblockingResponse.output
+                : safeJsonStringify(unblockingResponse.output);
+
+            if (unblockingOutput) {
+              messages.push({ role: 'assistant', content: unblockingOutput });
+            }
+
+            if (unblockingResponse.error) {
+              logger.error(`[GOAT] Target returned an error: ${unblockingResponse.error}`);
+            }
+          }
+        }
+
+        // Generate and send attack
         let body: string;
         let failureReason: string | undefined;
         if (this.config.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
@@ -202,8 +285,8 @@ export default class GoatProvider implements ApiProvider {
           totalTokenUsage.total += data.tokenUsage.total || 0;
           totalTokenUsage.prompt += data.tokenUsage.prompt || 0;
           totalTokenUsage.completion += data.tokenUsage.completion || 0;
-          totalTokenUsage.cached += data.tokenUsage.cached || 0;
           totalTokenUsage.numRequests += data.tokenUsage.numRequests ?? 1;
+          totalTokenUsage.cached += data.tokenUsage.cached || 0;
         }
         logger.debug(
           dedent`
@@ -241,6 +324,8 @@ export default class GoatProvider implements ApiProvider {
           typeof targetResponse.output === 'string'
             ? targetResponse.output
             : safeJsonStringify(targetResponse.output);
+        const finalOutput = stringifiedOutput;
+        const finalResponse = targetResponse;
 
         if (!stringifiedOutput) {
           logger.debug(
@@ -248,12 +333,14 @@ export default class GoatProvider implements ApiProvider {
           );
           continue;
         }
-        previousTargetOutput = stringifiedOutput;
 
         messages.push({
           role: 'assistant',
           content: stringifiedOutput,
         });
+
+        // Store the attack response for potential unblocking in next turn
+        previousTargetOutput = stringifiedOutput;
 
         if (targetResponse.tokenUsage) {
           totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
@@ -265,13 +352,13 @@ export default class GoatProvider implements ApiProvider {
           totalTokenUsage.numRequests += 1;
         }
 
-        lastTargetResponse = targetResponse;
+        lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && grader) {
+        if (test && grader && finalOutput) {
           const { grade } = await grader.getResult(
             attackerMessage.content,
-            stringifiedOutput,
+            finalOutput,
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
@@ -288,21 +375,37 @@ export default class GoatProvider implements ApiProvider {
         }
 
         if (graderPassed === false) {
-          break;
+          // Record successful attack
+          this.successfulAttacks.push({
+            turn,
+            prompt: attackerMessage.content,
+            response: stringifiedOutput,
+          });
+
+          // Only break early if continueAfterSuccess is false
+          if (this.config.continueAfterSuccess) {
+            // Continue to next turn
+          } else {
+            break;
+          }
         }
       } catch (err) {
         logger.error(`Error in GOAT turn ${turn}: ${err}`);
       }
     }
-    delete context?.vars?.sessionId;
 
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
         messages: messages as Record<string, any>[],
-        stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
+        stopReason:
+          this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess
+            ? 'Grader failed'
+            : 'Max turns reached',
         redteamHistory: messagesToRedteamHistory(messages),
+        successfulAttacks: this.successfulAttacks,
+        totalSuccessfulAttacks: this.successfulAttacks.length,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

@@ -104,8 +104,11 @@ describe('modelScanCommand', () => {
       'output.json',
       '--timeout',
       '600',
+      '--verbose',
       '--max-file-size',
       '1000000',
+      '--max-total-size',
+      '5000000',
     ]);
 
     expect(mockSpawn).toHaveBeenCalledWith(
@@ -121,9 +124,12 @@ describe('modelScanCommand', () => {
         '--output',
         'output.json',
         '--timeout',
-        600,
+        '600',
+        '--verbose',
         '--max-file-size',
         '1000000',
+        '--max-total-size',
+        '5000000',
       ],
       { stdio: 'inherit' },
     );

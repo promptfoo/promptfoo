@@ -242,7 +242,7 @@ Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
 function recordOnboardingStep(step: string, properties: EventProperties = {}) {
-  telemetry.recordAndSend('funnel', {
+  telemetry.record('funnel', {
     type: 'eval onboarding',
     step,
     ...properties,
@@ -388,7 +388,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     const choices: { name: string; value: (string | object)[] }[] = [
       { name: `I'll choose later`, value: ['openai:gpt-4.1-mini', 'openai:gpt-4.1'] },
       {
-        name: '[OpenAI] o1, o3, GPT 4o, GPT 4o-mini, GPT-3.5, ...',
+        name: '[OpenAI] o3, o4, GPT 4.1, ...',
         value:
           action === 'agent'
             ? [
@@ -430,9 +430,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
         value: [
-          'huggingface:text-generation:meta-llama/Meta-Llama-3-8B-Instruct',
-          'huggingface:text-generation:microsoft/Phi-3-mini-4k-instruct',
-          'huggingface:text-generation:google/gemma-2b-it',
+          'huggingface:text-generation:meta-llama/Meta-Llama-3.1-8B-Instruct',
+          'huggingface:text-generation:microsoft/Phi-4-mini-instruct',
+          'huggingface:text-generation:google/gemma-3-4b-it',
         ],
       },
       {
@@ -459,7 +459,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro-preview-03-25'] },
+      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',
         value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],

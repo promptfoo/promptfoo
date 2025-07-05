@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { email, isLoading, setEmail, fetchEmail } = useUserStore();
+  usePageMeta({ title: 'Login', description: 'Authenticate to access promptfoo' });
 
   useEffect(() => {
     fetchEmail();

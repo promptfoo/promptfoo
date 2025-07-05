@@ -380,6 +380,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         author: incEval.author,
         createdAt: new Date(incEval.createdAt),
         results: incEval.results,
+        vars: incEval.vars,
       });
       if (incEval.prompts) {
         eval_.addPrompts(incEval.prompts);

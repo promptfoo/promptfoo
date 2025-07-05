@@ -46,6 +46,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     setPrompts,
     setTestCases,
     setDefaultTest,
+    setDerivedMetrics,
     setEnv,
     setEvaluateOptions,
     setScenarios,
@@ -77,6 +78,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     setProviders([]);
     setPrompts([]);
     setDefaultTest({});
+    setDerivedMetrics([]);
     setEnv({});
     setEvaluateOptions({});
     setScenarios([]);

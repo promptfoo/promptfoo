@@ -1,6 +1,19 @@
 ---
-sidebar_position: 5
+sidebar_position: 11
 sidebar_label: Prompts
+title: Prompt Configuration - Text, Chat, and Dynamic Prompts
+description: Configure prompts for LLM evaluation including text prompts, chat conversations, file-based prompts, and dynamic prompt generation with variables.
+keywords:
+  [
+    prompt configuration,
+    LLM prompts,
+    chat conversations,
+    dynamic prompts,
+    template variables,
+    prompt engineering,
+  ]
+pagination_prev: configuration/parameters
+pagination_next: configuration/test-cases
 ---
 
 # Prompt Configuration

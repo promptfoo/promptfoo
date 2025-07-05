@@ -66,6 +66,9 @@
                             "AI21_API_KEY": {
                               "type": "string"
                             },
+                            "AIML_API_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
@@ -169,6 +172,9 @@
                               "type": "string"
                             },
                             "HF_TOKEN": {
+                              "type": "string"
+                            },
+                            "HYPERBOLIC_API_KEY": {
                               "type": "string"
                             },
                             "HUGGING_FACE_HUB_TOKEN": {
@@ -521,6 +527,7 @@
                                               "cost",
                                               "equals",
                                               "factuality",
+                                              "finish-reason",
                                               "g-eval",
                                               "gleu",
                                               "guardrails",
@@ -550,6 +557,9 @@
                                               "rouge-n",
                                               "similar",
                                               "starts-with",
+                                              "trace-error-spans",
+                                              "trace-span-count",
+                                              "trace-span-duration",
                                               "webhook"
                                             ]
                                           },
@@ -583,6 +593,9 @@
                                         "type": "string"
                                       },
                                       "transform": {
+                                        "type": "string"
+                                      },
+                                      "contextTransform": {
                                         "type": "string"
                                       }
                                     },
@@ -1081,7 +1094,11 @@
                           "beavertails",
                           "bfla",
                           "bias",
+                          "bias",
+                          "bias:age",
+                          "bias:disability",
                           "bias:gender",
+                          "bias:race",
                           "bola",
                           "cca",
                           "competitors",
@@ -1108,7 +1125,13 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "financial:calculation-error",
+                          "financial:compliance-violation",
+                          "financial:data-leakage",
+                          "financial:hallucination",
+                          "financial:sycophancy",
                           "foundation",
+                          "guardrails-eval",
                           "hallucination",
                           "harmbench",
                           "harmful",
@@ -1257,7 +1280,11 @@
                               "beavertails",
                               "bfla",
                               "bias",
+                              "bias",
+                              "bias:age",
+                              "bias:disability",
                               "bias:gender",
+                              "bias:race",
                               "bola",
                               "cca",
                               "competitors",
@@ -1284,7 +1311,13 @@
                               "eu:ai-act:art5:social-scoring",
                               "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "financial:calculation-error",
+                              "financial:compliance-violation",
+                              "financial:data-leakage",
+                              "financial:hallucination",
+                              "financial:sycophancy",
                               "foundation",
+                              "guardrails-eval",
                               "hallucination",
                               "harmbench",
                               "harmful",
@@ -1543,6 +1576,106 @@
         "writeLatestResults": {
           "type": "boolean"
         },
+        "tracing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "otlp": {
+              "type": "object",
+              "properties": {
+                "http": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4318
+                    },
+                    "host": {
+                      "type": "string",
+                      "default": "0.0.0.0"
+                    },
+                    "acceptFormats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "protobuf",
+                          "json"
+                        ]
+                      },
+                      "default": [
+                        "json"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "grpc": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4317
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "sqlite"
+                  ],
+                  "default": "sqlite"
+                },
+                "retentionDays": {
+                  "type": "number",
+                  "default": 30
+                }
+              },
+              "additionalProperties": false
+            },
+            "forwarding": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "endpoint"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
         "evaluateOptions": {
           "type": "object",
           "properties": {
@@ -1575,6 +1708,9 @@
             },
             "maxEvalTimeMs": {
               "type": "number"
+            },
+            "isRedteam": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false

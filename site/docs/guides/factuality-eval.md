@@ -85,19 +85,15 @@ The model-graded factuality check takes the following three inputs:
 The evaluation classifies the relationship between the LLM output and the reference into one of five categories:
 
 - **A**: Output is a subset of the reference and is fully consistent with it
-
   - _Example: If the reference is "Paris is the capital of France and has a population of 2.1 million," a subset would be "Paris is the capital of France" — it contains less information but is fully consistent_
 
 - **B**: Output is a superset of the reference and is fully consistent with it
-
   - _Example: If the reference is "Paris is the capital of France," a superset would be "Paris is the capital of France and home to the Eiffel Tower" — it adds accurate information while maintaining consistency_
 
 - **C**: Output contains all the same details as the reference
-
   - _Example: If the reference is "The Earth orbits the Sun," and the output is "The Sun is orbited by the Earth" — same information, different wording_
 
 - **D**: Output and reference disagree
-
   - _Example: If the reference is "Paris is the capital of France," but the output claims "Lyon is the capital of France" — this is a factual disagreement_
 
 - **E**: Output and reference differ, but differences don't affect factuality
@@ -185,17 +181,14 @@ The quality of your reference answers is crucial for accurate factuality evaluat
 ### What makes a good reference answer?
 
 1. **Clarity**: State the fact directly and unambiguously
-
    - _Good: "The capital of France is Paris."_
    - _Avoid: "As everyone knows, the beautiful city of Paris serves as the capital of the magnificent country of France."_
 
 2. **Precision**: Include necessary details without extraneous information
-
    - _Good: "Water freezes at 0 degrees Celsius at standard atmospheric pressure."_
    - _Avoid: "Water, H2O, freezes at 0 degrees Celsius, which is also 32 degrees Fahrenheit, creating ice that floats."_
 
 3. **Verifiability**: Ensure your reference is backed by authoritative sources
-
    - _Good: "According to the World Health Organization, the COVID-19 pandemic was declared on March 11, 2020."_
    - _Avoid: "The COVID pandemic started sometime in early 2020."_
 

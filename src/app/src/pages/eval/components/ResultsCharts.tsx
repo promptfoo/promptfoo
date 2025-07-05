@@ -80,7 +80,14 @@ function HistogramChart({ table }: ChartProps) {
     }
 
     // Calculate bins and their counts
-    const scores = table.body.flatMap((row) => row.outputs.map((output) => output.score));
+    const scores = table.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+
+    if (scores.length === 0) {
+      return;
+    }
+
     const maxScore = Math.max(...scores);
     const minScore = Math.min(...scores);
     const range = Math.ceil(maxScore) - Math.floor(minScore); // Adjust the range to be between whole numbers
@@ -90,7 +97,9 @@ function HistogramChart({ table }: ChartProps) {
     );
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const scores = table.body.flatMap((row) => row.outputs[promptIdx].score);
+      const scores = table.body
+        .map((row) => row.outputs[promptIdx]?.score)
+        .filter((score) => typeof score === 'number' && !Number.isNaN(score));
       const counts = bins.map(
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
@@ -156,7 +165,9 @@ function PassRateChart({ table }: ChartProps) {
     }
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const outputs = table.body.flatMap((row) => row.outputs[promptIdx]);
+      const outputs = table.body
+        .map((row) => row.outputs[promptIdx])
+        .filter((output) => output != null);
       const passCount = outputs.filter((output) => output.pass).length;
       const passRate = (passCount / outputs.length) * 100;
       return {
@@ -206,27 +217,42 @@ function ScatterChart({ table }: ChartProps) {
       scatterChartInstance.current.destroy();
     }
 
-    const scores = table.body.flatMap((row) => row.outputs.map((output) => output.score));
+    const scores = table.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+
+    if (scores.length === 0) {
+      return;
+    }
+
     const minScore = Math.min(...scores);
     const maxScore = Math.max(...scores);
 
-    const data = table.body.map((row) => {
-      const prompt1Score = row.outputs[xAxisPrompt].score;
-      const prompt2Score = row.outputs[yAxisPrompt].score;
-      let backgroundColor;
-      if (prompt2Score > prompt1Score) {
-        backgroundColor = 'green';
-      } else if (prompt2Score < prompt1Score) {
-        backgroundColor = 'red';
-      } else {
-        backgroundColor = 'gray';
-      }
-      return {
-        x: prompt1Score,
-        y: prompt2Score,
-        backgroundColor,
-      };
-    });
+    const data = table.body
+      .map((row) => {
+        const prompt1Score = row.outputs[xAxisPrompt]?.score;
+        const prompt2Score = row.outputs[yAxisPrompt]?.score;
+        let backgroundColor;
+        if (prompt2Score > prompt1Score) {
+          backgroundColor = 'green';
+        } else if (prompt2Score < prompt1Score) {
+          backgroundColor = 'red';
+        } else {
+          backgroundColor = 'gray';
+        }
+        return {
+          x: prompt1Score,
+          y: prompt2Score,
+          backgroundColor,
+        };
+      })
+      .filter(
+        (point) =>
+          typeof point.x === 'number' &&
+          !Number.isNaN(point.x) &&
+          typeof point.y === 'number' &&
+          !Number.isNaN(point.y),
+      );
 
     scatterChartInstance.current = new Chart(scatterCanvasRef.current, {
       type: 'scatter',
@@ -261,8 +287,8 @@ function ScatterChart({ table }: ChartProps) {
             callbacks: {
               label(tooltipItem: TooltipItem<'scatter'>) {
                 const row = table.body[tooltipItem.dataIndex];
-                let prompt1Text = row.outputs[0].text;
-                let prompt2Text = row.outputs[1].text;
+                let prompt1Text = row.outputs[0]?.text || 'No output';
+                let prompt2Text = row.outputs[1]?.text || 'No output';
                 if (prompt1Text.length > 30) {
                   prompt1Text = prompt1Text.substring(0, 30) + '...';
                 }
@@ -642,7 +668,15 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
     );
   }
 
-  const scores = table.body.flatMap((row) => row.outputs.map((output) => output.score));
+  const scores = table.body
+    .flatMap((row) => row.outputs.map((output) => output?.score))
+    .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+
+  if (scores.length === 0) {
+    // No valid scores available
+    return null;
+  }
+
   const scoreSet = new Set(scores);
   if (scoreSet.size === 1) {
     // All scores are the same, charts not useful.

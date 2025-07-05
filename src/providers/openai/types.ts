@@ -2,6 +2,29 @@ import type OpenAI from 'openai';
 import type { MCPConfig } from '../mcp/types';
 import { type OpenAiFunction, type OpenAiTool } from './util';
 
+/**
+ * Context provided to function callbacks for assistant providers
+ */
+export interface CallbackContext {
+  /** The thread ID for the current conversation */
+  threadId: string;
+  /** The run ID for the current execution */
+  runId: string;
+  /** The assistant ID being used */
+  assistantId: string;
+  /** The provider type (e.g., 'openai', 'azure') */
+  provider: string;
+}
+
+/**
+ * Function callback that can receive context about the current assistant execution
+ *
+ * @param args - Function arguments. OpenAI Assistant provider passes parsed objects,
+ *               Azure Assistant provider passes raw JSON strings.
+ * @param context - Optional execution context with thread/run/assistant information
+ */
+export type AssistantFunctionCallback = (args: any, context?: CallbackContext) => Promise<string>;
+
 export interface OpenAiSharedOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
@@ -118,7 +141,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    */
   functionToolCallbacks?: Record<
     OpenAI.FunctionDefinition['name'],
-    ((arg: string) => Promise<string>) | string
+    AssistantFunctionCallback | string
   >;
   mcp?: MCPConfig;
 };

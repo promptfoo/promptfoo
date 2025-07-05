@@ -1219,5 +1219,59 @@ describe('AIStudioChatProvider', () => {
         false,
       );
     });
+
+    it('should load system instructions from file', async () => {
+      const mockSystemInstruction = 'You are a helpful assistant from a file.';
+
+      // Mock file system operations
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          systemInstruction: 'file://system-instruction.txt',
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+          },
+        },
+        cached: false,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      await provider.callGemini('test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining(
+            `"system_instruction":{"parts":[{"text":"${mockSystemInstruction}"}]}`,
+          ),
+        }),
+        expect.any(Number),
+        'json',
+        false,
+      );
+
+      // Verify file was read
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('system-instruction.txt'),
+        'utf8',
+      );
+    });
   });
 });

@@ -298,10 +298,10 @@ describe('createShareableUrl', () => {
     mockEval.author = 'original@example.com';
 
     const result = await createShareableUrl(mockEval as Eval);
-    expect(result).toBe(`https://app.example.com/eval/${mockEval.id}`);
+    expect(result).toBe(`https://app.example.com/eval/mock-eval-id`);
   });
 
-  it('updates eval ID when server returns different ID for cloud instance', async () => {
+  it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
@@ -317,11 +317,15 @@ describe('createShareableUrl', () => {
       json: () => Promise.resolve({ id: newId }),
     });
 
-    await createShareableUrl(mockEval as Eval);
-    expect(mockEval.id).toBe(newId);
+    const result = await createShareableUrl(mockEval as Eval);
+    expect(result).toBe(`https://app.example.com/eval/${newId}`);
+
+    // Verify idempotency
+    const result2 = await createShareableUrl(mockEval as Eval);
+    expect(result2).toEqual(result);
   });
 
-  it('updates eval ID when server returns different ID for self-hosted instance', async () => {
+  it('Self-Hosted: creates unique URL for each share call', async () => {
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -333,8 +337,11 @@ describe('createShareableUrl', () => {
       json: () => Promise.resolve({ id: newId }),
     });
 
-    await createShareableUrl(mockEval as Eval);
-    expect(mockEval.id).toBe(newId);
+    const result = await createShareableUrl(mockEval as Eval);
+    expect(result).toBe(`https://promptfoo.app/eval/${newId}`);
+
+    const result2 = await createShareableUrl(mockEval as Eval);
+    expect(result2).not.toEqual(result);
   });
 
   describe('chunked sending', () => {

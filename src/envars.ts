@@ -34,11 +34,13 @@ type EnvVars = {
   PROMPTFOO_DISABLE_TEMPLATING?: boolean;
   PROMPTFOO_DISABLE_UPDATE?: boolean;
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
+  PROMPTFOO_DISABLE_WAL_MODE?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
+  PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
@@ -154,6 +156,9 @@ type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
+  // AIML API
+  AIML_API_KEY?: string;
+
   // Anthropic
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;
@@ -216,6 +221,9 @@ type EnvVars = {
   /** @deprecated Use HF_TOKEN instead */
   HF_API_TOKEN?: string;
   HF_TOKEN?: string;
+
+  // Hyperbolic
+  HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
   LANGFUSE_HOST?: string;

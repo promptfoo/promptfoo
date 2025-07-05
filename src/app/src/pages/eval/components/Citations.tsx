@@ -149,9 +149,9 @@ export default function Citations({ citations }: { citations: any }) {
   return (
     <Box mt={3} mb={3}>
       <Typography
-        variant="h6"
+        variant="subtitle1"
         gutterBottom
-        sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', mb: 2 }}
+        sx={{ display: 'flex', alignItems: 'center', mb: 2 }}
       >
         Citations
         <Typography component="span" variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>

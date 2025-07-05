@@ -259,6 +259,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         (filter: any) => filter.filtered,
       );
 
+      if (flaggedOutput) {
+        logger.warn(
+          `Azure model ${this.deploymentName} output was flagged by content filter: ${JSON.stringify(
+            contentFilterResults,
+          )}`,
+        );
+      }
+
       return {
         output,
         tokenUsage: cached

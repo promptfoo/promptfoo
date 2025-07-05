@@ -31,7 +31,7 @@ function TelemetryTracker() {
 
   useEffect(() => {
     recordEvent('webui_page_view', { path: location.pathname });
-  }, [location, recordEvent]);
+  }, [location.pathname, recordEvent]);
 
   return <Outlet />;
 }

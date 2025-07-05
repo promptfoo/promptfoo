@@ -88,7 +88,9 @@ When Promptfoo evaluates a test case with a Python provider:
 
 ### Function Interface
 
-Your Python script must implement one or more of these functions:
+Your Python script must implement one or more of these functions. Both synchronous and asynchronous versions are supported:
+
+**Synchronous Functions:**
 
 ```python
 def call_api(prompt: str, options: dict, context: dict) -> dict:
@@ -101,6 +103,22 @@ def call_embedding_api(prompt: str, options: dict, context: dict) -> dict:
 
 def call_classification_api(prompt: str, options: dict, context: dict) -> dict:
     """For classification tasks."""
+    pass
+```
+
+**Asynchronous Functions:**
+
+```python
+async def call_api(prompt: str, options: dict, context: dict) -> dict:
+    """Async main function for text generation tasks."""
+    pass
+
+async def call_embedding_api(prompt: str, options: dict, context: dict) -> dict:
+    """Async function for embedding generation tasks."""
+    pass
+
+async def call_classification_api(prompt: str, options: dict, context: dict) -> dict:
+    """Async function for classification tasks."""
     pass
 ```
 
@@ -544,6 +562,23 @@ def call_api(prompt, options, context):
    )
    print(result)
    ```
+
+4. **Use Python debugger (pdb) for interactive debugging:**
+
+   ```bash
+   export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
+   ```
+
+   With this environment variable set, you can use `import pdb; pdb.set_trace()` in your Python code to set breakpoints:
+
+   ```python
+   def call_api(prompt, options, context):
+       import pdb; pdb.set_trace()  # Execution will pause here
+       # Your provider logic
+       return {"output": result}
+   ```
+
+   This allows interactive debugging directly in your terminal during evaluation runs.
 
 ### Performance Optimization
 

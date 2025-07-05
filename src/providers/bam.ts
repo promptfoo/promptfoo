@@ -72,7 +72,7 @@ interface BAMModerations {
 
 export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
-    (acc, result) => acc + result.generated_token_count,
+    (acc: number, result: any) => acc + result.generated_token_count,
     0,
   );
   const tokenUsage: Partial<TokenUsage> = {
@@ -83,7 +83,7 @@ export function convertResponse(response: TextGenerationCreateOutput): ProviderR
 
   const providerResponse: ProviderResponse = {
     error: undefined,
-    output: response.results.map((result) => result.generated_text).join(', '),
+    output: response.results.map((result: any) => result.generated_text).join(', '),
     tokenUsage,
     cost: undefined,
     cached: undefined,

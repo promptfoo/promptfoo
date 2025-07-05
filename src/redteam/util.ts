@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { pluginDescriptions } from './constants';
-import { getRemoteGenerationUrl } from './remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
 
 /**
  * Normalizes different types of apostrophes to a standard single quote
@@ -216,6 +216,10 @@ export async function extractGoalFromPrompt(
   purpose: string,
   pluginId?: string,
 ): Promise<string | null> {
+  if (neverGenerateRemote()) {
+    logger.debug('Remote generation disabled, skipping goal extraction');
+    return null;
+  }
   // If we have a plugin ID, use the plugin description to generate a better goal
   // This helps with multi-variable attacks where the main prompt might be innocent
   const pluginDescription = pluginId

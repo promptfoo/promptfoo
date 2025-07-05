@@ -33,6 +33,7 @@ export interface Config {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
+  maxConcurrency?: number;
   applicationDefinition: ApplicationDefinition;
   entities: string[];
   defaultTest?: TestCase;

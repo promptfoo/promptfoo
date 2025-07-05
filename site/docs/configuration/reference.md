@@ -1,5 +1,19 @@
 ---
 sidebar_position: 2
+sidebar_label: Reference
+title: Configuration Reference - Complete API Documentation
+description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
+keywords:
+  [
+    promptfoo reference,
+    configuration API,
+    evaluation options,
+    provider settings,
+    test configuration,
+    assertion types,
+  ]
+pagination_prev: configuration/guide
+pagination_next: configuration/parameters
 ---
 
 # Reference
@@ -50,13 +64,14 @@ A test case represents a single example input that is fed into all prompts and p
 
 More details on using assertions, including examples [here](/docs/configuration/expected-outputs).
 
-| Property  | Type   | Required | Description                                                                                              |
-| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
-| type      | string | Yes      | Type of assertion                                                                                        |
-| value     | string | No       | The expected value, if applicable                                                                        |
-| threshold | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`  |
-| provider  | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
-| metric    | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                 |
+| Property         | Type   | Required | Description                                                                                                                                                                                                                                 |
+| ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                           |
+| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                           |
+| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                     |
+| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                    |
+| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                    |
+| contextTransform | string | No       | JavaScript expression to extract context from provider output for context-based assertions. Alternative to providing context as a test variable. Supports expressions like `output.context` or `output.docs.map(d => d.content).join('\n')` |
 
 ### AssertionValueFunctionContext
 
