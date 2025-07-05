@@ -103,7 +103,9 @@ describe('plugins constants', () => {
   it('should define BASE_PLUGINS array', () => {
     expect(BASE_PLUGINS).toEqual([
       'contracts',
+      'cross-session-leak',
       'excessive-agency',
+      'extra-information',
       'hallucination',
       'hijacking',
       'politics',

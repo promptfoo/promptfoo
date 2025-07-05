@@ -214,7 +214,9 @@ export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
+  'cross-session-leak',
   'excessive-agency',
+  'extra-information',
   'hallucination',
   'hijacking',
   'politics',
@@ -229,7 +231,6 @@ export const ADDITIONAL_PLUGINS = [
   'bola',
   'cca',
   'competitors',
-  'cross-session-leak',
   'cyberseceval',
   'debug-access',
   'divergent-repetition',

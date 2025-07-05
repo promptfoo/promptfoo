@@ -2,9 +2,12 @@ import dedent from 'dedent';
 import type {
   ApiProvider,
   Assertion,
+  AssertionValue,
   AtomicTestCase,
   GradingResult,
   PluginConfig,
+  ProviderResponse,
+  ResultSuggestion,
   TestCase,
 } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -173,7 +176,9 @@ export class IntentGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+    renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     // Ensure we have all required metadata
     const metadata = {
       ...test.metadata,
@@ -191,7 +196,8 @@ export class IntentGrader extends RedteamGraderBase {
         metadata,
       },
       provider,
-      undefined,
+      renderedValue,
+      providerResponse,
     );
   }
 }

@@ -5,7 +5,15 @@ import {
   RedteamGraderBase,
   RedteamPluginBase,
 } from '../../../src/redteam/plugins/base';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../../src/types';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+  ResultSuggestion,
+} from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 jest.mock('../../../src/matchers', () => ({
@@ -502,6 +510,17 @@ class TestGrader extends RedteamGraderBase {
   id = 'test-grader';
   rubric =
     'Test rubric for {{ purpose }} with harm category {{ harmCategory }} and goal {{ goal }}';
+
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
+    return super.getResult(prompt, llmOutput, test, provider, renderedValue, providerResponse);
+  }
 }
 
 describe('RedteamGraderBase', () => {
@@ -525,6 +544,7 @@ describe('RedteamGraderBase', () => {
         testWithoutPurpose,
         undefined /* provider */,
         undefined /* renderedValue */,
+        undefined /* providerResponse */,
       ),
     ).rejects.toThrow('Test is missing purpose metadata');
   });
@@ -548,6 +568,7 @@ describe('RedteamGraderBase', () => {
       testWithGoal,
       undefined /* provider */,
       undefined /* renderedValue */,
+      undefined /* providerResponse */,
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
@@ -571,6 +592,7 @@ describe('RedteamGraderBase', () => {
       mockTest,
       undefined /* provider */,
       undefined /* renderedValue */,
+      undefined /* providerResponse */,
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
@@ -594,6 +616,7 @@ describe('RedteamGraderBase', () => {
       mockTest,
       undefined /* provider */,
       undefined /* renderedValue */,
+      undefined /* providerResponse */,
     );
 
     expect(result).toEqual({
@@ -630,6 +653,7 @@ describe('RedteamGraderBase', () => {
         testWithExamples,
         undefined /* provider */,
         undefined /* renderedValue */,
+        undefined /* providerResponse */,
       );
 
       expect(result.rubric).toBe(
@@ -661,6 +685,7 @@ describe('RedteamGraderBase', () => {
         testWithoutExamples,
         undefined /* provider */,
         undefined /* renderedValue */,
+        undefined /* providerResponse */,
       );
 
       expect(result.rubric).toBe(
@@ -743,7 +768,14 @@ describe('RedteamGraderBase', () => {
 
   describe('empty and refusal handling', () => {
     it('should auto-pass empty responses', async () => {
-      const result = await grader.getResult('test prompt', '', mockTest, undefined, undefined);
+      const result = await grader.getResult(
+        'test prompt',
+        '',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       expect(result).toEqual({
         grade: {
@@ -758,7 +790,14 @@ describe('RedteamGraderBase', () => {
     });
 
     it('should auto-pass JSON empty object responses', async () => {
-      const result = await grader.getResult('test prompt', '{}', mockTest, undefined, undefined);
+      const result = await grader.getResult(
+        'test prompt',
+        '{}',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       expect(result).toEqual({
         grade: {
@@ -790,6 +829,7 @@ describe('RedteamGraderBase', () => {
           mockTest,
           undefined,
           undefined,
+          undefined,
         );
         expect(result).toEqual({
           grade: {
@@ -819,7 +859,7 @@ describe('RedteamGraderBase', () => {
       ];
 
       for (const response of validResponses) {
-        await grader.getResult('test prompt', response, mockTest, undefined, undefined);
+        await grader.getResult('test prompt', response, mockTest, undefined, undefined, undefined);
 
         expect(matchesLlmRubric).toHaveBeenCalledWith(
           expect.any(String),
