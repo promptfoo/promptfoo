@@ -137,6 +137,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'adv-noise',
+    displayName: 'Adversarial Noise',
+    description: 'Semantic-preserving perturbations',
+    longDescription:
+      'Tests model robustness by adding small semantic-preserving noise (typos, synonyms, punctuation) and comparing outputs with baseline using Levenshtein distance',
+    cost: 'Medium',
+    asrIncrease: '10-20%',
+    link: '/docs/red-team/strategies/adv-noise/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'video',
     displayName: 'Video Encoding',
     description: 'Text-to-video encoding bypass',

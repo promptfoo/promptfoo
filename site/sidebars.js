@@ -134,6 +134,7 @@ const redTeamSidebar = [
         label: 'Single-Turn',
         collapsed: true,
         items: [
+          'red-team/strategies/adv-noise',
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
