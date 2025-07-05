@@ -388,6 +388,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'sql-injection',
     'ssrf',
     'tool-discovery',
+    'mcp',
 
     // Data protection
     'cross-session-leak',
