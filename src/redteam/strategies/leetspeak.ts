@@ -25,19 +25,23 @@ export function addLeetspeak(testCases: TestCase[], injectVar: string): TestCase
       .join('');
   };
 
-  return testCases.map((testCase) => ({
-    ...testCase,
-    assert: testCase.assert?.map((assertion) => ({
-      ...assertion,
-      metric: `${assertion.metric}/Leetspeak`,
-    })),
-    vars: {
-      ...testCase.vars,
-      [injectVar]: toLeetspeak(String(testCase.vars![injectVar])),
-    },
-    metadata: {
-      ...testCase.metadata,
-      strategyId: 'leetspeak',
-    },
-  }));
+  return testCases.map((testCase) => {
+    const originalText = String(testCase.vars![injectVar]);
+    return {
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: `${assertion.metric}/Leetspeak`,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: toLeetspeak(originalText),
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'leetspeak',
+        originalText,
+      },
+    };
+  });
 }

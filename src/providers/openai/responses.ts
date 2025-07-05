@@ -15,6 +15,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
+    'gpt-4o-2024-11-20',
+    'gpt-4o-2024-05-13',
     'gpt-4.1',
     'gpt-4.1-2025-04-14',
     'gpt-4.1-mini',
@@ -22,14 +24,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4.1-nano',
     'gpt-4.1-nano-2025-04-14',
     'o1',
+    'o1-2024-12-17',
     'o1-preview',
+    'o1-preview-2024-09-12',
     'o1-mini',
+    'o1-mini-2024-09-12',
     'o1-pro',
+    'o1-pro-2025-03-19',
+    'o3-pro',
+    'o3-pro-2025-06-10',
     'o3',
     'o3-2025-04-16',
     'o4-mini',
     'o4-mini-2025-04-16',
     'o3-mini',
+    'o3-mini-2025-01-31',
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
     'codex-mini-latest',
@@ -98,9 +107,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
+    // Load response_format from external file if needed, similar to chat provider
+    const responseFormat = config.response_format
+      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
+      : undefined;
+
     let textFormat;
-    if (config.response_format) {
-      if (config.response_format.type === 'json_object') {
+    if (responseFormat) {
+      if (responseFormat.type === 'json_object') {
         textFormat = {
           format: {
             type: 'json_object',
@@ -108,18 +122,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
 
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
-      } else if (config.response_format.type === 'json_schema') {
+      } else if (responseFormat.type === 'json_schema') {
         const schema = maybeLoadFromExternalFile(
           renderVarsInObject(
-            config.response_format.schema || config.response_format.json_schema?.schema,
+            responseFormat.schema || responseFormat.json_schema?.schema,
             context?.vars,
           ),
         );
 
         const schemaName =
-          config.response_format.json_schema?.name ||
-          config.response_format.name ||
-          'response_schema';
+          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
 
         textFormat = {
           format: {
@@ -163,7 +175,26 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    return { body, config };
+    // Handle reasoning_effort and reasoning parameters for o-series models
+    if (
+      config.reasoning_effort &&
+      (this.modelName.startsWith('o1') ||
+        this.modelName.startsWith('o3') ||
+        this.modelName.startsWith('o4'))
+    ) {
+      body.reasoning_effort = config.reasoning_effort;
+    }
+
+    if (
+      config.reasoning &&
+      (this.modelName.startsWith('o1') ||
+        this.modelName.startsWith('o3') ||
+        this.modelName.startsWith('o4'))
+    ) {
+      body.reasoning = config.reasoning;
+    }
+
+    return { body, config: { ...config, response_format: responseFormat } };
   }
 
   async callApi(
@@ -196,6 +227,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       ));
 
       if (status < 200 || status >= 300) {
@@ -256,6 +289,31 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
+        } else if (item.type === 'mcp_list_tools') {
+          // MCP tools list - include in result for debugging/visibility
+          if (result) {
+            result += '\n';
+          }
+          result += `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
+        } else if (item.type === 'mcp_call') {
+          // MCP tool call result
+          if (item.error) {
+            if (result) {
+              result += '\n';
+            }
+            result += `MCP Tool Error (${item.name}): ${item.error}`;
+          } else {
+            if (result) {
+              result += '\n';
+            }
+            result += `MCP Tool Result (${item.name}): ${item.output}`;
+          }
+        } else if (item.type === 'mcp_approval_request') {
+          // MCP approval request - include in result for user to see
+          if (result) {
+            result += '\n';
+          }
+          result += `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
         }
       }
 

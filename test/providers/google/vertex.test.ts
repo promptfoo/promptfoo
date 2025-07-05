@@ -1,6 +1,9 @@
 import * as fs from 'fs';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
+import path from 'path';
 import { getCache, isCacheEnabled } from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 
@@ -54,6 +57,13 @@ jest.mock('../../../src/providers/google/util', () => ({
   ...jest.requireActual('../../../src/providers/google/util'),
   getGoogleClient: jest.fn(),
 }));
+
+jest.mock('../../../src/providers/google/util');
+jest.mock('../../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
+
+const mockImportModule = jest.mocked(importModule);
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
@@ -540,6 +550,249 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
   });
+
+  describe('External Function Callbacks', () => {
+    beforeEach(() => {
+      // Set cliState basePath for external function loading
+      cliState.basePath = '/test/base/path';
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+      cliState.basePath = undefined;
+    });
+
+    it('should load and execute external function callbacks from file', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'external_function',
+            args: '{"param":"test_value"}',
+          },
+        }),
+        tokenUsage: {
+          total: 15,
+          prompt: 10,
+          completion: 5,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      // Mock importModule to return our test function
+      const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+      mockImportModule.mockResolvedValue(mockExternalFunction);
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { param: { type: 'STRING' } },
+                    required: ['param'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            external_function: 'file://test/callbacks.js:testFunction',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Call external function');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'test/callbacks.js'),
+        'testFunction',
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
+      expect(result.output).toBe('External function result');
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+    });
+
+    it('should cache external functions and not reload them on subsequent calls', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'cached_function',
+            args: '{"value":123}',
+          },
+        }),
+        tokenUsage: {
+          total: 12,
+          prompt: 8,
+          completion: 4,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+      mockImportModule.mockResolvedValue(mockCachedFunction);
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'cached_function',
+                  description: 'A cached function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { value: { type: 'NUMBER' } },
+                    required: ['value'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            cached_function: 'file://callbacks/cache-test.js:cachedFunction',
+          },
+        },
+      });
+
+      // First call - should load the function
+      const result1 = await provider.callApi('First call');
+      expect(mockImportModule).toHaveBeenCalledTimes(1);
+      expect(mockCachedFunction).toHaveBeenCalledWith('{"value":123}');
+      expect(result1.output).toBe('Cached result');
+
+      // Second call - should use cached function, not reload
+      const result2 = await provider.callApi('Second call');
+      expect(mockImportModule).toHaveBeenCalledTimes(1); // Still only 1 call
+      expect(mockCachedFunction).toHaveBeenCalledTimes(2);
+      expect(result2.output).toBe('Cached result');
+    });
+
+    it('should handle errors in external function loading gracefully', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'error_function',
+            args: '{"test":"data"}',
+          },
+        }),
+        tokenUsage: {
+          total: 10,
+          prompt: 6,
+          completion: 4,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      // Mock import module to throw an error
+      mockImportModule.mockRejectedValue(new Error('Module not found'));
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'error_function',
+                  description: 'A function that errors during loading',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { test: { type: 'STRING' } },
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            error_function: 'file://nonexistent/module.js:errorFunction',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Call error function');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'nonexistent/module.js'),
+        'errorFunction',
+      );
+      // Should fall back to original function call object when loading fails
+      expect(result.output).toBe(
+        '{"functionCall":{"name":"error_function","args":"{\\"test\\":\\"data\\"}"}}',
+      );
+    });
+
+    it('should handle mixed inline and external function callbacks', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'external_function',
+            args: '{"external":"test"}',
+          },
+        }),
+        tokenUsage: {
+          total: 20,
+          prompt: 12,
+          completion: 8,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
+      const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+      mockImportModule.mockResolvedValue(mockExternalFunction);
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'inline_function',
+                  description: 'An inline function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { inline: { type: 'STRING' } },
+                  },
+                },
+                {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { external: { type: 'STRING' } },
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            inline_function: mockInlineFunction,
+            external_function: 'file://mixed/callbacks.js:externalFunc',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Test mixed callbacks');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'mixed/callbacks.js'),
+        'externalFunc',
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"external":"test"}');
+      expect(result.output).toBe('External result');
+    });
+  });
 });
 
 describe('VertexChatProvider.callLlamaApi', () => {
@@ -757,6 +1010,60 @@ describe('VertexChatProvider.callLlamaApi', () => {
 
     expect(response.error).toContain('API call error:');
     expect(response.error).toContain('Invalid request');
+  });
+
+  it('should load system instructions from file', async () => {
+    const mockSystemInstruction = 'You are a helpful assistant from a file.';
+
+    // Mock file system operations
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
+
+    provider = new VertexChatProvider('gemini-1.5-flash', {
+      config: {
+        systemInstruction: 'file://system-instruction.txt',
+      },
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+      ],
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    await provider.callGeminiApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          systemInstruction: {
+            parts: [{ text: mockSystemInstruction }],
+          },
+        }),
+      }),
+    );
+
+    // Verify file was read
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('system-instruction.txt'),
+      'utf8',
+    );
   });
 });
 

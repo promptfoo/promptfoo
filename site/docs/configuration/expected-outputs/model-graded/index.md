@@ -18,11 +18,13 @@ Output-based:
 - [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
 
-RAG-based (requires `query` and/or `context` vars):
+RAG-based (requires `query` and context via variables or `contextTransform`):
 
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output uses the context
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+
+For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
 ## Examples (output-based)
 
@@ -83,9 +85,9 @@ tests:
 
 ## Examples (RAG-based)
 
-RAG metrics require variables named `context` and `query`. You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
+RAG metrics require a `query` and context (provided via test variables or extracted using `contextTransform`). You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
 
-Here's an example config of a RAG-based knowledge bot that evaluates RAG context metrics:
+Here's an example config using context variables:
 
 ```yaml
 prompts:
@@ -127,6 +129,31 @@ tests:
       - type: context-relevance
         threshold: 0.9
       - type: context-faithfulness
+        threshold: 0.9
+```
+
+Alternatively, if your RAG system returns context in the response, you can use `contextTransform`:
+
+```yaml
+prompts:
+  - |
+    You are an internal corporate chatbot.
+    Respond to this query: {{query}}
+providers:
+  - openai:gpt-4
+tests:
+  - vars:
+      query: What is the max purchase that doesn't require approval?
+    assert:
+      - type: context-recall
+        contextTransform: 'output.context'
+        threshold: 0.9
+        value: max purchase price without approval is $500
+      - type: context-relevance
+        contextTransform: 'output.context'
+        threshold: 0.9
+      - type: context-faithfulness
+        contextTransform: 'output.context'
         threshold: 0.9
 ```
 
@@ -232,6 +259,19 @@ The rubric prompt has two built-in variables that you may use:
 - `{{output}}` - The output of the LLM (you probably want to use this)
 - `{{rubric}}` - The `value` of the llm-rubric `assert` object
 
+:::tip Object handling in variables
+
+When `{{output}}` or `{{rubric}}` contain objects, they are automatically converted to JSON strings by default to prevent display issues. To access object properties directly (e.g., `{{output.text}}`), enable object property access:
+
+```bash
+export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
+promptfoo eval
+```
+
+For details, see the [object template handling guide](/docs/usage/troubleshooting#object-template-handling).
+
+:::
+
 In this example, we set `rubricPrompt` under `defaultTest`, which applies it to every test in this test suite:
 
 ```yaml
@@ -251,6 +291,27 @@ defaultTest:
 ```
 
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
+
+### Image-based rubric prompts
+
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-4.1`.
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-4.1
+    rubricPrompt: |
+      [
+        { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
+        {
+          "role": "user",
+          "content": [
+            { "type": "image_url", "image_url": { "url": "{{image_url}}" } },
+            { "type": "text", "text": "Output: {{ output }}\nRubric: {{ rubric }}" }
+          ]
+        }
+      ]
+```
 
 #### select-best rubric prompt
 

@@ -60,7 +60,7 @@ export default function ExtensionEditor({
   onValidationChange,
 }: ExtensionEditorProps) {
   const [isTyping, setIsTyping] = React.useState(false);
-  const typingTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const typingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const error = React.useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
 

@@ -87,6 +87,44 @@ const MISTRAL_CHAT_MODELS = [
       output: 6 / 1000000,
     },
   })),
+  // New Magistral models - reasoning models announced June 2025
+  {
+    id: 'magistral-small-2506',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'magistral-medium-2506',
+    cost: {
+      input: 2 / 1000000,
+      output: 5 / 1000000,
+    },
+  },
+  // Also support latest aliases
+  {
+    id: 'magistral-small-latest',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'magistral-medium-latest',
+    cost: {
+      input: 2 / 1000000,
+      output: 5 / 1000000,
+    },
+  },
+  // Multimodal model
+  {
+    id: 'pixtral-12b',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.15 / 1000000,
+    },
+  },
 ];
 
 const MISTRAL_EMBEDDING_MODELS = [

@@ -1,6 +1,6 @@
 # Simple settings for Python provider - these are here to demonstrate how to load settings
 # from a YAML file and not used to configure the provider.
-model: 'gpt-4o-mini'
+model: 'gpt-4.1-mini'
 temperature: 0.7
 log_level: DEBUG
 max_tokens: 500

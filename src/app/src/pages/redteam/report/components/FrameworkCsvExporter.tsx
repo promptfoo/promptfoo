@@ -194,7 +194,13 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
   };
 
   return (
-    <Button variant="contained" color="primary" startIcon={<DownloadIcon />} onClick={exportToCSV}>
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<DownloadIcon />}
+      onClick={exportToCSV}
+      className="print-hide"
+    >
       Export framework results to CSV
     </Button>
   );

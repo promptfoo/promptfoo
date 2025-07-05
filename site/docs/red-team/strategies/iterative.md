@@ -32,6 +32,8 @@ PROMPTFOO_NUM_JAILBREAK_ITERATIONS=5
 
 ## How It Works
 
+![algorithmic jailbreak diagram](/img/docs/iterative-jailbreak-diagram.svg)
+
 The Iterative Jailbreaks strategy works by:
 
 1. Starting with a base prompt that attempts to elicit undesired behavior

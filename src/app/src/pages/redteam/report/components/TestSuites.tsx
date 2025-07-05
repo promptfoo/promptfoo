@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -76,6 +77,7 @@ const getSubCategoryStats = (
 };
 
 const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins }) => {
+  const navigate = useNavigate();
   const subCategoryStats = getSubCategoryStats(categoryStats, plugins).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
@@ -185,16 +187,18 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
   };
 
   return (
-    <Box>
+    <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" id="table">
           Vulnerabilities and Mitigations
         </Typography>
+
         <Button
           variant="contained"
           color="primary"
           startIcon={<FileDownloadIcon />}
           onClick={exportToCSV}
+          className="print-hide"
         >
           Export vulnerabilities to CSV
         </Button>
@@ -224,7 +228,9 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                   Severity
                 </TableSortLabel>
               </TableCell>
-              <TableCell style={{ minWidth: '275px' }}>Actions</TableCell>
+              <TableCell style={{ minWidth: '275px' }} className="print-hide">
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -276,8 +282,11 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                   }
                 }
               })
-              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((subCategory, index) => {
+                // Calculate if this row should be visible in normal view
+                const isInCurrentPage =
+                  index >= page * rowsPerPage && index < page * rowsPerPage + rowsPerPage;
+                const rowStyle = isInCurrentPage ? {} : { display: 'none' };
                 let passRateClass = '';
                 if (subCategory.attackSuccessRate !== 'N/A') {
                   const passRate = Number.parseFloat(subCategory.attackSuccessRate);
@@ -290,7 +299,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                   }
                 }
                 return (
-                  <TableRow key={index}>
+                  <TableRow key={index} style={rowStyle}>
                     <TableCell>
                       <span style={{ fontWeight: 500 }}>
                         {displayNameOverrides[
@@ -310,7 +319,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}
                     </TableCell>
-                    <TableCell style={{ minWidth: 270 }}>
+                    <TableCell style={{ minWidth: 270 }} className="print-hide">
                       <Button
                         variant="contained"
                         size="small"
@@ -321,7 +330,9 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                           const searchQuery = pluginId
                             ? `metadata=pluginId:${pluginId}`
                             : `metric=${subCategory.type}`;
-                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
+                          navigate(
+                            `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`,
+                          );
                         }}
                       >
                         View logs

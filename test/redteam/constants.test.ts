@@ -1,35 +1,39 @@
 import {
-  DEFAULT_NUM_TESTS_PER_PLUGIN,
-  REDTEAM_MODEL,
-  LLAMA_GUARD_REPLICATE_PROVIDER,
-  LLAMA_GUARD_ENABLED_CATEGORIES,
-  COLLECTIONS,
-  UNALIGNED_PROVIDER_HARM_PLUGINS,
-  REDTEAM_PROVIDER_HARM_PLUGINS,
-  HARM_PLUGINS,
-  PII_PLUGINS,
-  BASE_PLUGINS,
   ADDITIONAL_PLUGINS,
-  CONFIG_REQUIRED_PLUGINS,
-  DEFAULT_PLUGINS,
+  ADDITIONAL_STRATEGIES,
+  AGENTIC_EXEMPT_PLUGINS,
+  AGENTIC_PLUGINS,
   ALL_PLUGINS,
+  ALL_STRATEGIES,
+  BASE_PLUGINS,
+  categoryAliases,
+  categoryDescriptions,
+  COLLECTIONS,
+  CONFIG_REQUIRED_PLUGINS,
+  DATASET_EXEMPT_PLUGINS,
   DATASET_PLUGINS,
+  DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS,
+  displayNameOverrides,
+  HARM_PLUGINS,
+  LLAMA_GUARD_ENABLED_CATEGORIES,
+  LLAMA_GUARD_REPLICATE_PROVIDER,
+  PII_PLUGINS,
+  PLUGIN_PRESET_DESCRIPTIONS,
+  pluginDescriptions,
+  REDTEAM_MODEL,
+  REDTEAM_PROVIDER_HARM_PLUGINS,
+  riskCategories,
+  riskCategorySeverityMap,
   Severity,
   severityDisplayNames,
-  PLUGIN_PRESET_DESCRIPTIONS,
-  AGENTIC_PLUGINS,
-  riskCategories,
-  categoryDescriptions,
-  displayNameOverrides,
-  riskCategorySeverityMap,
-  categoryAliases,
-  pluginDescriptions,
-  subCategoryDescriptions,
-  STRATEGY_COLLECTIONS,
   STRATEGY_COLLECTION_MAPPINGS,
-  ALL_STRATEGIES,
+  STRATEGY_COLLECTIONS,
+  STRATEGY_EXEMPT_PLUGINS,
   strategyDescriptions,
   strategyDisplayNames,
+  subCategoryDescriptions,
+  UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -40,7 +44,7 @@ describe('constants', () => {
 
   it('REDTEAM_MODEL should be defined', () => {
     expect(REDTEAM_MODEL).toBeDefined();
-    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-4o');
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-4.1-2025-04-14');
   });
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
@@ -57,7 +61,14 @@ describe('constants', () => {
   });
 
   it('COLLECTIONS should contain expected values', () => {
-    expect(COLLECTIONS).toEqual(['default', 'foundation', 'harmful', 'pii']);
+    expect(COLLECTIONS).toEqual([
+      'default',
+      'foundation',
+      'harmful',
+      'pii',
+      'bias',
+      'guardrails-eval',
+    ]);
   });
 
   it('UNALIGNED_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {
@@ -123,17 +134,39 @@ describe('constants', () => {
       'cyberseceval',
       'donotanswer',
       'harmbench',
+      'toxic-chat',
+      'aegis',
       'pliny',
       'unsafebench',
       'xstest',
     ];
 
     expect(DATASET_PLUGINS).toEqual(expectedPlugins);
-    expect(DATASET_PLUGINS).toHaveLength(7);
+    expect(DATASET_PLUGINS).toHaveLength(9);
 
     expectedPlugins.forEach((plugin) => {
       expect(DATASET_PLUGINS).toContain(plugin);
     });
+  });
+
+  it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'agentic:memory-poisoning']);
+  });
+
+  it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+  });
+
+  it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
+    const expectedPlugins = [
+      'system-prompt-override',
+      'agentic:memory-poisoning',
+      'pliny',
+      'unsafebench',
+    ];
+
+    expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
+    expect(STRATEGY_EXEMPT_PLUGINS).toEqual([...AGENTIC_EXEMPT_PLUGINS, ...DATASET_EXEMPT_PLUGINS]);
   });
 
   it('Severity enum should have expected values', () => {
@@ -159,6 +192,9 @@ describe('constants', () => {
     );
     expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
       'Minimal set of plugins to validate your setup',
+    );
+    expect(PLUGIN_PRESET_DESCRIPTIONS.Harmful).toBe(
+      'Harmful content assessment using MLCommons and HarmBench taxonomies',
     );
     expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
       'OWASP Agentic AI Top 10 Threats and Mitigations',
@@ -207,7 +243,12 @@ describe('constants', () => {
   });
 
   it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
-    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual(['morse', 'piglatin']);
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual([
+      'camelcase',
+      'morse',
+      'piglatin',
+      'emoji',
+    ]);
   });
 
   it('ALL_STRATEGIES should include strategy collections', () => {
@@ -216,7 +257,7 @@ describe('constants', () => {
 
   it('strategy collections should have proper descriptions', () => {
     expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
     );
   });
 
@@ -226,7 +267,31 @@ describe('constants', () => {
 
   it('strategy collections should have proper subcategory descriptions', () => {
     expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
+    );
+  });
+
+  it('ADDITIONAL_STRATEGIES should include emoji strategy', () => {
+    expect(ADDITIONAL_STRATEGIES).toContain('emoji');
+  });
+
+  it('should have correct display name for emoji strategy', () => {
+    expect(strategyDisplayNames['emoji']).toBe('Emoji Smuggling');
+  });
+
+  it('should have correct strategy description for emoji strategy', () => {
+    expect(strategyDescriptions['emoji']).toBe(
+      'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
+    );
+  });
+
+  it('should include emoji in other-encodings strategy collection', () => {
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toContain('emoji');
+  });
+
+  it('should have correct subcategory description for emoji strategy', () => {
+    expect(subCategoryDescriptions['emoji']).toBe(
+      'Tests handling of text hidden using emoji variation selectors',
     );
   });
 });

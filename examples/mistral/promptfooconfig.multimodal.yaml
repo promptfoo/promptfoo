@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Multimodal capabilities with Mistral Pixtral model'
+
+providers:
+  - id: mistral:pixtral-12b
+    config:
+      temperature: 0.5
+      max_tokens: 1000
+
+prompts:
+  - '{{task}}'
+
+tests:
+  - vars:
+      task: 'Describe what you would expect to see in a typical office workspace photo, including common objects and furniture.'
+    assert:
+      - type: contains
+        value: 'desk'
+      - type: contains
+        value: 'computer'
+      - type: javascript
+        value: 'output.length >= 100'
+
+  - vars:
+      task: 'If I were to show you an image of a restaurant menu, what types of information would you look for to help someone decide what to order?'
+    assert:
+      - type: contains
+        value: 'price'
+      - type: contains
+        value: 'menu'
+      - type: javascript
+        value: 'output.length >= 150'
+
+  - vars:
+      task: 'Explain how you would analyze a chart or graph if one were provided to you.'
+    assert:
+      - type: contains
+        value: 'data'
+      - type: contains
+        value: 'chart'
+      - type: javascript
+        value: 'output.length >= 100'

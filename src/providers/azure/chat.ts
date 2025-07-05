@@ -160,10 +160,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       );
 
       cached = isCached;
@@ -255,6 +258,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       const flaggedOutput = Object.values(contentFilterResults || {}).some(
         (filter: any) => filter.filtered,
       );
+
+      if (flaggedOutput) {
+        logger.warn(
+          `Azure model ${this.deploymentName} output was flagged by content filter: ${JSON.stringify(
+            contentFilterResults,
+          )}`,
+        );
+      }
 
       return {
         output,

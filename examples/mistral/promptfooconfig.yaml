@@ -1,70 +1,142 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Comparison of Mistral AI Models'
+description: Mistral AI model comparison and evaluation
 
 prompts:
-  - file://./prompt.yaml
+  - '{{message}}'
 
 providers:
-  # AKA mistral-tiny-latest
-  - mistral:open-mistral-nemo
-  - mistral:mistral-small-latest
-  - mistral:mistral-medium-latest
-  - mistral:mistral-large-latest
+  # Reasoning models - specialized for complex problems
+  - id: mistral:magistral-medium-latest
+    label: magistral-medium
+    config:
+      temperature: 0.7
+      top_p: 0.95
+      max_tokens: 40960
 
+  - id: mistral:magistral-small-latest
+    label: magistral-small
+    config:
+      temperature: 0.7
+      top_p: 0.95
+      max_tokens: 40960
+
+  # Traditional chat models
+  - id: mistral:mistral-large-latest
+    label: large
+    config:
+      temperature: 0.7
+
+  - id: mistral:mistral-medium-latest
+    label: medium
+    config:
+      temperature: 0.7
+
+  - id: mistral:mistral-small-latest
+    label: small
+    config:
+      temperature: 0.7
+
+# Use Mistral models for evaluation instead of OpenAI
 defaultTest:
-  assert:
-    - type: cost
-      threshold: 0.05
-    - type: javascript
-      value: 'output.length >= 100 && output.length <= 500'
+  options:
+    # Use Mistral Large for grading and Mistral embeddings for similarity
+    provider:
+      id: mistral:mistral-large-latest
+      embedding:
+        id: mistral:embedding:mistral-embed
 
 tests:
-  - vars:
-      concept: 'Explain quantum entanglement to a 10-year-old child.'
+  # Simple chat scenarios
+  - description: Casual greeting
+    vars:
+      message: 'Hello! How are you today?'
     assert:
       - type: llm-rubric
-        value: Uses simple analogies or examples
-      - type: llm-rubric
-        value: Avoids technical jargon
-      - type: llm-rubric
-        value: Maintains scientific accuracy
-  - vars:
-      concept: 'Describe how CRISPR gene editing works in terms a high school student would understand.'
-    assert:
-      - type: llm-rubric
-        value: Explains the concept of DNA editing clearly
-      - type: llm-rubric
-        value: Uses appropriate metaphors or comparisons
-      - type: llm-rubric
-        value: Mentions potential applications or ethical considerations
-  - vars:
-      concept: 'Explain the concept of dark matter in the universe to someone with no background in physics.'
-    assert:
-      - type: llm-rubric
-        value: Conveys the mysterious nature of dark matter
-      - type: llm-rubric
-        value: Explains why scientists believe it exists
-      - type: llm-rubric
-        value: Uses everyday analogies to make the concept relatable
-  - vars:
-      concept: 'Describe how machine learning algorithms can identify objects in images to a curious teenager.'
-    assert:
-      - type: llm-rubric
-        value: Explains the concept of pattern recognition
-      - type: llm-rubric
-        value: Uses an example or analogy that a teenager can relate to
-      - type: llm-rubric
-        value: Mentions the need for large datasets or training
-  - vars:
-      concept: 'Explain the greenhouse effect and its role in climate change to a middle school student.'
-    assert:
-      - type: llm-rubric
-        value: Clearly explains the basic mechanism of the greenhouse effect
-      - type: llm-rubric
-        value: Connects the greenhouse effect to human activities and climate change
-      - type: llm-rubric
-        value: Uses relatable examples or analogies
+        value: Responds in a friendly, conversational manner
       - type: similar
-        value: 'The greenhouse effect is like a blanket around Earth that traps heat. Greenhouse gases in the atmosphere, such as carbon dioxide, act like the glass in a greenhouse. They let sunlight in but prevent some of the heat from escaping back into space. This natural process keeps Earth warm enough for life. However, human activities, especially burning fossil fuels, increase the amount of greenhouse gases in the atmosphere. This enhanced greenhouse effect leads to global warming and climate change, causing rising temperatures, changing weather patterns, and other environmental impacts.'
+        value: "Hi there! I'm doing well, thanks for asking."
         threshold: 0.7
-        provider: mistral:embedding:mistral-embed
+
+  - description: Creative writing request
+    vars:
+      message: 'Write a short story about a robot learning to paint'
+    assert:
+      - type: llm-rubric
+        value: Creates an engaging creative story with clear narrative structure
+      - type: contains
+        value: robot
+      - type: contains
+        value: paint
+
+  # Reasoning scenarios - where Magistral models should excel
+  - description: Mathematical reasoning
+    vars:
+      message: 'Solve this step by step: If a pizza has 8 slices and you eat 3 slices, then your friend eats twice as many slices as you did, how many slices are left?'
+    assert:
+      - type: contains
+        value: '2'
+      - type: llm-rubric
+        value: Shows clear step-by-step mathematical reasoning and arrives at the correct answer
+
+  - description: Logical reasoning
+    vars:
+      message: 'If all roses are flowers, and some flowers are red, can we conclude that some roses are red? Explain your reasoning.'
+    assert:
+      - type: icontains
+        value: 'cannot'
+      - type: llm-rubric
+        value: Correctly identifies the logical fallacy and explains why the conclusion doesn't follow
+
+  - description: Complex problem solving
+    vars:
+      message: 'You have a 3-gallon jug and a 5-gallon jug. How do you measure exactly 4 gallons of water? Show your steps.'
+    assert:
+      - type: llm-rubric
+        value: Provides a correct step-by-step solution to the water jug problem
+      - type: similar
+        value: 'Fill the 5-gallon jug, pour into 3-gallon jug, empty 3-gallon jug, pour remaining 2 gallons from 5-gallon into 3-gallon, fill 5-gallon again, pour into 3-gallon until full'
+        threshold: 0.6
+
+  # Multi-language capabilities
+  - description: French conversation
+    vars:
+      message: 'Bonjour! Comment allez-vous? Pouvez-vous me parler de Paris?'
+    assert:
+      - type: llm-rubric
+        value: Responds appropriately in French and provides information about Paris
+      - type: contains
+        value: Paris
+
+  # Technical explanations
+  - description: Technical concept explanation
+    vars:
+      message: 'Explain how machine learning works in simple terms that a 10-year-old could understand'
+    assert:
+      - type: llm-rubric
+        value: Explains machine learning concepts clearly and appropriately for a young audience
+      - type: similar
+        value: 'Machine learning is like teaching a computer to recognize patterns and make predictions by showing it lots of examples'
+        threshold: 0.5
+
+  # Code generation
+  - description: Code writing task
+    vars:
+      message: 'Write a Python function that takes a list of numbers and returns the average'
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains
+        value: 'sum'
+      - type: llm-rubric
+        value: Provides correct Python code for calculating an average
+
+  # Ethical reasoning
+  - description: Ethical discussion
+    vars:
+      message: 'What are the ethical considerations when developing AI systems?'
+    assert:
+      - type: llm-rubric
+        value: Discusses important ethical considerations like bias, privacy, transparency, and societal impact
+      - type: similar
+        value: 'Key ethical considerations include preventing bias, protecting privacy, ensuring transparency, and considering societal impact'
+        threshold: 0.6

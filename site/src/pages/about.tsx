@@ -129,7 +129,13 @@ const AboutPageContent = () => {
                 name: 'Asmi Gulati',
                 title: 'AI Red Team',
                 image: '/img/team/asmi.jpeg',
-                bio: 'Asmi specializes in prompt hacking and develops educational content for Promptfoo. In her free time she maintains https://aisimplyexplained.com/',
+                bio: 'Asmi specializes in prompt hacking and develops educational content for Promptfoo. In her free time she maintains <a href="https://aisimplyexplained.com/" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">AI Simply Explained</a>.',
+              },
+              {
+                name: 'Tabs Fakier',
+                title: 'Founding Developer Advocate',
+                image: '/img/team/tabs.jpeg',
+                bio: 'Tabs fronts developer education, community management, and technical writing backed by a wealth of experience in design and software development. Learn more at your <a href="https://ladyofcode.com" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">own peril</a>.',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
@@ -145,7 +151,7 @@ const AboutPageContent = () => {
                   <Typography variant="subtitle1" color="text.secondary" gutterBottom>
                     {leader.title}
                   </Typography>
-                  <Typography variant="body2">{leader.bio}</Typography>
+                  <Typography variant="body2" dangerouslySetInnerHTML={{ __html: leader.bio }} />
                 </Box>
               </Grid>
             ))}

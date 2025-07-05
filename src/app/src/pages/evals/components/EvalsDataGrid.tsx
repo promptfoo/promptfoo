@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
+import React, { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
 import { callApi } from '@app/utils/api';
 import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
 import {
@@ -176,7 +176,8 @@ export default function EvalsDataGrid({
         {
           field: 'evalId',
           headerName: 'ID',
-          flex: 1,
+          flex: 0.5,
+          minWidth: 120,
           renderCell: (params: GridRenderCellParams<Eval>) =>
             params.row.evalId === focusedEvalId ? (
               params.row.evalId
@@ -200,13 +201,16 @@ export default function EvalsDataGrid({
         {
           field: 'createdAt',
           headerName: 'Created',
-          flex: 1,
+          flex: 0.9,
+          valueGetter: (value: Eval['createdAt'], row: Eval) => {
+            return new Date(value);
+          },
           valueFormatter: (value: Eval['createdAt']) => new Date(value).toLocaleString(),
         },
         {
           field: 'description',
           headerName: 'Description',
-          flex: 1,
+          flex: 2,
           valueGetter: (value: Eval['description'], row: Eval) => value ?? row.label,
         },
         {
@@ -363,7 +367,7 @@ export default function EvalsDataGrid({
             sortModel: [{ field: 'createdAt', sort: 'desc' }],
           },
           pagination: {
-            paginationModel: { pageSize: 25 },
+            paginationModel: { pageSize: 50 },
           },
         }}
         pageSizeOptions={[10, 25, 50, 100]}

@@ -52,6 +52,11 @@ class AIStudioGenericProvider implements ApiProvider {
     return `[Google AI Studio Provider ${this.modelName}]`;
   }
 
+  getApiUrlDefault(): string {
+    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
+    return `https://${renderedHost}`;
+  }
+
   getApiHost(): string | undefined {
     const apiHost =
       this.config.apiHost ||
@@ -60,10 +65,29 @@ class AIStudioGenericProvider implements ApiProvider {
       getEnvString('GOOGLE_API_HOST') ||
       getEnvString('PALM_API_HOST') ||
       DEFAULT_API_HOST;
+    return getNunjucksEngine().renderString(apiHost, {});
+  }
+
+  getApiUrl(): string {
+    // Check for apiHost first (most specific override)
+    const apiHost =
+      this.config.apiHost ||
+      this.env?.GOOGLE_API_HOST ||
+      this.env?.PALM_API_HOST ||
+      getEnvString('GOOGLE_API_HOST') ||
+      getEnvString('PALM_API_HOST');
     if (apiHost) {
-      return getNunjucksEngine().renderString(apiHost, {});
+      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
+      return `https://${renderedHost}`;
     }
-    return undefined;
+
+    // Check for apiBaseUrl (less specific override)
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.GOOGLE_API_BASE_URL ||
+      getEnvString('GOOGLE_API_BASE_URL') ||
+      this.getApiUrlDefault()
+    );
   }
 
   getApiKey(): string | undefined {
@@ -141,19 +165,20 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta3/models/${
+        `${this.getApiUrl()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be passed
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -257,13 +282,14 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/${apiVersion}/models/${
+        `${this.getApiUrl()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be set
           },
           body: JSON.stringify(body),
         },
@@ -379,7 +405,7 @@ export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
 
     // Use embedContent endpoint
     const endpoint = 'embedContent';
-    const url = `https://${this.getApiHost()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
+    const url = `${this.getApiUrl()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
 
     logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
 
@@ -390,7 +416,10 @@ export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
         url,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be set
+          },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,

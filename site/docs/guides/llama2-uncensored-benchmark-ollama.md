@@ -72,8 +72,8 @@ Let's add the prompts to the config and match them with each provider:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  prompts/openai_prompt.json: openai_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/openai_prompt.json: openai_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
   - id: ollama:llama2
@@ -119,8 +119,8 @@ tests:
 // highlight-end
 
 prompts:
-  prompts/openai_prompt.json: openai_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/openai_prompt.json: openai_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
   - id: ollama:llama2

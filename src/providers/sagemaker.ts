@@ -410,8 +410,14 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   formatPayload(prompt: string): string {
     const modelType = this.config.modelType || 'custom';
     const maxTokens = this.config.maxTokens || getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') || 1024;
-    const temperature = this.config.temperature || getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') || 0.7;
-    const topP = this.config.topP || getEnvFloat('AWS_SAGEMAKER_TOP_P') || 1.0;
+    const temperature =
+      typeof this.config.temperature === 'number'
+        ? this.config.temperature
+        : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7);
+    const topP =
+      typeof this.config.topP === 'number'
+        ? this.config.topP
+        : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0);
     const stopSequences = this.config.stopSequences || [];
 
     let payload: any;
@@ -483,15 +489,18 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         break;
 
       case 'llama':
+        // TODO(Will): Can these be consolidated?
         try {
           const messages = JSON.parse(prompt);
           if (Array.isArray(messages)) {
             payload = {
-              messages,
-              max_tokens: maxTokens,
-              temperature,
-              top_p: topP,
-              stop: stopSequences.length > 0 ? stopSequences : undefined,
+              inputs: messages,
+              parameters: {
+                max_new_tokens: maxTokens,
+                temperature,
+                top_p: topP,
+                stop: stopSequences.length > 0 ? stopSequences : undefined,
+              },
             };
           } else {
             throw new Error('Not valid messages format');
@@ -499,11 +508,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         } catch {
           // Simple text completion for Llama
           payload = {
-            prompt,
-            max_tokens: maxTokens,
-            temperature,
-            top_p: topP,
-            stop: stopSequences.length > 0 ? stopSequences : undefined,
+            inputs: prompt,
+            parameters: {
+              max_new_tokens: maxTokens,
+              temperature,
+              top_p: topP,
+              stop: stopSequences.length > 0 ? stopSequences : undefined,
+            },
           };
         }
         break;
@@ -688,7 +699,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // Check if we should use cache - use the transformed prompt for cache key
-    const bustCache = context?.debug === true; // If debug mode is on, bust the cache
+    const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cacheKey = this.getCacheKey(transformedPrompt);
       const cache = (await getCache)

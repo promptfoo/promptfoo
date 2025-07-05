@@ -46,7 +46,7 @@ The Python provider is defined in `provider.py` and includes:
 2. Token usage extraction from the API response
 3. Multiple sample functions showing different ways to call the API
 
-By default, the example is configured to use `gpt-4o-mini` model, but you can modify it to use other models as needed.
+By default, the example is configured to use `gpt-4.1-mini` model, but you can modify it to use other models as needed.
 
 ## Expected Output
 

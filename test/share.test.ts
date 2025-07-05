@@ -10,7 +10,7 @@ import {
   isSharingEnabled,
   hasEvalBeenShared,
 } from '../src/share';
-import { cloudCanAcceptChunkedResults, makeRequest } from '../src/util/cloud';
+import { makeRequest } from '../src/util/cloud';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -57,7 +57,6 @@ jest.mock('../src/globalConfig/accounts', () => ({
 }));
 
 jest.mock('../src/util/cloud', () => ({
-  cloudCanAcceptChunkedResults: jest.fn(),
   makeRequest: jest.fn(),
 }));
 
@@ -299,15 +298,14 @@ describe('createShareableUrl', () => {
     mockEval.author = 'original@example.com';
 
     const result = await createShareableUrl(mockEval as Eval);
-    expect(result).toBe(`https://app.example.com/eval/${mockEval.id}`);
+    expect(result).toBe(`https://app.example.com/eval/mock-eval-id`);
   });
 
-  it('updates eval ID when server returns different ID for cloud instance', async () => {
+  it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-    jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(false);
 
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -319,11 +317,15 @@ describe('createShareableUrl', () => {
       json: () => Promise.resolve({ id: newId }),
     });
 
-    await createShareableUrl(mockEval as Eval);
-    expect(mockEval.id).toBe(newId);
+    const result = await createShareableUrl(mockEval as Eval);
+    expect(result).toBe(`https://app.example.com/eval/${newId}`);
+
+    // Verify idempotency
+    const result2 = await createShareableUrl(mockEval as Eval);
+    expect(result2).toEqual(result);
   });
 
-  it('updates eval ID when server returns different ID for self-hosted instance', async () => {
+  it('Self-Hosted: creates unique URL for each share call', async () => {
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -335,8 +337,11 @@ describe('createShareableUrl', () => {
       json: () => Promise.resolve({ id: newId }),
     });
 
-    await createShareableUrl(mockEval as Eval);
-    expect(mockEval.id).toBe(newId);
+    const result = await createShareableUrl(mockEval as Eval);
+    expect(result).toBe(`https://promptfoo.app/eval/${newId}`);
+
+    const result2 = await createShareableUrl(mockEval as Eval);
+    expect(result2).not.toEqual(result);
   });
 
   describe('chunked sending', () => {
@@ -356,7 +361,6 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(true);
 
       // Set up mock responses
       mockFetch
@@ -378,14 +382,14 @@ describe('createShareableUrl', () => {
       await createShareableUrl(mockEval as Eval);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results',
+        'https://api.example.com/api/v1/results',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"results":[]'),
         }),
       );
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results/mock-eval-id/results',
+        'https://api.example.com/api/v1/results/mock-eval-id/results',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),

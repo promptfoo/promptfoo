@@ -47,7 +47,6 @@ For private sheets, you'll need to set up Google's Default Application Credentia
    ```
 
 2. **Set Up Authentication**
-
    - Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud
    - Download the JSON key file
    - Enable the [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) (`sheets.googleapis.com`)
@@ -109,8 +108,8 @@ like `llm-rubric` or `similar`. To do this, override the default LLM grader by a
 
 ```yaml
 prompts:
-  - prompt1.txt
-  - prompt2.txt
+  - file://prompt1.txt
+  - file://prompt2.txt
 providers:
   - anthropic:messages:claude-3-5-sonnet-20241022
   - openai:chat:gpt-4.1-mini

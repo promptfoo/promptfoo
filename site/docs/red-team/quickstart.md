@@ -201,7 +201,7 @@ The configuration file includes a description of the target endpoint. You can ed
 ```yaml
 targets:
   - id: https
-    label: 'travel-agent-agent'
+    label: 'travel-agent'
     config:
       url: 'https://example.com/generate'
       method: 'POST'
@@ -213,7 +213,7 @@ targets:
 purpose: 'The user is a budget traveler looking for the best deals. The system is a travel agent that helps the user plan their trip. The user is anonymous and should not be able to access any information about other users, employees, or other individuals.'
 ```
 
-The `label` is used to create issues and report the results of the red teaming. Make sure to re-use the same `label` when generating new redteam configs for the same target.
+The `label` is used to create issues and report the results of the red teaming. Make sure to re-use the same `label` when generating new red team configs for the same target.
 
 Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases and grading. Be specific about who the user of the system is and what information and actions they should be able to access.
 
@@ -236,7 +236,7 @@ targets:
     label: 'travel-agent-mini'
 ```
 
-Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
+Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/prompts).
 
 ### Alternative: Talking directly to your app
 

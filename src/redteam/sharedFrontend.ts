@@ -54,6 +54,7 @@ export function getUnifiedConfig(
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
+      ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
       plugins: config.plugins.map((plugin): RedteamPluginObject => {
         if (typeof plugin === 'string') {
           return { id: plugin };
@@ -94,6 +95,9 @@ export function getUnifiedConfig(
           id: strategy.id,
           config: configObject,
         };
+      }),
+      ...(config.testGenerationInstructions && {
+        testGenerationInstructions: config.testGenerationInstructions,
       }),
     },
   };

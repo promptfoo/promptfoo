@@ -13,6 +13,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
+  TokenUsage,
 } from '../types';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -21,6 +22,43 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+/**
+ * Escapes string values in variables for safe JSON template substitution.
+ * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
+ */
+function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : value,
+    ]),
+  );
+}
+
+/**
+ * Renders a JSON template string with proper escaping for JSON context.
+ *
+ * When template substitution would create invalid JSON (due to unescaped newlines,
+ * quotes, etc.), this function attempts to fix it by re-rendering with escaped variables.
+ *
+ * @param template - The template string (should look like JSON)
+ * @param vars - Variables to substitute into the template
+ * @returns Parsed JSON object/array/primitive
+ * @throws Error if the template cannot be rendered as valid JSON
+ */
+function renderJsonTemplate(template: string, vars: Record<string, any>): any {
+  // First attempt: try normal rendering and parsing
+  const rendered = renderVarsInObject(template, vars);
+  try {
+    return JSON.parse(rendered);
+  } catch {
+    // Second attempt: re-render with JSON-escaped variables
+    const escapedVars = escapeJsonVariables(vars);
+    const reRendered = renderVarsInObject(template, escapedVars);
+    return JSON.parse(reRendered); // This will throw if still invalid
+  }
+}
 
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
@@ -112,6 +150,13 @@ export function needsSignatureRefresh(
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
+export const TokenEstimationConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  multiplier: z.number().min(0.01).default(1.3),
+});
+
+export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -134,6 +179,8 @@ export const HttpProviderConfigSchema = z.object({
    * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  // Token estimation configuration
+  tokenEstimation: TokenEstimationConfigSchema.optional(),
   // Digital Signature Authentication
   signatureAuth: z
     .object({
@@ -315,9 +362,9 @@ export async function createTransformResponse(
  * @returns A new object or array with all template expressions replaced
  */
 export function processJsonBody(
-  body: Record<string, any> | any[],
+  body: Record<string, any> | any[] | string,
   vars: Record<string, any>,
-): Record<string, any> | any[] {
+): Record<string, any> | any[] | string {
   // First apply the standard variable rendering
   const rendered = renderVarsInObject(body, vars);
 
@@ -350,7 +397,21 @@ export function processJsonBody(
   if (typeof rendered === 'string') {
     try {
       return JSON.parse(rendered);
-    } catch {
+    } catch (err) {
+      // If it looks like JSON but parsing failed, try with escaped variables
+      const trimmed = rendered.trim();
+      if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && typeof body === 'string') {
+        try {
+          return renderJsonTemplate(body, vars);
+        } catch {
+          // Fall back to original behavior
+        }
+      }
+      // JSON.parse failed, return the string as-is
+      // This string will be used directly as the request body without further JSON.stringify()
+      logger.debug(
+        `[HTTP Provider] Body is a string that failed JSON parsing, using as-is: ${String(err)}`,
+      );
       return rendered;
     }
   }
@@ -565,6 +626,22 @@ export async function createValidateStatus(
   );
 }
 
+/**
+ * Estimates token count for a given text using word-based counting
+ */
+export function estimateTokenCount(text: string, multiplier: number = 1.3): number {
+  if (!text || typeof text !== 'string') {
+    return 0;
+  }
+
+  // Split by whitespace and filter out empty strings
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0);
+  return Math.ceil(words.length * multiplier);
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -579,6 +656,9 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    if (!this.config.tokenEstimation && cliState.config?.redteam) {
+      this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
+    }
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -586,6 +666,7 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
@@ -604,6 +685,36 @@ export class HttpProvider implements ApiProvider {
 
   toString(): string {
     return `[HTTP Provider ${this.url}]`;
+  }
+
+  /**
+   * Estimates token usage for prompt and completion text
+   */
+  private async estimateTokenUsage(
+    promptText: string,
+    completionText: string,
+  ): Promise<Partial<TokenUsage> | undefined> {
+    if (!this.config.tokenEstimation?.enabled) {
+      return undefined;
+    }
+
+    try {
+      const config = this.config.tokenEstimation;
+
+      const promptTokens = estimateTokenCount(promptText, config.multiplier);
+      const completionTokens = estimateTokenCount(completionText, config.multiplier);
+      const totalTokens = promptTokens + completionTokens;
+
+      return {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: totalTokens,
+        numRequests: 1,
+      };
+    } catch (err) {
+      logger.warn(`Failed to estimate tokens: ${String(err)}`);
+      return undefined;
+    }
   }
 
   private async refreshSignatureIfNeeded(): Promise<void> {
@@ -667,9 +778,14 @@ export class HttpProvider implements ApiProvider {
           'Content-Type is not application/json, but body is an object or array. The body must be a string if the Content-Type is not application/json.',
         );
       }
-      if (typeof body === 'string' && contentTypeIsJson(headers)) {
+
+      try {
+        if (typeof body === 'string' && contentTypeIsJson(headers)) {
+          JSON.parse(body);
+        }
+      } catch {
         logger.warn(
-          'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
+          `[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array. Body: ${body} headers: ${safeJsonStringify(headers)}`,
         );
       }
     }
@@ -737,7 +853,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
-      url: this.url,
+      url: getNunjucksEngine().renderString(this.url, vars),
       method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
       headers,
       body: determineRequestBody(
@@ -763,10 +879,21 @@ export class HttpProvider implements ApiProvider {
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
     // Template the base URL first, then construct URL with query parameters
-    let url = getNunjucksEngine().renderString(this.url, vars);
+    let url = renderedConfig.url as string;
     if (renderedConfig.queryParams) {
-      const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
-      url = `${url}?${queryString}`;
+      try {
+        const urlObj = new URL(url);
+        // Add each query parameter to the URL object
+        Object.entries(renderedConfig.queryParams).forEach(([key, value]) => {
+          urlObj.searchParams.append(key, value);
+        });
+        url = urlObj.toString();
+      } catch (err) {
+        // Fallback for potentially malformed URLs
+        logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
+        const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+        url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
+      }
     }
 
     logger.debug(
@@ -780,13 +907,15 @@ export class HttpProvider implements ApiProvider {
         headers: renderedConfig.headers,
         ...(method !== 'GET' && {
           body: contentTypeIsJson(headers)
-            ? JSON.stringify(renderedConfig.body)
+            ? typeof renderedConfig.body === 'string'
+              ? renderedConfig.body // Already a JSON string, use as-is
+              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
             : String(renderedConfig.body)?.trim(),
         }),
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      context?.debug,
+      context?.bustCache ?? context?.debug,
       this.config.maxRetries,
     );
 
@@ -804,7 +933,11 @@ export class HttpProvider implements ApiProvider {
     if (context?.debug || this.config.includeRawResponse) {
       ret.raw = response.data;
       ret.metadata = {
-        headers: response.headers,
+        http: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers || {},
+        },
       };
     }
 
@@ -831,16 +964,14 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
-    if (parsedOutput?.output) {
-      return {
-        ...ret,
-        ...parsedOutput,
-      };
-    }
-    return {
-      ...ret,
-      output: parsedOutput,
-    };
+
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
   }
 
   private async callApiWithRawRequest(
@@ -912,16 +1043,67 @@ export class HttpProvider implements ApiProvider {
     }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
+  }
+
+  /**
+   * Extracts completion text from parsed output with fallback to raw text
+   */
+  private getCompletionText(parsedOutput: any, rawText: string): string {
+    if (typeof parsedOutput === 'string') {
+      return parsedOutput;
+    }
+    if (parsedOutput?.output && typeof parsedOutput.output === 'string') {
+      return parsedOutput.output;
+    }
+    return rawText;
+  }
+
+  /**
+   * Processes response and adds token estimation if enabled
+   */
+  private async processResponseWithTokenEstimation(
+    ret: ProviderResponse,
+    parsedOutput: any,
+    rawText: string,
+    transformedPrompt: any,
+    prompt: string,
+  ): Promise<ProviderResponse> {
+    // Estimate tokens if enabled
+    let estimatedTokenUsage: Partial<TokenUsage> | undefined;
+    if (this.config.tokenEstimation?.enabled) {
+      const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
+      const completionText = this.getCompletionText(parsedOutput, rawText);
+      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
+    }
+
     if (parsedOutput?.output) {
-      return {
+      const result = {
         ...ret,
         ...parsedOutput,
       };
+      // Add estimated token usage if available and not already present
+      if (estimatedTokenUsage && !result.tokenUsage) {
+        result.tokenUsage = estimatedTokenUsage;
+      }
+      return result;
     }
 
-    return {
+    const result = {
       ...ret,
       output: parsedOutput,
     };
+    // Add estimated token usage if available
+    if (estimatedTokenUsage && !result.tokenUsage) {
+      result.tokenUsage = estimatedTokenUsage;
+    }
+    return result;
   }
 }

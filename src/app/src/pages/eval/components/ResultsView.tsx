@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
@@ -29,7 +29,6 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
 import { useDebounce } from 'use-debounce';
@@ -42,12 +41,13 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
+import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useStore as useResultsViewStore, useResultsViewSettingsStore } from './store';
-import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
+import { useTableStore, useResultsViewSettingsStore } from './store';
+import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
@@ -158,8 +158,20 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
+
   const [searchParams, setSearchParams] = useSearchParams();
-  const { author, table, setTable, config, setConfig, evalId, setAuthor } = useResultsViewStore();
+  const {
+    author,
+    table,
+
+    config,
+    setConfig,
+    evalId,
+    setAuthor,
+    filteredResultsCount,
+    totalResultsCount,
+    highlightedResultsCount,
+  } = useTableStore();
 
   const {
     setInComparisonMode,
@@ -168,12 +180,16 @@ export default function ResultsView({
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+    comparisonEvalIds,
+    setComparisonEvalIds,
   } = useResultsViewSettingsStore();
 
   const { setStateFromConfig } = useMainStore();
+
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [debouncedSearchText] = useDebounce(searchText, 200);
+  const [debouncedSearchValue] = useDebounce(searchText, 1000);
+
   const handleSearchTextChange = React.useCallback(
     (text: string) => {
       setSearchParams((prev) => ({ ...prev, search: text }));
@@ -264,50 +280,9 @@ export default function ResultsView({
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
     setAnchorEl(null);
-    try {
-      const response = await callApi(`/results/${compareEvalId}`, {
-        cache: 'no-store',
-      });
-      const body = await response.json();
-      const comparisonTable =
-        body.data.version < 4
-          ? (body.data.results.table as EvaluateTable)
-          : convertResultsToTable(body.data);
 
-      // Combine the comparison table with the current table
-      const combinedTable: EvaluateTable = {
-        head: {
-          prompts: [
-            ...table.head.prompts.map((prompt) => ({
-              ...prompt,
-              label: `[${evalId || defaultEvalId || 'Eval A'}] ${prompt.label || ''}`,
-            })),
-            ...comparisonTable.head.prompts.map((prompt) => ({
-              ...prompt,
-              label: `[${compareEvalId}] ${prompt.label || ''}`,
-            })),
-          ],
-          vars: table.head.vars, // Assuming vars are the same
-        },
-        body: table.body.map((row, index) => ({
-          ...row,
-          outputs: [...row.outputs, ...(comparisonTable.body[index]?.outputs || [])],
-        })),
-      };
-      // Update the state with the combined table
-      setTable(combinedTable);
-
-      // Update other relevant state if needed
-      setConfig({
-        ...config,
-        ...body.data.config,
-        description: `Combined: "${config?.description || 'Eval A'}" and "${body.data.config?.description || 'Eval B'}"`,
-      });
-      setInComparisonMode(true);
-    } catch (error) {
-      console.error('Error fetching comparison eval:', error);
-      alert('Failed to load comparison eval. Please try again.');
-    }
+    setInComparisonMode(true);
+    setComparisonEvalIds([...comparisonEvalIds, compareEvalId]);
   };
 
   const hasAnyDescriptions = React.useMemo(
@@ -363,6 +338,14 @@ export default function ResultsView({
     selectedColumns: allColumns,
     columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
   };
+
+  const visiblePromptCount = React.useMemo(
+    () =>
+      head.prompts.filter(
+        (_, idx) => currentColumnState.columnVisibility[`Prompt ${idx + 1}`] !== false,
+      ).length,
+    [head.prompts, currentColumnState.columnVisibility],
+  );
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
@@ -475,6 +458,27 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
+  // Add state for metric filter and available metrics
+  const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
+
+  const availableMetrics = React.useMemo(() => {
+    if (table && table.head?.prompts) {
+      const metrics = new Set<string>();
+      table.head.prompts.forEach((prompt) => {
+        if (prompt.metrics?.namedScores) {
+          Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
+        }
+      });
+      return Array.from(metrics).sort();
+    }
+    return [];
+  }, [table]);
+
+  // Make the function a callback that can be passed to CustomMetrics
+  const handleMetricFilterChange = React.useCallback((metric: string | null) => {
+    setSelectedMetric(metric);
+  }, []);
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -538,7 +542,11 @@ export default function ResultsView({
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
-          <FilterModeSelector filterMode={filterMode} onChange={handleFilterModeChange} />
+          <FilterModeSelector
+            filterMode={filterMode}
+            onChange={handleFilterModeChange}
+            showDifferentOption={visiblePromptCount > 1}
+          />
         </Box>
         <Box>
           <SearchInputField
@@ -548,6 +556,68 @@ export default function ResultsView({
             placeholder="Text or regex"
           />
         </Box>
+        <MetricFilterSelector
+          selectedMetric={selectedMetric}
+          availableMetrics={availableMetrics}
+          onChange={handleMetricFilterChange}
+        />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+            borderRadius: '16px',
+            padding: '4px 12px',
+            fontSize: '0.875rem',
+          }}
+        >
+          {searchText || filterMode !== 'all' || selectedMetric ? (
+            <>
+              <strong>{filteredResultsCount}</strong>
+              <span style={{ margin: '0 4px' }}>of</span>
+              <strong>{totalResultsCount}</strong>
+              <span style={{ margin: '0 4px' }}>results</span>
+              {searchText && (
+                <Chip
+                  size="small"
+                  label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
+                  onDelete={() => handleSearchTextChange('')}
+                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                />
+              )}
+              {filterMode !== 'all' && (
+                <Chip
+                  size="small"
+                  label={`Filter: ${filterMode}`}
+                  onDelete={() => setFilterMode('all')}
+                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                />
+              )}
+              {selectedMetric && (
+                <Chip
+                  size="small"
+                  label={`Metric: ${selectedMetric}`}
+                  onDelete={() => handleMetricFilterChange(null)}
+                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                />
+              )}
+            </>
+          ) : (
+            <>{filteredResultsCount} results</>
+          )}
+        </Box>
+        {highlightedResultsCount > 0 && (
+          <Chip
+            size="small"
+            label={`${highlightedResultsCount} highlighted`}
+            sx={{
+              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+              color: 'rgba(25, 118, 210, 1)',
+              border: '1px solid rgba(25, 118, 210, 0.2)',
+              fontWeight: 500,
+            }}
+          />
+        )}
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
@@ -662,10 +732,12 @@ export default function ResultsView({
         filterMode={filterMode}
         failureFilter={failureFilter}
         searchText={searchText}
-        debouncedSearchText={debouncedSearchText}
+        debouncedSearchText={debouncedSearchValue}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
+        selectedMetric={selectedMetric}
+        onMetricFilter={handleMetricFilterChange}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

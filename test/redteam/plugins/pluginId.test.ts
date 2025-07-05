@@ -97,11 +97,6 @@ describe('Plugin IDs', () => {
       expectedPrefixedPluginIds.add(`promptfoo:redteam:${piiPlugin}`);
     });
 
-    // Add BIAS plugins with their prefixes
-    BIAS_PLUGINS.forEach((biasPlugin) => {
-      expectedPrefixedPluginIds.add(`promptfoo:redteam:${biasPlugin}`);
-    });
-
     // Add special case for general PII plugin
     expectedPrefixedPluginIds.add('promptfoo:redteam:pii');
 
@@ -120,7 +115,6 @@ describe('Plugin IDs', () => {
     uniqueIds.forEach((id) => {
       if (id === 'policy') {
         // This is a special case where the ID is not prefixed in the code
-        console.log("Note: Found 'policy' ID without prefix - this is a special case");
       }
     });
 
@@ -148,6 +142,7 @@ describe('Plugin IDs', () => {
             ...PII_PLUGINS,
             ...BIAS_PLUGINS,
             'pii', // Add the general pii plugin
+            'bias', // Add the general bias plugin
             'harmful', // Add the general harmful plugin
             ...Object.keys(HARM_PLUGINS),
           ];

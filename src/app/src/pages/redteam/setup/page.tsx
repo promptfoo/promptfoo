@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
+import ErrorBoundary from '@app/components/ErrorBoundary';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -27,6 +29,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
@@ -251,6 +254,7 @@ const StatusSection = styled(Box)(({ theme }) => ({
 
 export default function RedTeamSetupPage() {
   // --- Hooks ---
+  usePageMeta({ title: 'Red team setup', description: 'Configure red team testing' });
   const location = useLocation();
   const navigate = useNavigate();
   const { recordEvent } = useTelemetry();
@@ -471,6 +475,8 @@ export default function RedTeamSetupPage() {
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
         entities: yamlConfig.redteam?.entities || [],
+        numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
+        maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition: {
           purpose: yamlConfig.redteam?.purpose || '',
           // We could potentially parse these from redteam.purpose if it follows a specific format.
@@ -579,15 +585,15 @@ export default function RedTeamSetupPage() {
                 onChange={handleChange}
               >
                 <StyledTab
-                  icon={<AppIcon />}
-                  iconPosition="start"
-                  label="Usage Details"
-                  {...a11yProps(0)}
-                />
-                <StyledTab
                   icon={<TargetIcon />}
                   iconPosition="start"
                   label="Targets"
+                  {...a11yProps(0)}
+                />
+                <StyledTab
+                  icon={<AppIcon />}
+                  iconPosition="start"
+                  label="Usage Details"
                   {...a11yProps(1)}
                 />
                 <StyledTab
@@ -643,19 +649,29 @@ export default function RedTeamSetupPage() {
         </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
-            <Purpose onNext={handleNext} />
+            <ErrorBoundary name="Targets Page">
+              <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
-            <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+            <ErrorBoundary name="Application Purpose Page">
+              <Purpose onNext={handleNext} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>
-            <Plugins onNext={handleNext} onBack={handleBack} />
+            <ErrorBoundary name="Plugins Page">
+              <Plugins onNext={handleNext} onBack={handleBack} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={3}>
-            <Strategies onNext={handleNext} onBack={handleBack} />
+            <ErrorBoundary name="Strategies Page">
+              <Strategies onNext={handleNext} onBack={handleBack} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={4}>
-            <Review />
+            <ErrorBoundary name="Review Page">
+              <Review />
+            </ErrorBoundary>
           </CustomTabPanel>
         </TabContent>
       </Content>

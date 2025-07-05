@@ -38,6 +38,7 @@ interface FrameworkCardProps {
   nonCompliantPlugins: string[];
   sortedNonCompliantPlugins: (plugins: string[]) => string[];
   getPluginPassRate: (plugin: string) => { pass: number; total: number; rate: number };
+  idx: number;
 }
 
 const FrameworkCard: React.FC<FrameworkCardProps> = ({
@@ -49,11 +50,15 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
   nonCompliantPlugins,
   sortedNonCompliantPlugins,
   getPluginPassRate,
+  idx,
 }) => {
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
-
+  const breakInside = idx === 0 ? 'undefined' : 'avoid';
   return (
-    <Card className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}>
+    <Card
+      className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
+      sx={{ pageBreakInside: breakInside, breakInside }}
+    >
       <CardContent>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
           <Box display="flex" alignItems="center">
@@ -168,7 +173,8 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             label="No Plugins"
                             size="small"
                             sx={{
-                              backgroundColor: '#9e9e9e',
+                              backgroundColor:
+                                nonCompliantCategoryPlugins.length === 0 ? '#4caf50' : '#9e9e9e',
                               color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
@@ -176,11 +182,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                           />
                         ) : testedPlugins.length > 0 ? (
                           <Chip
-                            label={
-                              nonCompliantCategoryPlugins.length === 0
-                                ? '0% ASR'
-                                : `${Math.round((nonCompliantCategoryPlugins.length / testedPlugins.length) * 100)}% ASR`
-                            }
+                            label={`${nonCompliantCategoryPlugins.length} / ${testedPlugins.length} plugins failed`}
                             size="small"
                             sx={{
                               backgroundColor:
@@ -429,29 +431,17 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 }}
               >
                 <Typography variant="subtitle2">Framework Results</Typography>
-                {nonCompliantPlugins.length === 0 ? (
-                  <Chip
-                    label="0%"
-                    size="small"
-                    sx={{
-                      backgroundColor: '#4caf50',
-                      color: 'white',
-                      fontSize: '0.7rem',
-                      height: 20,
-                    }}
-                  />
-                ) : (
-                  <Chip
-                    label={`${Math.round((nonCompliantPlugins.length / Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length) * 100)}%`}
-                    size="small"
-                    sx={{
-                      backgroundColor: '#f44336',
-                      color: 'white',
-                      fontSize: '0.7rem',
-                      height: 20,
-                    }}
-                  />
-                )}
+
+                <Chip
+                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} failed`}
+                  size="small"
+                  sx={{
+                    backgroundColor: nonCompliantPlugins.length === 0 ? '#4caf50' : '#f44336',
+                    color: 'white',
+                    fontSize: '0.7rem',
+                    height: 20,
+                  }}
+                />
               </Box>
 
               <List dense sx={{ py: 0 }}>

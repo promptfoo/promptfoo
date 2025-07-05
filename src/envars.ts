@@ -21,9 +21,9 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
+  PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
-  PROMPTFOO_DISABLE_REDTEAM_PURPOSE_DISCOVERY_AGENT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
@@ -34,10 +34,13 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_TEMPLATING?: boolean;
   PROMPTFOO_DISABLE_UPDATE?: boolean;
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
+  PROMPTFOO_DISABLE_WAL_MODE?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
+  PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
@@ -153,6 +156,9 @@ export type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
+  // AIML API
+  AIML_API_KEY?: string;
+
   // Anthropic
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;
@@ -215,6 +221,9 @@ export type EnvVars = {
   /** @deprecated Use HF_TOKEN instead */
   HF_API_TOKEN?: string;
   HF_TOKEN?: string;
+
+  // Hyperbolic
+  HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
   LANGFUSE_HOST?: string;
@@ -285,6 +294,9 @@ export type EnvVars = {
 
   // Pi Labs
   WITHPI_API_KEY?: string;
+
+  // xAI
+  XAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
@@ -384,6 +396,15 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
  */
 export function getEvalTimeoutMs(defaultValue: number = 0): number {
   return getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', defaultValue);
+}
+
+/**
+ * Get the maximum duration for an evaluation in milliseconds.
+ * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
+ * @returns The max duration in milliseconds, or the default value if not set.
+ */
+export function getMaxEvalTimeMs(defaultValue: number = 0): number {
+  return getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS', defaultValue);
 }
 
 /**

@@ -1,14 +1,13 @@
-import type { z } from 'zod';
 import { fetchWithProxy } from '../../../src/fetch';
 import {
   ArgsSchema,
-  DEFAULT_TURN_COUNT,
   doTargetPurposeDiscovery,
-  mergePurposes,
+  normalizeTargetPurposeDiscoveryResult,
 } from '../../../src/redteam/commands/discover';
-import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/fetch');
+
+const mockedFetchWithProxy = jest.mocked(fetchWithProxy);
 
 describe('ArgsSchema', () => {
   it('`config` and `target` are mutually exclusive', () => {
@@ -23,153 +22,331 @@ describe('ArgsSchema', () => {
     expect(success).toBe(false);
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
   });
-
-  it('Either `config` or `target` must be provided', () => {
-    const args = {
-      preview: false,
-      overwrite: false,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('Either config or target must be provided!');
-  });
-
-  it('`output` and `preview` are mutually exclusive', () => {
-    const args: z.infer<typeof ArgsSchema> = {
-      config: 'test',
-      output: 'test',
-      preview: true,
-      overwrite: false,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('Cannot specify both output and preview!');
-
-    // Remove the preview flag:
-    args.preview = false;
-    const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
-    expect(success2).toBe(true);
-    expect(error2).toBeUndefined();
-
-    // Remove the output flag:
-    args.preview = true;
-    args.output = undefined;
-    const { success: success3, error: error3 } = ArgsSchema.safeParse(args);
-    expect(success3).toBe(true);
-    expect(error3).toBeUndefined();
-  });
-
-  it('`overwrite` can only be used if `output` is provided', () => {
-    const args: z.infer<typeof ArgsSchema> = {
-      config: 'test',
-      preview: false,
-      overwrite: true,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('Cannot specify overwrite without output!');
-
-    // Remove the overwrite flag:
-    args.output = 'test';
-    args.overwrite = false;
-    const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
-    expect(success2).toBe(true);
-    expect(error2).toBeUndefined();
-
-    // Overwrite to true
-    args.overwrite = true;
-    const { success: success3, error: error3 } = ArgsSchema.safeParse(args);
-    expect(success3).toBe(true);
-    expect(error3).toBeUndefined();
-  });
-
-  it('If `preview` is false, `output` must be provided', () => {
-    const args: z.infer<typeof ArgsSchema> = {
-      config: 'test',
-      preview: false,
-      overwrite: false,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('If preview is false, output must be provided!');
-
-    // Remove the preview flag:
-    args.preview = true;
-    const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
-    expect(success2).toBe(true);
-    expect(error2).toBeUndefined();
-  });
 });
 
-describe('mergePurposes', () => {
-  it('should correctly merge human-defined and discovered purposes', () => {
-    const humanDefined = 'This is a human defined purpose';
-    const discovered = 'This is a discovered purpose';
-    const expected = `${humanDefined}\n\nDiscovered Purpose:\n\n${discovered}`;
+describe('normalizeTargetPurposeDiscoveryResult', () => {
+  it('should handle null-like values', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: null,
+      limitations: '',
+      user: 'null',
+      tools: [],
+    });
 
-    expect(mergePurposes(humanDefined, discovered)).toBe(expected);
+    expect(result).toEqual({
+      purpose: null,
+      limitations: null,
+      user: null,
+      tools: [],
+    });
+  });
+
+  it('should handle string "null" values', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: 'null',
+      limitations: 'null',
+      user: 'null',
+      tools: [],
+    });
+
+    expect(result).toEqual({
+      purpose: null,
+      limitations: null,
+      user: null,
+      tools: [],
+    });
+  });
+
+  it('should handle invalid tools array', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
+      tools: null as any,
+    });
+
+    expect(result).toEqual({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
+      tools: [],
+    });
+  });
+
+  it('should filter invalid tools from array', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
+      tools: [
+        null,
+        { name: 'tool1', description: 'desc1', arguments: [] },
+        null,
+        { name: 'tool2', description: 'desc2', arguments: [] },
+      ],
+    });
+
+    expect(result).toEqual({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
+      tools: [
+        { name: 'tool1', description: 'desc1', arguments: [] },
+        { name: 'tool2', description: 'desc2', arguments: [] },
+      ],
+    });
   });
 });
 
 describe('doTargetPurposeDiscovery', () => {
-  const mockTarget: ApiProvider = {
-    id: () => 'test-target',
-    callApi: jest.fn().mockResolvedValue({ output: 'test response' }),
-  };
-
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
-  it('should throw error when question is undefined', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: false }),
-      statusText: 'Bad Request',
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+  it('should handle empty prompt', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              arguments: [{ name: 'a', description: 'd', type: 'string' }],
+            },
+          ],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I am a test assistant'],
+        },
+      },
+    ];
 
-    await expect(doTargetPurposeDiscovery(mockTarget)).rejects.toThrow(
-      'Failed to discover purpose: Bad Request',
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I am a test assistant' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    expect(target.callApi).toHaveBeenCalledWith('What is your purpose?', {
+      prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
+      vars: { sessionId: expect.any(String) },
+      bustCache: true,
+    });
+
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+      ],
+      user: 'Test user',
+    });
   });
 
-  it('should use DEFAULT_TURN_COUNT when maxTurns not provided', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: true, purpose: 'discovered purpose' }),
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+  it('should render the prompt if passed in', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              arguments: [{ name: 'a', description: 'd', type: 'string' }],
+            },
+          ],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I am a test assistant'],
+        },
+      },
+    ];
 
-    await doTargetPurposeDiscovery(mockTarget);
-
-    expect(fetchWithProxy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringContaining(`"maxTurns":${DEFAULT_TURN_COUNT}`),
-      }),
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I am a test assistant' }),
+    };
+    const prompt = {
+      raw: 'This is a test prompt {{prompt}}',
+      label: 'Test Prompt',
+    };
+    const discoveredPurpose = await doTargetPurposeDiscovery(target, prompt);
+
+    expect(target.callApi).toHaveBeenCalledWith('This is a test prompt What is your purpose?', {
+      prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
+      vars: { sessionId: expect.any(String) },
+      bustCache: true,
+    });
+
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+      ],
+      user: 'Test user',
+    });
   });
 
-  it('should use provided maxTurns value', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: true, purpose: 'discovered purpose' }),
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+  it('should normalize string "null" values from server response', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'null',
+          limitations: 'null',
+          tools: [],
+          user: 'null',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I cannot provide that information'],
+        },
+      },
+    ];
 
-    const customTurns = 10;
-    await doTargetPurposeDiscovery(mockTarget, customTurns);
-
-    expect(fetchWithProxy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringContaining(`"maxTurns":${customTurns}`),
-      }),
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I cannot provide that information' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    expect(discoveredPurpose).toEqual({
+      purpose: null,
+      limitations: null,
+      tools: [],
+      user: null,
+    });
+  });
+
+  it('should handle mixed valid/invalid tools from server', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [
+            null,
+            { name: 'tool1', description: 'desc1', arguments: [] },
+            null,
+            { name: 'tool2', description: 'desc2', arguments: [] },
+          ],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['Test response'],
+        },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'Test response' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      tools: [
+        { name: 'tool1', description: 'desc1', arguments: [] },
+        { name: 'tool2', description: 'desc2', arguments: [] },
+      ],
+      user: 'Test user',
+    });
   });
 });

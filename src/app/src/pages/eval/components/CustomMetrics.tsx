@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import Tooltip from '@mui/material/Tooltip';
 import './CustomMetrics.css';
 
@@ -9,6 +9,7 @@ interface CustomMetricsProps {
   counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
   onSearchTextChange?: (searchText: string) => void;
+  onMetricFilter?: (metric: string | null) => void;
 }
 
 interface MetricValueProps {
@@ -48,6 +49,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
   counts,
   metricTotals,
   onSearchTextChange,
+  onMetricFilter,
 }) => {
   const [showAll, setShowAll] = React.useState(false);
   if (!lookup || !Object.keys(lookup).length) {
@@ -57,30 +59,26 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
   const metrics = Object.entries(lookup);
   const displayMetrics = showAll ? metrics : metrics.slice(0, NUM_METRICS_TO_DISPLAY_ABOVE_FOLD);
 
+  const handleMetricClick = (metric: string) => {
+    if (onMetricFilter) {
+      onMetricFilter(metric);
+    } else if (onSearchTextChange) {
+      onSearchTextChange(`metric=${metric}:`);
+    }
+  };
+
   return (
     <div className="custom-metric-container" data-testid="custom-metrics">
       {displayMetrics
         .sort(([metricA], [metricB]) => metricA.localeCompare(metricB))
         .map(([metric, score]) =>
           metric && typeof score !== 'undefined' ? (
-            onSearchTextChange ? (
-              <Tooltip title={`Filter results to ${metric}`} key={metric}>
-                <span
-                  data-testid={`metric-${metric}`}
-                  onClick={() => onSearchTextChange(`metric=${metric}:`)}
-                  className="clickable"
-                >
-                  <span data-testid={`metric-name-${metric}`}>{metric}</span>:{' '}
-                  <MetricValue
-                    metric={metric}
-                    score={score}
-                    counts={counts}
-                    metricTotals={metricTotals}
-                  />
-                </span>
-              </Tooltip>
-            ) : (
-              <span key={metric} data-testid={`metric-${metric}`} className="">
+            <Tooltip title={`Filter results to ${metric}`} key={metric}>
+              <span
+                data-testid={`metric-${metric}`}
+                onClick={() => handleMetricClick(metric)}
+                className="clickable"
+              >
                 <span data-testid={`metric-name-${metric}`}>{metric}</span>:{' '}
                 <MetricValue
                   metric={metric}
@@ -89,7 +87,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
                   metricTotals={metricTotals}
                 />
               </span>
-            )
+            </Tooltip>
           ) : null,
         )}
       {metrics.length > 10 && (

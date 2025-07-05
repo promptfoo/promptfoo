@@ -181,6 +181,53 @@ describe('YamlEditor', () => {
     expect(editor.value).toContain('repeat: 3');
   });
 
+  it('includes defaultTest from store in YAML', () => {
+    mockGetTestSuite.mockReturnValueOnce({
+      description: 'Test suite',
+      providers: [{ id: 'test-provider' }],
+      prompts: ['test prompt'],
+      tests: [{ description: 'test case' }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'does not describe self as an AI, model, or chatbot',
+          },
+        ],
+      },
+    });
+
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    expect(editor.value).toContain('defaultTest');
+    expect(editor.value).toContain('assert:');
+    expect(editor.value).toContain('type: llm-rubric');
+    expect(editor.value).toContain('does not describe self as an AI, model, or chatbot');
+  });
+
+  it('includes derivedMetrics from store in YAML', () => {
+    mockGetTestSuite.mockReturnValueOnce({
+      description: 'Test suite',
+      providers: [{ id: 'test-provider' }],
+      prompts: ['test prompt'],
+      tests: [{ description: 'test case' }],
+      derivedMetrics: [
+        {
+          name: 'precision',
+          value: 'tp / (tp + fp)',
+        },
+      ],
+    });
+
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    expect(editor.value).toContain('derivedMetrics');
+    expect(editor.value).toContain('name: precision');
+    expect(editor.value).toContain('value: tp / (tp + fp)');
+  });
+
   it('respects readOnly prop', () => {
     render(<YamlEditorComponent readOnly={true} />);
 

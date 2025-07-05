@@ -150,7 +150,6 @@ export class PythonProvider implements ApiProvider {
     } else {
       if (context) {
         // Remove properties not useful in Python
-        delete context.fetchWithCache;
         delete context.getCache;
         delete context.logger;
       }

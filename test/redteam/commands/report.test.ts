@@ -46,7 +46,7 @@ describe('redteamReportCommand', () => {
       name: 'redteam report',
     });
     expect(setConfigDirectoryPath).toHaveBeenCalledWith('testdir');
-    expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_REPORT, undefined);
+    expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_REPORT);
   });
 
   it('should open browser if server is already running', async () => {
@@ -61,7 +61,7 @@ describe('redteamReportCommand', () => {
     expect(startServer).not.toHaveBeenCalled();
   });
 
-  it('should handle report command with filter description', async () => {
+  it('should ignore filter description option', async () => {
     redteamReportCommand(program);
     const cmd = program.commands[0];
 
@@ -69,11 +69,7 @@ describe('redteamReportCommand', () => {
 
     await cmd.parseAsync(['node', 'test', '--filter-description', 'test.*']);
 
-    expect(startServer).toHaveBeenCalledWith(
-      expect.any(String),
-      BrowserBehavior.OPEN_TO_REPORT,
-      'test.*',
-    );
+    expect(startServer).toHaveBeenCalledWith(expect.any(String), BrowserBehavior.OPEN_TO_REPORT);
   });
 
   it('should handle report command with env file path', async () => {

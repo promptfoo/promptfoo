@@ -98,6 +98,26 @@ describe('ScriptCompletionProvider', () => {
     jest.clearAllMocks();
     jest.mocked(cacheModule.getCache).mockReset();
     jest.mocked(cacheModule.isCacheEnabled).mockReset();
+
+    // Set up default file system mocks for all tests
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.statSync).mockReturnValue({
+      isFile: () => true,
+      isDirectory: () => false,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isSymbolicLink: () => false,
+      isFIFO: () => false,
+      isSocket: () => false,
+    } as fs.Stats);
+    jest.mocked(fs.readFileSync).mockReturnValue('default file content');
+
+    // Set up default crypto mock
+    const mockHashUpdate = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue('default-hash'),
+    } as unknown as crypto.Hash;
+    jest.mocked(crypto.createHash).mockReturnValue(mockHashUpdate);
   });
 
   it('should return the correct id', () => {

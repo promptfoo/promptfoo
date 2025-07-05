@@ -55,10 +55,13 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as any);
     } catch (err) {
       return {

@@ -2,9 +2,10 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool, getEnvString } from './envars';
+import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { readGlobalConfig } from './globalConfig/globalConfig';
+import { POSTHOG_KEY } from './generated-constants';
+import { getUserEmail, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 
 export const TelemetryEventSchema = z.object({
@@ -24,8 +25,6 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
-// NEVER change this to getEnvString - `replace-keys` depends on it directly referencing process.env
-export const POSTHOG_KEY = process.env.PROMPTFOO_POSTHOG_KEY;
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
@@ -34,7 +33,7 @@ let posthogClient: PostHog | null = null;
 try {
   posthogClient = POSTHOG_KEY
     ? new PostHog(POSTHOG_KEY, {
-        host: getEnvString('PROMPTFOO_POSTHOG_HOST', EVENTS_ENDPOINT),
+        host: EVENTS_ENDPOINT,
       })
     : null;
 } catch {
@@ -46,35 +45,39 @@ const TELEMETRY_TIMEOUT_MS = 1000;
 export class Telemetry {
   private telemetryDisabledRecorded = false;
   private id: string;
-  private email: string | undefined;
+  private email: string | null;
 
   constructor() {
-    logger.debug(`Telemetry enabled: ${!this.disabled}`);
-
-    const globalConfig = readGlobalConfig();
-    this.id = globalConfig?.id;
-    this.email = globalConfig?.account?.email;
+    this.id = getUserId();
+    this.email = getUserEmail();
     this.identify();
   }
 
   identify() {
-    if (this.disabled) {
+    // Do not use getEnvBool here - it will be mocked in tests
+    if (this.disabled || process.env.IS_TESTING) {
       return;
     }
-    if (posthogClient && this.email) {
+
+    if (posthogClient) {
       posthogClient.identify({
         distinctId: this.id,
         properties: { email: this.email },
       });
+      posthogClient.flush();
     }
 
-    fetch(KA_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    fetchWithTimeout(
+      KA_ENDPOINT,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profile_id: this.id, email: this.email }),
       },
-      body: JSON.stringify({ profile_id: this.id, email: this.email }),
-    }).catch(() => {
+      TELEMETRY_TIMEOUT_MS,
+    ).catch(() => {
       // pass
     });
   }
@@ -94,20 +97,27 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
-      logger.debug(`Record event: ${eventName} ${JSON.stringify(properties)}`);
       this.sendEvent(eventName, properties);
     }
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (posthogClient && !getEnvBool('IS_TESTING')) {
-      const globalConfig = readGlobalConfig();
+    const propertiesWithMetadata = {
+      ...properties,
+      packageVersion: VERSION,
+      isRunningInCi: isCI(),
+    };
+
+    // Do not use getEnvBool here - it will be mocked in tests
+    if (posthogClient && !process.env.IS_TESTING) {
       posthogClient.capture({
-        distinctId: globalConfig.id,
+        distinctId: this.id,
         event: eventName,
-        properties: { ...properties, packageVersion: VERSION },
+        properties: propertiesWithMetadata,
       });
+      posthogClient.flush();
     }
+
     const kaBody = {
       profile_id: this.id,
       email: this.email,
@@ -116,7 +126,7 @@ export class Telemetry {
           message_id: randomUUID(),
           type: 'track',
           event: eventName,
-          properties,
+          properties: propertiesWithMetadata,
           sent_at: new Date().toISOString(),
         },
       ],

@@ -22,8 +22,8 @@ export function readGlobalConfig(): GlobalConfig {
   let globalConfig: GlobalConfig = { id: randomUUID() };
   if (fs.existsSync(configFilePath)) {
     globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
-    if (!globalConfig.id) {
-      globalConfig.id = randomUUID();
+    if (!globalConfig?.id) {
+      globalConfig = { ...globalConfig, id: randomUUID() };
       writeGlobalConfig(globalConfig);
     }
   } else {

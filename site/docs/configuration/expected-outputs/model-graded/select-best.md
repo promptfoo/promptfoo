@@ -1,3 +1,7 @@
+---
+sidebar_label: Select Best
+---
+
 # Select Best
 
 The `select-best` assertion compares multiple outputs in the same test case and selects the one that best meets a specified criterion. This is useful for comparing different prompt or model variations to determine which produces the best result.

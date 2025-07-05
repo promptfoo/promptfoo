@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, eq, gte, lt } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
@@ -143,6 +143,27 @@ export default class EvalResult {
           opts?.testIdx == null ? undefined : eq(evalResultsTable.testIdx, opts.testIdx),
         ),
       );
+    return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
+  static async findManyByEvalIdAndTestIndices(evalId: string, testIndices: number[]) {
+    if (!testIndices.length) {
+      return [];
+    }
+
+    const db = getDb();
+    const results = await db
+      .select()
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          testIndices.length === 1
+            ? eq(evalResultsTable.testIdx, testIndices[0])
+            : inArray(evalResultsTable.testIdx, testIndices),
+        ),
+      );
+
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 

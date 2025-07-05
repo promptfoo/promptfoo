@@ -66,6 +66,7 @@ describe('redteamRouter', () => {
         force: true,
         verbose: true,
         delay: 1000,
+        maxConcurrency: 1,
         logCallback: expect.any(Function),
         abortSignal: expect.any(AbortSignal),
       });
@@ -96,6 +97,41 @@ describe('redteamRouter', () => {
       expect(mockJson).toHaveBeenCalledWith({ id: expect.any(String) });
       expect(jobs[0]?.status).toBe('error');
       expect(jobs[0]?.logs).toContain('Error: Test error');
+    });
+
+    it('should normalize maxConcurrency to at least 1', async () => {
+      const mockEvalResult = {
+        id: 'eval-123',
+        toEvaluateSummary: jest.fn().mockResolvedValue({ summary: 'test' }),
+      } as any;
+
+      jest.mocked(doRedteamRun).mockResolvedValue(mockEvalResult);
+
+      mockRequest.body = {
+        config: { test: 'config' },
+        force: true,
+        verbose: false,
+        delay: 0,
+        maxConcurrency: 0, // Invalid value, should be normalized to 1
+      };
+
+      const routeHandler = redteamRouter.stack.find(
+        (layer: any) => layer.route?.path === '/run' && layer.route?.methods?.post,
+      )?.route?.stack[0]?.handle;
+
+      if (routeHandler) {
+        await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
+      }
+
+      expect(doRedteamRun).toHaveBeenCalledWith({
+        liveRedteamConfig: { test: 'config' },
+        force: true,
+        verbose: false,
+        delay: 0,
+        maxConcurrency: 1, // Should be normalized to 1
+        logCallback: expect.any(Function),
+        abortSignal: expect.any(AbortSignal),
+      });
     });
   });
 

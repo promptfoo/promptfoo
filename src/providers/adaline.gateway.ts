@@ -615,18 +615,19 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         if (formatType === 'openai') {
           // convert gateway message type to openai message type if it's more than just text content
           if (
-            response.response.messages[0].content.filter((content) => content.modality === 'text')
-              .length > 0
+            response.response.messages[0].content.filter(
+              (content: any) => content.modality === 'text',
+            ).length > 0
           ) {
             // response has both text and tool-call content
             output = {
               content: response.response.messages[0].content
-                .filter((content) => content.modality === 'text')
-                .map((content) => content.value)
+                .filter((content: any) => content.modality === 'text')
+                .map((content: any) => content.value)
                 .join(' '),
               tool_calls: response.response.messages[0].content
-                .filter((content) => content.modality === 'tool-call')
-                .map((content) => {
+                .filter((content: any) => content.modality === 'tool-call')
+                .map((content: any) => {
                   return {
                     id: content.id,
                     type: 'function',
@@ -640,8 +641,8 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           } else {
             // response has only tool-call content
             output = response.response.messages[0].content
-              .filter((content) => content.modality === 'tool-call')
-              .map((content) => {
+              .filter((content: any) => content.modality === 'tool-call')
+              .map((content: any) => {
                 return {
                   id: content.id,
                   type: 'function',
@@ -682,7 +683,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         );
       }
 
-      const logProbs = response.response.logProbs?.map((logProb) => logProb.logProb);
+      const logProbs = response.response.logProbs?.map((logProb: any) => logProb.logProb);
       const tokenUsage: TokenUsage = {};
       if (response.cached) {
         tokenUsage.cached = response.response.usage?.totalTokens;

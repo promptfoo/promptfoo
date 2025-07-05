@@ -308,7 +308,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
   private datasetManager: UnsafeBenchDatasetManager;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: UnsafeBenchPluginConfig) {
-    super(provider, purpose, injectVar, config || {});
+    super(provider, purpose, injectVar, config);
     this.pluginConfig = config;
     this.datasetManager = UnsafeBenchDatasetManager.getInstance();
 

@@ -39,8 +39,14 @@ export const useSettingsState = (isOpen: boolean) => {
     setMaxImageHeight,
   } = store;
 
+  const sanitizedMaxTextLength =
+    maxTextLength === Number.POSITIVE_INFINITY
+      ? Number.POSITIVE_INFINITY
+      : Number.isFinite(maxTextLength) && maxTextLength >= 25
+        ? maxTextLength
+        : 500;
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
-    maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength,
+    sanitizedMaxTextLength === Number.POSITIVE_INFINITY ? 1001 : sanitizedMaxTextLength,
   );
 
   const initialStateRef = useRef<SettingsState>({

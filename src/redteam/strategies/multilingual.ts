@@ -60,6 +60,7 @@ export async function generateMultilingual(
           format:
             'Remote Multilingual Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -241,11 +242,6 @@ export async function translateBatch(
   }
 }
 
-export async function translate(text: string, lang: string): Promise<string | null> {
-  const translations = await translateBatch(text, [lang]);
-  return translations[lang] || null;
-}
-
 export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
@@ -277,6 +273,7 @@ export async function addMultilingual(
       {
         format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
         hideCursor: true,
+        gracefulExit: true,
       },
       Presets.shades_classic,
     );
@@ -313,6 +310,7 @@ export async function addMultilingual(
             ...testCase.metadata,
             strategyId: 'multilingual',
             language: lang,
+            originalText,
           },
         });
       }

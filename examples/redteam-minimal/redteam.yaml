@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: First Red Team
 targets:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: customer-service-agent
 prompts:
   - 'Respond to the user input: {{prompt}}'

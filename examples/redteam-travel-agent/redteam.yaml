@@ -3,7 +3,7 @@ description: Travel agent red team
 prompts:
   - file://prompt.json
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       tools: file://tools.yaml
 redteam:

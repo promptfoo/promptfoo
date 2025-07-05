@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { Subject } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
+import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -16,10 +17,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import {
-  AwsBedrockGenericProvider,
-  type BedrockAmazonNovaSonicGenerationOptions,
-} from '../bedrock';
 
 // Configuration types
 interface SessionState {
@@ -51,7 +48,7 @@ const DEFAULT_CONFIG = {
       audioType: 'SPEECH',
       encoding: 'base64',
       mediaType: 'audio/lpcm',
-      sampleRateHertz: 8000,
+      sampleRateHertz: 16000,
       sampleSizeBits: 16,
       channelCount: 1,
       voiceId: 'tiffany',
@@ -402,22 +399,32 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         }
       }
 
+      const audioConfig = this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output;
+      const audioOutput =
+        hasAudioContent && audioContent
+          ? {
+              audio: {
+                data: this.convertRawToWav(
+                  Buffer.from(audioContent, 'base64'),
+                  audioConfig.sampleRateHertz,
+                  audioConfig.sampleSizeBits,
+                  audioConfig.channelCount,
+                ).toString('base64'),
+                format: 'wav',
+                transcript: assistantTranscript,
+              },
+              userTranscript,
+            }
+          : {};
+
       return {
         output: assistantTranscript || '[No response received from API]',
+        ...audioOutput,
         // TODO: Add token usage
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
         cached: false,
         metadata: {
-          ...(hasAudioContent && audioContent
-            ? {
-                audio: {
-                  data: audioContent,
-                  format: 'lpcm',
-                  transcript: assistantTranscript,
-                },
-                userTranscript,
-              }
-            : {}),
+          ...audioOutput,
           functionCallOccurred,
         },
       };
@@ -475,5 +482,37 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         },
       }),
     };
+  }
+
+  private convertRawToWav(
+    audioData: Buffer,
+    sampleRate: number = 8000,
+    bitsPerSample: number = 16,
+    channels: number = 1,
+  ): Buffer {
+    const dataLength = audioData.length;
+    const fileLength = 44 + dataLength;
+    const header = Buffer.alloc(44);
+
+    // RIFF header
+    header.write('RIFF', 0);
+    header.writeUInt32LE(fileLength - 8, 4);
+    header.write('WAVE', 8);
+
+    // fmt chunk
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16); // fmt chunk size
+    header.writeUInt16LE(1, 20); // PCM format
+    header.writeUInt16LE(channels, 22); // number of channels
+    header.writeUInt32LE(sampleRate, 24); // sample rate
+    header.writeUInt32LE((sampleRate * channels * bitsPerSample) / 8, 28); // byte rate
+    header.writeUInt16LE((channels * bitsPerSample) / 8, 32); // block align
+    header.writeUInt16LE(bitsPerSample, 34); // bits per sample
+
+    // data chunk
+    header.write('data', 36);
+    header.writeUInt32LE(dataLength, 40);
+
+    return Buffer.concat([header, audioData]);
   }
 }

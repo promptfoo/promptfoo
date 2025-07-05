@@ -5,9 +5,9 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   ],
   providers: [
     {
-      id: 'openai:gpt-4o-mini',
+      id: 'openai:gpt-4.1-mini',
       config: {
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-mini',
         temperature: 0,
         tools: [
           {

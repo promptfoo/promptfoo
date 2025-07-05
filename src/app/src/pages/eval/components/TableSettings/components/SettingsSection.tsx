@@ -4,8 +4,8 @@ import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
   title: string;
+  icon?: JSX.Element | null;
   children: React.ReactNode;
-  icon?: React.ReactNode;
   description?: string;
 }
 

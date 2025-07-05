@@ -1,11 +1,19 @@
 import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import type { RedteamFileConfig } from '@promptfoo/types';
 import yaml from 'js-yaml';
 import type { Config } from '../types';
 
 const orderRedTeam = (redteam: any): any => {
   const orderedRedTeam: any = {};
-  const redTeamOrder = ['purpose', 'entities', 'plugins', 'strategies'];
+  const redTeamOrder: (keyof RedteamFileConfig)[] = [
+    'purpose',
+    'entities',
+    'plugins',
+    'strategies',
+    'numTests',
+    'testGenerationInstructions',
+  ] as const;
 
   redTeamOrder.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(redteam, key)) {
@@ -41,6 +49,7 @@ const orderKeys = (obj: any): any => {
 
 export function generateOrderedYaml(config: Config): string {
   const yamlConfig = getUnifiedConfig(config);
+
   if (config.purpose) {
     yamlConfig.redteam.purpose = config.purpose;
   }

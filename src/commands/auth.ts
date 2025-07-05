@@ -94,7 +94,7 @@ export function authCommand(program: Command) {
         }
 
         const apiHost = cloudConfig.getApiHost();
-        const response = await fetchWithProxy(`${apiHost}/users/me`, {
+        const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },

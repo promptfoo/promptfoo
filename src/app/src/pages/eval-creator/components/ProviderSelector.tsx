@@ -17,6 +17,45 @@ const defaultProviders: ProviderOptions[] = (
 )
   .concat([
     {
+      id: 'openai:gpt-4.1',
+      label: 'OpenAI: GPT-4.1',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+        function_call: undefined,
+        functions: undefined,
+        stop: undefined,
+      },
+    },
+    {
+      id: 'openai:gpt-4.1-mini',
+      label: 'OpenAI: GPT-4.1 Mini',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
+    {
+      id: 'openai:gpt-4.1-nano',
+      label: 'OpenAI: GPT-4.1 Nano',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
+    {
       id: 'openai:gpt-4o',
       label: 'OpenAI: GPT-4o',
       config: {
@@ -44,12 +83,22 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openai:o1',
-      label: 'OpenAI: GPT-o1 (with thinking)',
+      id: 'openai:o3',
+      label: 'OpenAI: GPT-o3 (with thinking)',
       config: {
         organization: '',
         isReasoningModel: true,
         max_completion_tokens: 1024,
+        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
+      },
+    },
+    {
+      id: 'openai:o4-mini',
+      label: 'OpenAI: GPT-o4 Mini (with thinking)',
+      config: {
+        organization: '',
+        isReasoningModel: true,
+        max_completion_tokens: 2048,
         reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
       },
     },
@@ -65,6 +114,35 @@ const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
+    {
+      id: 'anthropic:messages:claude-sonnet-4-20250514',
+      label: 'Anthropic: Claude 4 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'anthropic:messages:claude-opus-4-20250514',
+      label: 'Anthropic: Claude 4 Opus',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'anthropic:messages:claude-sonnet-4-20250514',
+      label: 'Anthropic: Claude 4 Sonnet (with thinking)',
+      config: {
+        max_tokens: 8192,
+        temperature: 1.0,
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 4096,
+        },
+        showThinking: true,
+      },
+    },
     {
       id: 'anthropic:messages:claude-3-7-sonnet-20250219',
       label: 'Anthropic: Claude 3.7 Sonnet',
@@ -112,6 +190,38 @@ const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
+    {
+      id: 'bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0',
+      label: 'Bedrock: Claude 4 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+        region: 'us-east-1',
+      },
+    },
+    {
+      id: 'bedrock:us.anthropic.claude-opus-4-20250514-v1:0',
+      label: 'Bedrock: Claude 4 Opus',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+        region: 'us-east-1',
+      },
+    },
+    {
+      id: 'bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0',
+      label: 'Bedrock: Claude 4 Sonnet (with thinking)',
+      config: {
+        max_tokens: 8192,
+        temperature: 1.0,
+        region: 'us-east-1',
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 4096,
+        },
+        showThinking: true,
+      },
+    },
     {
       id: 'bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       label: 'Bedrock: Claude 3.7 Sonnet',
@@ -232,6 +342,26 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'azure:chat:gpt-4.1',
+      label: 'Azure: GPT-4.1',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-02-15-preview',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
+    {
+      id: 'azure:chat:gpt-4.1-mini',
+      label: 'Azure: GPT-4.1 Mini',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-02-15-preview',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
+    {
       id: 'azure:chat:gpt-4o',
       label: 'Azure: GPT-4o',
       config: {
@@ -249,6 +379,16 @@ const defaultProviders: ProviderOptions[] = (
         api_version: '2024-02-15-preview',
         temperature: 0.5,
         max_tokens: 2048,
+      },
+    },
+    {
+      id: 'azure:chat:o4-mini',
+      label: 'Azure: O4 Mini',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-05-15-preview',
+        temperature: 0.5,
+        max_tokens: 4096,
       },
     },
     {
@@ -326,6 +466,26 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'vertex:claude-sonnet-4@20250514',
+      label: 'Vertex: Claude 4 Sonnet',
+      config: {
+        region: 'global',
+        anthropic_version: 'vertex-2024-10-22',
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'vertex:claude-opus-4@20250514',
+      label: 'Vertex: Claude 4 Opus',
+      config: {
+        region: 'global',
+        anthropic_version: 'vertex-2024-10-22',
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'vertex:claude-3-5-sonnet-v2@20241022',
       label: 'Vertex: Claude 3.5 Sonnet',
       config: {
@@ -373,6 +533,22 @@ const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
+    {
+      id: 'openrouter:anthropic/claude-sonnet-4-20250514',
+      label: 'OpenRouter: Claude 4 Sonnet',
+      config: {
+        temperature: 0.7,
+        max_tokens: 4096,
+      },
+    },
+    {
+      id: 'openrouter:anthropic/claude-opus-4-20250514',
+      label: 'OpenRouter: Claude 4 Opus',
+      config: {
+        temperature: 0.7,
+        max_tokens: 4096,
+      },
+    },
     {
       id: 'openrouter:anthropic/claude-3-5-sonnet',
       label: 'OpenRouter: Claude 3.5 Sonnet',

@@ -29,10 +29,16 @@ export interface MCPConfig {
   verbose?: boolean;
 }
 
+export interface MCPToolInputSchema {
+  properties?: Record<string, any>;
+  required?: string[];
+  [key: string]: any;
+}
+
 export interface MCPTool {
   name: string;
   description: string;
-  inputSchema: Record<string, unknown>;
+  inputSchema: MCPToolInputSchema;
 }
 
 export interface MCPToolResult {

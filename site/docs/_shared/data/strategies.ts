@@ -279,6 +279,28 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/other-encodings/#pig-latin',
   },
   {
+    category: 'Static (Single-Turn)',
+    strategy: 'camelcase',
+    displayName: 'camelCase',
+    description: 'camelCase transformation',
+    longDescription:
+      'Tests handling of text transformed into camelCase (removing spaces and capitalizing words) to potentially bypass content filters',
+    cost: 'Low',
+    asrIncrease: '0-5%',
+    link: '/docs/red-team/strategies/other-encodings/#camelcase',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'emoji',
+    displayName: 'Emoji Smuggling',
+    description: 'Variation selector encoding',
+    longDescription:
+      'Tests hiding UTF-8 payloads inside emoji variation selectors to evaluate filter evasion.',
+    cost: 'Low',
+    asrIncrease: '0-5%',
+    link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
+  },
+  {
     category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',

@@ -1,6 +1,21 @@
 ---
-date: 2025-02-14
+title: 'Understanding AI Agent Security'
+description: 'AI agents are powerful but vulnerable. Discover the biggest security risks and how to protect your agentic systems from hijacking, excessive access, and multi-turn attacks.'
 image: /img/blog/agent-security/panda_tools.png
+keywords:
+  [
+    AI agent security,
+    agent hijacking,
+    excessive agency,
+    AI security,
+    LLM agents,
+    multi-agent systems,
+    AI red teaming,
+    prompt injection,
+    agent vulnerabilities,
+  ]
+date: 2025-02-14
+authors: [vanessa]
 ---
 
 # Understanding AI Agent Security
@@ -49,9 +64,9 @@ Agents must evaluate problems and identify necessary actions to achieve goals. T
 
 In order for an AI agent to execute on tasks, it must invoke tools. These tools could be as simple as Python functions or as complex as third-party APIs and database queries. When creating an AI agent, you will need to register the tools with the agent.
 
-Providing these tools does not mean the AI agent will invoke those tools at every response. Instead, you can structure the AI agent to “reason” and determine whether the tool should be invoked. For some models, you can also force the model to call a function.
+Providing these tools does not mean the AI agent will invoke those tools at every response. Instead, you can structure the AI agent to "reason" and determine whether the tool should be invoked. For some models, you can also force the model to call a function.
 
-In Anthropic’s example customer service agent, the user sends a message that subsequently triggers the LLM to “think.”
+In Anthropic's example customer service agent, the user sends a message that subsequently triggers the LLM to "think."
 
 The LLM has access to three client-side tools: get_customer_info, get_order_details, and cancel_order. Based on the user message, it must determine which tool it should use to execute the task. In this example, it determines that it should call the get_customer_info function and returns the appropriate, structured response.
 
@@ -62,11 +77,11 @@ The LLM has access to three client-side tools: get_customer_info, get_order_deta
 AI agents require memory to overcome the challenges of stateless LLM architecture. There are typically two types of memory that an AI agent uses:
 
 - **Short-term memory**: This is the memory of the current conversation. It is used to store the conversation history and the context of the task at hand.
-- **Long-term memory**: This is the memory of the AI agent’s knowledge. It is used to store the knowledge of the world and the knowledge of the task at hand.
+- **Long-term memory**: This is the memory of the AI agent's knowledge. It is used to store the knowledge of the world and the knowledge of the task at hand.
 
 ### Retrieval and Knowledge
 
-Retrieval is the process of accessing information from a knowledge source, such as a vector database. AI agents may need access to a vector database to retrieve relevant information, whether that’s searching for stored information that is required to execute tasks, or to retrieve relevant information that will help the agent complete the function successfully.
+Retrieval is the process of accessing information from a knowledge source, such as a vector database. AI agents may need access to a vector database to retrieve relevant information, whether that's searching for stored information that is required to execute tasks, or to retrieve relevant information that will help the agent complete the function successfully.
 
 AI agents may also be granted access to databases, such as SQL databases, to retrieve information requested by the user or another agent.
 
@@ -100,15 +115,15 @@ Depending on the type of agent architecture, AI agents may remain susceptible to
 
 ### Agent Hijacking
 
-One of the largest risks against agentic systems is the [newly-coined concept](https://www.nist.gov/news-events/news/2025/01/technical-blog-strengthening-ai-agent-hijacking-evaluations) of “agent hijacking,” where AI agents are exploited through direct or indirect prompt injection. Agentic hijacking is a type of chained exploit that requires multiple vulnerabilities to pose a serious risk. The first is a fundamental misconfiguration of the AI agent to allow excessive privilege or autonomy. The second is the presence of direct or indirect prompt injection from untrusted user input. When chained, AI agents can be “hijacked” into executing malicious commands from users.
+One of the largest risks against agentic systems is the [newly-coined concept](https://www.nist.gov/news-events/news/2025/01/technical-blog-strengthening-ai-agent-hijacking-evaluations) of "agent hijacking," where AI agents are exploited through direct or indirect prompt injection. Agentic hijacking is a type of chained exploit that requires multiple vulnerabilities to pose a serious risk. The first is a fundamental misconfiguration of the AI agent to allow excessive privilege or autonomy. The second is the presence of direct or indirect prompt injection from untrusted user input. When chained, AI agents can be "hijacked" into executing malicious commands from users.
 
-Direct prompt injections occur when a user directly interacts with the AI agent (such as through a chatbot) and includes malicious instructions that bypass the LLM system’s original intent. Indirect prompt injection occurs through poisoning an LLM agent’s retrieval system, such as including a poisoned document in a RAG knowledge base that is subsequently retrieved by the LLM.
+Direct prompt injections occur when a user directly interacts with the AI agent (such as through a chatbot) and includes malicious instructions that bypass the LLM system's original intent. Indirect prompt injection occurs through poisoning an LLM agent's retrieval system, such as including a poisoned document in a RAG knowledge base that is subsequently retrieved by the LLM.
 
 Together, excessive agency and a prompt injection attack can force an AI agent to behave in unintended or malicious ways, such as sending well-crafted phishing messages on behalf of an attacker, escalating privileges to retrieve unauthorized data to the user, or providing malicious or illegal information back to a user.
 
 ### Excessive Agency
 
-AI agents with excessive access (or unrestricted access) to tools, APIs, and databases can pose tremendous risks for data exfiltration and sensitive information disclosure. They can also introduce the risk of [unbounded consumption attacks](https://www.promptfoo.dev/blog/unbounded-consumption/) against databases and APIs if rate limiting and input sanitation aren’t applied. This is caused by a lack of robust authorization mechanisms, overly-permissive tool calling, and lack of input sanitation.
+AI agents with excessive access (or unrestricted access) to tools, APIs, and databases can pose tremendous risks for data exfiltration and sensitive information disclosure. They can also introduce the risk of [unbounded consumption attacks](https://www.promptfoo.dev/blog/unbounded-consumption/) against databases and APIs if rate limiting and input sanitation aren't applied. This is caused by a lack of robust authorization mechanisms, overly-permissive tool calling, and lack of input sanitation.
 
 ![Excessive Agency](/img/blog/agent-security/sql_injection.png)
 
@@ -116,7 +131,7 @@ Above is an example of SQL injection in an AI agent. Since the prompts are not s
 
 ### Denial of Wallet (DoW) Attacks
 
-By design, AI agents require more sophisticated reasoning and planning to execute on tasks. Due to the computational requirements, these models are inherently more expensive than simpler models that are intended for chat completion, with inference for reasoning models such as OpenAI’s o1 [almost 150% more expensive](https://openai.com/api/pricing/) than gpt-4o. Users with access to a company’s agentic systems can abuse or mislead agentic systems to spiral in their reasoning or unnecessarily complete tasks, subsequently leading to tremendously large bills from inference providers.
+By design, AI agents require more sophisticated reasoning and planning to execute on tasks. Due to the computational requirements, these models are inherently more expensive than simpler models that are intended for chat completion, with inference for reasoning models such as OpenAI's o1 [almost 150% more expensive](https://openai.com/api/pricing/) than gpt-4o. Users with access to a company's agentic systems can abuse or mislead agentic systems to spiral in their reasoning or unnecessarily complete tasks, subsequently leading to tremendously large bills from inference providers.
 
 ### Multi-Turn Conversational Attacks
 
@@ -128,21 +143,21 @@ An example of multi-step conversational attacks can be seen using Promptfoo itse
 
 ### Inadvertent (But Harmful) Actions
 
-While not malicious in intent, AI agents may inadvertently take harmful actions with the resources they’re provided. For example, a misconfigured coding agent could commit insecure code to production. Without proper controls in place to mitigate the risk of agents in production systems, these agents could disrupt a platform’s operability or availability, expose sensitive data such as API tokens, or introduce insecure code that could subsequently be exploited by an attacker.
+While not malicious in intent, AI agents may inadvertently take harmful actions with the resources they're provided. For example, a misconfigured coding agent could commit insecure code to production. Without proper controls in place to mitigate the risk of agents in production systems, these agents could disrupt a platform's operability or availability, expose sensitive data such as API tokens, or introduce insecure code that could subsequently be exploited by an attacker.
 
-AI agents in fields such as customer service could also make mistakes such as providing commitments at the wrong price that a company is [legally forced to honor](https://www.bbc.com/travel/article/20240222-air-canada-chatbot-misinformation-what-travellers-should-know). It could also provide erroneous information about a company’s policies or draw the wrong conclusions based on the facts it’s provided.
+AI agents in fields such as customer service could also make mistakes such as providing commitments at the wrong price that a company is [legally forced to honor](https://www.bbc.com/travel/article/20240222-air-canada-chatbot-misinformation-what-travellers-should-know). It could also provide erroneous information about a company's policies or draw the wrong conclusions based on the facts it's provided.
 
 AI agents could also be susceptible to fraud and should be monitored for anomalous activity. For example, an attacker could insist that it did not receive a package delivery and force the agent to call a tool to cancel the delivery or issue a refund.
 
 ### Traditional Jailbreaks
 
-AI agents are not immune from traditional jailbreaks. Among the vulnerabilities listed above, AI agents still remain susceptible to baseline jailbreak attempts, which could force the agent to disclose harmful information or bypass inherent safety guardrails. It’s important to note that deploying agentic systems does not eradicate classes of vulnerabilities from simpler LLM systems but compounds risks due to the multi-layered architecture that agents require. Therefore, AI agents should still have defense-in-depth measures that would be applied to conversational AI or foundation models, such as red teaming and guardrails.
+AI agents are not immune from traditional jailbreaks. Among the vulnerabilities listed above, AI agents still remain susceptible to baseline jailbreak attempts, which could force the agent to disclose harmful information or bypass inherent safety guardrails. It's important to note that deploying agentic systems does not eradicate classes of vulnerabilities from simpler LLM systems but compounds risks due to the multi-layered architecture that agents require. Therefore, AI agents should still have defense-in-depth measures that would be applied to conversational AI or foundation models, such as red teaming and guardrails.
 
 ## Agentic Security Best Practices
 
 In many ways, AI agents should be treated the same way as security teams would handle access control for employees within an organization. Agents, like humans, make decisions and execute on tasks based on their working memory, the tools at their disposal, and the knowledge sources they have access to. Like employees, AI agents generally want to perform tasks well in alignment with larger goals, but can also be prone to making mistakes, disclosing information, or falling for social engineering attacks.
 
-A best practice for AI agents is to enforce the principles of least privilege and need-to-know. An AI agent’s access (including to vector databases, tools, and third-party APIs) should be audited and recertified on a regular cadence. All agentic activity should be logged and monitored with alerting set up for suspicious activity, and AI agents should be deprecated when no longer in use.
+A best practice for AI agents is to enforce the principles of least privilege and need-to-know. An AI agent's access (including to vector databases, tools, and third-party APIs) should be audited and recertified on a regular cadence. All agentic activity should be logged and monitored with alerting set up for suspicious activity, and AI agents should be deprecated when no longer in use.
 
 Consider the following controls when deploying AI agents:
 
@@ -187,6 +202,6 @@ Consider the following controls when deploying AI agents:
 
 ## Red Teaming AI Agents with Promptfoo
 
-Promptfoo supports red teaming against AI agents through tailored strategies and plugins. We’ve even [compiled a guide](https://www.promptfoo.dev/docs/red-team/agents/) specifically for red teaming AI agents.
+Promptfoo supports red teaming against AI agents through tailored strategies and plugins. We've even [compiled a guide](https://www.promptfoo.dev/docs/red-team/agents/) specifically for red teaming AI agents.
 
 Curious about learning more about agentic red teaming? [Contact us](https://www.promptfoo.dev/contact/) to schedule a demo.

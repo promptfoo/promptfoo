@@ -1,3 +1,7 @@
+---
+sidebar_label: Google AI / Gemini
+---
+
 # Google AI / Gemini
 
 The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
@@ -8,10 +12,14 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ### Chat and Multimodal Models
 
-- `google:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
-- `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities
+- `google:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
+- `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
+- `google:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
+- `google:gemini-2.5-pro-preview-06-05` - Previous Gemini 2.5 Pro preview with enhanced reasoning, coding, and multimodal understanding
+- `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
+- `google:gemini-2.5-flash-preview-05-20` - Previous Flash preview with enhanced reasoning and thinking capabilities
 - `google:gemini-2.0-pro-exp-02-05` - Multimodal model with next-gen features, 1M token context window
-- `google:gemini-2.0-flash-exp` - Multimodal model with next generation features
+- `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
@@ -34,6 +42,7 @@ If you are using Google Vertex, see the [`vertex` provider](/docs/providers/vert
 
 - `GOOGLE_API_KEY` (required) - Google AI Studio API key
 - `GOOGLE_API_HOST` - used to override the Google API host, defaults to `generativelanguage.googleapis.com`
+- `GOOGLE_API_BASE_URL` - used to override the Google API base url, defaults to `https://generativelanguage.googleapis.com`
 
 ### Basic Configuration
 
@@ -56,7 +65,7 @@ For models that support thinking capabilities (like Gemini 2.5 Flash), you can c
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash-preview-05-20
     config:
       generationConfig:
         temperature: 0.7
@@ -93,16 +102,84 @@ Safety settings can be configured to control content filtering:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
           probability: BLOCK_ONLY_HIGH # or other thresholds
 ```
 
+### System Instructions
+
+Configure system-level instructions for the model:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro
+    config:
+      # Direct text
+      systemInstruction: 'You are a helpful assistant'
+
+      # Or load from file
+      systemInstruction: file://system-instruction.txt
+```
+
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
 ## Model Examples
+
+### Gemini 2.5 Pro
+
+Latest stable model for complex reasoning, coding, and multimodal understanding:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro
+    config:
+      temperature: 0.7
+      maxOutputTokens: 4096
+      topP: 0.9
+      topK: 40
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 2048 # Enhanced thinking for complex tasks
+```
+
+### Gemini 2.5 Flash
+
+Latest stable Flash model with enhanced reasoning and thinking capabilities:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+      topP: 0.9
+      topK: 40
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 1024 # Fast model with thinking capabilities
+```
+
+### Gemini 2.5 Flash-Lite
+
+Most cost-efficient and fastest 2.5 model for high-volume, latency-sensitive tasks:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-lite
+    config:
+      temperature: 0.7
+      maxOutputTokens: 1024
+      topP: 0.9
+      topK: 40
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 512 # Optimized for speed and cost efficiency
+```
 
 ### Gemini 2.0 Flash
 
@@ -197,6 +274,8 @@ providers:
           mode: 'auto' # or 'none' to disable
 ```
 
+For practical examples of function calling with Google AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution patterns that work with Google AI Studio models.
+
 ### Structured Output
 
 You can constrain the model to output structured JSON responses in two ways:
@@ -245,7 +324,7 @@ To enable Search grounding:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash-preview-05-20
     config:
       tools:
         - googleSearch: {} # or google_search: {}
@@ -257,7 +336,7 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro-exp-03-25
+  - id: google:gemini-2.5-pro-preview-06-05
     config:
       generationConfig:
         thinkingConfig:
@@ -314,7 +393,7 @@ Promptfoo now supports Google's WebSocket-based Live API, which enables low-late
 
 ### Using the Live Provider
 
-Access the Live API by specifying the model with the 'live' service type:
+Access the Google Live API by specifying the model with the 'live' service type:
 
 ```yaml
 providers:
@@ -335,7 +414,7 @@ providers:
 
 ### Function Calling Example
 
-The Live API supports function calling, allowing you to define tools that the model can use:
+The Google Live API supports function calling, allowing you to define tools that the model can use:
 
 ```yaml
 providers:
@@ -380,7 +459,7 @@ Where `tools.json` contains function declarations and built-in tools:
 
 ### Built-in Tools
 
-The Live API includes several built-in tools:
+The Google Live API includes several built-in tools:
 
 1. **Code Execution**: Execute Python code directly in the model's runtime
 
@@ -397,6 +476,40 @@ The Live API includes several built-in tools:
    }
    ```
 
+### Audio Generation
+
+Evaluate audio generation with the Google Live provider:
+
+1. Basic audio generation:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.0-flash-live-001'
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {} # Enable transcription
+      speechConfig:
+        voiceConfig:
+          prebuiltVoiceConfig:
+            voiceName: 'Charon'
+      timeoutMs: 30000
+```
+
+2. Specifying additional options, such as enabling affective dialog:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.5-flash-exp-native-audio-thinking-dialog'
+    config:
+      apiVersion: 'v1alpha' # Required for affective dialog
+      generationConfig:
+        response_modalities: ['audio']
+        enableAffectiveDialog: true
+```
+
+Other configuration options are available, such as setting proactive audio, setting the language code, and more. Read more about sending and receiving audio for Gemini in the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#send-receive-audio).
+
 ### Getting Started
 
 Try the examples:
@@ -407,6 +520,9 @@ promptfoo init --example google-live
 
 # Function calling and tools example
 promptfoo init --example google-live-tools
+
+# Audio generation example
+promptfoo init --example google-live-audio
 ```
 
 ### Limitations
@@ -416,4 +532,4 @@ promptfoo init --example google-live-tools
 - Rate limits of 3 concurrent sessions per API key apply
 - Maximum of 4M tokens per minute
 
-For more details, see the [Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+For more details, see the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live).

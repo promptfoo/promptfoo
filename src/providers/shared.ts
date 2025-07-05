@@ -1,5 +1,6 @@
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
+import type { ApiProvider } from '../types';
 
 /**
  * The default timeout for API requests in milliseconds.
@@ -103,4 +104,9 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
  */
 export function toTitleCase(str: string) {
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+}
+
+export function isPromptfooSampleTarget(provider: ApiProvider) {
+  const url = provider.config?.url;
+  return url?.includes('promptfoo.app') || url?.includes('promptfoo.dev');
 }

@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: DBRX model benchmarking against Mixtral and GPT-4o-mini
+
 prompts:
   - 'Think deeply and answer concisely: {{query}}'
 
@@ -9,7 +11,7 @@ providers:
   - id: openrouter:mistralai/mixtral-8x7b-instruct
     config:
       temperature: 0
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
 

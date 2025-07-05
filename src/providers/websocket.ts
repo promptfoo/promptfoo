@@ -1,4 +1,4 @@
-import WebSocket from 'ws';
+import WebSocket, { type ClientOptions } from 'ws';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -17,6 +17,7 @@ interface WebSocketProviderConfig {
   url?: string;
   timeoutMs?: number;
   transformResponse?: string | Function;
+  headers?: Record<string, string>;
   /**
    * @deprecated
    */
@@ -70,7 +71,11 @@ export class WebSocketProvider implements ApiProvider {
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
 
     return new Promise<ProviderResponse>((resolve) => {
-      const ws = new WebSocket(this.url);
+      const wsOptions: ClientOptions = {};
+      if (this.config.headers) {
+        wsOptions.headers = this.config.headers;
+      }
+      const ws = new WebSocket(this.url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
         resolve({ error: 'WebSocket request timed out' });

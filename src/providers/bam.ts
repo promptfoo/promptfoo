@@ -44,35 +44,35 @@ interface BAMGenerationParameters {
 }
 
 interface BAMModerations {
-  hap?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
-  stigma?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
-  implicit_hate?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
+  hap?: {
+    input?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+    output?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+  };
+  social_bias?: {
+    input?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+    output?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+  };
 }
 
 export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
-    (acc, result) => acc + result.generated_token_count,
+    (acc: number, result: any) => acc + result.generated_token_count,
     0,
   );
   const tokenUsage: Partial<TokenUsage> = {
@@ -83,7 +83,7 @@ export function convertResponse(response: TextGenerationCreateOutput): ProviderR
 
   const providerResponse: ProviderResponse = {
     error: undefined,
-    output: response.results.map((result) => result.generated_text).join(', '),
+    output: response.results.map((result: any) => result.generated_text).join(', '),
     tokenUsage,
     cost: undefined,
     cached: undefined,

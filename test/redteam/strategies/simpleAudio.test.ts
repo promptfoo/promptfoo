@@ -161,6 +161,7 @@ describe('audio strategy', () => {
         harmCategory: 'Illegal Activities',
         otherField: 'value',
         strategyId: 'audio',
+        originalText: 'Harmful content',
       });
       expect(result[0].assert).toEqual([
         {
@@ -181,6 +182,7 @@ describe('audio strategy', () => {
 
       expect(result[0].metadata).toEqual({
         strategyId: 'audio',
+        originalText: 'Simple content',
       });
       expect(result[0].assert).toBeUndefined();
     });
