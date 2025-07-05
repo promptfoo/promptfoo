@@ -255,7 +255,18 @@ describe('Share Command', () => {
     });
 
     it('should show cloud instructions and return null when sharing is not enabled', async () => {
+      const mockEval = {
+        id: 'test-eval-id',
+        prompts: ['test prompt'],
+        config: {},
+      } as unknown as Eval;
+
+      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       jest.mocked(isSharingEnabled).mockReturnValue(false);
+      jest.mocked(loadDefaultConfig).mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: 'promptfooconfig.yaml',
+      });
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);

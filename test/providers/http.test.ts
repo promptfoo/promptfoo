@@ -12,11 +12,11 @@ import {
   createTransformResponse,
   createValidateStatus,
   determineRequestBody,
+  estimateTokenCount,
   HttpProvider,
   processJsonBody,
-  urlEncodeRawRequestPath,
   processTextBody,
-  estimateTokenCount,
+  urlEncodeRawRequestPath,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util/file';
@@ -695,6 +695,263 @@ describe('HttpProvider', () => {
       expect(result).toEqual({
         key: 'value1',
         jsonString: { parsed: 123 },
+      });
+    });
+
+    describe('Raw JSON string handling (YAML literal case)', () => {
+      it('should return raw JSON strings as-is with control characters', () => {
+        // Simulate a YAML literal string that contains control characters
+        const body = '{\n  "input": "Text with control char: \u0001",\n  "role": "user"\n}';
+        const vars = { prompt: 'test' };
+        const result = processJsonBody(body, vars);
+
+        // Should return string as-is since it's already in intended format
+        expect(result).toBe('{\n  "input": "Text with control char: \u0001",\n  "role": "user"\n}');
+      });
+
+      it('should return raw JSON strings as-is with bad syntax', () => {
+        // Simulate malformed JSON that would fail parsing
+        const body = '{\n  "input": "{{prompt}}",\n  "role": "user",\n}'; // trailing comma
+        const vars = { prompt: 'test prompt' };
+        const result = processJsonBody(body, vars);
+
+        // Should return string as-is since it's already in intended format
+        expect(result).toBe('{\n  "input": "test prompt",\n  "role": "user",\n}');
+      });
+
+      it('should parse valid JSON strings normally', () => {
+        // Valid JSON string should be parsed into object
+        const body = '{"input": "{{prompt}}", "role": "user"}';
+        const vars = { prompt: 'test prompt' };
+        const result = processJsonBody(body, vars);
+
+        // Should return parsed object since JSON.parse succeeds
+        expect(result).toEqual({
+          input: 'test prompt',
+          role: 'user',
+        });
+      });
+
+      it('should handle JSON primitive strings correctly', () => {
+        // JSON string literals should be parsed
+        const body = '"{{prompt}}"';
+        const vars = { prompt: 'hello world' };
+        const result = processJsonBody(body, vars);
+
+        // Should return the string value (not wrapped)
+        expect(result).toBe('hello world');
+      });
+
+      it('should handle JSON number strings correctly', () => {
+        const body = '{{number}}';
+        const vars = { number: 42 };
+        const result = processJsonBody(body, vars);
+
+        // Should return the number value
+        expect(result).toBe(42);
+      });
+
+      it('should handle JSON boolean strings correctly', () => {
+        const body = '{{bool}}';
+        const vars = { bool: true };
+        const result = processJsonBody(body, vars);
+
+        // Should return the boolean value
+        expect(result).toBe(true);
+      });
+
+      it('should handle complex nested JSON with control characters', () => {
+        // Complex nested structure with control characters
+        const body = `{
+  "user": {
+    "query": "{{prompt}}",
+    "metadata": {
+      "session": "abc\u0001def",
+      "tags": ["test", "debug\u0002"]
+    }
+  },
+  "options": {
+    "model": "gpt-4",
+    "temperature": 0.7
+  }
+}`;
+        const vars = { prompt: 'What is AI?' };
+        const result = processJsonBody(body, vars);
+
+        // Should return string as-is since it's already in intended format
+        expect(result).toBe(`{
+  "user": {
+    "query": "What is AI?",
+    "metadata": {
+      "session": "abc\u0001def",
+      "tags": ["test", "debug\u0002"]
+    }
+  },
+  "options": {
+    "model": "gpt-4",
+    "temperature": 0.7
+  }
+}`);
+      });
+
+      it('should handle JSON with random whitespace and indentation', () => {
+        // JSON with inconsistent formatting
+        const body = `{
+          "input":    "{{prompt}}",
+       "role":   "engineering",
+            "config": {
+                "debug":true ,
+              "timeout": 5000,
+        }
+}`;
+        const vars = { prompt: 'Test with whitespace' };
+        const result = processJsonBody(body, vars);
+
+        // Should return string as-is since it's already in intended format
+        expect(result).toBe(`{
+          "input":    "Test with whitespace",
+       "role":   "engineering",
+            "config": {
+                "debug":true ,
+              "timeout": 5000,
+        }
+}`);
+      });
+
+      it('should handle deeply nested arrays with template variables', () => {
+        // Deep nesting with trailing comma
+        const body = `{
+"messages": [
+  {
+    "role": "system", 
+    "content": "{{systemPrompt}}"
+  },
+  {
+    "role": "user",
+    "content": "{{prompt}}",
+    "attachments": [
+      {"type": "image", "url": "{{imageUrl}}"},
+      {"type": "document", "data": "{{docData}}"}
+    ]
+  }
+],
+"stream": {{streaming}},
+}`;
+        const vars = {
+          systemPrompt: 'You are a helpful assistant',
+          prompt: 'Analyze this data',
+          imageUrl: 'https://example.com/image.jpg',
+          docData: 'base64encodeddata',
+          streaming: false,
+        };
+        const result = processJsonBody(body, vars);
+
+        // Should return string as-is since it's already in intended format
+        expect(result).toBe(`{
+"messages": [
+  {
+    "role": "system", 
+    "content": "You are a helpful assistant"
+  },
+  {
+    "role": "user",
+    "content": "Analyze this data",
+    "attachments": [
+      {"type": "image", "url": "https://example.com/image.jpg"},
+      {"type": "document", "data": "base64encodeddata"}
+    ]
+  }
+],
+"stream": false,
+}`);
+      });
+
+      it('should handle multiline strings with special characters', () => {
+        // Multiline JSON with special characters and newlines
+        const body = `{
+"query": "{{prompt}}",
+"system_message": "You are a helpful AI.\\n\\nRules:\\n- Be concise\\n- Use examples\\n- Handle edge cases",
+"special_chars": "Quotes: \\"test\\" and symbols: @#$%^&*()",
+"unicode": "Emoji: 🤖 and unicode: \\u00A9"
+}`;
+        const vars = { prompt: 'How does this work?' };
+        const result = processJsonBody(body, vars);
+
+        // This should actually parse successfully since it's valid JSON
+        expect(result).toEqual({
+          query: 'How does this work?',
+          system_message:
+            'You are a helpful AI.\n\nRules:\n- Be concise\n- Use examples\n- Handle edge cases',
+          special_chars: 'Quotes: "test" and symbols: @#$%^&*()',
+          unicode: 'Emoji: 🤖 and unicode: ©',
+        });
+      });
+
+      it('should handle mixed valid and invalid JSON syntax', () => {
+        // JSON that looks valid but has subtle syntax errors
+        const body = `{
+"valid_field": "{{prompt}}",
+"numbers": [1, 2, 3,],
+"object": {
+  "nested": true,
+  "value": "test"
+},
+"trailing_comma": "problem",
+}`;
+        const vars = { prompt: 'Test input' };
+        const result = processJsonBody(body, vars);
+
+        // Should return string as-is since it's already in intended format
+        expect(result).toBe(`{
+"valid_field": "Test input",
+"numbers": [1, 2, 3,],
+"object": {
+  "nested": true,
+  "value": "test"
+},
+"trailing_comma": "problem",
+}`);
+      });
+
+      it('should auto-escape newlines in JSON templates (YAML literal case)', () => {
+        // This is the real-world case: YAML literal string with unescaped newlines from red team
+        const body = '{\n  "message": "{{prompt}}"\n}';
+        const vars = {
+          prompt: 'Multi-line prompt\nwith actual newlines\nand more text',
+        };
+        const result = processJsonBody(body, vars);
+
+        // Should automatically escape the newlines and return parsed JSON object
+        expect(result).toEqual({
+          message: 'Multi-line prompt\nwith actual newlines\nand more text',
+        });
+      });
+
+      it('should auto-escape quotes and special chars in JSON templates', () => {
+        // Test various special characters that break JSON
+        const body = '{\n  "message": "{{prompt}}",\n  "role": "user"\n}';
+        const vars = {
+          prompt: 'Text with "quotes" and \ttabs and \nmore stuff',
+        };
+        const result = processJsonBody(body, vars);
+
+        // Should automatically escape and return parsed JSON object
+        expect(result).toEqual({
+          message: 'Text with "quotes" and \ttabs and \nmore stuff',
+          role: 'user',
+        });
+      });
+
+      it('should fall back gracefully when JSON template cannot be fixed', () => {
+        // Test case where even escaping cannot fix the JSON (structural issues)
+        const body = '{\n  "message": "{{prompt}}"\n  missing_comma: true\n}';
+        const vars = {
+          prompt: 'Some text with\nnewlines',
+        };
+        const result = processJsonBody(body, vars);
+
+        // Should fall back to returning the original rendered string (with literal newlines)
+        expect(result).toBe('{\n  "message": "Some text with\nnewlines"\n  missing_comma: true\n}');
       });
     });
   });

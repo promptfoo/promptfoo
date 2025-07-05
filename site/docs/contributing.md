@@ -157,6 +157,19 @@ npx jest providers
 When writing tests, please:
 
 - Run the test suite you modified with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
+
+  ```bash
+  # Run specific test file with randomization
+  npx jest path/to/your/test.test.ts --randomize
+
+  # Run all tests in a directory with randomization
+  npm run test -- --testPathPattern="test/providers" --randomize
+  ```
+
+- Ensure proper test isolation by:
+  - Using `beforeEach` and `afterEach` to set up and clean up mocks
+  - Calling `jest.clearAllMocks()` or `jest.restoreAllMocks()` as appropriate
+  - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
 

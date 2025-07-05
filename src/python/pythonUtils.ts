@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
@@ -144,6 +144,8 @@ export async function runPython(
     mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
+    // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
+    ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };
 
   try {
@@ -154,11 +156,11 @@ export async function runPython(
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
 
-        pyshell.stdout.on('data', (chunk: Buffer) => {
+        pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());
         });
 
-        pyshell.stderr.on('data', (chunk: Buffer) => {
+        pyshell.stderr?.on('data', (chunk: Buffer) => {
           logger.error(chunk.toString('utf-8').trim());
         });
 

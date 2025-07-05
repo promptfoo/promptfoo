@@ -135,7 +135,7 @@ def call_api(prompt, options, context):
 `;
 
 function recordOnboardingStep(step: string, properties: EventProperties = {}) {
-  telemetry.recordAndSend('funnel', {
+  telemetry.record('funnel', {
     type: 'redteam onboarding',
     step,
     ...properties,

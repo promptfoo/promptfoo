@@ -563,6 +563,23 @@ def call_api(prompt, options, context):
    print(result)
    ```
 
+4. **Use Python debugger (pdb) for interactive debugging:**
+
+   ```bash
+   export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
+   ```
+
+   With this environment variable set, you can use `import pdb; pdb.set_trace()` in your Python code to set breakpoints:
+
+   ```python
+   def call_api(prompt, options, context):
+       import pdb; pdb.set_trace()  # Execution will pause here
+       # Your provider logic
+       return {"output": result}
+   ```
+
+   This allows interactive debugging directly in your terminal during evaluation runs.
+
 ### Performance Optimization
 
 :::tip

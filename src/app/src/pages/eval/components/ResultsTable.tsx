@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-table';
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
 import {
@@ -189,6 +189,7 @@ function ResultsTable({
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -222,13 +223,28 @@ function ResultsTable({
       const updatedData = [...body];
       const updatedRow = { ...updatedData[rowIndex] };
       const updatedOutputs = [...updatedRow.outputs];
-      const finalPass = isPass ?? updatedOutputs[promptIndex].pass;
-      const finalScore = typeof score === 'undefined' ? (isPass ? 1 : 0) : score || 0;
+      const existingOutput = updatedOutputs[promptIndex];
+
+      const finalPass = typeof isPass === 'undefined' ? existingOutput.pass : isPass;
+
+      let finalScore = existingOutput.score;
+      if (typeof score !== 'undefined') {
+        finalScore = score;
+      } else if (typeof isPass !== 'undefined') {
+        finalScore = isPass ? 1 : 0;
+      }
+
       updatedOutputs[promptIndex].pass = finalPass;
       updatedOutputs[promptIndex].score = finalScore;
 
-      const componentResults = updatedOutputs[promptIndex].gradingResult?.componentResults || [];
+      let componentResults = existingOutput.gradingResult?.componentResults;
+      let modifiedComponentResults = false;
+
       if (typeof isPass !== 'undefined') {
+        // Make a copy to avoid mutating the original
+        componentResults = [...(componentResults || [])];
+        modifiedComponentResults = true;
+
         const humanResultIndex = componentResults.findIndex(
           (result) => result.assertion?.type === 'human',
         );
@@ -248,15 +264,41 @@ function ResultsTable({
         }
       }
 
+      // Build gradingResult, ensuring required fields are always present
+      // Destructure to exclude componentResults initially
+      const { componentResults: _, ...existingGradingResultWithoutComponents } =
+        existingOutput.gradingResult || {};
+
       const gradingResult = {
-        ...(updatedOutputs[promptIndex].gradingResult || {}),
-        pass: finalPass,
-        score: finalScore,
-        reason: 'Manual result (overrides all other grading results)',
+        // Copy over existing fields except componentResults
+        ...existingGradingResultWithoutComponents,
+        // Ensure required fields have valid values
+        pass: existingOutput.gradingResult?.pass ?? finalPass,
+        score: existingOutput.gradingResult?.score ?? finalScore,
+        reason: existingOutput.gradingResult?.reason ?? 'Manual result',
+        // Always update comment
         comment,
-        assertion: updatedOutputs[promptIndex].gradingResult?.assertion || null,
-        componentResults,
       };
+
+      // Only update pass/score/reason/assertion if we're actually rating (not just commenting)
+      if (typeof isPass !== 'undefined' || typeof score !== 'undefined') {
+        gradingResult.pass = finalPass;
+        gradingResult.score = finalScore;
+        gradingResult.reason = 'Manual result (overrides all other grading results)';
+        gradingResult.assertion = existingOutput.gradingResult?.assertion || null;
+      }
+
+      // Only include componentResults if we modified them, or if we didn't modify them but they exist and are not empty
+      if (modifiedComponentResults && componentResults) {
+        (gradingResult as any).componentResults = componentResults;
+      } else if (
+        !modifiedComponentResults &&
+        existingOutput.gradingResult?.componentResults &&
+        existingOutput.gradingResult.componentResults.length > 0
+      ) {
+        (gradingResult as any).componentResults = existingOutput.gradingResult.componentResults;
+      }
+
       updatedOutputs[promptIndex].gradingResult = gradingResult;
       updatedRow.outputs = updatedOutputs;
       updatedData[rowIndex] = updatedRow;
@@ -845,9 +887,9 @@ function ResultsTable({
     const url = new URL(window.location.href);
     if (url.searchParams.has('rowId')) {
       url.searchParams.delete('rowId');
-      window.history.replaceState({}, '', url);
+      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const params = parseQueryParams(window.location.search);

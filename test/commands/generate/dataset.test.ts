@@ -58,7 +58,7 @@ describe('dataset generation', () => {
       jest.mocked(fs.existsSync).mockReturnValue(true);
       jest.mocked(fs.writeFileSync).mockImplementation(() => undefined);
       jest.mocked(disableCache).mockImplementation(() => undefined);
-      jest.mocked(telemetry.send).mockResolvedValue(undefined);
+      jest.mocked(telemetry.record).mockResolvedValue(undefined as never);
 
       jest.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,

@@ -53,6 +53,7 @@ jest.mock('../../../src/util/config/manage');
 jest.mock('../../../src/globalConfig/accounts', () => ({
   getAuthor: jest.fn(),
   getUserEmail: jest.fn(),
+  getUserId: jest.fn().mockReturnValue('test-id'),
 }));
 jest.mock('../../../src/providers', () => ({
   loadApiProviders: jest.fn().mockResolvedValue([
