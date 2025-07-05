@@ -56,18 +56,22 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
 
   const pathWithoutProtocol = renderedFilePath.slice('file://'.length);
   const resolvedPath = path.resolve(cliState.basePath || '', pathWithoutProtocol);
-  
+
   // Check if the path contains glob patterns
-  if (pathWithoutProtocol.includes('*') || pathWithoutProtocol.includes('?') || pathWithoutProtocol.includes('[')) {
+  if (
+    pathWithoutProtocol.includes('*') ||
+    pathWithoutProtocol.includes('?') ||
+    pathWithoutProtocol.includes('[')
+  ) {
     // Use globSync to expand the pattern
     const matchedFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
-    
+
     if (matchedFiles.length === 0) {
       throw new Error(`No files found matching pattern: ${resolvedPath}`);
     }
-    
+
     // Load all matched files and combine their contents
     const allContents: any[] = [];
     for (const matchedFile of matchedFiles) {
@@ -93,10 +97,10 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
         allContents.push(contents);
       }
     }
-    
+
     return allContents;
   }
-  
+
   // Original single file logic
   const finalPath = resolvedPath;
   if (!fs.existsSync(finalPath)) {
