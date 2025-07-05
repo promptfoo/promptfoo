@@ -148,6 +148,10 @@ const config: Config = {
               label: 'Blog',
             },
             {
+              href: '/releases/',
+              label: 'Release Notes',
+            },
+            {
               href: '/press/',
               label: 'Press',
             },
@@ -292,6 +296,10 @@ const config: Config = {
             {
               label: 'Blog',
               to: '/blog/',
+            },
+            {
+              label: 'Release Notes',
+              to: '/releases/',
             },
             {
               label: 'Press',
@@ -474,6 +482,29 @@ const config: Config = {
         },
       };
     },
+    [
+      '@docusaurus/plugin-content-blog',
+      {
+        id: 'releases',
+        routeBasePath: 'releases',
+        path: './releases',
+        authorsMapPath: '../blog/authors.yml',
+        blogTitle: 'Release Notes',
+        blogDescription: 'promptfoo release notes and updates',
+        blogSidebarCount: 0,
+        blogSidebarTitle: 'Recent Releases',
+        postsPerPage: 10,
+        showReadingTime: false,
+        feedOptions: {
+          type: 'all',
+          title: 'promptfoo Release Notes',
+          description: 'Stay updated with the latest promptfoo releases',
+          copyright: `© ${new Date().getFullYear()} promptfoo`,
+          language: 'en',
+        },
+        editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+      },
+    ],
   ],
 
   // Mermaid diagram support
