@@ -18,14 +18,20 @@ function addTypos(text: string, typoRate: number = 0.1): string {
   const numTypos = Math.max(1, Math.floor(text.length * typoRate));
 
   for (let i = 0; i < numTypos; i++) {
+    if (chars.length === 0) {
+      break;
+    }
+
     const pos = Math.floor(Math.random() * chars.length);
     const typoType = Math.floor(Math.random() * 3);
 
     switch (typoType) {
-      case 0: // Insert random character
+      case 0: {
+        // Insert random character
         const randomChar = String.fromCharCode(97 + Math.floor(Math.random() * 26)); // a-z
         chars.splice(pos, 0, randomChar);
         break;
+      }
       case 1: // Delete character
         if (chars.length > 1) {
           chars.splice(pos, 1);
@@ -57,22 +63,37 @@ function addSynonymSwaps(text: string, synonymRate: number = 0.2): string {
     sad: ['unhappy', 'sorrowful', 'melancholy', 'dejected'],
     beautiful: ['pretty', 'gorgeous', 'stunning', 'lovely'],
     ugly: ['hideous', 'unsightly', 'repulsive', 'grotesque'],
+    help: ['assist', 'aid', 'support'],
+    create: ['make', 'build', 'generate'],
+    write: ['compose', 'draft', 'author'],
+    explain: ['describe', 'clarify', 'elaborate'],
   };
 
-  const words = text.split(/\s+/);
-  const numSwaps = Math.floor(words.length * synonymRate);
+  const words = text.split(/\b/);
+  const wordIndices = words.map((w, idx) => (/\w/.test(w) ? idx : -1)).filter((idx) => idx !== -1);
+
+  const numSwaps = Math.floor(wordIndices.length * synonymRate);
 
   for (let i = 0; i < numSwaps; i++) {
-    const wordIndex = Math.floor(Math.random() * words.length);
-    const word = words[wordIndex].toLowerCase().replace(/[^\w]/g, '');
+    if (wordIndices.length === 0) {
+      break;
+    }
+
+    const wordIndex = wordIndices[Math.floor(Math.random() * wordIndices.length)];
+    const word = words[wordIndex].toLowerCase();
 
     if (synonyms[word]) {
       const replacement = synonyms[word][Math.floor(Math.random() * synonyms[word].length)];
-      words[wordIndex] = words[wordIndex].replace(new RegExp(word, 'i'), replacement);
+      // Preserve original case
+      if (words[wordIndex][0] === words[wordIndex][0].toUpperCase()) {
+        words[wordIndex] = replacement.charAt(0).toUpperCase() + replacement.slice(1);
+      } else {
+        words[wordIndex] = replacement;
+      }
     }
   }
 
-  return words.join(' ');
+  return words.join('');
 }
 
 /**
@@ -88,10 +109,12 @@ function addPunctuationJitter(text: string, punctuationRate: number = 0.1): stri
     const changeType = Math.floor(Math.random() * 3);
 
     switch (changeType) {
-      case 0: // Add punctuation
+      case 0: {
+        // Add punctuation
         const randomPunct = punctuation[Math.floor(Math.random() * punctuation.length)];
         chars.splice(pos, 0, randomPunct);
         break;
+      }
       case 1: // Remove punctuation if it exists
         if (punctuation.includes(chars[pos])) {
           chars.splice(pos, 1);
@@ -168,7 +191,10 @@ export default class AdvNoiseProvider implements ApiProvider {
       punctuationRate?: number;
     } = {},
   ) {
-    invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
+    invariant(
+      typeof options.injectVar === 'string' && options.injectVar.length > 0,
+      'Expected injectVar to be a non-empty string',
+    );
     this.injectVar = options.injectVar;
     this.levenshteinThreshold = options.levenshteinThreshold || 0.2;
     this.maxAttempts = options.maxAttempts || 5;

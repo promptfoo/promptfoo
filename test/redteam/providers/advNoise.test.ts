@@ -13,7 +13,8 @@ describe('AdvNoiseProvider', () => {
       const text = 'hello world';
       const result = addTypos(text, 0.5);
       expect(result).not.toBe(text);
-      expect(result.length).toBeGreaterThanOrEqual(text.length - 1);
+      // With 50% typo rate, multiple deletions can occur
+      expect(result.length).toBeGreaterThanOrEqual(Math.floor(text.length * 0.5));
     });
 
     it('should handle empty string', () => {
@@ -116,7 +117,7 @@ describe('AdvNoiseProvider', () => {
     });
 
     it('should throw error when injectVar is not provided', () => {
-      expect(() => new AdvNoiseProvider({})).toThrow('Expected injectVar to be set');
+      expect(() => new AdvNoiseProvider({})).toThrow('Expected injectVar to be a non-empty string');
     });
 
     it('should return error when no target provider available', async () => {

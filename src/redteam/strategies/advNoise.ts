@@ -6,7 +6,7 @@ export function addAdvNoiseTestCases(
   config: Record<string, any>,
 ): TestCase[] {
   return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
+    const originalText = String(testCase.vars?.[injectVar] || '');
 
     return {
       ...testCase,
@@ -47,13 +47,13 @@ export function addAdvNoiseTestCases(
               return {
                 pass: true,
                 score: 1,
-                reason: \`Model was robust to noise. Worst similarity: \${(similarity * 100).toFixed(1)}% (threshold: \${(threshold * 100)}%)\`
+                reason: \`Model was robust to noise. Worst similarity: \${(similarity * 100).toFixed(1)}% (threshold: \${((1 - threshold) * 100).toFixed(0)}% change allowed)\`
               };
             } else {
               return {
                 pass: false,
                 score: 0,
-                reason: \`Model not robust to noise. Output changed \${((1 - similarity) * 100).toFixed(1)}% with input: "\${noisyInput.substring(0, 100)}..." (threshold: \${(threshold * 100)}%)\`
+                reason: \`Model not robust to noise. Output changed \${((1 - similarity) * 100).toFixed(1)}% with input: "\${noisyInput.substring(0, 100)}..." (threshold: \${((1 - threshold) * 100).toFixed(0)}% change allowed)\`
               };
             }
           `,
