@@ -1,8 +1,11 @@
+import { randomUUID } from 'crypto';
+import { PostHog } from 'posthog-node';
 import { z } from 'zod';
-import cliState from './cliState';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
+import { POSTHOG_KEY } from './generated-constants';
+import { getUserEmail, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 
 export const TelemetryEventSchema = z.object({
@@ -22,14 +25,62 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
-const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
+const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
+const KA_ENDPOINT = 'https://ka.promptfoo.app/';
+
+let posthogClient: PostHog | null = null;
+try {
+  posthogClient = POSTHOG_KEY
+    ? new PostHog(POSTHOG_KEY, {
+        host: EVENTS_ENDPOINT,
+      })
+    : null;
+} catch {
+  posthogClient = null;
+}
 
 const TELEMETRY_TIMEOUT_MS = 1000;
 
 export class Telemetry {
-  private events: TelemetryEvent[] = [];
   private telemetryDisabledRecorded = false;
+  private id: string;
+  private email: string | null;
+
+  constructor() {
+    this.id = getUserId();
+    this.email = getUserEmail();
+    this.identify();
+  }
+
+  identify() {
+    // Do not use getEnvBool here - it will be mocked in tests
+    if (this.disabled || process.env.IS_TESTING) {
+      return;
+    }
+
+    if (posthogClient) {
+      posthogClient.identify({
+        distinctId: this.id,
+        properties: { email: this.email },
+      });
+      posthogClient.flush();
+    }
+
+    fetchWithTimeout(
+      KA_ENDPOINT,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profile_id: this.id, email: this.email }),
+      },
+      TELEMETRY_TIMEOUT_MS,
+    ).catch(() => {
+      // pass
+    });
+  }
 
   get disabled() {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
@@ -37,11 +88,7 @@ export class Telemetry {
 
   private recordTelemetryDisabled() {
     if (!this.telemetryDisabledRecorded) {
-      this.events.push({
-        event: 'feature_used',
-        packageVersion: VERSION,
-        properties: { feature: 'telemetry disabled' },
-      });
+      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
       this.telemetryDisabledRecorded = true;
     }
   }
@@ -50,91 +97,51 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
-      const event: TelemetryEvent = {
+      this.sendEvent(eventName, properties);
+    }
+  }
+
+  private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    const propertiesWithMetadata = {
+      ...properties,
+      packageVersion: VERSION,
+      isRunningInCi: isCI(),
+    };
+
+    // Do not use getEnvBool here - it will be mocked in tests
+    if (posthogClient && !process.env.IS_TESTING) {
+      posthogClient.capture({
+        distinctId: this.id,
         event: eventName,
-        packageVersion: VERSION,
-        properties: {
-          ...properties,
-          isRedteam: Boolean(cliState.config?.redteam),
-          isRunningInCi: isCI(),
+        properties: propertiesWithMetadata,
+      });
+      posthogClient.flush();
+    }
+
+    const kaBody = {
+      profile_id: this.id,
+      email: this.email,
+      events: [
+        {
+          message_id: randomUUID(),
+          type: 'track',
+          event: eventName,
+          properties: propertiesWithMetadata,
+          sent_at: new Date().toISOString(),
         },
-      };
+      ],
+    };
 
-      const result = TelemetryEventSchema.safeParse(event);
-      if (result.success) {
-        this.events.push(result.data);
-      } else {
-        logger.debug(
-          `Invalid telemetry event: got ${JSON.stringify(event)}, error: ${result.error}`,
-        );
-      }
-    }
-  }
-
-  private recordedEvents: Set<string> = new Set();
-
-  /**
-   * Record an event once, unique by event name and properties.
-   *
-   * @param eventName - The name of the event to record.
-   * @param properties - The properties of the event to record.
-   */
-  recordOnce(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      const eventKey = JSON.stringify({ eventName, properties });
-      if (!this.recordedEvents.has(eventKey)) {
-        this.record(eventName, properties);
-        this.recordedEvents.add(eventKey);
-      }
-    }
-  }
-
-  async recordAndSend(eventName: TelemetryEventTypes, properties: EventProperties): Promise<void> {
-    this.record(eventName, properties);
-    await this.send();
-  }
-
-  async recordAndSendOnce(
-    eventName: TelemetryEventTypes,
-    properties: EventProperties,
-  ): Promise<void> {
-    if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      this.recordOnce(eventName, properties);
-    }
-    await this.send();
-  }
-
-  async send(): Promise<void> {
-    if (this.events.length > 0) {
-      if (getEnvBool('PROMPTFOO_TELEMETRY_DEBUG')) {
-        logger.debug(
-          `Sending ${this.events.length} telemetry events to ${TELEMETRY_ENDPOINT}: ${JSON.stringify(this.events)}`,
-        );
-      }
-      try {
-        const response = await fetchWithTimeout(
-          TELEMETRY_ENDPOINT,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(this.events),
-          },
-          TELEMETRY_TIMEOUT_MS,
-        );
-
-        if (response.ok) {
-          this.events = [];
-        }
-      } catch {
-        // ignore
-      }
-    }
+    fetch(KA_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': `promptfoo/${VERSION}`,
+      },
+      body: JSON.stringify(kaBody),
+    }).catch(() => {
+      // pass
+    });
   }
 
   /**

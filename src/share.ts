@@ -300,6 +300,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
  */
 export async function getShareableUrl(
   eval_: Eval,
+  remoteEvalId: string,
   showAuth: boolean = false,
 ): Promise<string | null> {
   const { domain } = determineShareDomain(eval_);
@@ -309,10 +310,10 @@ export async function getShareableUrl(
   const finalDomain = customDomain || domain;
 
   const fullUrl = cloudConfig.isEnabled()
-    ? `${finalDomain}/eval/${eval_.id}`
+    ? `${finalDomain}/eval/${remoteEvalId}`
     : getShareViewBaseUrl() === getDefaultShareViewBaseUrl() && !customDomain
-      ? `${finalDomain}/eval/${eval_.id}`
-      : `${finalDomain}/eval/?evalId=${eval_.id}`;
+      ? `${finalDomain}/eval/${remoteEvalId}`
+      : `${finalDomain}/eval/?evalId=${remoteEvalId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
@@ -346,13 +347,7 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  // Note: Eval ID will differ on self-hosted instance because self-hosted doesn't implement
-  // sharing idempotency.
-  if (evalId !== evalRecord.id) {
-    evalRecord.id = evalId;
-  }
-
-  return getShareableUrl(evalRecord, showAuth);
+  return getShareableUrl(evalRecord, evalId, showAuth);
 }
 
 /**

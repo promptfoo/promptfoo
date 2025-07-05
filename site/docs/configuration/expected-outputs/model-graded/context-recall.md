@@ -2,101 +2,67 @@
 sidebar_label: Context Recall
 ---
 
-# Context Recall
+# Context recall
 
-The `context-recall` assertion evaluates whether key information from a ground truth statement appears in the provided context. This is particularly useful for RAG (Retrieval-Augmented Generation) applications to ensure that important facts are being retrieved.
+The `context-recall` assertion evaluates whether the provided context contains the information needed to answer a specific question or verify a particular fact.
 
-### How to use it
-
-To use the `context-recall` assertion type, add it to your test configuration like this:
+## Configuration
 
 ```yaml
 assert:
   - type: context-recall
-    threshold: 0.9 # Score between 0 and 1
-    value: 'Key facts that should appear in the context'
+    value: 'Expected fact to find in context'
+    threshold: 0.8 # Score from 0 to 1
 ```
 
-Note: This assertion requires the `context` variable to be set in your test.
+## Providing context
+
+You can provide context in two ways:
+
+### Using context variables
+
+Include the context as a variable in your test case:
+
+```yaml
+tests:
+  - vars:
+      context: 'Paris is the capital of France. It has a population of over 2 million people.'
+    assert:
+      - type: context-recall
+        value: 'Paris is the capital of France'
+        threshold: 0.8
+```
+
+### Extracting from provider responses
+
+If your provider returns context within the response, use `contextTransform`:
+
+```yaml
+assert:
+  - type: context-recall
+    contextTransform: 'output.context'
+    value: 'Expected fact'
+    threshold: 0.8
+```
+
+For complex response structures:
+
+```yaml
+assert:
+  - type: context-recall
+    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
+    value: 'Expected fact'
+    threshold: 0.8
+```
 
 ### How it works
 
 The context recall checker:
 
-1. Takes a ground truth statement (the `value`) and the retrieved context
-2. Breaks down the ground truth into individual statements
-3. Checks which statements are supported by the context
-4. Calculates a recall score based on the proportion of supported statements
-
-A higher threshold requires more of the ground truth information to be present in the context.
-
-### Example Configuration
-
-Here's a complete example showing how to use context recall in a RAG system:
-
-```yaml
-prompts:
-  - |
-    Answer this question: {{query}}
-    Using this context: {{context}}
-providers:
-  - openai:gpt-4
-tests:
-  - vars:
-      query: 'What is our maternity leave policy?'
-      context: file://docs/policies/maternity.md
-    assert:
-      - type: context-recall
-        threshold: 0.9
-        value: |
-          Employees get 4 months paid maternity leave.
-          Leave can be taken before or after birth.
-          Additional unpaid leave is available upon request.
-```
-
-### Overriding the Grader
-
-Like other model-graded assertions, you can override the default grader:
-
-1. Using the CLI:
-
-   ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
-   ```
-
-2. Using test options:
-
-   ```yaml
-   defaultTest:
-     options:
-       provider: openai:gpt-4.1-mini
-   ```
-
-3. Using assertion-level override:
-   ```yaml
-   assert:
-     - type: context-recall
-       threshold: 0.9
-       value: 'Key facts to check'
-       provider: openai:gpt-4.1-mini
-   ```
-
-### Customizing the Prompt
-
-You can customize the evaluation prompt using the `rubricPrompt` property:
-
-```yaml
-defaultTest:
-  options:
-    rubricPrompt: |
-      Context: {{context}}
-      Ground Truth: {{groundTruth}}
-
-      Break down the ground truth into atomic statements.
-      For each statement, mark it with [FOUND] if it appears in the context,
-      or [NOT FOUND] if it does not.
-```
+1. Analyzes whether the provided context contains the information specified in the `value` field
+2. Evaluates the completeness and accuracy of information retrieval
+3. Returns a score from 0 to 1, where 1 means the context fully contains the expected information
 
 # Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.

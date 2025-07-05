@@ -28,7 +28,6 @@ export function configCommand(program: Command) {
         name: 'config get',
         configKey: 'email',
       });
-      await telemetry.send();
     });
 
   setCommand
@@ -55,7 +54,6 @@ export function configCommand(program: Command) {
         name: 'config set',
         configKey: 'email',
       });
-      await telemetry.send();
     });
 
   unsetCommand
@@ -95,6 +93,5 @@ export function configCommand(program: Command) {
         name: 'config unset',
         configKey: 'email',
       });
-      await telemetry.send();
     });
 }

@@ -10,6 +10,7 @@ import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
@@ -361,11 +362,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     try {
       const message = data.choices[0].message;
+      const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+
       if (message.refusal) {
         return {
           output: message.refusal,
           tokenUsage: getTokenUsage(data, cached),
           isRefusal: true,
+          ...(finishReason && { finishReason }),
         };
       }
       let output = '';
@@ -431,6 +435,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             tokenUsage: getTokenUsage(data, cached),
             cached,
             logProbs,
+            ...(finishReason && { finishReason }),
             cost: calculateOpenAICost(
               this.modelName,
               config,
@@ -465,6 +470,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           tokenUsage: getTokenUsage(data, cached),
           cached,
           logProbs,
+          ...(finishReason && { finishReason }),
           cost: calculateOpenAICost(
             this.modelName,
             config,
@@ -481,6 +487,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,
+        ...(finishReason && { finishReason }),
         cost: calculateOpenAICost(
           this.modelName,
           config,
