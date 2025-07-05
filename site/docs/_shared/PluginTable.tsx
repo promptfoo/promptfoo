@@ -12,6 +12,7 @@ interface PluginTableProps {
   shouldRenderPluginId?: boolean;
   shouldGroupByCategory?: boolean;
   showApplicationTypes?: boolean;
+  showRemoteStatus?: boolean;
 }
 
 const styles = {
@@ -62,6 +63,7 @@ const PluginTable = ({
   shouldRenderPluginId = true,
   shouldGroupByCategory = false,
   showApplicationTypes = false,
+  showRemoteStatus = false,
 }: PluginTableProps) => {
   let filteredPlugins = PLUGINS;
 
@@ -128,6 +130,9 @@ const PluginTable = ({
                     {shouldRenderDescription && (
                       <td style={{ ...styles.td, ...styles.columns.description }}>
                         {plugin.description}
+                        {showRemoteStatus && plugin.isRemote && (
+                          <span title="Uses remote inference"> 🌐</span>
+                        )}
                       </td>
                     )}
                     {shouldRenderPluginId && (
@@ -157,7 +162,14 @@ const PluginTable = ({
                 <td style={styles.td}>
                   <a href={plugin.link}>{plugin.name}</a>
                 </td>
-                {shouldRenderDescription && <td style={styles.td}>{plugin.description}</td>}
+                {shouldRenderDescription && (
+                  <td style={styles.td}>
+                    {plugin.description}
+                    {showRemoteStatus && plugin.isRemote && (
+                      <span title="Uses remote inference"> 🌐</span>
+                    )}
+                  </td>
+                )}
                 {shouldRenderPluginId && (
                   <td style={styles.td}>
                     <code style={styles.code}>{plugin.pluginId}</code>

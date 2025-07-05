@@ -10,6 +10,7 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
@@ -19,6 +20,8 @@ import fuzzysearch from 'fuzzysearch';
 
 type SortField = 'description' | 'createdAt' | 'evalId';
 
+const ROWS_PER_PAGE = 50;
+
 const ReportIndex: React.FC = () => {
   const navigate = useNavigate();
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>([]);
@@ -26,6 +29,11 @@ const ReportIndex: React.FC = () => {
   const [sortField, setSortField] = React.useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [page, setPage] = React.useState(0);
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
 
   React.useEffect(() => {
     const fetchRecentEvals = async () => {
@@ -79,6 +87,11 @@ const ReportIndex: React.FC = () => {
       }
     });
   }, [recentEvals, sortField, sortOrder, searchQuery]);
+
+  const paginatedEvals = React.useMemo(() => {
+    const startIndex = page * ROWS_PER_PAGE;
+    return filteredAndSortedEvals.slice(startIndex, startIndex + ROWS_PER_PAGE);
+  }, [filteredAndSortedEvals, page]);
 
   if (isLoading) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
@@ -150,7 +163,7 @@ const ReportIndex: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredAndSortedEvals.map((eval_) => (
+            {paginatedEvals.map((eval_) => (
               <TableRow
                 key={eval_.evalId}
                 hover
@@ -182,6 +195,16 @@ const ReportIndex: React.FC = () => {
             ))}
           </TableBody>
         </Table>
+        {filteredAndSortedEvals.length > ROWS_PER_PAGE && (
+          <TablePagination
+            component="div"
+            count={filteredAndSortedEvals.length}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={ROWS_PER_PAGE}
+            rowsPerPageOptions={[ROWS_PER_PAGE]}
+          />
+        )}
       </TableContainer>
     </Container>
   );

@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Function Calling with OpenAI Responses API
+prompts:
+  - 'What is the weather like in {{location}}?'
+
+providers:
+  - id: openai:responses:o1-pro
+    label: o1-pro
+    config:
+      temperature: 0.7
+      max_output_tokens: 300
+      tool_choice: auto
+      tools:
+        - type: function
+          name: get_current_weather
+          description: 'Get the current weather in a given location'
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: 'The city and state, e.g. San Francisco, CA'
+              unit:
+                type: string
+                enum: ['celsius', 'fahrenheit']
+            required: ['location', 'unit']
+
+  - id: openai:responses:o3
+    label: o3
+    config:
+      reasoning_effort: 'medium'
+      max_output_tokens: 300
+      tool_choice: auto
+      tools:
+        - type: function
+          name: get_current_weather
+          description: 'Get the current weather in a given location'
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: 'The city and state, e.g. San Francisco, CA'
+              unit:
+                type: string
+                enum: ['celsius', 'fahrenheit']
+            required: ['location', 'unit']
+
+  - id: openai:responses:o4-mini
+    label: o4-mini
+    config:
+      reasoning_effort: 'low'
+      max_output_tokens: 300
+      tool_choice: auto
+      tools:
+        - type: function
+          name: get_current_weather
+          description: 'Get the current weather in a given location'
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: 'The city and state, e.g. San Francisco, CA'
+              unit:
+                type: string
+                enum: ['celsius', 'fahrenheit']
+            required: ['location', 'unit']
+
+tests:
+  - vars:
+      location: Boston, MA
+    assert:
+      - type: contains
+        value: 'get_current_weather'
+
+  - vars:
+      location: San Francisco, CA
+    assert:
+      - type: contains
+        value: 'get_current_weather'

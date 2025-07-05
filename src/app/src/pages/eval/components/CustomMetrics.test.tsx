@@ -146,16 +146,6 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-name-test-metric')).toHaveTextContent('test-metric');
   });
 
-  it('adds clickable class only when onSearchTextChange is provided', () => {
-    const lookup = { metric1: 10 };
-
-    const { rerender } = render(<CustomMetrics lookup={lookup} />);
-    expect(screen.getByTestId('metric-metric1')).not.toHaveClass('clickable');
-
-    rerender(<CustomMetrics lookup={lookup} onSearchTextChange={() => {}} />);
-    expect(screen.getByTestId('metric-metric1')).toHaveClass('clickable');
-  });
-
   it('handles missing metrics in counts/totals objects', () => {
     const lookup = { metric1: 10, metric2: 20 };
     const counts = { metric1: 20 };

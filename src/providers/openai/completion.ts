@@ -35,7 +35,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
+    if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -75,13 +75,15 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);

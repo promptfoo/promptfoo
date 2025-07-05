@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Amazon Bedrock Nova Sonic with a conversation
+
+providers:
+  - id: bedrock:amazon.nova-sonic-v1:0
+    config:
+      inferenceConfiguration:
+        maxTokens: 4096
+        temperature: 0.7
+        topP: 0.95
+      textOutputConfiguration:
+        mediaType: text/plain
+      audioInputConfiguration:
+        mediaType: audio/lpcm
+        sampleRateHertz: 16000
+        sampleSizeBits: 16
+        channelCount: 1
+        encoding: base64
+        audioType: SPEECH
+      audioOutputConfiguration:
+        mediaType: audio/lpcm
+        sampleRateHertz: 24000
+        sampleSizeBits: 16
+        channelCount: 1
+        voiceId: matthew
+        encoding: base64
+        audioType: SPEECH
+      region: us-east-1
+
+prompts:
+  - file://nova_sonic_prompt.js
+
+defaultTest:
+  vars:
+    system_message: You are a helpful assistant. Answer the question based on the audio input.
+  metadata:
+    type: text
+    conversationId: date_thread
+
+# The conversationId is a special metadata field that promptfoo uses to maintain conversation history between tests.
+# When multiple tests share the same conversationId (like "date_thread" here), each test's response is added to the
+# conversation history, allowing the model to reference previous exchanges. This enables testing of multi-turn
+# conversations where context from earlier interactions affects later responses.
+tests:
+  - vars:
+      audio_file: file://assets/hello.wav
+    metadata:
+      type: audio
+      conversationId: date_thread
+    assert:
+      - type: llm-rubric
+        value: the date and time is today
+  - vars:
+      audio_file: file://assets/weather.wav
+    metadata:
+      type: audio
+      conversationId: date_thread
+    assert:
+      - type: llm-rubric
+        value: contains a weather report

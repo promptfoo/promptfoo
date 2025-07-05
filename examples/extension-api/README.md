@@ -1,4 +1,10 @@
-# Custom Extensions Example for promptfoo
+# extension-api (Custom Extensions Example for promptfoo)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example extension-api
+```
 
 This example demonstrates how to leverage promptfoo's powerful extensions API to implement custom setup and teardown hooks for individual tests. These extensions can be defined in either Python or JavaScript, providing flexibility for your preferred programming environment.
 
@@ -12,6 +18,8 @@ promptfoo supports four types of extension hooks, each triggered at a specific p
 4. `afterEach`: Executed after each individual test
 
 Each hook receives a `hookName` parameter and a `context` object containing relevant data for that specific hook type.
+
+The `beforeAll` and `beforeEach` hooks should return the `context` object, while the `afterAll` and `afterEach` hooks should not return anything.
 
 For comprehensive information on implementing and using these hooks, refer to the [Extension Hooks](https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks) section in the official documentation.
 

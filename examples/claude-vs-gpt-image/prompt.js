@@ -56,7 +56,7 @@ async function formatImagePrompt(context) {
   // The ID always exists
   if (
     context.provider.id.startsWith('bedrock:anthropic') ||
-    context.provider.id === 'anthropic:messages:claude-3-5-sonnet-20241022'
+    context.provider.id === 'anthropic:claude-3-5-sonnet-20241022'
   ) {
     return [
       { role: 'system', content: systemPrompt },
@@ -76,7 +76,7 @@ async function formatImagePrompt(context) {
     ];
   }
   // We can use the label if provided in the config.
-  if (context.provider.label === 'custom label for gpt-4o') {
+  if (context.provider.label === 'custom label for gpt-4.1') {
     return [
       {
         role: 'system',

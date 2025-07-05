@@ -111,6 +111,35 @@
   [data-theme='dark'] .configToWebview {
     padding: 1rem;
   }
+
+  .exampleTabs {
+    width: 100%;
+    max-width: 100%;
+    padding: 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .exampleTab {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    flex: 1;
+    text-align: center;
+  }
+
+  .tabLabelDesktop {
+    display: none;
+  }
+
+  .tabLabelMobile {
+    display: block;
+  }
+}
+
+@media (max-width: 480px) {
+  .exampleTab {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
 }
 
 .exampleTabs {
@@ -123,6 +152,8 @@
   border-radius: var(--border-radius-pill);
   width: fit-content;
   margin-inline: auto;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .exampleTab {
@@ -136,7 +167,14 @@
   border-radius: var(--border-radius-pill);
   color: #666;
   position: relative;
-  white-space: nowrap;
+}
+
+.tabLabelDesktop {
+  display: block;
+}
+
+.tabLabelMobile {
+  display: none;
 }
 
 .exampleTabActive {

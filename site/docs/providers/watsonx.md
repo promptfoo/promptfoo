@@ -1,3 +1,7 @@
+---
+sidebar_label: WatsonX
+---
+
 # WatsonX
 
 [IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
@@ -5,7 +9,6 @@
 ## Supported Models
 
 - **Granite Series**
-
   - `granite-20b-multilingual`
   - `granite-34b-code-instruct`
   - `granite-20b-code-instruct`
@@ -15,7 +18,6 @@
   - `granite-7b-lab`
 
 - **Llama Series**
-
   - `llama-3-2-90b-vision-instruct`
   - `llama-3-2-11b-vision-instruct`
   - `llama-3-2-3b-instruct`

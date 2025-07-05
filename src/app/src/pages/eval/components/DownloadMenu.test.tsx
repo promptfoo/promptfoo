@@ -3,10 +3,27 @@ import { screen } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import DownloadMenu from './DownloadMenu';
-import { useStore as useResultsViewStore } from './store';
+import { useTableStore as useResultsViewStore } from './store';
+
+// Get a reference to the mock
+const showToastMock = vi.fn();
+
+// Mock clipboard API
+Object.assign(navigator, {
+  clipboard: {
+    writeText: vi.fn().mockImplementation(() => Promise.resolve()),
+  },
+});
 
 vi.mock('./store', () => ({
-  useStore: vi.fn(),
+  useTableStore: vi.fn(),
+  useResultsViewSettingsStore: vi.fn(),
+}));
+
+vi.mock('../../../hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: showToastMock,
+  }),
 }));
 
 vi.mock('js-yaml', () => ({
@@ -15,7 +32,7 @@ vi.mock('js-yaml', () => ({
   },
 }));
 
-vi.mock('csv-stringify/sync', () => ({
+vi.mock('csv-stringify/browser/esm/sync', () => ({
   stringify: vi.fn().mockReturnValue('mocked csv'),
 }));
 
@@ -37,12 +54,23 @@ describe('DownloadMenu', () => {
       {
         test: { vars: { testVar: 'value' } },
         vars: ['value1', 'value2'],
-        outputs: [{ pass: true, text: 'output text' }],
+        outputs: [{ pass: false, text: 'failed output' }],
+      },
+      {
+        test: { vars: { testVar: 'value2' } },
+        vars: ['value3', 'value4'],
+        outputs: [{ pass: true, text: 'passed output' }],
       },
     ],
   };
 
-  const mockConfig = { someConfig: 'value' };
+  const mockConfig = {
+    someConfig: 'value',
+    redteam: {
+      injectVar: 'prompt',
+    },
+  };
+
   const mockEvalId = 'test-eval-id';
 
   beforeEach(() => {
@@ -144,20 +172,127 @@ describe('DownloadMenu', () => {
     expect(window.URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it('shows an alert when table data is not available', async () => {
+  it('shows a toast when table data is not available', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: null,
       config: mockConfig,
       evalId: mockEvalId,
     });
 
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    // Clear any previous calls to the mock
+    showToastMock.mockClear();
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Download Table CSV'));
 
-    expect(alertMock).toHaveBeenCalledWith('No table data');
-    alertMock.mockRestore();
+    expect(showToastMock).toHaveBeenCalledWith('No table data', 'error');
+  });
+
+  it('generates a CSV file with valid outputs when table data contains null or undefined outputs', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [null, { pass: false, text: 'failed output' }, undefined],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: true, text: 'passed output' }, null],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Download Table CSV'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    });
+  });
+
+  it('handles null gradingResult in downloadHumanEvalTestCases without crashing', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: false, text: 'failed output', gradingResult: null }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: true, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Download Human Eval Test YAML'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    });
+  });
+
+  it('handles deeply nested null properties in outputs without crashing', () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: false, text: 'failed output', gradingResult: { scores: null } }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: true, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    expect(() => {
+      render(<DownloadMenu />);
+    }).not.toThrow();
+  });
+
+  it('downloads Burp Suite Payloads when clicking the button', async () => {
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Download Burp Suite Payloads'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+    });
+  });
+
+  it('properly categorizes download options into sections', async () => {
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    // Check the category headings
+    expect(screen.getByText('Promptfoo Configs')).toBeInTheDocument();
+    expect(screen.getByText('Table Data')).toBeInTheDocument();
+    expect(screen.getByText('Advanced Options')).toBeInTheDocument();
   });
 });

@@ -1,3 +1,7 @@
+---
+sidebar_label: Using LangChain PromptTemplate with Promptfoo
+---
+
 # Using LangChain PromptTemplate with Promptfoo
 
 LangChain PromptTemplate is commonly used to format prompts with injecting variables. Promptfoo allows you to evaluate and test your prompts systematically. Combining the two can streamline your workflow, enabling you to test the prompts that use LangChain PromptTemplate in application code directly within Promptfoo.
@@ -60,7 +64,7 @@ export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> 
 
 To make the evaluation of prompts more seamless, the prompts can be loaded directly into Promptfoo tests. This way, whenever the prompts are updated in the application, the tests can evaluate the most up-to-date prompt.
 
-Change the prompt to a function that can be loaded in the Promptfoo configuration file, as described in the [prompt functions documentation](https://www.promptfoo.dev/docs/configuration/parameters/). Change how the substitution of variables is done to regular JS substitution.
+Change the prompt to a function that can be loaded in the Promptfoo configuration file, as described in the [prompt functions documentation](/docs/configuration/parameters/). Change how the substitution of variables is done to regular JS substitution.
 
 ```tsx
 export function toneEvaluationInstructions(vars): string {
@@ -100,7 +104,7 @@ prompts:
   - file:<path to application files>/prompt-template/tone-detection.ts:toneEvaluationInstructions
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - description: 'Simple tone detection test'
@@ -141,4 +145,4 @@ export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> 
 }
 ```
 
-In conclusion, this setup allows you to load the most up-to-date prompts from your application code, test them continuously, and integrate with LangChain PromptTemplate by properly handling the formatting differences between the two systems. For more information, see the [LangChain PromptTemplate documentation](https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.prompt.PromptTemplate.html) and [Promptfoo's prompt functions guide](https://www.promptfoo.dev/docs/configuration/parameters/).
+In conclusion, this setup allows you to load the most up-to-date prompts from your application code, test them continuously, and integrate with LangChain PromptTemplate by properly handling the formatting differences between the two systems. For more information, see the [LangChain PromptTemplate documentation](https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.prompt.PromptTemplate.html) and [Promptfoo's prompt functions guide](/docs/configuration/parameters/).

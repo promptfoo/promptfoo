@@ -17,6 +17,8 @@ const DEFAULT_EXAMPLES = dedent`
     `;
 
 export class HallucinationPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether a large language model can be led to fabricate answers,
@@ -53,7 +55,7 @@ export class HallucinationPlugin extends RedteamPluginBase {
 }
 
 export class HallucinationGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

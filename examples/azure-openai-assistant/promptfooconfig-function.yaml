@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI Assistant with Function Tool Capability
+
+prompts:
+  - 'Answer the following question: {{prompt}}'
+
+providers:
+  - id: azure:assistant:your_assistant_id
+    label: azure-assistant-function
+    config:
+      apiHost: your-resource-name.openai.azure.com
+      # Load tools from external file
+      tools: file://tools/weather-function.json
+      # Use the external file-based callback
+      functionToolCallbacks:
+        get_weather: file://callbacks/weather.js:getWeather
+      temperature: 0.7
+      apiVersion: '2024-05-01-preview'
+      debug: true
+
+tests:
+  # Function tool invocation tests
+  - vars:
+      prompt: What's the weather like in Seattle?
+  - vars:
+      prompt: Tell me about the weather in Tokyo in Celsius.
+  - vars:
+      prompt: Compare the weather in New York and London.
+  - vars:
+      prompt: What's the weather forecast for San Francisco in Fahrenheit?

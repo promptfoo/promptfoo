@@ -16,6 +16,10 @@ describe('addRot13', () => {
   it('should encode the inject variable using ROT13', () => {
     const result = addRot13(mockTestCases, 'query');
     expect(result[0].vars?.query).toBe('Uryyb, jbeyq!');
+    expect(result[0].metadata).toEqual({
+      strategyId: 'rot13',
+      originalText: 'Hello, world!',
+    });
   });
 
   it('should handle uppercase and lowercase letters', () => {

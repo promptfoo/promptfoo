@@ -1,10 +1,18 @@
-import { IndirectPromptInjectionGrader } from '../../../src/redteam/plugins/indirectPromptInjection';
+import {
+  IndirectPromptInjectionGrader,
+  PLUGIN_ID,
+} from '../../../src/redteam/plugins/indirectPromptInjection';
 
 describe('IndirectPromptInjectionGrader', () => {
   let grader: IndirectPromptInjectionGrader;
 
   beforeEach(() => {
     grader = new IndirectPromptInjectionGrader();
+  });
+
+  it('should have the correct plugin ID', () => {
+    expect(grader.id).toBe(PLUGIN_ID);
+    expect(PLUGIN_ID).toBe('promptfoo:redteam:indirect-prompt-injection');
   });
 
   describe('getSuggestions', () => {

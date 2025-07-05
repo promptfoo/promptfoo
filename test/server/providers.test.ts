@@ -81,22 +81,6 @@ describe('providersRouter', () => {
     expect(mockCallApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
   });
 
-  it('should validate provider config using Zod schema', async () => {
-    const invalidProvider = {
-      id: 'http://example.com/api',
-      config: {
-        // Missing required url field
-        method: 'POST',
-        headers: { 'invalid-header': 123 }, // Invalid header value type
-      },
-    };
-
-    const res = await request(app).post('/api/providers/test').send(invalidProvider);
-
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty('error');
-  });
-
   it('should handle non-JSON content types correctly', async () => {
     const mockCallApi = jest.fn().mockResolvedValue({ output: 'Mocked response' });
     jest.spyOn(httpProvider.HttpProvider.prototype, 'callApi').mockImplementation(mockCallApi);

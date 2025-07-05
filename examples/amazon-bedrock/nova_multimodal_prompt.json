@@ -1,0 +1,16 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "image": {
+          "format": "jpg",
+          "source": { "bytes": "{{image}}" }
+        }
+      },
+      {
+        "text": "What is this a picture of?"
+      }
+    ]
+  }
+]

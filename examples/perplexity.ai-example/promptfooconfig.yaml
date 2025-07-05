@@ -1,15 +1,40 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Search-augmented responses with different Perplexity models
+
 prompts:
   - 'What are the latest scientific discoveries about {{topic}}? Please include citations.'
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
+
   - id: perplexity:sonar
     config:
       temperature: 0.2
+      max_tokens: 1000
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
       return_related_questions: true
+      usage_tier: 'low'
+      web_search_options:
+        search_context_size: 'medium'
+
+  - id: perplexity:sonar-pro
+    config:
+      temperature: 0.2
+      max_tokens: 2000
+      search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
+      search_recency_filter: 'month'
+      usage_tier: 'medium'
+      web_search_options:
+        search_context_size: 'high'
+
+  - id: perplexity:sonar-reasoning
+    config:
+      temperature: 0.3
+      max_tokens: 2500
+      search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
+      search_recency_filter: 'month'
+      usage_tier: 'high'
 
 tests:
   - vars:

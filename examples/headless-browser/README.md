@@ -1,3 +1,11 @@
+# headless-browser (Headless Browser)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example headless-browser
+```
+
 To get started, install peer dependencies:
 
 ```bash

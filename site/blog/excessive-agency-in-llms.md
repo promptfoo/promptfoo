@@ -1,7 +1,22 @@
 ---
+title: 'Understanding Excessive Agency in LLMs'
 sidebar_label: Excessive agency in LLMs
+description: 'When LLMs have too much power, they become dangerous. Learn how excessive agency vulnerabilities work and why they made the OWASP Top 10 for AI risks.'
 image: /img/blog/excessive-agency/detecting-excessive-agency.svg
+keywords:
+  [
+    excessive agency,
+    LLM security,
+    AI security,
+    OWASP Top 10,
+    LLM vulnerabilities,
+    AI agent security,
+    access control,
+    privilege escalation,
+    LLM red teaming,
+  ]
 date: 2024-10-08
+authors: [ian]
 ---
 
 # Understanding Excessive Agency in LLMs
@@ -121,18 +136,15 @@ Identifying excessive agency problems requires proactive monitoring and rigorous
 **Challenge your system's boundaries**. [Red team](/docs/red-team/) your system with inputs designed to push the AI beyond its intended limits. Focus on these key areas:
 
 1. **Unauthorized Access**: Unintended data access.
-
    - Broken Function Level Authorization (BFLA)
    - Broken Object Level Authorization (BOLA, similar to IDOR)
    - Unauthorized data access or manipulation
 
 2. **Manipulation and Injection**: Ways to trick the LLM into doing things.
-
    - Prompt injection and extraction
    - Indirect prompt injection through trusted data sources
 
 3. **Scope and Capability Expansion**: Attempts to trigger actions beyond the LLM's intended scope.
-
    - Unauthorized tool or API usage
    - Execution of restricted operations or commands
    - Accessing or modifying resources outside the authorized scope

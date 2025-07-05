@@ -86,7 +86,7 @@ export const strategies: Strategy[] = [
     displayName: 'Likert-based Jailbreaks',
     description: 'Academic evaluation framework',
     longDescription:
-      'Single-turn adaptation of the Bad Likert Judge technique that uses academic evaluation frameworks and Likert scales to test model behaviors',
+      'Leverages academic evaluation frameworks and Likert scales to frame harmful requests within research contexts',
     cost: 'Medium',
     asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/likert/',
@@ -128,12 +128,45 @@ export const strategies: Strategy[] = [
     category: 'Multi-turn',
     strategy: 'goat',
     displayName: 'GOAT',
-    description: 'Gradual escalation',
+    description: 'Generative Offensive Agent Tester',
     longDescription:
       'Uses a Generative Offensive Agent Tester to dynamically generate multi-turn conversations',
     cost: 'High',
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/goat/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'video',
+    displayName: 'Video Encoding',
+    description: 'Text-to-video encoding bypass',
+    longDescription:
+      'Tests handling of text embedded in videos and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/video/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'image',
+    displayName: 'Image Encoding',
+    description: 'Text-to-image encoding bypass',
+    longDescription:
+      'Tests handling of text embedded in images and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/image/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'audio',
+    displayName: 'Audio Encoding',
+    description: 'Text-to-speech encoding bypass',
+    longDescription:
+      'Tests handling of text converted to speech audio and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/audio/',
   },
   {
     category: 'Static (Single-Turn)',
@@ -156,6 +189,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/hex/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'homoglyph',
+    displayName: 'Homoglyph',
+    description: 'Unicode confusable characters',
+    longDescription:
+      'Tests detection and handling of text with homoglyphs (visually similar Unicode characters) to bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/homoglyph/',
   },
   {
     category: 'Static (Single-Turn)',
@@ -211,5 +255,72 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/rot13/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'morse',
+    displayName: 'Morse Code',
+    description: 'Dots and dashes encoding',
+    longDescription:
+      'Tests handling of text encoded in Morse code (dots and dashes) to potentially bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/other-encodings/#morse-code',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'piglatin',
+    displayName: 'Pig Latin',
+    description: 'Word transformation encoding',
+    longDescription:
+      'Tests handling of text transformed into Pig Latin (rearranging word parts) to potentially bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/other-encodings/#pig-latin',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'camelcase',
+    displayName: 'camelCase',
+    description: 'camelCase transformation',
+    longDescription:
+      'Tests handling of text transformed into camelCase (removing spaces and capitalizing words) to potentially bypass content filters',
+    cost: 'Low',
+    asrIncrease: '0-5%',
+    link: '/docs/red-team/strategies/other-encodings/#camelcase',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'emoji',
+    displayName: 'Emoji Smuggling',
+    description: 'Variation selector encoding',
+    longDescription:
+      'Tests hiding UTF-8 payloads inside emoji variation selectors to evaluate filter evasion.',
+    cost: 'Low',
+    asrIncrease: '0-5%',
+    link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
+  },
+  {
+    category: 'Regression',
+    strategy: 'retry',
+    displayName: 'Retry',
+    description: 'Historical failure testing',
+    longDescription:
+      'Automatically incorporates previously failed test cases into your test suite, creating a regression testing system that learns from past failures',
+    cost: 'Low',
+    asrIncrease: '50-70%',
+    link: '/docs/red-team/strategies/retry/',
+    recommended: false,
+  },
+  {
+    category: 'Multi-turn',
+    strategy: 'pandamonium',
+    displayName: 'Pandamonium',
+    description: 'Dynamic attack generation',
+    longDescription:
+      'Advanced automated red teaming technique that dynamically generates single or multi-turn conversations aimed at bypassing safety measures',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/pandamonium/',
   },
 ];

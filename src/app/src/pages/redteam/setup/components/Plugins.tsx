@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -20,23 +20,29 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import {
+  AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,
+  categoryAliases,
+  DATASET_EXEMPT_PLUGINS,
   DEFAULT_PLUGINS,
+  displayNameOverrides,
+  EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
-  OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
-  PLUGIN_PRESET_DESCRIPTIONS,
-  displayNameOverrides,
-  subCategoryDescriptions,
-  categoryAliases,
+  OWASP_LLM_RED_TEAM_MAPPING,
+  OWASP_LLM_TOP_10_MAPPING,
   type Plugin,
+  PLUGIN_PRESET_DESCRIPTIONS,
   riskCategories,
+  subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 import { useDebounce } from 'use-debounce';
-import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
+import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 import CustomIntentSection from './CustomIntentPluginSection';
 import PluginConfigDialog from './PluginConfigDialog';
@@ -214,20 +220,36 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
+      name: 'Guardrails Evaluation',
+      plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+    },
+    {
+      name: 'Harmful',
+      plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
+    },
+    {
       name: 'NIST',
       plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
     },
     {
-      name: 'OWASP LLM',
+      name: 'OWASP LLM Top 10',
       plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
     },
     {
-      name: 'OWASP API',
+      name: 'OWASP Gen AI Red Team',
+      plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'OWASP API Top 10',
       plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
     },
     {
       name: 'MITRE',
       plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'EU AI Act',
+      plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
     },
   ];
 
@@ -260,7 +282,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           return false;
         }
         for (const key in config) {
-          const value = config[key];
+          const value = config[key as keyof PluginConfig];
           if (Array.isArray(value) && value.length === 0) {
             return false;
           }
@@ -288,7 +310,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     for (const key in config) {
-      const value = config[key];
+      const value = config[key as keyof PluginConfig];
       if (Array.isArray(value) && value.length === 0) {
         return false;
       }
@@ -302,6 +324,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const renderPluginCategory = (category: string, plugins: readonly Plugin[]) => {
     const pluginsToShow = plugins
       .filter((plugin) => plugin !== 'intent') // Skip intent because we have a dedicated section for it
+      .filter((plugin) => plugin !== 'policy') // Skip policy because we have a dedicated section for it
       .filter((plugin) => filteredPlugins.includes(plugin));
     if (pluginsToShow.length === 0) {
       return null;
@@ -393,7 +416,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   sx={{
                     p: 2,
                     height: '100%',
-                    borderRadius: 2,
                     border: (theme) => {
                       if (selectedPlugins.has(plugin)) {
                         if (
@@ -404,7 +426,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         }
                         return `1px solid ${theme.palette.primary.main}`;
                       }
-                      return '1px solid transparent';
+                      return undefined;
                     },
                     backgroundColor: (theme) =>
                       selectedPlugins.has(plugin)
@@ -453,8 +475,42 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                               {getPluginCategory(plugin)}
                             </Typography>
                           )}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            </Typography>
+                            {AGENTIC_EXEMPT_PLUGINS.includes(plugin as any) && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  color: 'text.secondary',
+                                  fontWeight: 400,
+                                  backgroundColor: 'action.hover',
+                                  px: 0.5,
+                                  py: 0.25,
+                                  borderRadius: 0.5,
+                                }}
+                              >
+                                agentic
+                              </Typography>
+                            )}
+                            {DATASET_EXEMPT_PLUGINS.includes(plugin as any) && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  color: 'text.secondary',
+                                  fontWeight: 400,
+                                  backgroundColor: 'action.hover',
+                                  px: 0.5,
+                                  py: 0.25,
+                                  borderRadius: 0.5,
+                                }}
+                              >
+                                no strategies
+                              </Typography>
+                            )}
                           </Box>
                           <Typography variant="body2" color="text.secondary">
                             {subCategoryDescriptions[plugin]}
@@ -661,13 +717,34 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <CustomIntentSection />
             </AccordionDetails>
           </Accordion>
+          <Accordion
+            expanded={expandedCategories.has('Custom Policies')}
+            onChange={(event, expanded) => {
+              setExpandedCategories((prev) => {
+                const newSet = new Set(prev);
+                if (expanded) {
+                  newSet.add('Custom Policies');
+                } else {
+                  newSet.delete('Custom Policies');
+                }
+                return newSet;
+              });
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                Custom Policies (
+                {config.plugins.filter(
+                  (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
+                ).length || 0}
+                )
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <CustomPoliciesSection />
+            </AccordionDetails>
+          </Accordion>
         </Box>
-
-        {selectedPlugins.has('policy') && (
-          <Box sx={{ mb: 4 }}>
-            <CustomPoliciesSection />
-          </Box>
-        )}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
           <Button

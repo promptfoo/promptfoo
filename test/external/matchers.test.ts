@@ -24,7 +24,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -65,7 +64,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -113,7 +111,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -141,7 +138,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -178,7 +174,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -212,7 +207,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -247,7 +241,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -285,7 +278,6 @@ describe('matchesConversationRelevance', () => {
     };
 
     jest.mocked(getDefaultProviders).mockResolvedValue({
-      datasetGenerationProvider: mockProvider,
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,

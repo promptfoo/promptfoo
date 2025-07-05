@@ -1,0 +1,79 @@
+# Example of using the conversation-relevance assertion
+# This metric evaluates whether responses remain relevant throughout a conversation
+
+description: 'Conversation Relevance Example'
+
+providers:
+  - id: openai:gpt-4o-mini
+    config:
+      temperature: 0
+
+tests:
+  # Example 1: Single turn conversation - tests basic relevance
+  - description: 'Single turn - relevant response'
+    vars:
+      prompt: 'What is the capital of France?'
+      output: 'The capital of France is Paris.'
+    assert:
+      - type: conversation-relevance
+        threshold: 0.8
+
+  # Example 2: Multi-turn conversation with good relevance
+  - description: 'Multi-turn - all responses relevant'
+    vars:
+      _conversation:
+        - input: 'What is the capital of France?'
+          output: 'The capital of France is Paris.'
+        - input: 'What is its population?'
+          output: 'Paris has a population of approximately 2.2 million people in the city proper.'
+        - input: 'Tell me about its famous landmarks.'
+          output: 'Paris is famous for the Eiffel Tower, Louvre Museum, and Notre-Dame Cathedral.'
+    assert:
+      - type: conversation-relevance
+        threshold: 0.8
+        config:
+          windowSize: 3
+
+  # Example 3: Conversation that goes off-topic (should fail)
+  - description: 'Multi-turn - irrelevant response'
+    vars:
+      _conversation:
+        - input: 'What is 2+2?'
+          output: '2+2 equals 4.'
+        - input: 'What about 3+3?'
+          output: 'The capital of France is Paris.'  # Completely irrelevant
+        - input: 'Can you solve 5+5?'
+          output: '5+5 equals 10.'
+    assert:
+      - type: conversation-relevance
+        threshold: 0.8
+        config:
+          windowSize: 2
+
+  # Example 4: Vague greetings (should pass)
+  - description: 'Greetings - vague but acceptable'
+    vars:
+      _conversation:
+        - input: 'Hi there!'
+          output: 'Hello! How can I help you today?'
+        - input: 'How are you?'
+          output: "I'm doing well, thank you! How about you?"
+    assert:
+      - type: conversation-relevance
+        threshold: 0.8
+
+  # Example 5: Context-dependent conversation
+  - description: 'Travel planning - context maintained'
+    vars:
+      _conversation:
+        - input: "I'm planning a trip to Japan."
+          output: 'Japan is wonderful! When are you planning to visit?'
+        - input: 'Next spring. What should I see?'
+          output: 'Spring is perfect for cherry blossoms! Visit Tokyo, Kyoto, and Mount Fuji.'
+        - input: 'What about food?'
+          output: 'Try sushi, ramen, tempura, and wagyu beef. Street food markets are amazing too!'
+    assert:
+      - type: conversation-relevance
+        threshold: 0.9
+        config:
+          windowSize: 3 

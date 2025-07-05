@@ -1,202 +1,347 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { callApi } from '@app/utils/api';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import Pagination from '@mui/material/Pagination';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TableSortLabel from '@mui/material/TableSortLabel';
-import Tooltip from '@mui/material/Tooltip';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import { alpha, useTheme } from '@mui/material/styles';
+import {
+  DataGrid,
+  type GridColDef,
+  type GridRenderCellParams,
+  GridToolbarContainer,
+  GridToolbarColumnsButton,
+  GridToolbarFilterButton,
+  GridToolbarDensitySelector,
+  GridToolbarExport,
+  GridToolbarQuickFilter,
+} from '@mui/x-data-grid';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 import DatasetDialog from './DatasetDialog';
 
-const rowsPerPage = 10;
+// augment the props for the toolbar slot
+declare module '@mui/x-data-grid' {
+  interface ToolbarPropsOverrides {
+    showUtilityButtons: boolean;
+  }
+}
 
-export default function Datasets() {
+function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
+  const theme = useTheme();
+  return (
+    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+      {showUtilityButtons && (
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <GridToolbarColumnsButton />
+          <GridToolbarFilterButton />
+          <GridToolbarDensitySelector />
+          <GridToolbarExport />
+        </Box>
+      )}
+      <Box sx={{ flexGrow: 1 }} />
+      <GridToolbarQuickFilter
+        sx={{
+          '& .MuiInputBase-root': {
+            borderRadius: 2,
+            backgroundColor: theme.palette.background.paper,
+          },
+        }}
+      />
+    </GridToolbarContainer>
+  );
+}
+
+interface DatasetsProps {
+  data: (TestCasesWithMetadata & { recentEvalDate: string })[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+type DatasetRow = TestCasesWithMetadata & { recentEvalDate: string };
+
+const getVariables = (testCases: DatasetRow['testCases']) => {
+  if (!Array.isArray(testCases) || typeof testCases[0] === 'string') {
+    return '';
+  }
+  const allVarsKeys = (testCases as TestCase[]).flatMap((testCase) =>
+    Object.keys(testCase.vars || {}),
+  );
+  const uniqueVarsKeys = Array.from(new Set(allVarsKeys));
+  return uniqueVarsKeys.length > 0 ? uniqueVarsKeys.join(', ') : 'None';
+};
+
+export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   const [searchParams] = useSearchParams();
-
-  const [testCases, setTestCases] = useState<
-    (TestCasesWithMetadata & { recentEvalDate: string })[]
-  >([]);
-  const [sortField, setSortField] = useState<string | null>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [page, setPage] = useState(1);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [dialogTestCaseIndex, setDialogTestCaseIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const hasShownPopup = useRef(false);
-
-  const handleSort = (field: string) => {
-    const order = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
-    setSortField(field);
-    setSortOrder(order);
-  };
-
-  useEffect(() => {
-    (async () => {
-      setIsLoading(true);
-      try {
-        const response = await callApi(`/datasets`);
-        const data = await response.json();
-        const sortedData = [...data.data].sort((a, b) => {
-          if (sortField === null) {
-            return 0;
-          }
-          if (sortOrder === 'asc') {
-            return a[sortField] > b[sortField] ? 1 : -1;
-          }
-          return a[sortField] < b[sortField] ? 1 : -1;
-        });
-        setTestCases(sortedData);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, [sortField, sortOrder, page]);
+  const [dialogState, setDialogState] = React.useState<{ open: boolean; selectedIndex: number }>({
+    open: false,
+    selectedIndex: 0,
+  });
+  const hasShownPopup = React.useRef(false);
 
   const handleClickOpen = (index: number) => {
-    setDialogTestCaseIndex(index);
-    setOpenDialog(true);
+    setDialogState({ open: true, selectedIndex: index });
   };
 
-  useEffect(() => {
+  const handleClose = () => {
+    setDialogState((prev) => ({ ...prev, open: false }));
+  };
+
+  React.useEffect(() => {
     if (hasShownPopup.current) {
       return;
     }
+
     const testCaseId = searchParams.get('id');
     if (testCaseId) {
-      const testCaseIndex = testCases.findIndex((testCase) => testCase.id.startsWith(testCaseId));
-      if (testCaseIndex !== -1) {
-        handleClickOpen(testCaseIndex);
+      const index = data.findIndex((testCase) => testCase.id.startsWith(testCaseId));
+      if (index !== -1) {
+        handleClickOpen(index);
         hasShownPopup.current = true;
       }
     }
-  }, [testCases, searchParams]);
+  }, [data, searchParams]);
 
-  const handleClose = () => {
-    setOpenDialog(false);
+  const columns: GridColDef<DatasetRow>[] = React.useMemo(
+    () => [
+      {
+        field: 'id',
+        headerName: 'ID',
+        flex: 1,
+        minWidth: 100,
+        valueFormatter: (value: string) => value?.slice(0, 6) || '',
+      },
+      {
+        field: 'testCases',
+        headerName: 'Test Cases',
+        flex: 1,
+        minWidth: 120,
+        valueGetter: (value: DatasetRow['testCases'], row: DatasetRow) => value.length,
+        renderCell: (params: GridRenderCellParams<DatasetRow>) => `${params.value} test cases`,
+      },
+      {
+        field: 'variables',
+        headerName: 'Variables',
+        flex: 2,
+        minWidth: 200,
+        valueGetter: (value: undefined, row: DatasetRow) => getVariables(row.testCases),
+      },
+      {
+        field: 'count',
+        headerName: 'Total Evals',
+        flex: 1,
+        minWidth: 100,
+      },
+      {
+        field: 'prompts',
+        headerName: 'Total Prompts',
+        flex: 1,
+        minWidth: 120,
+        valueGetter: (value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
+      },
+      {
+        field: 'recentEvalDate',
+        headerName: 'Latest Eval Date',
+        description: 'The date of the most recent eval for this set of test cases',
+        flex: 1.5,
+        minWidth: 150,
+        renderCell: (params: GridRenderCellParams<DatasetRow>) => {
+          if (!params.value) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                Unknown
+              </Typography>
+            );
+          }
+          return params.value;
+        },
+      },
+      {
+        field: 'recentEvalId',
+        headerName: 'Latest Eval ID',
+        description: 'The ID of the most recent eval for this set of test cases',
+        flex: 1.5,
+        minWidth: 150,
+        renderCell: (params: GridRenderCellParams<DatasetRow>) => {
+          if (!params.value) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                Unknown
+              </Typography>
+            );
+          }
+          return (
+            <Link to={`/eval?evalId=${params.value}`} style={{ textDecoration: 'none' }}>
+              <Typography
+                variant="body2"
+                color="primary"
+                fontFamily="monospace"
+                sx={{
+                  '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                {params.value}
+              </Typography>
+            </Link>
+          );
+        },
+      },
+    ],
+    [],
+  );
+
+  const handleRowClick = (params: any) => {
+    const index = data.findIndex((d) => d.id === params.id);
+    if (index !== -1) {
+      handleClickOpen(index);
+    }
   };
 
+  if (error) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert
+          severity="error"
+          sx={{
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          }}
+        >
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
-    <Box paddingX={2}>
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell style={{ width: '10%' }}>ID</TableCell>
-              <TableCell style={{ width: '20%' }}>
-                <TableSortLabel
-                  active={sortField === 'raw'}
-                  direction={sortField === 'raw' ? sortOrder : 'asc'}
-                  onClick={() => handleSort('raw')}
-                >
-                  Info
-                </TableSortLabel>
-              </TableCell>
-              <TableCell style={{ width: '20%' }}>Variables</TableCell>
-              <TableCell style={{ width: '10%' }}>
-                <TableSortLabel
-                  active={sortField === 'count'}
-                  direction={sortField === 'count' ? sortOrder : 'asc'}
-                  onClick={() => handleSort('count')}
-                >
-                  Total # evals
-                </TableSortLabel>
-              </TableCell>
-              <TableCell style={{ width: '20%' }}>
-                <Tooltip title="The date of the most recent eval for this set of test cases">
-                  <TableSortLabel
-                    active={sortField === 'date'}
-                    direction={sortField === 'date' ? sortOrder : 'asc'}
-                    onClick={() => handleSort('date')}
-                  >
-                    Most recent eval date
-                  </TableSortLabel>
-                </Tooltip>
-              </TableCell>
-              <TableCell style={{ width: '20%' }}>
-                <Tooltip title="The ID of the most recent eval for this set of test cases">
-                  <TableSortLabel
-                    active={sortField === 'evalId'}
-                    direction={sortField === 'evalId' ? sortOrder : 'asc'}
-                    onClick={() => handleSort('evalId')}
-                  >
-                    Most recent eval ID
-                  </TableSortLabel>
-                </Tooltip>
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {testCases
-              .slice((page - 1) * rowsPerPage, page * rowsPerPage)
-              .map((testCasesData, index) => (
-                <TableRow
-                  key={index}
-                  hover
-                  onClick={() => handleClickOpen(index)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <TableCell>{testCasesData.id.slice(0, 6)}</TableCell>
-                  <TableCell style={{ width: '20%', whiteSpace: 'pre-wrap' }}>
-                    {testCasesData.testCases.length} test cases
-                  </TableCell>
-                  <TableCell style={{ width: '20%', whiteSpace: 'pre-wrap' }}>
-                    {(() => {
-                      if (
-                        !Array.isArray(testCasesData.testCases) ||
-                        typeof testCasesData.testCases[0] === 'string'
-                      ) {
-                        return '';
-                      }
-                      const allVarsKeys = ((testCasesData.testCases as TestCase[]) || []).flatMap(
-                        (testCase) => Object.keys(testCase.vars || {}),
-                      );
-                      const uniqueVarsKeys = Array.from(new Set(allVarsKeys));
-                      return uniqueVarsKeys.length > 0 ? uniqueVarsKeys.join(', ') : 'None';
-                    })()}
-                  </TableCell>
-                  <TableCell style={{ width: '10%' }}>{testCasesData.count}</TableCell>
-                  <TableCell style={{ width: '20%' }}>
-                    {testCasesData.recentEvalDate || 'Unknown'}
-                  </TableCell>
-                  <TableCell style={{ width: '20%' }}>
-                    {testCasesData.recentEvalId ? (
-                      <Link to={`/eval?evalId=${testCasesData.recentEvalId}`}>
-                        {testCasesData.recentEvalId}
-                      </Link>
-                    ) : (
-                      'Unknown'
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-          </TableBody>
-        </Table>
-        {Math.ceil(testCases.length / rowsPerPage) > 1 && (
-          <Pagination
-            count={Math.ceil(testCases.length / rowsPerPage)}
-            page={page}
-            onChange={(event, value) => setPage(value)}
-          />
-        )}
-        {testCases[dialogTestCaseIndex] && (
-          <DatasetDialog
-            openDialog={openDialog}
-            handleClose={handleClose}
-            testCase={testCases[dialogTestCaseIndex]}
-          />
-        )}
-      </TableContainer>
-      {isLoading && (
-        <Box display="flex" justifyContent="center" my={4}>
-          <CircularProgress />
-        </Box>
+    <Box
+      sx={{
+        position: 'absolute',
+        top: 64,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        bgcolor: (theme) =>
+          theme.palette.mode === 'dark'
+            ? alpha(theme.palette.common.black, 0.2)
+            : alpha(theme.palette.grey[50], 0.5),
+        p: 3,
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          borderTop: 1,
+          borderColor: (theme) => alpha(theme.palette.divider, 0.1),
+          boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.common.black, 0.05)}`,
+          bgcolor: 'background.paper',
+          borderRadius: 1,
+        }}
+      >
+        <DataGrid
+          rows={data}
+          columns={columns}
+          loading={isLoading}
+          getRowId={(row) => row.id}
+          onRowClick={handleRowClick}
+          slots={{
+            toolbar: CustomToolbar,
+            loadingOverlay: () => (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  gap: 2,
+                }}
+              >
+                <CircularProgress />
+                <Typography variant="body2" color="text.secondary">
+                  Loading datasets...
+                </Typography>
+              </Box>
+            ),
+            noRowsOverlay: () => (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  color: 'text.secondary',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  p: 3,
+                }}
+              >
+                {error ? (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
+                    <Typography variant="h6" gutterBottom color="error">
+                      Error loading datasets
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {error}
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
+                    <Typography variant="h6" gutterBottom>
+                      No datasets found
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Create a dataset to start evaluating your AI responses
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            ),
+          }}
+          slotProps={{ toolbar: { showUtilityButtons: true } }}
+          sx={{
+            border: 'none',
+            '& .MuiDataGrid-row': {
+              cursor: 'pointer',
+              transition: 'background-color 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              },
+            },
+            '& .MuiDataGrid-cell': {
+              borderColor: 'divider',
+              display: 'flex',
+              alignItems: 'center',
+            },
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: 'background.default',
+              borderColor: 'divider',
+            },
+          }}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'recentEvalDate', sort: 'desc' }],
+            },
+            pagination: {
+              paginationModel: { pageSize: 25 },
+            },
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+        />
+      </Paper>
+
+      {data[dialogState.selectedIndex] && (
+        <DatasetDialog
+          openDialog={dialogState.open}
+          handleClose={handleClose}
+          testCase={data[dialogState.selectedIndex]}
+        />
       )}
     </Box>
   );

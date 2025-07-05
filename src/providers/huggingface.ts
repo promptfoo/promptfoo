@@ -67,7 +67,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
 
   getConfig() {
@@ -164,7 +164,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
@@ -254,7 +254,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
 
   async callApi(): Promise<ProviderResponse> {
@@ -336,7 +336,7 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
 
   toString(): string {
@@ -424,6 +424,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     return `huggingface:token-classification:${this.modelName}`;
   }
 
+  getApiKey(): string | undefined {
+    return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+  }
+
   async callClassificationApi(input: string): Promise<ProviderClassificationResponse> {
     const params = {
       inputs: input,
@@ -447,9 +451,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('HF_API_TOKEN')
-              ? { Authorization: `Bearer ${getEnvString('HF_API_TOKEN')}` }
-              : {}),
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
           },
           body: JSON.stringify(params),
         },

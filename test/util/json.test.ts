@@ -1,7 +1,72 @@
 import dedent from 'dedent';
-import { extractJsonObjects, isValidJson, safeJsonStringify, orderKeys } from '../../src/util/json';
+import {
+  convertSlashCommentsToHash,
+  extractFirstJsonObject,
+  extractJsonObjects,
+  getAjv,
+  isValidJson,
+  orderKeys,
+  resetAjv,
+  safeJsonStringify,
+} from '../../src/util/json';
 
 describe('json utilities', () => {
+  describe('getAjv', () => {
+    beforeAll(() => {
+      process.env.NODE_ENV = 'test';
+    });
+
+    beforeEach(() => {
+      delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+      resetAjv();
+    });
+
+    afterEach(() => {
+      delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+    });
+
+    it('should create an Ajv instance with default options', () => {
+      const ajv = getAjv();
+      expect(ajv).toBeDefined();
+      expect(ajv.opts.strictSchema).toBe(true);
+    });
+
+    it('should disable strict mode when PROMPTFOO_DISABLE_AJV_STRICT_MODE is set', () => {
+      process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE = 'true';
+      const ajv = getAjv();
+      expect(ajv.opts.strictSchema).toBe(false);
+    });
+
+    it('should add formats to the Ajv instance', () => {
+      const ajv = getAjv();
+      expect(ajv.formats).toBeDefined();
+      expect(Object.keys(ajv.formats)).not.toHaveLength(0);
+    });
+
+    it('should reuse the same instance on subsequent calls', () => {
+      const firstInstance = getAjv();
+      const secondInstance = getAjv();
+      expect(firstInstance).toBe(secondInstance);
+    });
+
+    it('should reset the instance when resetAjv is called', () => {
+      const firstInstance = getAjv();
+      resetAjv();
+      const secondInstance = getAjv();
+      expect(firstInstance).not.toBe(secondInstance);
+    });
+
+    it('should only allow resetAjv to be called in test environment', () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+        expect(() => resetAjv()).toThrow('resetAjv can only be called in test environment');
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+  });
+
   describe('isValidJson', () => {
     it('returns true for valid JSON', () => {
       expect(isValidJson('{"key": "value"}')).toBe(true);
@@ -134,6 +199,25 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
 
+    it('should handle comments', () => {
+      const input = `{
+        "reason": "all good",
+        "score": 1.0 // perfect score
+      }`;
+      const expectedOutput = [{ reason: 'all good', score: 1.0 }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should handle jsonl', () => {
+      const input = `{"reason": "hello", "score": 1.0}
+      {"reason": "world", "score": 0.0}`;
+      const expectedOutput = [
+        { reason: 'hello', score: 1.0 },
+        { reason: 'world', score: 0.0 },
+      ];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
     it('should handle invalid JSON gracefully', () => {
       const input = '{"key": "value" some text {"key2": "value2"}';
       const expectedOutput = [{ key2: 'value2' }];
@@ -143,19 +227,23 @@ describe('json utilities', () => {
     it('should handle incomplete JSON', () => {
       const input = `{
   "incomplete": "object"`;
-      expect(extractJsonObjects(input)).toEqual([]);
+      expect(extractJsonObjects(input)).toEqual([
+        {
+          incomplete: 'object',
+        },
+      ]);
     });
 
     it('should handle string containing incomplete JSON', () => {
-      const input = `{
-  "key1": "value1",
-  "key2": {
-    "nested": "value2"
-  },
-  "key3": "value3"
-}
-{
-  "incomplete": "object"`;
+      const input = dedent`{
+        "key1": "value1",
+        "key2": {
+          "nested": "value2"
+        },
+        "key3": "value3"
+      }
+      {
+        "incomplete": "object"`;
       expect(extractJsonObjects(input)).toEqual([
         {
           key1: 'value1',
@@ -163,6 +251,9 @@ describe('json utilities', () => {
             nested: 'value2',
           },
           key3: 'value3',
+        },
+        {
+          incomplete: 'object',
         },
       ]);
     });
@@ -218,6 +309,236 @@ describe('json utilities', () => {
       };
       const input = JSON.stringify(obj);
       expect(extractJsonObjects(input)).toEqual([obj]);
+    });
+
+    it('should handle YAML-style unquoted strings', () => {
+      const input = '{key: value, another_key: another value}';
+      const expectedOutput = [{ key: 'value', another_key: 'another value' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    describe('convertSlashCommentsToHash', () => {
+      it('should convert basic // comments to # comments', () => {
+        const input = 'some text // this is a comment';
+        const expected = 'some text # this is a comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should not convert // inside double quoted strings', () => {
+        const input = '"this // is not a comment" // but this is';
+        const expected = '"this // is not a comment" # but this is';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should not convert // inside single quoted strings', () => {
+        const input = "'don't convert // here' // convert here";
+        const expected = "'don't convert // here' # convert here";
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle escaped quotes in strings', () => {
+        const input = '"escaped \\" quote // not a comment" // real comment';
+        const expected = '"escaped \\" quote // not a comment" # real comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle multiple comments in one line', () => {
+        const input = 'text // first comment // not a second comment';
+        const expected = 'text # first comment // not a second comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle comments at the start of the line', () => {
+        const input = '// comment at start\ntext // comment at end';
+        const expected = '# comment at start\ntext # comment at end';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle strings with multiple lines', () => {
+        const input = dedent`
+          line1 // comment 1
+          "string with // not a comment"
+          line3 // comment 2`;
+        const expected = dedent`
+          line1 # comment 1
+          "string with // not a comment"
+          line3 # comment 2`;
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle nested quotes', () => {
+        const input = '"outer \\"inner // not comment\\" still outer" // real comment';
+        const expected = '"outer \\"inner // not comment\\" still outer" # real comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle mixed single and double quotes', () => {
+        const input = '"contains \'nested\' // not comment" // real comment';
+        const expected = '"contains \'nested\' // not comment" # real comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle empty strings', () => {
+        expect(convertSlashCommentsToHash('')).toBe('');
+      });
+
+      it('should handle strings without comments', () => {
+        const input = 'no comments here';
+        expect(convertSlashCommentsToHash(input)).toBe(input);
+      });
+
+      it('should handle strings with only a comment', () => {
+        const input = '// just a comment';
+        const expected = '# just a comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle multiple sequential comment markers', () => {
+        const input = 'text //// double comment';
+        const expected = 'text ## double comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle JSON-like structures', () => {
+        const input =
+          '{\n  "key": "value", // comment here\n  "key2": "value2" // another comment\n}';
+        const expected =
+          '{\n  "key": "value", # comment here\n  "key2": "value2" # another comment\n}';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should handle comments after different types of values', () => {
+        const inputs = [
+          'null // after null',
+          'true // after boolean',
+          '42 // after number',
+          '"string" // after string',
+          '[] // after array',
+          '{} // after object',
+        ];
+        const expected = inputs.map((input) => input.replace('//', '#'));
+        inputs.forEach((input, i) => {
+          expect(convertSlashCommentsToHash(input)).toBe(expected[i]);
+        });
+      });
+    });
+
+    it('should skip non-object YAML values', () => {
+      const input = 'plain string {key: value} 42 {another: obj} true';
+      const expectedOutput = [{ key: 'value' }, { another: 'obj' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should handle YAML with mixed quoted and unquoted strings', () => {
+      const input = '{unquoted: value, "quoted": "value", another: "mixed"}';
+      const expectedOutput = [{ unquoted: 'value', quoted: 'value', another: 'mixed' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should ignore YAML arrays and scalars', () => {
+      const input = '[1, 2, 3] {obj: value} plain: string {another: obj}';
+      const expectedOutput = [{ obj: 'value' }, { another: 'obj' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should handle YAML with special characters', () => {
+      const input = '{key: value with spaces, special: value!@#$%, empty:}';
+      const expectedOutput = [{ key: 'value with spaces', special: 'value!@#$%', empty: null }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    describe('LLM output scenarios', () => {
+      it('should handle JSON with inline comments', () => {
+        const input = dedent`
+          {
+            "reason": "The test passed",
+            "score": 1.0 # The score is perfect because all criteria were met
+          }`;
+        const expectedOutput = [
+          {
+            reason: 'The test passed',
+            score: 1.0,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle JSON with multiline string containing markdown', () => {
+        const input = dedent`
+          {
+            "reason": "The summary provided is mostly accurate but contains some omissions:
+
+            - Point 1: Details here
+            - Point 2: More details
+
+            Some additional context...",
+            "score": 0.75
+          }`;
+        const expectedOutput = [
+          {
+            reason:
+              'The summary provided is mostly accurate but contains some omissions:\n- Point 1: Details here - Point 2: More details\nSome additional context...',
+            score: 0.75,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle JSON with unescaped backticks', () => {
+        const input = dedent`
+          {
+            "reason": "\`\`The summary accurately reflects...",
+            "score": 1.0
+          }`;
+        const expectedOutput = [
+          {
+            reason: '``The summary accurately reflects...',
+            score: 1.0,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle JSON with trailing commas', () => {
+        const input = dedent`
+          {
+            "key1": "value1",
+            "key2": "value2",
+          }`;
+        const expectedOutput = [
+          {
+            key1: 'value1',
+            key2: 'value2',
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle multiple JSON objects in LLM output with text in between', () => {
+        const input = dedent`
+          Here's my analysis:
+          {
+            "first_point": "valid observation",
+            "score": 0.8
+          }
+
+          And another point:
+          {
+            "second_point": "another observation",
+            "score": 0.9
+          }`;
+        const expectedOutput = [
+          {
+            first_point: 'valid observation',
+            score: 0.8,
+          },
+          {
+            second_point: 'another observation',
+            score: 0.9,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
     });
   });
 
@@ -279,6 +600,21 @@ describe('json utilities', () => {
       const order: (keyof typeof obj)[] = ['b', 'a', 'c', 'd', 'e'];
       const result = orderKeys(obj, order);
       expect(result).toEqual({ b: 42, a: 'string', c: true, d: null, e: undefined });
+    });
+  });
+
+  describe('extractFirstJsonObject', () => {
+    it('should extract the first JSON object from a string', () => {
+      const input = '{"key1": "value1"} {"key2": "value2"}';
+      const expected = { key1: 'value1' };
+      expect(extractFirstJsonObject(input)).toEqual(expected);
+    });
+
+    it('should throw an error when no JSON objects are found', () => {
+      const input = 'no json here';
+      expect(() => extractFirstJsonObject(input)).toThrow(
+        'Expected a JSON object, but got "no json here"',
+      );
     });
   });
 });

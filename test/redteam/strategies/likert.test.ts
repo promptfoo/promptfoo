@@ -58,7 +58,7 @@ describe('likert strategy', () => {
 
     expect(result).toHaveLength(2);
     expect(result[0]?.vars?.prompt).toBe('modified prompt 1');
-    expect(result[0]?.metadata?.strategy).toBe('jailbreak:likert');
+    expect(result[0]?.metadata?.strategyId).toBe('jailbreak:likert');
     expect(result[0]?.assert?.[0].metric).toBe('test-metric/Likert');
   });
 

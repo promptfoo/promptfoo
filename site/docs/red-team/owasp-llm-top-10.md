@@ -31,6 +31,10 @@ The end result is a comprehensive report card that enumerates the OWASP Top 10 v
 
 ![Promptfoo OWASP LLM Top 10](/img/docs/compliance.png)
 
+To set up the scan through the Promptfoo UI, select the OWASP LLM Top 10 option in the list of presets on the Plugins page.
+
+![Promptfoo OWASP LLM Top 10 configuration](/img/docs/owasp-selection.png)
+
 ## 1. Prompt Injection (LLM01)
 
 OWASP defines two types of prompt injection vulnerabilities:
@@ -389,6 +393,66 @@ tests:
       - type: javascript
         value: output.length < 1000
 ```
+
+## OWASP Gen AI Red Team Best Practices
+
+In addition to the OWASP LLM Top 10, OWASP has published best practices for red teaming Gen AI applications. These best practices are organized into four phases, each focusing on different aspects of Gen AI security testing.
+
+You can find this option in the list of presets:
+
+![OWASP Gen AI red team preset](/img/docs/owasp-genai-red-team-preset.png)
+
+Or you can use Promptfoo to automate testing across all four phases using the `owasp:llm:redteam` shorthand:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam
+```
+
+Or target specific phases:
+
+### Phase 1: Model Evaluation
+
+Focus on alignment, robustness, bias, socio-technological harms, and data risk at the base model layer.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:model
+```
+
+### Phase 2: Implementation Evaluation
+
+Focus on guardrails, knowledge retrieval security (RAG), content filtering bypass, access control tests, and other "middle tier" application-level defenses.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:implementation
+```
+
+### Phase 3: System Evaluation
+
+Focus on full-application or system-level vulnerabilities, supply chain, sandbox escapes, resource controls, and overall infrastructure.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:system
+```
+
+### Phase 4: Runtime / Human & Agentic Evaluation
+
+Focus on live environment, human-agent interaction, multi-agent chaining, brand & trust issues, social engineering, and over-reliance.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:runtime
+```
+
+These red teaming best practices complement the OWASP LLM Top 10 by providing a structured approach to testing LLM applications across different layers of the stack.
 
 ## What's next
 

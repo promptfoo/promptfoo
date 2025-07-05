@@ -56,11 +56,10 @@ export const STRATEGY_PRESETS: Record<PresetId, StrategyPreset> = {
     description: 'A larger set of strategies for a more comprehensive redteam.',
     strategies: [
       'basic',
+      'jailbreak',
+      'jailbreak:tree',
       'jailbreak:composite',
       'jailbreak:likert',
-      'jailbreak:tree',
-      'rot13',
-      'citation',
     ] as const,
     options: {
       multiTurn: {

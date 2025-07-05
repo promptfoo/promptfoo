@@ -1,49 +1,57 @@
-import * as React from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
+import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
-  fetchId?: string;
-  preloadedData?: SharedResults;
-  recentEvals?: ResultLightweightWithLabel[];
-  defaultEvalId?: string;
+  /**
+   * ID of a specific eval to load.
+   */
+  fetchId: string | null;
 }
 
-export default function Eval({
-  fetchId,
-  preloadedData,
-  recentEvals: recentEvalsProp,
-  defaultEvalId: defaultEvalIdProp,
-}: EvalOptions) {
+export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
 
   const {
     table,
-    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
     evalId,
     setEvalId,
     setAuthor,
-    setInComparisonMode,
-  } = useStore();
-  const [loaded, setLoaded] = React.useState(false);
-  const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
-    recentEvalsProp || [],
-  );
+    fetchEvalData,
+  } = useTableStore();
+
+  const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
+
+  // ================================
+  // State
+  // ================================
+
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
+  const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
+
+  // ================================
+  // Handlers
+  // ================================
 
   const fetchRecentFileEvals = async () => {
     const resp = await callApi(`/results`, { cache: 'no-store' });
@@ -56,87 +64,96 @@ export default function Eval({
     return body.data;
   };
 
-  const fetchEvalById = React.useCallback(
+  /**
+   * Triggers the fetching of a specific eval by id. Eval data is populated in the table store.
+   *
+   * @returns {Boolean} Whether the eval was loaded successfully.
+   */
+  const loadEvalById = useCallback(
     async (id: string) => {
-      const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
-      if (!resp.ok) {
+      try {
+        setEvalId(id);
+
+        const data = await fetchEvalData(id, { skipSettingEvalId: true });
+
+        if (!data) {
+          setFailed(true);
+          return false;
+        }
+        return true;
+      } catch (error) {
+        console.error('Error loading eval:', error);
         setFailed(true);
-        return;
+        return false;
       }
-      const body = (await resp.json()) as { data: ResultsFile };
-
-      setTableFromResultsFile(body.data);
-      setConfig(body.data.config);
-      setAuthor(body.data.author);
-      setEvalId(id);
     },
-    [setTable, setConfig, setEvalId, setAuthor],
+    [fetchEvalData, setFailed, setEvalId],
   );
 
-  const handleRecentEvalSelection = async (id: string) => {
-    navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
-  };
-
-  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.evalId,
+  /**
+   * Updates the URL with the selected eval id, triggering a re-render of the Eval component.
+   */
+  const handleRecentEvalSelection = useCallback(
+    async (id: string) => {
+      navigate({
+        pathname: `/eval/${encodeURIComponent(id)}`,
+        search: searchParams.toString(),
+      });
+    },
+    [searchParams, navigate],
   );
 
-  const [searchParams] = useSearchParams();
-  const searchEvalId = searchParams.get('evalId');
+  // ================================
+  // Effects
+  // ================================
 
-  React.useEffect(() => {
-    const evalId = searchEvalId || fetchId;
-    if (evalId) {
-      console.log('Eval init: Fetching eval by id', { searchEvalId, fetchId });
+  useEffect(() => {
+    if (fetchId) {
+      console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
-        await fetchEvalById(evalId);
-        setLoaded(true);
-        setDefaultEvalId(evalId);
-        // Load other recent eval runs
-        fetchRecentFileEvals();
+        const success = await loadEvalById(fetchId);
+        if (success) {
+          setLoaded(true);
+          setDefaultEvalId(fetchId);
+          // Load other recent eval runs
+          fetchRecentFileEvals();
+        }
       };
       run();
-    } else if (preloadedData) {
-      console.log('Eval init: Using preloaded data');
-      setTableFromResultsFile(preloadedData.data);
-      setConfig(preloadedData.data.config);
-      setAuthor(preloadedData.data.author || null);
-      setLoaded(true);
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
       const socket = SocketIOClient(apiBaseUrl || '');
 
-      socket.on('init', (data) => {
-        console.log('Initialized socket connection', data);
-        setLoaded(true);
-        setTableFromResultsFile(data);
-        setConfig(data?.config);
-        setAuthor(data?.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            setDefaultEvalId(newRecentEvals[0]?.evalId);
-            setEvalId(newRecentEvals[0]?.evalId);
-            console.log('setting default eval id', newRecentEvals[0]?.evalId);
-          }
-        });
-      });
-
-      socket.on('update', (data) => {
-        console.log('Received data update', data);
+      /**
+       * Populates the table store with the most recent eval result.
+       */
+      async function handleResultsFile(data: ResultsFile) {
         setTableFromResultsFile(data);
         setConfig(data.config);
-        setAuthor(data.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            const newId = newRecentEvals[0]?.evalId;
-            if (newId) {
-              setDefaultEvalId(newId);
-              setEvalId(newId);
-            }
-          }
+        setAuthor(data.author ?? null);
+        const newRecentEvals = await fetchRecentFileEvals();
+        if (newRecentEvals && newRecentEvals.length > 0) {
+          const newId = newRecentEvals[0].evalId;
+          setDefaultEvalId(newId);
+          setEvalId(newId);
+          loadEvalById(newId);
+        }
+      }
+
+      socket
+        .on('init', async (data) => {
+          console.log('Initialized socket connection', data);
+          await handleResultsFile(data);
+        })
+        /**
+         * The user has run `promptfoo eval` and a new latest eval
+         * result has been received.
+         */
+        .on('update', async (data) => {
+          console.log('Received data update', data);
+          await handleResultsFile(data);
         });
-      });
 
       return () => {
         socket.disconnect();
@@ -148,14 +165,11 @@ export default function Eval({
         const evals = await fetchRecentFileEvals();
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
-          const resp = await callApi(`/results/${defaultEvalId}`);
-          const body = await resp.json();
-          setTableFromResultsFile(body.data);
-          setConfig(body.data.config);
-          setAuthor(body.data.author || null);
-          setLoaded(true);
-          setDefaultEvalId(defaultEvalId);
-          setEvalId(defaultEvalId);
+          const success = await loadEvalById(defaultEvalId);
+          if (success) {
+            setLoaded(true);
+            setDefaultEvalId(defaultEvalId);
+          }
         } else {
           return (
             <div className="notice">
@@ -166,31 +180,46 @@ export default function Eval({
       };
       run();
     }
+    console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
+    setComparisonEvalIds([]);
   }, [
     apiBaseUrl,
     fetchId,
-    setTable,
+    loadEvalById,
+    setTableFromResultsFile,
     setConfig,
     setAuthor,
     setEvalId,
-    fetchEvalById,
-    preloadedData,
     setDefaultEvalId,
-    searchEvalId,
     setInComparisonMode,
+    setComparisonEvalIds,
   ]);
 
-  React.useEffect(() => {
-    document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
-  }, [config, evalId]);
+  usePageMeta({
+    title: config?.description || evalId || 'Eval',
+    description: 'View evaluation results',
+  });
+
+  /**
+   * If and when a table is available, set loaded to true.
+   *
+   * Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
+   * immediately after `setTableFromResultsFile` is called. Otherwise, `loaded` will be true before
+   * the table is defined resulting in a race condition.
+   */
+  useEffect(() => {
+    if (table && !loaded) {
+      setLoaded(true);
+    }
+  }, [table, loaded]);
+
+  // ================================
+  // Rendering
+  // ================================
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;
-  }
-
-  if (loaded && !table) {
-    return <EmptyState />;
   }
 
   if (!loaded || !table) {
@@ -204,8 +233,20 @@ export default function Eval({
     );
   }
 
+  if (loaded && !table) {
+    return <EmptyState />;
+  }
+
+  // Check if this is a redteam eval
+  const isRedteam = config?.redteam !== undefined;
+
   return (
     <ShiftKeyProvider>
+      {isRedteam && evalId && (
+        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+          <EnterpriseBanner evalId={evalId} />
+        </Box>
+      )}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

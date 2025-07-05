@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
 import { ResultFailureReason, type EvaluateTable } from './types';
-import { ellipsize } from './utils/text';
+import { ellipsize } from './util/text';
 
 export function generateTable(
   evaluateTable: EvaluateTable,
@@ -48,14 +48,22 @@ export function generateTable(
   return table.toString();
 }
 
-export function wrapTable(rows: Record<string, string | number>[]) {
+export function wrapTable(
+  rows: Record<string, string | number>[],
+  columnWidths?: Record<string, number>,
+) {
   if (rows.length === 0) {
     return 'No data to display';
   }
   const head = Object.keys(rows[0]);
+
+  // Calculate widths based on content and terminal width
+  const defaultWidth = Math.floor(TERMINAL_MAX_WIDTH / head.length);
+  const colWidths = head.map((column) => columnWidths?.[column] || defaultWidth);
+
   const table = new Table({
     head,
-    colWidths: Array(head.length).fill(Math.floor(TERMINAL_MAX_WIDTH / head.length)),
+    colWidths,
     wordWrap: true,
     wrapOnWordBoundary: true,
   });

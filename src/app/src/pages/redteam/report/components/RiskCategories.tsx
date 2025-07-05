@@ -45,17 +45,22 @@ const RiskCategories: React.FC<{
             key={index}
             title={category.name}
             subtitle={categoryDescriptions[categoryName as keyof typeof categoryDescriptions]}
-            progressValue={(totalPasses / totalTests) * 100}
+            progressValue={totalTests > 0 ? (totalPasses / totalTests) * 100 : 0}
             numTestsPassed={totalPasses}
             numTestsFailed={totalTests - totalPasses}
-            testTypes={subCategories.map((subCategory) => ({
-              name: subCategory,
-              categoryPassed:
-                categoryStats[subCategory]?.pass === categoryStats[subCategory]?.total,
-              numPassed: categoryStats[subCategory]?.pass || 0,
-              numFailed:
-                (categoryStats[subCategory]?.total || 0) - (categoryStats[subCategory]?.pass || 0),
-            }))}
+            testTypes={subCategories.map((subCategory) => {
+              const stats = categoryStats[subCategory];
+              const numPassed = stats?.pass || 0;
+              const totalForSubcategory = stats?.total || 0;
+              const numFailed = totalForSubcategory - numPassed;
+
+              return {
+                name: subCategory,
+                categoryPassed: numPassed === totalForSubcategory && totalForSubcategory > 0,
+                numPassed,
+                numFailed,
+              };
+            })}
             evalId={evalId}
             failuresByPlugin={failuresByPlugin}
             passesByPlugin={passesByPlugin}

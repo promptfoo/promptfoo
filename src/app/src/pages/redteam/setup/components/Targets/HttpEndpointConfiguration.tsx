@@ -29,6 +29,7 @@ import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import type { ProviderOptions } from '../../types';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import './syntax-highlighting.css';
 
 interface HttpEndpointConfigurationProps {
@@ -88,7 +89,7 @@ Content-Type: application/json
 {
   "messages": [
     {
-      "role": "user", 
+      "role": "user",
       "content": "{{prompt}}"
     }
   ]
@@ -135,6 +136,7 @@ Content-Type: application/json
         updateCustomTarget('method', 'POST');
         updateCustomTarget('headers', {});
         updateCustomTarget('body', '');
+        updateCustomTarget('useHttps', false);
       }
     },
     [updateCustomTarget, setBodyError, setUrlError],
@@ -350,6 +352,19 @@ ${exampleRequest}`;
             },
           }}
         >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={selectedTarget.config.useHttps}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  updateCustomTarget('useHttps', enabled);
+                }}
+              />
+            }
+            label="Use HTTPS"
+            sx={{ mb: 2, display: 'block' }}
+          />
           <Editor
             value={selectedTarget.config.request || ''}
             onValueChange={handleRawRequestChange}
@@ -562,6 +577,11 @@ ${exampleRequest}`;
           )}
         </DialogActions>
       </Dialog>
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        defaultRequestTransform={selectedTarget.config.transformRequest}
+      />
     </Box>
   );
 };

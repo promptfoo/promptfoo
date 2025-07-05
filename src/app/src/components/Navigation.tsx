@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import type { LinkProps } from 'react-router-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
@@ -20,6 +20,12 @@ import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
+
+// Create a properly typed forwarded ref component for MUI compatibility
+const RouterLink = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => (
+  <Link ref={ref} {...props} />
+));
+RouterLink.displayName = 'RouterLink';
 
 const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -53,13 +59,13 @@ function NavLink({ href, label }: { href: string; label: string }) {
   const isActive = location.pathname.startsWith(href);
 
   return (
-    <NavButton component={Link} to={href} className={isActive ? 'active' : ''}>
+    <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
       {label}
     </NavButton>
   );
 }
 
-function Dropdown() {
+function CreateDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
@@ -98,11 +104,47 @@ function Dropdown() {
           },
         }}
       >
-        <MenuItem onClick={handleClose} component={Link} to="/setup">
+        <MenuItem onClick={handleClose} component={RouterLink} to="/setup">
           Eval
         </MenuItem>
-        <MenuItem onClick={handleClose} component={Link} to="/redteam/setup">
-          Redteam
+        <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
+          Red team
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+
+function EvalsDropdown() {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+  const location = useLocation();
+
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
+
+  return (
+    <>
+      <NavButton
+        onClick={handleClick}
+        endIcon={<ArrowDropDownIcon />}
+        className={isActive ? 'active' : ''}
+      >
+        Evals
+      </NavButton>
+      <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
+        <MenuItem onClick={handleClose} component={RouterLink} to="/eval">
+          Latest Eval
+        </MenuItem>
+        <MenuItem onClick={handleClose} component={RouterLink} to="/evals">
+          All Evals
         </MenuItem>
       </Menu>
     </>
@@ -128,11 +170,12 @@ export default function Navigation({
         <NavToolbar>
           <NavSection>
             <Logo />
-            <Dropdown />
-            <NavLink href="/eval" label="Evals" />
+            <CreateDropdown />
+            <EvalsDropdown />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
-            <NavLink href="/progress" label="History" />
+            <NavLink href="/history" label="History" />
+            <NavLink href="/model-audit" label="Model Audit" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">

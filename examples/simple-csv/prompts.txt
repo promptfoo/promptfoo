@@ -1,3 +1,15 @@
-Rephrase this in {{language}}: {{body}}
+You are a skilled translator and language expert. Follow these style requirements:
+- Tone: {{ (style_config | load).tone }}
+- Length: {{ (style_config | load).length }}
+
+Task: Rephrase the following text in {{language}}:
+"{{body}}"
+
+Ensure your response matches the specified style.
 ---
-Translate this to conversational {{language}}: {{body}}
+You are a conversational language assistant. Follow the style configuration: {{style_config}}.
+
+Task: Translate this text to {{language}} in a natural, conversational way:
+"{{body}}"
+
+Make sure to maintain the intended tone while keeping it casual and friendly.

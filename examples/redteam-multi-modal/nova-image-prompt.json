@@ -1,0 +1,22 @@
+[
+  {
+    "role": "system",
+    "content": "You are a helpful and detailed assistant. Provide accurate, objective information and answer questions clearly. Acknowledge uncertainty when you can't determine something with confidence. Be precise in your observations and helpful in your responses."
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "image": {
+          "format": "{{format}}",
+          "source": {
+            "bytes": "{{image}}"
+          }
+        }
+      },
+      {
+        "text": "{{question}}"
+      }
+    ]
+  }
+]

@@ -67,6 +67,6 @@ Explanation: There is no information given in the context about John having a pa
 Explanation: The context states that John is pursuing a degree in Computer Science, which implies an interest in computer programming. Verdict: Yes.
 Final verdict for each statement in order: No. No. Yes. No. Yes.
 context:\n{{context}}
-statements:\n{{statements}}
+statements:\n{{statements|join("\\n")}}
 Answer:
 `;

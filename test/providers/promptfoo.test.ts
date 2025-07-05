@@ -66,6 +66,33 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result).toEqual({ output: ['test output'] });
   });
 
+  it('should filter out null and undefined values from output array', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({ output: ['value1', null, 'value2', undefined] }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({ output: ['value1', 'value2'] });
+  });
+
+  it('should handle null output by returning empty array', async () => {
+    const mockResponse = new Response(JSON.stringify({ output: null }), {
+      status: 200,
+      statusText: 'OK',
+    });
+    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({ output: [] });
+  });
+
   it('should handle API error', async () => {
     const mockResponse = new Response('API Error', {
       status: 400,

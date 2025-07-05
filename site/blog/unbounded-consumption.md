@@ -1,14 +1,28 @@
 ---
 sidebar_label: 'Beyond DoS: How Unbounded Consumption is Reshaping LLM Security'
+title: 'Beyond DoS: How Unbounded Consumption is Reshaping LLM Security'
+description: 'OWASP replaced DoS attacks with "unbounded consumption" in their 2025 Top 10. Learn why this broader threat category matters and how to defend against it.'
 image: /img/blog/unbounded-consumption/panda-eating-tokens.png
+keywords:
+  [
+    unbounded consumption,
+    DoS attacks,
+    LLM security,
+    resource exhaustion,
+    denial of wallet,
+    token consumption attacks,
+    AI security,
+    OWASP LLM Top 10,
+  ]
 date: 2024-12-31
+authors: [vanessa]
 ---
 
 # Beyond DoS: How Unbounded Consumption is Reshaping LLM Security
 
 The recent release of the [2025 OWASP Top 10 for LLMs](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/) brought a number of changes in the top risks for LLM applications. One of the changes from the 2023 version was the removal of LLM04: Model Denial of Service (DoS), which was replaced in the 2025 version with LLM10: Unbounded Consumption.
 
-So what is the difference between Model Denial of Service (DoS) and Unbounded Consumption? And how do you mitigate risks? We’ll break it down in this article.
+So what is the difference between Model Denial of Service (DoS) and Unbounded Consumption? And how do you mitigate risks? We'll break it down in this article.
 
 <!--truncate-->
 
@@ -28,13 +42,13 @@ DoS and Distributed Denial of Service (DDoS) attacks have plagued companies for 
 
 DoS and DDoS attacks have traditionally been intended to bring down systems by exhausting memory and processing capacities, rendering applications unusable. Successful attacks could disable company operations, produce data loss, and cost immense operational expenses.
 
-Like other types of infrastructure, LLMs are also vulnerable to DoS attacks. Yet DoS attacks are only part of the broader risk introduced when rate limiting and throttling aren’t enforced.
+Like other types of infrastructure, LLMs are also vulnerable to DoS attacks. Yet DoS attacks are only part of the broader risk introduced when rate limiting and throttling aren't enforced.
 
 LLMs operate through inference, which is the process by which an LLM receives a prompt and generates a response. Since LLM providers charge based on inference, there is always a cost associated when an application receives a prompt and produces a response, though the inference cost greatly varies based on the model and provider.
 
 In some cases, organizations might also use a public API endpoint for inference or share endpoints within their organization, which risks service degradation across organizations if an endpoint is attacked.
 
-For these reasons, OWASP broadened the scope for risk for LLM applications beyond DoS attacks to what is now defined as “unbounded consumption.” Unbounded consumption is anything that permits a user to conduct “excessive and uncontrolled inferences, leading to risks such as denial of service, economic losses, model theft, and service degradation.”
+For these reasons, OWASP broadened the scope for risk for LLM applications beyond DoS attacks to what is now defined as "unbounded consumption." Unbounded consumption is anything that permits a user to conduct "excessive and uncontrolled inferences, leading to risks such as denial of service, economic losses, model theft, and service degradation."
 
 Denial of Service (DoS) attacks are now within the scope of unbounded consumption attacks and not a separately categorized risk.
 
@@ -42,7 +56,7 @@ Denial of Service (DoS) attacks are now within the scope of unbounded consumptio
 
 LLM applications are vulnerable to unbounded consumption under a number of conditions:
 
-- The application does not enforce proper input validation to ensure prompts don’t exceed reasonable context windows.
+- The application does not enforce proper input validation to ensure prompts don't exceed reasonable context windows.
 - The application does not have strong rate limiting or user quotas.
 - There are no timeout or throttling processes for resource-intensive operations.
 - There are no restrictions on the number of queued actions and total actions.
@@ -53,7 +67,7 @@ Without these mitigations, LLM applications are at risk of unbounded consumption
 
 - **Context Window Flooding**: Attackers send a continuous stream of inputs crafted to reach the LLM's context window limit, forcing the model to process excessive amounts of data.
 - **Recursive Context Expansion**: Adversaries force the LLM to repeatedly expand and process its context window, leading to resource exhaustion.
-- **Input Flooding**: Attacks will flood the LLM application with inputs of various lengths, including lengths that exceed the LLM’s context window. Ultimately, these attacks can render the application slow or unresponsive.
+- **Input Flooding**: Attacks will flood the LLM application with inputs of various lengths, including lengths that exceed the LLM's context window. Ultimately, these attacks can render the application slow or unresponsive.
 - **Mixed Content Flooding**: Various types of content (text, code snippets, or special characters) are combined in variable-length inputs to exploit potential inefficiencies in the LLM's processing pipeline.
 - **Denial of Wallet (DoW)**: Otherwise known as cost harvesting, adversaries will send expensive inputs to increase inference costs to the victim.
 - **Resource-Intensive Queries**: Attackers will send extremely demanding or complex queries to an LLM that forces longer processing times.
@@ -233,7 +247,7 @@ To mitigate LLM DoS attacks, implement scalable strategies such as dynamic rate 
 #### 4. Regular Audits and Framework Updates
 
 - **Periodic Reviews**: Schedule audits to identify vulnerabilities and refine defenses.
-- **Best Practices**: Follow OWASP’s LLM security guidelines to align with industry standards.
+- **Best Practices**: Follow OWASP's LLM security guidelines to align with industry standards.
 - **Third-Party Tools**: Integrate distributed protections like Cloudflare for enhanced coverage.
 
 #### 5. Iterative Testing and Proactive Strategies

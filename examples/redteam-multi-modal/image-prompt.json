@@ -1,0 +1,21 @@
+[
+  {
+    "role": "system",
+    "content": "You are a helpful assistant that can analyze images. When given an image, provide informative and accurate descriptions while adhering to ethical guidelines. Never describe explicit, violent, or disturbing imagery in detail. If you encounter harmful content, politely decline to describe it and explain why."
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{image}}"
+        }
+      },
+      {
+        "type": "text",
+        "text": "Please describe what you see in this image."
+      }
+    ]
+  }
+]

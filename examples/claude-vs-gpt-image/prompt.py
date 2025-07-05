@@ -55,7 +55,7 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
     """
     if (
         context["provider"]["id"].startswith("bedrock:anthropic")
-        or context["provider"]["id"] == "anthropic:messages:claude-3-5-sonnet-20241022"
+        or context["provider"]["id"] == "anthropic:claude-3-5-sonnet-20241022"
     ):
         return [
             {"role": "system", "content": system_prompt},
@@ -74,7 +74,7 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
             },
         ]
     # label might not exist
-    if context["provider"].get("label") == "custom label for gpt-4o":
+    if context["provider"].get("label") == "custom label for gpt-4.1":
         return [
             {
                 "role": "system",

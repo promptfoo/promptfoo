@@ -1,5 +1,5 @@
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult from '../../src/models/evalResult';
+import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import {
   ResultFailureReason,
@@ -7,8 +7,8 @@ import {
   type EvaluateResult,
   type Prompt,
   type ProviderOptions,
+  type ApiProvider,
 } from '../../src/types';
-import { safeJsonStringify } from '../../src/util/json';
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -49,6 +49,60 @@ describe('EvalResult', () => {
     namedScores: {},
     response: undefined,
   };
+
+  describe('sanitizeProvider', () => {
+    it('should handle ApiProvider objects', () => {
+      const apiProvider: ApiProvider = {
+        id: () => 'test-provider',
+        label: 'Test Provider',
+        callApi: async () => ({ output: 'test' }),
+        config: {
+          apiKey: 'test-key',
+        },
+      };
+
+      const result = sanitizeProvider(apiProvider);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+    });
+
+    it('should handle ProviderOptions objects', () => {
+      const providerOptions: ProviderOptions = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      };
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result).toEqual(providerOptions);
+    });
+
+    it('should handle generic objects with id function', () => {
+      const provider = {
+        id: () => 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      } as ApiProvider;
+
+      const result = sanitizeProvider(provider);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+    });
+  });
 
   describe('createFromEvaluateResult', () => {
     it('should create and persist an EvalResult', async () => {
@@ -98,33 +152,40 @@ describe('EvalResult', () => {
         provider: circularProvider,
       };
 
-      // Pre-serialize the provider to handle circular references
-      const serializedProvider = JSON.parse(safeJsonStringify(circularProvider) as string);
-
       const resultWithCircular = await EvalResult.createFromEvaluateResult(
         evalId,
         {
           ...mockEvaluateResult,
-          provider: serializedProvider, // Use pre-serialized provider,
+          provider: circularProvider,
           testCase: testCaseWithCircular,
         },
         { persist: true },
       );
 
       // Verify the provider was properly serialized
-      expect(resultWithCircular.testCase.provider).toEqual({
+      expect(resultWithCircular.provider).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
-        config: {},
+        config: {
+          circular: {
+            id: 'test-provider',
+            label: 'Test Provider',
+          },
+        },
       });
 
       // Verify it can be persisted without errors
       const retrieved = await EvalResult.findById(resultWithCircular.id);
       expect(retrieved).not.toBeNull();
-      expect(retrieved?.testCase.provider).toEqual({
+      expect(retrieved?.provider).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
-        config: {},
+        config: {
+          circular: {
+            id: 'test-provider',
+            label: 'Test Provider',
+          },
+        },
       });
     });
 
@@ -143,29 +204,23 @@ describe('EvalResult', () => {
         },
       };
 
-      const testCaseWithNestedData: AtomicTestCase = {
-        ...mockTestCase,
-        provider: providerWithNestedData,
-      };
-
       const result = await EvalResult.createFromEvaluateResult(
         evalId,
         {
           ...mockEvaluateResult,
           provider: providerWithNestedData,
-          testCase: testCaseWithNestedData,
+          testCase: { ...mockTestCase, provider: providerWithNestedData },
         },
-
         { persist: true },
       );
 
       // Verify nested properties are preserved
-      expect(result.testCase.provider).toEqual(providerWithNestedData);
+      expect(result.provider).toEqual(providerWithNestedData);
 
       // Verify it can be persisted and retrieved with all properties intact
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).not.toBeNull();
-      expect(retrieved?.testCase.provider).toEqual(providerWithNestedData);
+      expect(retrieved?.provider).toEqual(providerWithNestedData);
     });
   });
 

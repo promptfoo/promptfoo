@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Image Input with OpenAI Responses API
+prompts:
+  - file://prompt.image.json
+
+providers:
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      temperature: 0.7
+      max_output_tokens: 300
+
+tests:
+  - vars:
+      topic: secret service agents
+      image_url: https://upload.wikimedia.org/wikipedia/commons/0/06/Commander_Biden_22_December_2021_%28cropped_to_face%29.jpg

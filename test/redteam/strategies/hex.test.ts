@@ -21,6 +21,10 @@ describe('addHexEncoding', () => {
 
     expect(result[0].vars!.input).toBe('68 65 6C 6C 6F');
     expect(result[0].assert![0].metric).toBe('accuracy/Hex');
+    expect(result[0].metadata).toEqual({
+      strategyId: 'hex',
+      originalText: 'hello',
+    });
   });
 
   it('should handle empty string', () => {

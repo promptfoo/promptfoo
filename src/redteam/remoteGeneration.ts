@@ -11,10 +11,10 @@ export function getRemoteGenerationUrl(): string {
   // If logged into cloud use that url + /task
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/task';
+    return cloudConfig.getApiHost() + '/api/v1/task';
   }
   // otherwise use the default
-  return 'https://api.promptfoo.app/task';
+  return 'https://api.promptfoo.app/api/v1/task';
 }
 
 export function neverGenerateRemote(): boolean {
@@ -22,10 +22,9 @@ export function neverGenerateRemote(): boolean {
 }
 
 /**
- * Gets the URL for checking remote API health based on configuration.
- * @returns The health check URL, or null if remote generation is disabled.
+ * Builds a remote URL with a substituted pathname, honoring env vars / cloud config.
  */
-export function getRemoteHealthUrl(): string | null {
+function buildRemoteUrl(pathname: string, fallback: string): string | null {
   if (neverGenerateRemote()) {
     return null;
   }
@@ -34,19 +33,35 @@ export function getRemoteHealthUrl(): string | null {
   if (envUrl) {
     try {
       const url = new URL(envUrl);
-      url.pathname = '/health';
+      url.pathname = pathname;
       return url.toString();
     } catch {
-      return 'https://api.promptfoo.app/health';
+      return fallback;
     }
   }
 
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
-    return `${cloudConfig.getApiHost()}/health`;
+    return `${cloudConfig.getApiHost()}${pathname}`;
   }
 
-  return 'https://api.promptfoo.app/health';
+  return fallback;
+}
+
+/**
+ * Gets the URL for checking remote API health based on configuration.
+ * @returns The health check URL, or null if remote generation is disabled.
+ */
+export function getRemoteHealthUrl(): string | null {
+  return buildRemoteUrl('/health', 'https://api.promptfoo.app/health');
+}
+
+/**
+ * Gets the URL for checking remote API version based on configuration.
+ * @returns The version check URL, or null if remote generation is disabled.
+ */
+export function getRemoteVersionUrl(): string | null {
+  return buildRemoteUrl('/version', 'https://api.promptfoo.app/version');
 }
 
 export function shouldGenerateRemote(): boolean {
@@ -63,8 +78,8 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   // If logged into cloud use that url + /task
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/task/harmful';
+    return cloudConfig.getApiHost() + '/api/v1/task/harmful';
   }
   // otherwise use the default
-  return 'https://api.promptfoo.app/task/harmful';
+  return 'https://api.promptfoo.app/api/v1/task/harmful';
 }

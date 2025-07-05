@@ -14,6 +14,21 @@ import type {
 import invariant from '../../util/invariant';
 import { neverGenerateRemote } from '../remoteGeneration';
 
+/**
+ * Type guard for RedteamPandamoniumProvider
+ * Checks if a provider is a RedteamPandamoniumProvider by verifying it has the runPandamonium method
+ */
+export const isPandamoniumProvider = (
+  provider: unknown,
+): provider is RedteamPandamoniumProvider => {
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    'runPandamonium' in provider &&
+    typeof (provider as Record<string, unknown>)['runPandamonium'] === 'function'
+  );
+};
+
 const CURRENT_VERSION = 1;
 const TIMEOUT = 120000;
 

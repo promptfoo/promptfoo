@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
 import type { Prompt, ApiProvider, PromptFunctionContext } from '../../types';
@@ -63,7 +64,7 @@ export const pythonPromptFunctionLegacy = async (
   };
   const options: PythonShellOptions = {
     mode: 'text',
-    pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+    pythonPath: getEnvString('PROMPTFOO_PYTHON', 'python'),
     args: [safeJsonStringify(transformedContext) as string],
   };
   logger.debug(`Executing python prompt script ${filePath}`);

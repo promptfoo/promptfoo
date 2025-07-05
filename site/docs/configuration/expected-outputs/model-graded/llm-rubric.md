@@ -1,3 +1,7 @@
+---
+sidebar_label: LLM Rubric
+---
+
 # LLM Rubric
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.
@@ -51,7 +55,7 @@ You can incorporate test variables into your LLM rubric. This is particularly us
 
 ```yaml
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4.1
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -68,12 +72,12 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, `llm-rubric` uses GPT-4o for grading. You can override this in several ways:
+By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override this in several ways:
 
 1. Using the `--grader` CLI option:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using `test.options` or `defaultTest.options`:
@@ -82,7 +86,7 @@ By default, `llm-rubric` uses GPT-4o for grading. You can override this in sever
    defaultTest:
      // highlight-start
      options:
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
      // highlight-end
      assert:
        - description: Evaluate output using LLM
@@ -100,7 +104,7 @@ By default, `llm-rubric` uses GPT-4o for grading. You can override this in sever
          - type: llm-rubric
            value: Is written in a professional tone
            // highlight-start
-           provider: openai:gpt-4o-mini
+           provider: openai:gpt-4.1-mini
            // highlight-end
    ```
 
@@ -123,6 +127,42 @@ defaultTest:
         }
     ]
 ```
+
+### Object handling in rubric prompts
+
+When using `{{output}}` or `{{rubric}}` variables that contain objects, promptfoo automatically converts them to JSON strings by default to prevent display issues. If you need to access specific properties of objects in your rubric prompts, you can enable object property access:
+
+```bash
+export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
+promptfoo eval
+```
+
+With this enabled, you can access object properties directly in your rubric prompts:
+
+```yaml
+rubricPrompt: >
+  [
+      {
+          "role": "user", 
+          "content": "Evaluate this answer: {{output.text}}\nFor the question: {{rubric.question}}\nCriteria: {{rubric.criteria}}"
+      }
+  ]
+```
+
+For more details, see the [object template handling guide](/docs/usage/troubleshooting#object-template-handling).
+
+## Threshold Support
+
+The `llm-rubric` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass. For example:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: Is not apologetic and provides a clear, concise answer
+    threshold: 0.8 # Requires a score of 0.8 or higher to pass
+```
+
+The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
 
 ## Further reading
 

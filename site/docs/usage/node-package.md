@@ -15,7 +15,7 @@ npm install promptfoo
 
 ## Usage
 
-Use `promptfoo` as a library in your project by importing the `evaluate` function:
+Use `promptfoo` as a library in your project by importing the `evaluate` function and other utilities:
 
 ```ts
 import promptfoo from 'promptfoo';
@@ -34,6 +34,23 @@ The results of the evaluation are returned as an [`EvaluateSummary` object](/doc
 ### Provider functions
 
 A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
+
+You can load providers using the `loadApiProvider` function:
+
+```ts
+import { loadApiProvider } from 'promptfoo';
+
+// Load a provider with default options
+const provider = await loadApiProvider('openai:o3-mini');
+
+// Load a provider with custom options
+const providerWithOptions = await loadApiProvider('azure:chat:test', {
+  options: {
+    apiHost: 'test-host',
+    apiKey: 'test-key',
+  },
+});
+```
 
 ### Assertion functions
 
@@ -95,7 +112,7 @@ import promptfoo from 'promptfoo';
 const results = await promptfoo.evaluate(
   {
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-    providers: ['openai:gpt-4o-mini'],
+    providers: ['openai:gpt-4.1-mini'],
     tests: [
       {
         vars: {
@@ -134,7 +151,7 @@ import promptfoo from 'promptfoo';
       },
     ],
     providers: [
-      'openai:gpt-4o-mini',
+      'openai:gpt-4.1-mini',
       (prompt, context) => {
         // Call LLM here...
         console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);

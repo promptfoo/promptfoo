@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
-import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
+import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
@@ -9,7 +9,7 @@ jest.mock('../../../src/cache', () => ({
 }));
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   ...jest.requireActual('../../../src/redteam/remoteGeneration'),
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
 describe('System Purpose Extractor', () => {
@@ -30,7 +30,7 @@ describe('System Purpose Extractor', () => {
       id: jest.fn().mockReturnValue('test-provider'),
     };
     jest.clearAllMocks();
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/task');
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
   });
 
   afterEach(() => {
@@ -51,7 +51,7 @@ describe('System Purpose Extractor', () => {
 
     expect(result).toBe('Remote extracted purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.app/task',
+      'https://api.promptfoo.app/api/v1/task',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
@@ -95,5 +95,10 @@ describe('System Purpose Extractor', () => {
     const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
 
     expect(result).toBe('Extracted system purpose');
+  });
+
+  it('should return default message for empty prompts array', async () => {
+    const result = await extractSystemPurpose(provider, []);
+    expect(result).toBe(DEFAULT_PURPOSE);
   });
 });

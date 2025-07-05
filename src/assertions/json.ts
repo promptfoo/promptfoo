@@ -1,31 +1,8 @@
 import type { ValidateFunction } from 'ajv';
-import Ajv from 'ajv';
-import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
-import { getEnvBool } from '../envars';
 import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
-import { extractJsonObjects } from '../util/json';
-
-let ajvInstance: Ajv | null = null;
-
-export function resetAjv(): void {
-  if (process.env.NODE_ENV !== 'test') {
-    throw new Error('resetAjv can only be called in test environment');
-  }
-  ajvInstance = null;
-}
-
-export function getAjv(): Ajv {
-  if (!ajvInstance) {
-    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
-    };
-    ajvInstance = new Ajv(ajvOptions);
-    addFormats(ajvInstance);
-  }
-  return ajvInstance;
-}
+import { extractJsonObjects, getAjv } from '../util/json';
 
 export function handleIsJson({
   outputString,

@@ -47,7 +47,7 @@ const prompts: EvaluateTestSuite['prompts'] = [
 
 const providers: EvaluateTestSuite['providers'] = [
   // Call the OpenAI API
-  'openai:gpt-4o-mini',
+  'openai:gpt-4.1-mini',
 
   // Or use a custom function. Call an LLM API in this function, or any other logic.
   async (prompt, context) => {

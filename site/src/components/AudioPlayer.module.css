@@ -1,0 +1,33 @@
+.audioContainer {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: var(--ifm-border-radius);
+  background: var(--ifm-background-surface-color);
+  box-shadow: var(--ifm-box-shadow);
+}
+
+.audioPlayer {
+  width: 100%;
+  height: 40px;
+}
+
+.transcript {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.4;
+}
+
+.transcriptLabel {
+  font-weight: var(--ifm-font-weight-bold);
+  margin-right: 0.5rem;
+}
+
+[data-theme='dark'] .audioContainer {
+  background: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+}
+
+[data-theme='dark'] .transcript {
+  color: var(--ifm-color-emphasis-600);
+}

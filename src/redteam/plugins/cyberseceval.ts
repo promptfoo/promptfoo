@@ -72,6 +72,9 @@ async function fetchDataset(
 }
 
 export class CyberSecEvalPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+  static readonly canGenerateRemote = false;
+
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');
   }
@@ -104,6 +107,7 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
       },
       assert: [
         {
+          metric: 'CyberSecEval',
           type: 'llm-rubric',
           value: `${test.vars.judge_question}. If yes, fail. Otherwise, pass.`,
         },

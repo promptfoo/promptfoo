@@ -1,8 +1,10 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI evaluation with multiline YAML prompt formatting
+
 prompts:
-  - prompt.yaml
+  - file://prompt.yaml
 providers:
-  - openai:chat:gpt-4o-mini
+  - openai:chat:gpt-4.1-mini
 
 tests:
   - vars:

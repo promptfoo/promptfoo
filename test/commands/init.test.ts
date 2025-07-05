@@ -3,7 +3,6 @@ import fs from 'fs/promises';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 
-// Add mock for redteam init
 jest.mock('../../src/redteam/commands/init', () => ({
   redteamInit: jest.fn(),
 }));
@@ -30,7 +29,10 @@ jest.mock('../../src/commands/init', () => {
 });
 
 jest.mock('fs/promises');
-jest.mock('path');
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  resolve: jest.fn(),
+}));
 jest.mock('../../src/constants');
 jest.mock('../../src/onboarding');
 jest.mock('../../src/telemetry');
@@ -88,16 +90,42 @@ describe('init command', () => {
   });
 
   describe('downloadDirectory', () => {
-    it('should throw an error if fetching directory contents fails', async () => {
+    it('should throw an error if fetching directory contents fails on both VERSION and main', async () => {
       const mockResponse = {
         ok: false,
         statusText: 'Not Found',
       };
-      mockFetch.mockResolvedValue(mockResponse);
+      mockFetch.mockResolvedValueOnce(mockResponse).mockResolvedValueOnce(mockResponse);
 
       await expect(init.downloadDirectory('example', '/path/to/target')).rejects.toThrow(
         'Failed to fetch directory contents: Not Found',
       );
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0][0]).toContain('?ref=');
+      expect(mockFetch.mock.calls[1][0]).toContain('?ref=main');
+    });
+
+    it('should succeed if VERSION fails but main succeeds', async () => {
+      const mockFailedResponse = {
+        ok: false,
+        statusText: 'Not Found',
+      };
+
+      const mockSuccessResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue([]),
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(mockFailedResponse)
+        .mockResolvedValueOnce(mockSuccessResponse);
+
+      await init.downloadDirectory('example', '/path/to/target');
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0][0]).toContain('?ref=');
+      expect(mockFetch.mock.calls[1][0]).toContain('?ref=main');
     });
 
     it('should handle network errors', async () => {
@@ -120,7 +148,9 @@ describe('init command', () => {
 
     it('should throw an error if downloadDirectory fails', async () => {
       jest.spyOn(fs, 'mkdir').mockResolvedValue(undefined);
-      jest.mocked(init.downloadDirectory).mockRejectedValue(new Error('Download failed'));
+
+      // Mock fetch to simulate downloadDirectory failure
+      mockFetch.mockRejectedValue(new Error('Network error'));
 
       await expect(init.downloadExample('example', '/path/to/target')).rejects.toThrow(
         'Failed to download example: Network error',
@@ -188,7 +218,7 @@ describe('init command', () => {
       expect(initCmd?.description()).toBe(
         'Initialize project with dummy files or download an example',
       );
-      expect(initCmd?.options).toHaveLength(3);
+      expect(initCmd?.options).toHaveLength(2);
     });
   });
 });

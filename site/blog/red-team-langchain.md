@@ -1,6 +1,19 @@
 ---
-date: 2025-01-18
+title: 'How to Red Team a LangChain Application: Complete Security Testing Guide'
+description: 'LangChain apps combine multiple AI components, creating complex attack surfaces. Learn how to red team agents, chains, and tool integrations systematically.'
 image: /img/blog/langchain/red-team-langchain-banner.jpg
+keywords:
+  [
+    LangChain red teaming,
+    LangChain security,
+    AI agent testing,
+    chain security testing,
+    LangChain vulnerabilities,
+    AI application security,
+    framework security,
+  ]
+date: 2025-01-18
+authors: [ian]
 ---
 
 # How to Red Team a LangChain Application
@@ -72,7 +85,7 @@ def call_api(prompt, options, context):
     # Initialize your LangChain components
     llm = ChatOpenAI(
         temperature=0.7,
-        model_name="gpt-4o-mini"
+        model_name="gpt-4.1-mini"
     )
 
     # Create your chain

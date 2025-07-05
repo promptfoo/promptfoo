@@ -1,0 +1,7 @@
+You are a professional chef with expertise in various cuisines. 
+
+Create a {{cuisine}} recipe for {{dish}}. 
+
+Include a name for the recipe, the cuisine type, difficulty level (easy, medium, or hard), preparation time in minutes, cooking time in minutes, a list of ingredients with amounts, and step-by-step cooking instructions.
+
+Your response should be structured as valid JSON. 

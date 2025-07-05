@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: LangChain Python integration for prompt evaluation
+
 prompts:
-  - prompt.txt
+  - file://prompt.txt
 providers:
   - openai:chat:gpt-4o
   - file://langchain_example.py

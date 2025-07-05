@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Amazon SageMaker Anthropic Claude-compatible model evaluation'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+  - 'Write a short blog introduction about {{topic}}'
+  - 'List 3 key benefits of {{topic}}'
+
+providers:
+  - id: sagemaker:anthropic:your-claude-endpoint
+    config:
+      region: us-east-1
+      modelType: anthropic
+      temperature: 0.7
+      maxTokens: 256
+
+tests:
+  - vars:
+      topic: sustainable packaging
+  - vars:
+      topic: artificial intelligence in healthcare
+  - vars:
+      topic: remote work policies

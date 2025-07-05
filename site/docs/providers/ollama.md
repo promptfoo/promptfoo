@@ -1,3 +1,7 @@
+---
+sidebar_label: Ollama
+---
+
 # Ollama
 
 The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
@@ -34,7 +38,7 @@ Supported environment variables:
 
 To pass configuration options to Ollama, use the `config` key like so:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: ollama:llama2
     config:

@@ -21,7 +21,7 @@ import type {
 } from '@adaline/types';
 import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { isCacheEnabled, getCache } from '../cache';
-import { getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -33,18 +33,22 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
-import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
-import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
-import { GoogleChatProvider } from './google';
+import { AnthropicMessagesProvider } from './anthropic/messages';
+import { calculateAnthropicCost } from './anthropic/util';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
+import { calculateAzureCost } from './azure/util';
+import { AIStudioChatProvider } from './google/ai.studio';
+import { getGoogleClient } from './google/util';
+import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { OpenAiCompletionOptions } from './openai/types';
 import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
-import { getGoogleClient } from './vertexUtil';
 import { VoyageEmbeddingProvider } from './voyage';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
@@ -409,7 +413,9 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         gatewayMessages = parseChatPrompt(prompt, [
           { role: 'user', content: [{ modality: 'text', value: prompt }] },
         ]);
-        gatewayTools = _config.tools as GatewayToolType[];
+        gatewayTools = _config.tools
+          ? (maybeLoadToolsFromExternalFile(_config.tools) as GatewayToolType[])
+          : undefined;
       }
 
       if (this.providerName === 'openai') {
@@ -453,7 +459,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         });
       } else if (this.providerName === 'google') {
         const provider = new GatewayGoogle();
-        const parentClass = new GoogleChatProvider(this.modelName, this.providerOptions);
+        const parentClass = new AIStudioChatProvider(this.modelName, this.providerOptions);
         const apiKey = parentClass.getApiKey();
         if (!apiKey) {
           throw new Error(
@@ -514,7 +520,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         });
       } else if (this.providerName === 'openrouter') {
         const provider = new GatewayOpenRouter();
-        const apiKey = this.config.apiKey || process.env['OPENROUTER_API_KEY'];
+        const apiKey = this.config.apiKey || getEnvString('OPENROUTER_API_KEY');
         if (!apiKey) {
           throw new Error(
             'OpenRouter API key is not set. Set the OPENROUTER_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -536,7 +542,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           gatewayConfig.presencePenalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0);
       } else if (this.providerName === 'togetherai') {
         const provider = new GatewayTogetherAi();
-        const apiKey = this.config.apiKey || process.env['TOGETHER_API_KEY'];
+        const apiKey = this.config.apiKey || getEnvString('TOGETHER_API_KEY');
         if (!apiKey) {
           throw new Error(
             'TogetherAI API key is not set. Set the TOGETHER_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -609,18 +615,19 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         if (formatType === 'openai') {
           // convert gateway message type to openai message type if it's more than just text content
           if (
-            response.response.messages[0].content.filter((content) => content.modality === 'text')
-              .length > 0
+            response.response.messages[0].content.filter(
+              (content: any) => content.modality === 'text',
+            ).length > 0
           ) {
             // response has both text and tool-call content
             output = {
               content: response.response.messages[0].content
-                .filter((content) => content.modality === 'text')
-                .map((content) => content.value)
+                .filter((content: any) => content.modality === 'text')
+                .map((content: any) => content.value)
                 .join(' '),
               tool_calls: response.response.messages[0].content
-                .filter((content) => content.modality === 'tool-call')
-                .map((content) => {
+                .filter((content: any) => content.modality === 'tool-call')
+                .map((content: any) => {
                   return {
                     id: content.id,
                     type: 'function',
@@ -634,8 +641,8 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           } else {
             // response has only tool-call content
             output = response.response.messages[0].content
-              .filter((content) => content.modality === 'tool-call')
-              .map((content) => {
+              .filter((content: any) => content.modality === 'tool-call')
+              .map((content: any) => {
                 return {
                   id: content.id,
                   type: 'function',
@@ -676,7 +683,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         );
       }
 
-      const logProbs = response.response.logProbs?.map((logProb) => logProb.logProb);
+      const logProbs = response.response.logProbs?.map((logProb: any) => logProb.logProb);
       const tokenUsage: TokenUsage = {};
       if (response.cached) {
         tokenUsage.cached = response.response.usage?.totalTokens;

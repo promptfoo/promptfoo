@@ -91,7 +91,6 @@ export class ScriptCompletionProvider implements ApiProvider {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
       // These are not useful in the shell
-      delete context?.fetchWithCache;
       delete context?.getCache;
       delete context?.logger;
       const scriptArgs = scriptParts.concat([

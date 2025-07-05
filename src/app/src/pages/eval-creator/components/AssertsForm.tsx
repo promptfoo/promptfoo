@@ -32,6 +32,7 @@ const assertTypes: AssertionType[] = [
   //'python',
   'similar',
   'llm-rubric',
+  'pi',
   'model-graded-closedqa',
   'factuality',
   'webhook',
@@ -52,6 +53,7 @@ const assertTypes: AssertionType[] = [
   'not-similar',
   'not-webhook',
   'not-rouge-n',
+  'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'latency',
@@ -64,6 +66,7 @@ const assertTypes: AssertionType[] = [
   'context-relevance',
   'select-best',
   'moderation',
+  'finish-reason',
 ];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {

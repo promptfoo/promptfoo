@@ -1,3 +1,11 @@
+# cohere (Cohere)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example cohere
+```
+
 To get started, set your COHERE_API_KEY environment variable.
 
 Next, edit promptfooconfig.yaml.

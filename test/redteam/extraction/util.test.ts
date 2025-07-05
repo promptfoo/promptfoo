@@ -16,7 +16,7 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
 describe('fetchRemoteGeneration', () => {
@@ -26,7 +26,7 @@ describe('fetchRemoteGeneration', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/task');
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
   });
 
   it('should fetch remote generation for purpose task', async () => {
@@ -45,7 +45,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toBe('This is a purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.app/task',
+      'https://api.promptfoo.app/api/v1/task',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -77,7 +77,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toEqual(['Entity1', 'Entity2']);
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.app/task',
+      'https://api.promptfoo.app/api/v1/task',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

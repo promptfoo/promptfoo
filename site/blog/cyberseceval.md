@@ -1,6 +1,20 @@
 ---
-date: 2024-12-21
+title: 'How to run CyberSecEval'
+description: "Even top models fail 25-50% of prompt injection attacks. Use Meta's CyberSecEval benchmark to see how vulnerable your LLM really is to these critical security flaws."
 image: /img/blog/cyberseceval/cyberseceval-illustration.jpg
+keywords:
+  [
+    CyberSecEval,
+    LLM security testing,
+    prompt injection,
+    cybersecurity evaluation,
+    AI security,
+    model vulnerability testing,
+    red teaming,
+    LLM benchmarks,
+  ]
+date: 2024-12-21
+authors: [ian]
 ---
 
 # How to run CyberSecEval

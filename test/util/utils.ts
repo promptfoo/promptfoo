@@ -13,27 +13,36 @@ export class TestGrader implements ApiProvider {
   }
 }
 
-export function createMockResponse(options: Partial<Response> = {}): Response {
+export function createMockResponse(
+  options: {
+    ok?: boolean;
+    body?: any;
+    statusText?: string;
+    status?: number;
+    headers?: Headers;
+    text?: () => Promise<string>;
+    json?: () => Promise<any>;
+  } = { ok: true },
+): Response {
+  const isOk = options.ok ?? (options.status ? options.status < 400 : true);
   const mockResponse: Response = {
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    headers: new Headers(),
+    ok: isOk,
+    status: options.status || (isOk ? 200 : 400),
+    statusText: options.statusText || (isOk ? 'OK' : 'Bad Request'),
+    headers: options.headers || new Headers(),
     redirected: false,
     type: 'basic',
     url: 'https://example.com',
-    json: () => Promise.resolve({}),
-    text: () => Promise.resolve(''),
+    json: options.json || (() => Promise.resolve(options.body || {})),
+    text: options.text || (() => Promise.resolve('')),
     blob: () => Promise.resolve(new Blob()),
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     formData: () => Promise.resolve(new FormData()),
-    bytes: () => Promise.resolve(new Uint8Array()),
     bodyUsed: false,
     body: null,
     clone() {
-      return createMockResponse(this);
+      return createMockResponse(options);
     },
-    ...options,
   } as Response;
   return mockResponse;
 }

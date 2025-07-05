@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Vertex Claude Code Analysis'
+
+prompts:
+  - 'Analyze this code and list any potential issues: ```{{code}}```'
+
+providers:
+  - id: vertex:claude-3-5-sonnet-v2@20241022
+    label: Claude 3.5 Sonnet v2
+    config:
+      region: us-east5
+tests:
+  - vars:
+      code: |
+        def calculate_average(numbers):
+            total = 0
+            for num in numbers:
+                total += num
+            return total / len(numbers)
+  - vars:
+      code: |
+        def fibonacci(n):
+            if n <= 1:
+                return n
+            return fibonacci(n-1) + fibonacci(n-2)
+  - vars:
+      code: |
+        def search_list(items, target):
+            for i in range(len(items)):
+                if items[i] == target:
+                    return i
+            return -1
