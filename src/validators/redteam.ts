@@ -5,6 +5,7 @@ import {
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
+  DATASET_PLUGIN_ALIASES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES,
   COLLECTIONS,
@@ -27,6 +28,7 @@ export const pluginOptions: string[] = [
   ...COLLECTIONS,
   ...REDTEAM_ALL_PLUGINS,
   ...ALIASED_PLUGINS,
+  ...Object.keys(DATASET_PLUGIN_ALIASES),
 ].sort();
 /**
  * Schema for individual redteam plugins
@@ -281,6 +283,10 @@ export const RedteamConfigSchema = z
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
+
+      if (DATASET_PLUGIN_ALIASES[pluginObj.id]) {
+        pluginObj.id = DATASET_PLUGIN_ALIASES[pluginObj.id];
+      }
 
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {

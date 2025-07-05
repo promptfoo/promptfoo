@@ -31,10 +31,10 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
-  'beavertails',
+  'dataset:beavertails',
   'contracts',
-  'cyberseceval',
-  'donotanswer',
+  'dataset:cyberseceval',
+  'dataset:donotanswer',
   'divergent-repetition',
   'excessive-agency',
   'hallucination',
@@ -67,7 +67,7 @@ export const FOUNDATION_PLUGINS = [
   'imitation',
   'overreliance',
   'pii:direct',
-  'pliny',
+  'dataset:pliny',
   'politics',
   'religion',
 ] as const;
@@ -79,10 +79,10 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'cca',
   'hijacking',
   'system-prompt-override',
-  'beavertails',
-  'harmbench',
-  'pliny',
-  'donotanswer',
+  'dataset:beavertails',
+  'dataset:harmbench',
+  'dataset:pliny',
+  'dataset:donotanswer',
   'prompt-extraction',
 
   // === HARMFUL CONTENT ===
@@ -128,7 +128,7 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:intellectual-property',
 
   // === SYSTEM SECURITY & INTEGRITY ===
-  'cyberseceval',
+  'dataset:cyberseceval',
   'excessive-agency',
   'hallucination',
   'overreliance',
@@ -222,20 +222,20 @@ export const BASE_PLUGINS = [
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
-  'aegis',
+  'dataset:aegis',
   'ascii-smuggling',
-  'beavertails',
+  'dataset:beavertails',
   'bfla',
   'bola',
   'cca',
   'competitors',
   'cross-session-leak',
-  'cyberseceval',
+  'dataset:cyberseceval',
   'debug-access',
   'divergent-repetition',
-  'donotanswer',
-  'harmbench',
-  'toxic-chat',
+  'dataset:donotanswer',
+  'dataset:harmbench',
+  'dataset:toxic-chat',
   'imitation',
   'indirect-prompt-injection',
   'mcp',
@@ -251,7 +251,7 @@ export const ADDITIONAL_PLUGINS = [
   'financial:sycophancy',
   'off-topic',
   'overreliance',
-  'pliny',
+  'dataset:pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
@@ -263,8 +263,9 @@ export const ADDITIONAL_PLUGINS = [
   'ssrf',
   'system-prompt-override',
   'tool-discovery',
-  'unsafebench',
-  'xstest',
+  'tool-discovery:multi-turn',
+  'dataset:unsafebench',
+  'dataset:xstest',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -278,8 +279,22 @@ export const AGENTIC_EXEMPT_PLUGINS = [
   MEMORY_POISONING_PLUGIN_ID,
 ] as const;
 
+// All dataset plugins
+export const DATASET_PLUGINS = [
+  'dataset:aegis',
+  'dataset:beavertails',
+  'dataset:cyberseceval',
+  'dataset:donotanswer',
+  'dataset:harmbench',
+  'dataset:toxic-chat',
+  'dataset:pliny',
+  'dataset:unsafebench',
+  'dataset:xstest',
+] as const;
+export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
+
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+export const DATASET_EXEMPT_PLUGINS = ['dataset:pliny', 'dataset:unsafebench'] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -299,7 +314,8 @@ export type Plugin =
   | HarmPlugin
   | PIIPlugin
   | BiasPlugin
-  | AgenticPlugin;
+  | AgenticPlugin
+  | DatasetPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[
@@ -316,5 +332,6 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...ADDITIONAL_PLUGINS,
     ...CONFIG_REQUIRED_PLUGINS,
     ...AGENTIC_PLUGINS,
+    ...DATASET_PLUGINS,
   ]),
 ].sort() as Plugin[];

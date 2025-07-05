@@ -293,7 +293,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
     plugins: [
       'excessive-agency',
       'overreliance',
-      'pliny',
+      'dataset:pliny',
       'competitors',
       'imitation',
       'politics',

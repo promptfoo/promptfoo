@@ -26,20 +26,35 @@ describe('getGraderById', () => {
     const asciiGrader = getGraderById('promptfoo:redteam:ascii-smuggling');
     expect(asciiGrader).toBeInstanceOf(AsciiSmugglingGrader);
 
-    const beavertailsGrader = getGraderById('promptfoo:redteam:beavertails');
-    expect(beavertailsGrader).toBeInstanceOf(BeavertailsGrader);
-
     const harmfulGrader = getGraderById('promptfoo:redteam:harmful');
     expect(harmfulGrader).toBeInstanceOf(HarmfulGrader);
 
     const unsafebenchGrader = getGraderById('promptfoo:redteam:unsafebench');
     expect(unsafebenchGrader).toBeInstanceOf(UnsafeBenchGrader);
 
-    const plinyGrader = getGraderById('promptfoo:redteam:pliny');
+    const unsafebenchDatasetGrader = getGraderById('promptfoo:redteam:dataset:unsafebench');
+    expect(unsafebenchDatasetGrader).toBeInstanceOf(UnsafeBenchGrader);
+
+    const plinyGrader = getGraderById('promptfoo:redteam:dataset:pliny');
     expect(plinyGrader).toBeInstanceOf(PlinyGrader);
 
-    const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
+    const toxicChatGrader = getGraderById('promptfoo:redteam:dataset:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
+
+    const aegisGrader = getGraderById('promptfoo:redteam:aegis');
+    expect(aegisGrader).toBeInstanceOf(AegisGrader);
+
+    const aegisDatasetGrader = getGraderById('promptfoo:redteam:dataset:aegis');
+    expect(aegisDatasetGrader).toBeInstanceOf(AegisGrader);
+
+    const beavertailsGrader = getGraderById('promptfoo:redteam:beavertails');
+    expect(beavertailsGrader).toBeInstanceOf(BeavertailsGrader);
+
+    const beavertailsDatasetGrader = getGraderById('promptfoo:redteam:dataset:beavertails');
+    expect(beavertailsDatasetGrader).toBeInstanceOf(BeavertailsGrader);
+
+    const toolDiscoveryGrader = getGraderById('promptfoo:redteam:tool-discovery');
+    expect(toolDiscoveryGrader).toBeInstanceOf(ToolDiscoveryGrader);
 
     const financialCalculationGrader = getGraderById(
       'promptfoo:redteam:financial:calculation-error',
@@ -60,9 +75,6 @@ describe('getGraderById', () => {
     const financialSycophancyGrader = getGraderById('promptfoo:redteam:financial:sycophancy');
     expect(financialSycophancyGrader).toBeInstanceOf(FinancialSycophancyPluginGrader);
 
-    const aegisGrader = getGraderById('promptfoo:redteam:aegis');
-    expect(aegisGrader).toBeInstanceOf(AegisGrader);
-
     const mcpGrader = getGraderById('promptfoo:redteam:mcp');
     expect(mcpGrader).toBeInstanceOf(MCPPluginGrader);
 
@@ -74,9 +86,6 @@ describe('getGraderById', () => {
 
     const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
     expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
-
-    const toolDiscoveryGrader = getGraderById('promptfoo:redteam:tool-discovery');
-    expect(toolDiscoveryGrader).toBeInstanceOf(ToolDiscoveryGrader);
 
     const biasGrader = getGraderById('promptfoo:redteam:bias');
     expect(biasGrader).toBeInstanceOf(BiasGrader);

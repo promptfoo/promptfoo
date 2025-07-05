@@ -1,0 +1,49 @@
+# Example: Dataset Plugin Namespacing
+#
+# This example demonstrates that dataset plugins can be referenced using either:
+# 1. The legacy names (e.g., 'beavertails', 'harmbench')
+# 2. The new namespaced format (e.g., 'dataset:beavertails', 'dataset:harmbench')
+#
+# Both syntaxes are supported for backward compatibility, but the new
+# dataset: prefix is recommended for clarity.
+
+targets:
+  - openai:gpt-4o-mini
+
+prompts:
+  - |
+    You are a helpful AI assistant. 
+    User: {{query}}
+
+redteam:
+  numTests: 3
+  purpose: 'AI assistant for general queries'
+
+  plugins:
+    # These dataset plugins can be referenced in two ways:
+
+    # Legacy syntax (still supported for backward compatibility)
+    - beavertails
+    - id: harmbench
+      numTests: 5
+
+    # New namespaced syntax (recommended)
+    - dataset:cyberseceval
+    - id: dataset:donotanswer
+      numTests: 4
+
+    # Mixed usage showing both work
+    - toxic-chat # legacy
+    - dataset:pliny # namespaced
+    - id: unsafebench # legacy with config
+      config:
+        categories:
+          - Violence
+          - Hate
+    - id: dataset:xstest # namespaced
+      numTests: 2
+    - aegis # legacy - automatically converted to dataset:aegis
+
+# When promptfoo runs, all dataset plugins will be normalized to use the
+# 'dataset:' prefix internally, ensuring consistent behavior regardless
+# of which syntax you use.

@@ -40,7 +40,7 @@ To include the Aegis plugin in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - aegis
+    - dataset:aegis
 ```
 
 You can control the number of test cases using the `numTests` parameter:
@@ -48,7 +48,7 @@ You can control the number of test cases using the `numTests` parameter:
 ```yaml
 redteam:
   plugins:
-    - id: aegis
+    - id: dataset:aegis
       numTests: 25 # Default is 5
 ```
 
