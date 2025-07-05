@@ -41,7 +41,7 @@ tests:
         - input: 'What is 2+2?'
           output: '2+2 equals 4.'
         - input: 'What about 3+3?'
-          output: 'The capital of France is Paris.'  # Completely irrelevant
+          output: 'The capital of France is Paris.' # Completely irrelevant
         - input: 'Can you solve 5+5?'
           output: '5+5 equals 10.'
     assert:
@@ -76,4 +76,4 @@ tests:
       - type: conversation-relevance
         threshold: 0.9
         config:
-          windowSize: 3 
+          windowSize: 3

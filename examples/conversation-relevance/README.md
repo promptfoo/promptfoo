@@ -36,8 +36,9 @@ This example includes several test scenarios:
 ## Scoring
 
 The metric calculates:
+
 ```
 Score = Number of Relevant Windows / Total Number of Windows
 ```
 
-A window is considered relevant if the last assistant message in that window is relevant to the conversational context. 
+A window is considered relevant if the last assistant message in that window is relevant to the conversational context.
