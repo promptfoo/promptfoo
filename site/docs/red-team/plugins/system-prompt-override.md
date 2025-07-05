@@ -16,6 +16,8 @@ The impact of a successful system prompt override can be devastating. An attacke
 
 This vulnerability is a critical part of [LLM01: Prompt Injection](/docs/red-team/owasp-llm-top-10#1-prompt-injection-llm01) in the OWASP LLM Top 10. While standard prompt injection tries to manipulate the model's output, system prompt override attempts to change its fundamental operating instructions - making it a particularly dangerous form of attack.
 
+System prompt override is also closely related to [LLM07:2025 System Prompt Leakage](https://genai.owasp.org/llmrisk/llm072025-system-prompt-leakage/), as successful override attacks can often reveal information about the original system prompt structure and may lead to complete exposure of system instructions.
+
 ## Plugin Usage
 
 ### Configuration

@@ -23,6 +23,7 @@ import { AegisPlugin } from './aegis';
 import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
+import { BoplaPlugin } from './bopla';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';
@@ -44,10 +45,12 @@ import { PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
+import { ResourceConsumptionPlugin } from './resourceConsumption';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
+import { UnrestrictedAccessPlugin } from './unrestrictedAccess';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
@@ -163,6 +166,7 @@ const pluginFactories: PluginFactory[] = [
       category,
     ),
   ),
+  createPluginFactory<{ targetProperties?: string[] }>(BoplaPlugin, 'bopla'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
@@ -188,8 +192,13 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory(RbacPlugin, 'rbac'),
+  createPluginFactory<{ targetResources?: string[] }>(
+    ResourceConsumptionPlugin,
+    'resource-consumption',
+  ),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory<{ targetFlows?: string[] }>(UnrestrictedAccessPlugin, 'unrestricted-access'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
