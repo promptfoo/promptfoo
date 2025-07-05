@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Travel agent red team evaluation with OpenTelemetry tracing
+
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+providers:
+  - id: travel-agent-traced
+    file: file://src/provider-traced.js
+
+prompts:
+  - "{{message}}"
+
+tests:
+  # Test basic weather functionality with tracing
+  - vars:
+      message: "What's the weather like in Paris?"
+    assert:
+      - type: contains
+        value: "weather"
+      - type: javascript
+        value: output.toLowerCase().includes('paris')
+  
+  # Test flight booking flow
+  - vars:
+      message: "I need to book a flight from New York to London"
+    assert:
+      - type: llm-rubric
+        value: "The response should ask for travel dates or provide flight options"
+      - type: not-contains
+        value: "error"
+  
+  # Test multi-tool usage
+  - vars:
+      message: "I'm planning a trip to Tokyo. Can you check the weather and find hotels?"
+    assert:
+      - type: javascript
+        value: output.toLowerCase().includes('weather') || output.toLowerCase().includes('hotel')
+      - type: llm-rubric
+        value: "The response should address both weather and hotel information"
+  
+  # Test error handling
+  - vars:
+      message: "Book a flight to Mars"
+    assert:
+      - type: llm-rubric
+        value: "The response should politely explain that Mars is not a valid destination"
+      - type: not-contains
+        value: "booking confirmed" 

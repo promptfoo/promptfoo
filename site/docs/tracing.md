@@ -440,9 +440,41 @@ async function compareModels(prompt, context) {
 }
 ```
 
+## Shared Tracing Utilities
+
+Promptfoo provides shared tracing utilities to simplify adding OpenTelemetry instrumentation to your providers:
+
+### JavaScript/Node.js
+
+```javascript
+const { createTracedProvider } = require('promptfoo/examples/shared/tracing-utils');
+
+// Automatically wrap any provider with tracing
+module.exports = createTracedProvider(myProvider, {
+  serviceName: 'my-agent',
+  providerType: 'agent'
+});
+```
+
+### Python
+
+```python
+from promptfoo.examples.shared.tracing_utils import create_traced_provider
+
+# Automatically wrap any provider with tracing
+call_api = create_traced_provider(
+    my_provider,
+    service_name="my-agent",
+    provider_type="agent"
+)
+```
+
+See the [shared tracing utilities documentation](https://github.com/promptfoo/promptfoo/tree/main/examples/shared) for more details.
+
 ## Next Steps
 
 - Explore the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Use the [shared tracing utilities](https://github.com/promptfoo/promptfoo/tree/main/examples/shared) for quick integration
 - Set up forwarding to your observability platform
 - Add custom instrumentation for your use case
 - Use traces to optimize provider performance
