@@ -23,6 +23,7 @@ import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,
+  isOtlpReceiverStarted,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
@@ -227,6 +228,7 @@ export async function runEval({
     vars,
   };
   let latencyMs = 0;
+  let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> = null;
 
   try {
     // Render the prompt
@@ -262,12 +264,7 @@ export async function runEval({
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
       // Generate trace context if tracing is enabled
-      const traceContext = await generateTraceContextIfNeeded(
-        test,
-        evaluateOptions,
-        testIdx,
-        promptIdx,
-      );
+      traceContext = await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx);
 
       const callApiContext: any = {
         // Always included
@@ -394,6 +391,17 @@ export async function runEval({
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Extract traceId from traceparent if available
+      let traceId: string | undefined;
+      if (traceContext?.traceparent) {
+        // traceparent format: version-traceId-spanId-flags
+        const parts = traceContext.traceparent.split('-');
+        if (parts.length >= 3) {
+          traceId = parts[1];
+        }
+      }
+
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
@@ -401,6 +409,7 @@ export async function runEval({
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+        traceId,
       });
 
       if (!checkResult.pass) {
@@ -736,7 +745,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.recordAndSendOnce('feature_used', {
+      telemetry.record('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {
@@ -1604,6 +1613,11 @@ class Evaluator {
     try {
       return await this._runEvaluation();
     } finally {
+      // Add a delay to allow providers to finish exporting spans
+      if (isOtlpReceiverStarted()) {
+        logger.debug('[Evaluator] Waiting for span exports to complete...');
+        await sleep(1000); // Wait 1 second for any remaining spans to be exported
+      }
       // Stop OTLP receiver if it was started
       await stopOtlpReceiverIfNeeded();
     }

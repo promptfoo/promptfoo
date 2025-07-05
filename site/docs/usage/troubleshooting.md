@@ -217,25 +217,22 @@ Alternatively, you can use the `--verbose` flag:
 npx promptfoo eval --verbose
 ```
 
-### Using a debugger
+### Using the Python debugger (pdb)
 
-While standard Python debuggers like `pdb` are not directly supported, you can use `remote-pdb` for debugging. First, install `remote-pdb`:
+Promptfoo now supports native Python debugging with pdb. To enable it:
 
 ```bash
-pip install remote-pdb
+export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
 ```
 
-Then, add the following lines to your Python script where you want to set a breakpoint:
+Then add breakpoints in your Python code:
 
 ```python
-from remote_pdb import RemotePdb
-RemotePdb('127.0.0.1', 4444).set_trace()
-```
+import pdb
 
-When your code reaches this point, it will pause execution and wait for you to connect to the debugger. You can then connect to the debugger using a tool like `telnet`:
-
-```bash
-telnet 127.0.0.1 4444
+def call_api(prompt, options, context):
+    pdb.set_trace()  # Debugger will pause here
+    # Your code...
 ```
 
 ### Handling errors

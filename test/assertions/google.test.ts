@@ -9,7 +9,10 @@ import { VertexChatProvider } from '../../src/providers/google/vertex';
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types';
 
 jest.mock('fs');
-jest.mock('path');
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  resolve: jest.fn(),
+}));
 
 const mockedFs = jest.mocked(fs);
 const mockedPath = jest.mocked(path);

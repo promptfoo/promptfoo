@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-table';
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
 import {
@@ -189,6 +189,7 @@ function ResultsTable({
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -886,9 +887,9 @@ function ResultsTable({
     const url = new URL(window.location.href);
     if (url.searchParams.has('rowId')) {
       url.searchParams.delete('rowId');
-      window.history.replaceState({}, '', url);
+      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
