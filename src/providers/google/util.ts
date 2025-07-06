@@ -455,7 +455,69 @@ export function geminiFormatAndSystemInstructions(
     throw new Error(`Template error: system instruction defined in prompt and config.`);
   }
 
+  // Process images in contents
+  contents = processImagesInContents(contents);
+
   return { contents, systemInstruction };
+}
+
+function processImagesInContents(contents: GeminiFormat): GeminiFormat {
+  return contents.map(content => {
+    if (content.parts) {
+      const newParts: Part[] = [];
+      
+      for (const part of content.parts) {
+        if (part.text) {
+          // Check if text contains base64 image data
+          const base64ImageRegex = /^\/9j\/|^iVBORw0KGgo|^R0lGODlh|^UklGRg/;
+          const lines = part.text.split('\n');
+          
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            
+            if (base64ImageRegex.test(trimmedLine) && trimmedLine.length > 100) {
+              // This looks like base64 image data
+              const mimeType = getMimeTypeFromBase64(trimmedLine);
+              newParts.push({
+                inlineData: {
+                  mimeType,
+                  data: trimmedLine
+                }
+              });
+            } else if (trimmedLine.length > 0) {
+              // Regular text
+              newParts.push({
+                text: trimmedLine
+              });
+            }
+          }
+        } else {
+          // Keep non-text parts as is
+          newParts.push(part);
+        }
+      }
+      
+      return {
+        ...content,
+        parts: newParts
+      };
+    }
+    return content;
+  });
+}
+
+function getMimeTypeFromBase64(base64Data: string): string {
+  if (base64Data.startsWith('/9j/')) {
+    return 'image/jpeg';
+  } else if (base64Data.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  } else if (base64Data.startsWith('R0lGODlh')) {
+    return 'image/gif';
+  } else if (base64Data.startsWith('UklGRg')) {
+    return 'image/webp';
+  }
+  // Default to jpeg for unknown formats
+  return 'image/jpeg';
 }
 
 /**

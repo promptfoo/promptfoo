@@ -1,0 +1,17 @@
+description: 'Image captioning'
+
+prompts: |
+  {{imageFile}}
+  Describe what you see.
+
+providers:
+  - id: 'google:gemini-2.5-flash'
+    config:
+      mediaConfig: file://media-config.json
+
+tests:
+  - vars:
+      imageFile: file://red-panda.png
+    assert:
+      - type: javascript
+        value: output.length > 10
