@@ -15,6 +15,7 @@ import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { getProviderIds } from '../../providers';
+import { MCPProvider } from '../../providers/mcp';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
@@ -88,6 +89,82 @@ function createHeaderComments({
     `  Strategies:  ${strategies.map((s) => s.id).join(', ')}`,
     `===================================================================`,
   ].filter(Boolean) as string[];
+}
+
+/**
+ * Helper function to check if a provider path indicates an MCP provider
+ */
+function isMcpProviderPath(providerPath: string): boolean {
+  return providerPath === 'mcp' || providerPath.startsWith('mcp:');
+}
+
+/**
+ * Helper function to get provider path from ApiProvider
+ */
+function getProviderPath(provider: ApiProvider): string | null {
+  // Try to get the provider ID/path - this might vary depending on how providers store their identifier
+  if (typeof provider.id === 'function') {
+    return provider.id();
+  }
+  if (typeof provider.id === 'string') {
+    return provider.id;
+  }
+  return null;
+}
+
+/**
+ * Extract tools information from MCP providers and format for red team purpose
+ */
+async function extractMcpToolsInfo(providers: ApiProvider[]): Promise<string> {
+  const mcpProviders: MCPProvider[] = [];
+
+  // Find MCP providers
+  for (const provider of providers) {
+    const providerPath = getProviderPath(provider);
+    if (providerPath && isMcpProviderPath(providerPath) && provider instanceof MCPProvider) {
+      mcpProviders.push(provider);
+    }
+  }
+
+  if (mcpProviders.length === 0) {
+    return '';
+  }
+
+  const toolsInfo: string[] = [];
+
+  for (const mcpProvider of mcpProviders) {
+    try {
+      // Wait a moment for MCP provider initialization to complete
+      // The MCPProvider initializes automatically in the constructor
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const tools = mcpProvider.getAvailableTools();
+
+      if (tools.length > 0) {
+        toolsInfo.push('\nAvailable MCP tools:');
+
+        for (const tool of tools) {
+          let toolDesc = `- ${tool.name}: ${tool.description}`;
+
+          // Add parameter information if available
+          if (tool.inputSchema?.properties) {
+            const params = Object.keys(tool.inputSchema.properties);
+            if (params.length > 0) {
+              toolDesc += ` (parameters: ${params.join(', ')})`;
+            }
+          }
+
+          toolsInfo.push(toolDesc);
+        }
+      }
+    } catch (error) {
+      logger.warn(
+        `Failed to get tools from MCP provider: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  return toolsInfo.join('\n');
 }
 
 export async function doGenerateRedteam(
@@ -301,6 +378,20 @@ export async function doGenerateRedteam(
     .map((provider: ApiProvider) => provider?.label)
     .filter(Boolean);
 
+  // Extract MCP tools information and add to purpose
+  let enhancedPurpose = parsedConfig.data.purpose || '';
+  try {
+    const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
+    if (mcpToolsInfo) {
+      enhancedPurpose = enhancedPurpose ? `${enhancedPurpose}\n\n${mcpToolsInfo}` : mcpToolsInfo;
+      logger.info('Added MCP tools information to red team purpose');
+    }
+  } catch (error) {
+    logger.warn(
+      `Failed to extract MCP tools information: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   const {
     testCases: redteamTests,
     purpose,
@@ -308,6 +399,7 @@ export async function doGenerateRedteam(
     injectVar: finalInjectVar,
   } = await synthesize({
     ...parsedConfig.data,
+    purpose: enhancedPurpose,
     language: config.language,
     numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),

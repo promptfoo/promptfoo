@@ -34,6 +34,7 @@ export class MCPClient {
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
     for (const server of servers) {
+      logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
       await this.connectToServer(server);
     }
   }
