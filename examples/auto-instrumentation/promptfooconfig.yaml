@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Demonstrate automatic instrumentation for Python providers
+
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+prompts:
+  - "{{question}}"
+
+providers:
+  # Provider with manual instrumentation
+  - id: manual
+    label: "Manual Instrumentation"
+    python: providers/manual_provider.py
+  
+  # Provider with automatic instrumentation
+  - id: auto
+    label: "Auto Instrumentation"
+    python: providers/auto_provider.py
+  
+  # Provider with both
+  - id: hybrid
+    label: "Hybrid Instrumentation"
+    python: providers/hybrid_provider.py
+
+tests:
+  - vars:
+      question: "What's the capital of France?"
+    assert:
+      - type: contains
+        value: "Paris"
+  
+  - vars:
+      question: "Calculate 25 * 4 + 10"
+    assert:
+      - type: contains
+        value: "110"
+  
+  - vars:
+      question: "Tell me about OpenTelemetry"
+    assert:
+      - type: llm-rubric
+        value: "Response mentions distributed tracing or observability" 

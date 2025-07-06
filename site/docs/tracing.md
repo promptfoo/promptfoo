@@ -471,9 +471,58 @@ call_api = create_traced_provider(
 
 See the [shared tracing utilities documentation](https://github.com/promptfoo/promptfoo/tree/main/examples/shared) for more details.
 
+## Automatic Instrumentation
+
+For Python providers, you can enable automatic instrumentation with zero code changes:
+
+```python
+# Just add this import at the top of your provider
+import auto_instrument
+
+# That's it! The following libraries are now automatically traced:
+# - OpenAI API calls
+# - HTTP requests (requests, urllib3, httpx)
+# - Database queries (SQLAlchemy, Redis)
+# - AWS SDK calls (boto3)
+# - And more...
+```
+
+See the [auto-instrumentation example](https://github.com/promptfoo/promptfoo/tree/main/examples/auto-instrumentation) for details.
+
+## Agent Framework Tracing
+
+When evaluating agent frameworks, Promptfoo provides specialized tracing support:
+
+### Framework-Specific Examples
+
+- **[PydanticAI](/docs/guides/evaluate-pydantic-ai-agents)** - Type-safe agents with structured outputs
+- **[Mozilla Any-Agent](/docs/guides/evaluate-any-agent-framework)** - Framework-agnostic agent interface
+- **[OpenAI Agents SDK](/docs/guides/evaluate-openai-agents-sdk)** - Multi-agent orchestration
+- **[Agent Framework Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/agent-framework-comparison)** - Compare multiple frameworks side-by-side
+
+### Tool Function Tracing
+
+When tracing agents with tools, wrap tool functions to capture their execution:
+
+```javascript
+const { wrapToolWithTracing } = require('promptfoo/examples/shared/tracing-utils');
+
+const tools = [
+  wrapToolWithTracing({
+    name: 'search',
+    func: async (query) => {
+      // Tool implementation
+      return results;
+    }
+  }, tracer)
+];
+```
+
 ## Next Steps
 
 - Explore the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Try [automatic instrumentation](https://github.com/promptfoo/promptfoo/tree/main/examples/auto-instrumentation) for zero-code tracing
+- Compare [agent frameworks with tracing](https://github.com/promptfoo/promptfoo/tree/main/examples/agent-framework-comparison)
 - Use the [shared tracing utilities](https://github.com/promptfoo/promptfoo/tree/main/examples/shared) for quick integration
 - Set up forwarding to your observability platform
 - Add custom instrumentation for your use case

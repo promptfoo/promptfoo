@@ -1,0 +1,112 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare multiple agent frameworks with OpenTelemetry tracing
+
+# Enable comprehensive tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+# Define common prompts for all agents
+prompts:
+  - "{{task}}"
+
+# Compare different agent frameworks
+providers:
+  # PydanticAI Agent
+  - id: pydantic-ai
+    label: "PydanticAI"
+    python: providers/pydantic_provider.py
+    config:
+      framework: "pydantic-ai"
+      model: "gpt-4o-mini"
+  
+  # Mozilla Any-Agent (TinyAgents)
+  - id: any-agent-tiny
+    label: "Any-Agent (TinyAgents)"
+    python: providers/anyagent_provider.py
+    config:
+      framework: "tinyagent"
+      model: "gpt-4.1"
+  
+  # Mozilla Any-Agent (LangChain)
+  - id: any-agent-langchain
+    label: "Any-Agent (LangChain)"
+    python: providers/anyagent_provider.py
+    config:
+      framework: "langchain"
+      model: "gpt-4.1"
+  
+  # OpenAI Agents SDK
+  - id: openai-agents
+    label: "OpenAI Agents"
+    python: providers/openai_agents_provider.py
+    config:
+      model: "gpt-4.1"
+  
+  # LangChain ReAct Agent
+  - id: langchain-react
+    label: "LangChain ReAct"
+    file: providers/langchain_provider.js
+    config:
+      model: "gpt-4.1"
+  
+  # Direct LLM (baseline)
+  - id: openai:gpt-4.1
+    label: "Direct GPT-4"
+
+# Test scenarios
+tests:
+  # Test 1: Simple task
+  - vars:
+      task: "What's the weather like in Paris?"
+    assert:
+      - type: contains-any
+        value: ["weather", "Paris", "temperature", "forecast"]
+      - type: latency
+        threshold: 5000
+  
+  # Test 2: Multi-step reasoning
+  - vars:
+      task: "Plan a 3-day trip to Tokyo including weather check, hotel recommendations, and must-see attractions"
+    assert:
+      - type: llm-rubric
+        value: "Response should include weather information, hotel suggestions, and tourist attractions"
+      - type: javascript
+        value: |
+          const hasWeather = output.toLowerCase().includes('weather') || output.toLowerCase().includes('temperature');
+          const hasHotels = output.toLowerCase().includes('hotel') || output.toLowerCase().includes('stay');
+          const hasAttractions = output.toLowerCase().includes('attraction') || output.toLowerCase().includes('visit');
+          return hasWeather && hasHotels && hasAttractions;
+  
+  # Test 3: Tool usage
+  - vars:
+      task: "Calculate the compound interest on $10,000 at 5% annual rate for 3 years"
+    assert:
+      - type: contains-any
+        value: ["11,576", "11576", "1,576", "1576", "15.76%"]
+      - type: llm-rubric
+        value: "Response should show the calculation process or formula"
+  
+  # Test 4: Error handling
+  - vars:
+      task: "Book a flight to Mars next Tuesday"
+    assert:
+      - type: llm-rubric
+        value: "Response should politely explain this is not possible"
+      - type: not-contains
+        value: "booking confirmed"
+  
+  # Test 5: Context awareness
+  - vars:
+      task: "I'm a software developer. Recommend tools to improve my productivity."
+    assert:
+      - type: contains-any
+        value: ["IDE", "Git", "debugging", "testing", "CI/CD", "version control"]
+      - type: llm-rubric
+        value: "Recommendations should be specific to software development"
+
+# Output configuration
+outputPath: results/agent-comparison.json 

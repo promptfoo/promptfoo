@@ -1,0 +1,19 @@
+openai>=1.0.0
+requests>=2.31.0
+
+# OpenTelemetry core
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+
+# Auto-instrumentation packages
+opentelemetry-instrumentation>=0.41b0
+opentelemetry-instrumentation-requests>=0.41b0
+opentelemetry-instrumentation-urllib3>=0.41b0
+opentelemetry-instrumentation-httpx>=0.41b0
+
+# Optional: Uncomment if using these libraries
+# opentelemetry-instrumentation-sqlalchemy>=0.41b0
+# opentelemetry-instrumentation-redis>=0.41b0
+# opentelemetry-instrumentation-boto3sqs>=0.41b0
+# opentelemetry-instrumentation-botocore>=0.41b0 
