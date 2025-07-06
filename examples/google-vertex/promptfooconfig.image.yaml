@@ -1,11 +1,13 @@
-description: 'Image captioning'
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Image captioning using Gemini
 
 prompts: |
   {{imageFile}}
   Describe what you see.
 
 providers:
-  - id: 'vertex:gemini-2.5-flash'
+  - id: vertex:gemini-2.5-flash
 
 tests:
   - vars:
