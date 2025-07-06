@@ -1,0 +1,15 @@
+description: 'Image captioning'
+
+prompts: |
+  {{imageFile}}
+  Describe what you see.
+
+providers:
+  - id: 'vertex:gemini-2.5-flash'
+
+tests:
+  - vars:
+      imageFile: file://assets/red-panda.jpg
+    assert:
+      - type: contains
+        value: red panda

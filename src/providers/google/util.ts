@@ -456,38 +456,52 @@ export function geminiFormatAndSystemInstructions(
   }
 
   // Process images in contents
-  contents = processImagesInContents(contents);
+  contents = processImagesInContents(contents, contextVars);
 
   return { contents, systemInstruction };
 }
 
-function processImagesInContents(contents: GeminiFormat): GeminiFormat {
-  return contents.map(content => {
+function processImagesInContents(
+  contents: GeminiFormat,
+  contextVars?: Record<string, string | object>,
+): GeminiFormat {
+  if (!contextVars) {
+    return contents;
+  }
+
+  const base64ToVarName = new Map<string, string>();
+
+  for (const [varName, value] of Object.entries(contextVars)) {
+    if (typeof value === 'string' && isValidBase64Image(value)) {
+      base64ToVarName.set(value, varName);
+    }
+  }
+
+  return contents.map((content) => {
     if (content.parts) {
       const newParts: Part[] = [];
-      
+
       for (const part of content.parts) {
         if (part.text) {
-          // Check if text contains base64 image data
-          const base64ImageRegex = /^\/9j\/|^iVBORw0KGgo|^R0lGODlh|^UklGRg/;
           const lines = part.text.split('\n');
-          
+
           for (const line of lines) {
             const trimmedLine = line.trim();
-            
-            if (base64ImageRegex.test(trimmedLine) && trimmedLine.length > 100) {
-              // This looks like base64 image data
+
+            // Check if this line is a base64 image that was loaded from a variable
+            if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
               const mimeType = getMimeTypeFromBase64(trimmedLine);
+
               newParts.push({
                 inlineData: {
                   mimeType,
-                  data: trimmedLine
-                }
+                  data: trimmedLine,
+                },
               });
             } else if (trimmedLine.length > 0) {
               // Regular text
               newParts.push({
-                text: trimmedLine
+                text: trimmedLine,
               });
             }
           }
@@ -496,14 +510,35 @@ function processImagesInContents(contents: GeminiFormat): GeminiFormat {
           newParts.push(part);
         }
       }
-      
+
       return {
         ...content,
-        parts: newParts
+        parts: newParts,
       };
     }
     return content;
   });
+}
+
+function isValidBase64Image(data: string): boolean {
+  if (!data || data.length < 100) {
+    return false;
+  }
+
+  try {
+    // Verify it's valid base64
+    Buffer.from(data, 'base64');
+
+    // Check for known image format headers
+    return (
+      data.startsWith('/9j/') || // JPEG
+      data.startsWith('iVBORw0KGgo') || // PNG
+      data.startsWith('R0lGODlh') || // GIF
+      data.startsWith('UklGRg') // WebP
+    );
+  } catch {
+    return false;
+  }
 }
 
 function getMimeTypeFromBase64(base64Data: string): string {

@@ -6,12 +6,10 @@ prompts: |
 
 providers:
   - id: 'google:gemini-2.5-flash'
-    config:
-      mediaConfig: file://media-config.json
 
 tests:
   - vars:
-      imageFile: file://red-panda.png
+      imageFile: file://assets/red-panda.jpg
     assert:
-      - type: javascript
-        value: output.length > 10
+      - type: contains
+        value: red panda
