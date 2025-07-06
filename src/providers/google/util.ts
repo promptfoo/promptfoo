@@ -555,8 +555,6 @@ export function geminiFormatAndSystemInstructions(
   return { contents, systemInstruction };
 }
 
-
-
 /**
  * Recursively traverses a JSON schema object and converts
  * uppercase type keywords (string values) to lowercase.
