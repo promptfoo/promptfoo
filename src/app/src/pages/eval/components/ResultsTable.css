@@ -9,9 +9,15 @@ pre {
 table.results-table,
 .divTable {
   border-collapse: collapse;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   margin: 1rem 0;
   background-color: #fff;
+}
+
+.results-table-container {
+  overflow-x: auto;
+  width: 100%;
 }
 
 [data-theme='dark'] table.results-table,

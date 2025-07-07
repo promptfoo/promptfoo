@@ -1009,120 +1009,122 @@ function ResultsTable({
           </Box>
         )}
 
-      <table
-        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-        style={{
-          wordBreak,
-        }}
-      >
-        <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
-          {stickyHeader && isCollapsed && (
-            <div className="header-dismiss">
-              <IconButton
-                onClick={() => setStickyHeader(false)}
-                size="small"
-                sx={{ color: 'text.primary' }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </div>
-          )}
-          {reactTable.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  colSpan={header.colSpan}
-                  style={{
-                    width: header.getSize(),
-                  }}
+      <div className="results-table-container">
+        <table
+          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          style={{
+            wordBreak,
+          }}
+        >
+          <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
+            {stickyHeader && isCollapsed && (
+              <div className="header-dismiss">
+                <IconButton
+                  onClick={() => setStickyHeader(false)}
+                  size="small"
+                  sx={{ color: 'text.primary' }}
                 >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  <div
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                  />
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {reactTable.getRowModel().rows.map((row, rowIndex) => {
-            let colBorderDrawn = false;
-
-            return (
-              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
-                {row.getVisibleCells().map((cell) => {
-                  const isMetadataCol =
-                    cell.column.id.startsWith('Variable') || cell.column.id === 'description';
-                  const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
-                  if (shouldDrawColBorder) {
-                    colBorderDrawn = true;
-                  }
-                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
-
-                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
-                  const value = cell.getValue();
-                  if (
-                    typeof value === 'string' &&
-                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                      value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
-                  ) {
-                    const imgSrc = value.startsWith('data:')
-                      ? value
-                      : `data:image/jpeg;base64,${value}`;
-                    cellContent = (
-                      <>
-                        <img
-                          src={imgSrc}
-                          alt="Base64 encoded image"
-                          style={{
-                            maxWidth: '100%',
-                            height: 'auto',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => toggleLightbox(imgSrc)}
-                        />
-                        {lightboxOpen && lightboxImage === imgSrc && (
-                          <div className="lightbox" onClick={() => toggleLightbox()}>
-                            <img
-                              src={lightboxImage}
-                              alt="Lightbox"
-                              style={{
-                                maxWidth: '90%',
-                                maxHeight: '90vh',
-                                objectFit: 'contain',
-                              }}
-                            />
-                          </div>
-                        )}
-                      </>
-                    );
-                  }
-
-                  return (
-                    <td
-                      key={cell.id}
-                      style={{
-                        width: cell.column.getSize(),
-                      }}
-                      className={`${isMetadataCol ? 'variable' : ''} ${
-                        shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
-                    >
-                      {cellContent}
-                    </td>
-                  );
-                })}
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </div>
+            )}
+            {reactTable.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id} className="header">
+                {headerGroup.headers.map((header) => (
+                  <th
+                    key={header.id}
+                    colSpan={header.colSpan}
+                    style={{
+                      width: header.getSize(),
+                    }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                    <div
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                    />
+                  </th>
+                ))}
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ))}
+          </thead>
+          <tbody>
+            {reactTable.getRowModel().rows.map((row, rowIndex) => {
+              let colBorderDrawn = false;
+
+              return (
+                <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
+                  {row.getVisibleCells().map((cell) => {
+                    const isMetadataCol =
+                      cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                    const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
+                    if (shouldDrawColBorder) {
+                      colBorderDrawn = true;
+                    }
+                    const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+
+                    let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+                    const value = cell.getValue();
+                    if (
+                      typeof value === 'string' &&
+                      (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
+                        value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
+                    ) {
+                      const imgSrc = value.startsWith('data:')
+                        ? value
+                        : `data:image/jpeg;base64,${value}`;
+                      cellContent = (
+                        <>
+                          <img
+                            src={imgSrc}
+                            alt="Base64 encoded image"
+                            style={{
+                              maxWidth: '100%',
+                              height: 'auto',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => toggleLightbox(imgSrc)}
+                          />
+                          {lightboxOpen && lightboxImage === imgSrc && (
+                            <div className="lightbox" onClick={() => toggleLightbox()}>
+                              <img
+                                src={lightboxImage}
+                                alt="Lightbox"
+                                style={{
+                                  maxWidth: '90%',
+                                  maxHeight: '90vh',
+                                  objectFit: 'contain',
+                                }}
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    }
+
+                    return (
+                      <td
+                        key={cell.id}
+                        style={{
+                          width: cell.column.getSize(),
+                        }}
+                        className={`${isMetadataCol ? 'variable' : ''} ${
+                          shouldDrawRowBorder ? 'first-prompt-row' : ''
+                        } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
+                      >
+                        {cellContent}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       {pageCount > 1 && (
         <Box
           className="pagination"
