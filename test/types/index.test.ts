@@ -406,7 +406,9 @@ describe('CommandLineOptionsSchema', () => {
 
 describe('TestSuiteConfigSchema', () => {
   const rootDir = path.join(__dirname, '../..');
-  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`);
+  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`, {
+    windowsPathsNoEscape: true,
+  });
 
   it('should find configuration files', () => {
     expect(configFiles.length).toBeGreaterThan(0);
