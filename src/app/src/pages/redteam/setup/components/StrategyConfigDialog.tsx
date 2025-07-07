@@ -83,6 +83,7 @@ export default function StrategyConfigDialog({
       strategy === 'best-of-n' ||
       strategy === 'goat' ||
       strategy === 'crescendo' ||
+      strategy === 'custom' ||
       strategy === 'pandamonium' ||
       strategy === 'gcg' ||
       strategy === 'citation'
@@ -292,6 +293,61 @@ export default function StrategyConfigDialog({
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
             placeholder="Maximum number of conversation turns (default: 5)"
+            InputProps={{ inputProps: { min: 1, max: 20 } }}
+            helperText="Maximum number of back-and-forth exchanges with the model"
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localConfig.stateful !== false}
+                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
+                color="primary"
+              />
+            }
+            label={
+              <Box component="span">
+                <Typography variant="body2" component="span">
+                  Stateful
+                </Typography>
+                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                  - Enable to maintain conversation history (recommended)
+                </Typography>
+              </Box>
+            }
+          />
+        </Box>
+      );
+    } else if (strategy === 'custom') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Define your custom multi-turn strategy with specific instructions for the AI agent.
+          </Typography>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={6}
+            label="Strategy Text"
+            value={localConfig.strategyText || ''}
+            onChange={(e) => {
+              setLocalConfig({ ...localConfig, strategyText: e.target.value });
+            }}
+            placeholder="Describe how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc."
+            helperText="Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc."
+          />
+
+          <TextField
+            fullWidth
+            label="Max Turns"
+            type="number"
+            value={localConfig.maxTurns || 10}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+              setLocalConfig({ ...localConfig, maxTurns: value });
+            }}
+            placeholder="Maximum number of conversation turns (default: 10)"
             InputProps={{ inputProps: { min: 1, max: 20 } }}
             helperText="Maximum number of back-and-forth exchanges with the model"
           />

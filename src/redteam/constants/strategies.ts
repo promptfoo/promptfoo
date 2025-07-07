@@ -11,12 +11,13 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
+  'custom',
   'jailbreak',
   'jailbreak:tree',
   'pandamonium',
@@ -43,6 +44,7 @@ export const ADDITIONAL_STRATEGIES = [
   'camelcase',
   'citation',
   'crescendo',
+  'custom',
   'gcg',
   'goat',
   'hex',

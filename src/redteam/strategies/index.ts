@@ -10,6 +10,7 @@ import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
+import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
@@ -89,6 +90,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
       const newTestCases = addCrescendo(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'custom',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Custom to ${testCases.length} test cases`);
+      const newTestCases = addCustom(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Custom test cases`);
       return newTestCases;
     },
   },
