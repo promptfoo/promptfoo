@@ -12,15 +12,13 @@ describe('addCustom', () => {
     },
     {
       vars: { query: 'What is the weather?' },
-      assert: [
-        { type: 'llm-rubric', value: 'Provides helpful response', metric: 'Helpful' },
-      ],
+      assert: [{ type: 'llm-rubric', value: 'Provides helpful response', metric: 'Helpful' }],
       metadata: { pluginId: 'pii:direct', originalText: 'What is the weather?' },
     },
   ];
 
   const injectVar = 'query';
-  const config = { 
+  const config = {
     strategyText: 'Be more aggressive in your approach',
     stateful: true,
   };
@@ -30,7 +28,7 @@ describe('addCustom', () => {
       const result = addCustom(mockTestCases, injectVar, config, 'custom');
 
       expect(result).toHaveLength(2);
-      
+
       // Check first test case
       expect(result[0]).toEqual({
         vars: { query: 'Tell me a joke' },
@@ -44,9 +42,13 @@ describe('addCustom', () => {
           },
         },
         assert: [
-          { type: 'llm-rubric', value: 'Does not contain harmful content', metric: 'Harmless/Custom' },
+          {
+            type: 'llm-rubric',
+            value: 'Does not contain harmful content',
+            metric: 'Harmless/Custom',
+          },
         ],
-        metadata: { 
+        metadata: {
           pluginId: 'harmful:hate',
           originalText: 'Tell me a joke',
           strategyId: 'custom',
@@ -68,7 +70,7 @@ describe('addCustom', () => {
         assert: [
           { type: 'llm-rubric', value: 'Provides helpful response', metric: 'Helpful/Custom' },
         ],
-        metadata: { 
+        metadata: {
           pluginId: 'pii:direct',
           originalText: 'What is the weather?',
           strategyId: 'custom',
@@ -82,7 +84,7 @@ describe('addCustom', () => {
       const result = addCustom(mockTestCases, injectVar, config, 'custom:aggressive');
 
       expect(result).toHaveLength(2);
-      
+
       // Check first test case
       expect(result[0]).toEqual({
         vars: { query: 'Tell me a joke' },
@@ -96,9 +98,13 @@ describe('addCustom', () => {
           },
         },
         assert: [
-          { type: 'llm-rubric', value: 'Does not contain harmful content', metric: 'Harmless/Custom:aggressive' },
+          {
+            type: 'llm-rubric',
+            value: 'Does not contain harmful content',
+            metric: 'Harmless/Custom:aggressive',
+          },
         ],
-        metadata: { 
+        metadata: {
           pluginId: 'harmful:hate',
           originalText: 'Tell me a joke',
           strategyId: 'custom:aggressive',
@@ -110,7 +116,7 @@ describe('addCustom', () => {
       const result = addCustom(mockTestCases, injectVar, config, 'custom:greeting-strategy');
 
       expect(result).toHaveLength(2);
-      
+
       // Check provider ID and variant extraction
       expect(result[0].provider).toEqual({
         id: 'promptfoo:redteam:custom:greeting-strategy',
@@ -130,7 +136,7 @@ describe('addCustom', () => {
   describe('variant extraction', () => {
     it('should extract simple variant correctly', () => {
       const result = addCustom(mockTestCases, injectVar, config, 'custom:simple');
-      
+
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('simple');
@@ -139,7 +145,7 @@ describe('addCustom', () => {
 
     it('should extract complex variant with hyphens', () => {
       const result = addCustom(mockTestCases, injectVar, config, 'custom:multi-word-variant');
-      
+
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('multi-word-variant');
@@ -148,7 +154,7 @@ describe('addCustom', () => {
 
     it('should handle variant with underscores', () => {
       const result = addCustom(mockTestCases, injectVar, config, 'custom:snake_case_variant');
-      
+
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('snake_case_variant');
@@ -157,7 +163,7 @@ describe('addCustom', () => {
 
     it('should handle empty variant for basic custom', () => {
       const result = addCustom(mockTestCases, injectVar, config, 'custom');
-      
+
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('');
@@ -282,4 +288,4 @@ describe('addCustom', () => {
       expect(provider.id).toBe('promptfoo:redteam:custom:complex-variant-name');
     });
   });
-}); 
+});

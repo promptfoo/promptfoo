@@ -135,7 +135,7 @@ describe('CustomProvider', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should initialize with default config values', () => {
