@@ -1295,4 +1295,26 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
 
     jest.mocked(fs.readFileSync).mockRestore();
   });
+
+  it('should propagate non-quote-related CSV errors', async () => {
+    // Create CSV content with inconsistent column count to trigger "Invalid Record Length" error
+    const csvContent = `label,query,expected_json_format,context
+my_test_label,What is the date?
+another_label,What is the time?,too,many,columns,here`;
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+
+    // Use default settings (not strict mode) to get past quote checking
+    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
+    jest
+      .mocked(getEnvString)
+      .mockImplementation((key, defaultValue) =>
+        key === 'PROMPTFOO_CSV_DELIMITER' ? ',' : defaultValue || '',
+      );
+
+    // The CSV parser should throw an error about inconsistent column count
+    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Invalid Record Length');
+
+    jest.mocked(fs.readFileSync).mockRestore();
+  });
 });
