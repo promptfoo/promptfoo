@@ -87,6 +87,7 @@ describe('Strategy IDs', () => {
       audio: 'simpleAudio.ts',
       leetspeak: 'leetspeak.ts',
       'math-prompt': 'mathPrompt.ts',
+      'mischievous-user': 'mischievousUser.ts',
       morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
       pandamonium: 'pandamonium.ts',
@@ -94,7 +95,6 @@ describe('Strategy IDs', () => {
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',
       rot13: 'rot13.ts',
-      'mischievous-user': 'mischievousUser.ts',
       video: 'simpleVideo.ts',
     };
 
