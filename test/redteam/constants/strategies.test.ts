@@ -1,13 +1,13 @@
 import {
-  FRAMEWORK_COMPLIANCE_IDS,
-  DEFAULT_STRATEGIES,
-  MULTI_TURN_STRATEGIES,
-  AGENTIC_STRATEGIES,
-  DATASET_PLUGINS,
   ADDITIONAL_STRATEGIES,
-  STRATEGY_COLLECTIONS,
-  STRATEGY_COLLECTION_MAPPINGS,
+  AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
+  DATASET_PLUGINS,
+  DEFAULT_STRATEGIES,
+  FRAMEWORK_COMPLIANCE_IDS,
+  MULTI_TURN_STRATEGIES,
+  STRATEGY_COLLECTION_MAPPINGS,
+  STRATEGY_COLLECTIONS,
 } from '../../../src/redteam/constants/strategies';
 
 describe('strategies constants', () => {
@@ -26,13 +26,14 @@ describe('strategies constants', () => {
   });
 
   it('should have correct multi-turn strategies', () => {
-    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat']);
+    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'playbook']);
   });
 
   it('should have correct agentic strategies', () => {
     expect(AGENTIC_STRATEGIES).toEqual([
       'crescendo',
       'goat',
+      'playbook',
       'jailbreak',
       'jailbreak:tree',
       'pandamonium',
@@ -61,6 +62,7 @@ describe('strategies constants', () => {
       'camelcase',
       'citation',
       'crescendo',
+      'playbook',
       'gcg',
       'goat',
       'hex',

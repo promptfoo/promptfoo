@@ -6,10 +6,12 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { isPlaybookStrategy } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
+import { addPlaybook } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
@@ -35,6 +37,7 @@ export interface Strategy {
     testCases: TestCaseWithPlugin[],
     injectVar: string,
     config: Record<string, any>,
+    strategyId?: string,
   ) => Promise<TestCase[]>;
 }
 
@@ -89,6 +92,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
       const newTestCases = addCrescendo(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'playbook',
+    action: async (testCases, injectVar, config, strategyId = 'playbook') => {
+      logger.debug(`Adding Playbook to ${testCases.length} test cases`);
+      const newTestCases = addPlaybook(testCases, injectVar, config, strategyId);
+      logger.debug(`Added ${newTestCases.length} Playbook test cases`);
       return newTestCases;
     },
   },
@@ -290,6 +302,11 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
     // Skip validation for file:// strategies since they're loaded dynamically
     if (strategy.id.startsWith('file://')) {
       continue;
+    }
+
+    // Check if it's a playbook strategy variant (e.g., playbook:greeting-strategy)
+    if (isPlaybookStrategy(strategy.id)) {
+      continue; // Playbook strategies are always valid
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

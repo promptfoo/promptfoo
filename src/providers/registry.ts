@@ -6,6 +6,7 @@ import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
+import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
@@ -74,9 +75,9 @@ import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
 import {
+  ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
-  ReplicateImageProvider,
 } from './replicate';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
@@ -1067,6 +1068,18 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new RedteamCrescendoProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'promptfoo:redteam:playbook' ||
+      providerPath.startsWith('promptfoo:redteam:playbook:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamCustomProvider(providerOptions.config);
     },
   },
   {
