@@ -1,5 +1,6 @@
-import * as fs from 'fs';
-import path from 'path';
+import * as fs from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import cliState from '../../src/cliState';
 import {
   maybeLoadFromExternalFile,
@@ -14,10 +15,15 @@ import {
   isAudioFile,
 } from '../../src/util/fileExtensions';
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
+jest.mock('node:fs', () => ({
+  ...jest.requireActual('node:fs'),
   readFileSync: jest.fn(),
   existsSync: jest.fn(),
+}));
+
+jest.mock('node:fs/promises', () => ({
+  access: jest.fn(),
+  readFile: jest.fn(),
 }));
 
 describe('file utilities', () => {
@@ -97,125 +103,136 @@ describe('file utilities', () => {
       jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
     });
 
-    it('should return the input if it is not a string', () => {
+    it('should return the input if it is not a string', async () => {
       const input = { key: 'value' };
-      expect(maybeLoadFromExternalFile(input)).toBe(input);
+      expect(await maybeLoadFromExternalFile(input)).toBe(input);
     });
 
-    it('should return the input if it does not start with "file://"', () => {
+    it('should return the input if it does not start with "file://"', async () => {
       const input = 'not a file path';
-      expect(maybeLoadFromExternalFile(input)).toBe(input);
+      expect(await maybeLoadFromExternalFile(input)).toBe(input);
     });
 
-    it('should throw an error if the file does not exist', () => {
-      jest.mocked(fs.existsSync).mockReturnValue(false);
-      expect(() => maybeLoadFromExternalFile('file://nonexistent.txt')).toThrow(
+    it('should throw an error if the file does not exist', async () => {
+      jest.mocked(access).mockRejectedValue(new Error('ENOENT'));
+      await expect(maybeLoadFromExternalFile('file://nonexistent.txt')).rejects.toThrow(
         'File does not exist',
       );
     });
 
-    it('should return the file contents for a non-JSON, non-YAML file', () => {
-      expect(maybeLoadFromExternalFile('file://test.txt')).toBe(mockFileContent);
+    it('should return the file contents for a non-JSON, non-YAML file', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockFileContent);
+      expect(await maybeLoadFromExternalFile('file://test.txt')).toBe(mockFileContent);
     });
 
-    it('should parse and return JSON content for a .json file', () => {
-      jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-      expect(maybeLoadFromExternalFile('file://test.json')).toEqual({ key: 'value' });
+    it('should parse and return JSON content for a .json file', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockJsonContent);
+      expect(await maybeLoadFromExternalFile('file://test.json')).toEqual({ key: 'value' });
     });
 
-    it('should parse and return YAML content for a .yaml file', () => {
-      jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-      expect(maybeLoadFromExternalFile('file://test.yaml')).toEqual({ key: 'value' });
+    it('should parse and return YAML content for a .yaml file', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockYamlContent);
+      expect(await maybeLoadFromExternalFile('file://test.yaml')).toEqual({ key: 'value' });
     });
 
-    it('should parse and return YAML content for a .yml file', () => {
-      jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-      expect(maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
+    it('should parse and return YAML content for a .yml file', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockYamlContent);
+      expect(await maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
     });
 
-    it('should use basePath when resolving file paths', () => {
+    it('should use basePath when resolving file paths', async () => {
       const basePath = '/base/path';
       cliState.basePath = basePath;
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockFileContent);
 
-      maybeLoadFromExternalFile('file://test.txt');
+      await maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-      expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+      expect(access).toHaveBeenCalledWith(expectedPath);
+      expect(readFile).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
     });
 
-    it('should handle relative paths correctly', () => {
+    it('should handle relative paths correctly', async () => {
       const basePath = './relative/path';
       cliState.basePath = basePath;
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockFileContent);
 
-      maybeLoadFromExternalFile('file://test.txt');
+      await maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-      expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+      expect(access).toHaveBeenCalledWith(expectedPath);
+      expect(readFile).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
     });
 
-    it('should handle a path with environment variables in Nunjucks template', () => {
+    it('should handle a path with environment variables in Nunjucks template', async () => {
       process.env.TEST_ROOT_PATH = '/root/dir';
       const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
 
-      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockFileContent);
 
       const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
-      maybeLoadFromExternalFile(input);
+      await maybeLoadFromExternalFile(input);
 
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-      expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+      expect(access).toHaveBeenCalledWith(expectedPath);
+      expect(readFile).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       delete process.env.TEST_ROOT_PATH;
     });
 
-    it('should ignore basePath when file path is absolute', () => {
+    it('should ignore basePath when file path is absolute', async () => {
       const basePath = '/base/path';
       cliState.basePath = basePath;
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockFileContent);
 
-      maybeLoadFromExternalFile('file:///absolute/path/test.txt');
+      await maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
       const expectedPath = path.resolve('/absolute/path/test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-      expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+      expect(access).toHaveBeenCalledWith(expectedPath);
+      expect(readFile).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
     });
 
-    it('should handle list of paths', () => {
+    it('should handle list of paths', async () => {
       const basePath = './relative/path';
       cliState.basePath = basePath;
       const input = ['file://test1.txt', 'file://test2.txt', 'file://test3.txt'];
 
-      // Mock readFileSync to return consistent data
+      // Mock readFile to return consistent data
       const mockFileData = 'test content';
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileData);
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue(mockFileData);
 
-      maybeLoadFromExternalFile(input);
+      await maybeLoadFromExternalFile(input);
 
-      expect(fs.existsSync).toHaveBeenCalledTimes(3);
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'));
+      expect(access).toHaveBeenCalledTimes(3);
+      expect(access).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'));
+      expect(access).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'));
+      expect(access).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'));
 
-      expect(fs.readFileSync).toHaveBeenCalledTimes(3);
-      expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'), 'utf8');
-      expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'), 'utf8');
-      expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'), 'utf8');
+      expect(readFile).toHaveBeenCalledTimes(3);
+      expect(readFile).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'), 'utf8');
+      expect(readFile).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'), 'utf8');
+      expect(readFile).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'), 'utf8');
 
       cliState.basePath = undefined;
     });
 
-    it('should recursively load file references in objects', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": 1}').mockReturnValueOnce('bar');
+    it('should recursively load file references in objects', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValueOnce('{"foo": 1}').mockResolvedValueOnce('bar');
 
       const config = {
         data: 'file://data.json',
@@ -224,14 +241,15 @@ describe('file utilities', () => {
         },
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
-      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(readFile).toHaveBeenCalledTimes(2);
       expect(result).toEqual({ data: { foo: 1 }, nested: { text: 'bar' } });
     });
 
-    it('should handle arrays and nested structures', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('test content');
+    it('should handle arrays and nested structures', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue('test content');
 
       const config = {
         items: ['file://test.txt', 'normal string'],
@@ -244,9 +262,9 @@ describe('file utilities', () => {
         },
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
-      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(readFile).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         items: ['test content', 'normal string'],
         nullValue: null,
@@ -259,12 +277,12 @@ describe('file utilities', () => {
       });
     });
 
-    it('should handle primitive values safely', () => {
-      expect(maybeLoadConfigFromExternalFile('normal string')).toBe('normal string');
-      expect(maybeLoadConfigFromExternalFile(42)).toBe(42);
-      expect(maybeLoadConfigFromExternalFile(true)).toBe(true);
-      expect(maybeLoadConfigFromExternalFile(null)).toBeNull();
-      expect(maybeLoadConfigFromExternalFile(undefined)).toBeUndefined();
+    it('should handle primitive values safely', async () => {
+      expect(await maybeLoadConfigFromExternalFile('normal string')).toBe('normal string');
+      expect(await maybeLoadConfigFromExternalFile(42)).toBe(42);
+      expect(await maybeLoadConfigFromExternalFile(true)).toBe(true);
+      expect(await maybeLoadConfigFromExternalFile(null)).toBeNull();
+      expect(await maybeLoadConfigFromExternalFile(undefined)).toBeUndefined();
     });
 
     it('should handle deeply nested objects with multiple file references', () => {
