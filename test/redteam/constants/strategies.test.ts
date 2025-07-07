@@ -33,9 +33,9 @@ describe('strategies constants', () => {
     expect(AGENTIC_STRATEGIES).toEqual([
       'crescendo',
       'goat',
-      'mischievous-user',
       'jailbreak',
       'jailbreak:tree',
+      'mischievous-user',
       'pandamonium',
     ]);
   });
@@ -64,7 +64,6 @@ describe('strategies constants', () => {
       'crescendo',
       'gcg',
       'goat',
-      'mischievous-user',
       'hex',
       'homoglyph',
       'image',
@@ -73,6 +72,7 @@ describe('strategies constants', () => {
       'jailbreak:tree',
       'leetspeak',
       'math-prompt',
+      'mischievous-user',
       'morse',
       'multilingual',
       'pandamonium',
