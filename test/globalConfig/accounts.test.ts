@@ -1,3 +1,8 @@
+// Mock fetchWithTimeout before any imports that might use telemetry
+jest.mock('../../src/fetch', () => ({
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+}));
+
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
@@ -19,11 +24,6 @@ import {
 } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
-
-// Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
-  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-}));
 
 jest.mock('@inquirer/input');
 jest.mock('../../src/envars');
