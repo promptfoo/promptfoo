@@ -5,12 +5,12 @@ import type { GradingResult } from '../types';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import invariant from '../util/invariant';
 
-export const handleIsValidOpenAiToolsCall = ({
+export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   output,
   provider,
   test,
-}: AssertionParams): GradingResult => {
+}: AssertionParams): Promise<GradingResult> => {
   // Handle MCP tool outputs from Responses API
   const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
 
@@ -66,7 +66,7 @@ export const handleIsValidOpenAiToolsCall = ({
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
   if (tools) {
-    tools = maybeLoadToolsFromExternalFile(tools, test.vars);
+    tools = await maybeLoadToolsFromExternalFile(tools, test.vars);
   }
   invariant(
     tools,
@@ -75,15 +75,15 @@ export const handleIsValidOpenAiToolsCall = ({
     )}`,
   );
   try {
-    toolsOutput.forEach((toolOutput) => {
-      validateFunctionCall(
+    await Promise.all(toolsOutput.map(async (toolOutput) => {
+      await validateFunctionCall(
         toolOutput.function,
         tools
           .filter((tool) => tool.type === 'function' && 'function' in tool)
           .map((tool) => tool.function),
         test.vars,
       );
-    });
+    }));
     return {
       pass: true,
       score: 1,

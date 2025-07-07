@@ -1,5 +1,3 @@
-import async from 'async';
-import chalk from 'chalk';
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -35,7 +33,6 @@ import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
 import { access, mkdir, readFile, stat, writeFile, appendFile } from 'node:fs/promises';
-import { createWriteStream } from 'node:fs';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -61,6 +58,15 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
       ${gradingResultText}
     `.trim();
 };
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function writeOutput(
   outputPath: string,
@@ -299,15 +305,15 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
  * @param promptPath - The path or glob pattern.
  * @returns Parsed details including function name, file extension, and directory status.
  */
-export function parsePathOrGlob(
+export async function parsePathOrGlob(
   basePath: string,
   promptPath: string,
-): {
+): Promise<{
   extension?: string;
   functionName?: string;
   isPathPattern: boolean;
   filePath: string;
-} {
+}> {
   if (promptPath.startsWith('file://')) {
     promptPath = promptPath.slice('file://'.length);
   }
@@ -369,21 +375,12 @@ export function isRunningUnderNpx(): boolean {
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  */
-export async function maybeLoadTools(tools: string | object | undefined, vars: Record<string, any>) {
+export async function maybeLoadTools(tools: string | object | undefined, vars?: Record<string, any>) {
   if (!tools) {
     return undefined;
   }
-  return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
+  return maybeLoadFromExternalFile(renderVarsInObject(tools, vars || {}));
 }
 
 // Alias for backward compatibility
 export const maybeLoadToolsFromExternalFile = maybeLoadTools;
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}

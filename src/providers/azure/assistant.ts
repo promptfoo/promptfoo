@@ -286,7 +286,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
       tools: JSON.stringify(
-        maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
+        await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
       ),
       top_p: this.assistantConfig.top_p,
     })}`;
@@ -353,7 +353,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.tool_choice = this.assistantConfig.tool_choice;
       }
       if (this.assistantConfig.tools) {
-        runOptions.tools = maybeLoadToolsFromExternalFile(
+        runOptions.tools = await maybeLoadToolsFromExternalFile(
           this.assistantConfig.tools,
           context?.vars,
         );

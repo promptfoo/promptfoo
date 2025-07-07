@@ -42,11 +42,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     return !!this.config.isReasoningModel || !!this.config.o1;
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -77,7 +77,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const fileTools = config.tools
-      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
       : [];
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
@@ -136,7 +136,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error('Azure API host must be set.');
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;

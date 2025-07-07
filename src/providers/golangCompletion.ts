@@ -26,27 +26,35 @@ interface GolangProviderConfig {
 export class GolangProvider implements ApiProvider {
   config: GolangProviderConfig;
 
-  private scriptPath: string;
-  private functionName: string | null;
+  private scriptPath: string = '';
+  private functionName: string | null = null;
   public label: string | undefined;
+  private runPath: string;
+  private initialized = false;
 
   constructor(
     runPath: string,
     private options?: ProviderOptions,
   ) {
-    const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
-      runPath,
-    );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
-    this.functionName = functionName || null;
-    this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
+    this.runPath = runPath;
     this.label = options?.label;
     this.config = options?.config ?? {};
   }
 
+  private async initialize() {
+    if (this.initialized) return;
+    
+    const { filePath: providerPath, functionName } = await parsePathOrGlob(
+      this.options?.config.basePath || '',
+      this.runPath,
+    );
+    this.scriptPath = path.relative(this.options?.config.basePath || '', providerPath);
+    this.functionName = functionName || null;
+    this.initialized = true;
+  }
+
   id() {
-    return `golang:${this.scriptPath}:${this.functionName || 'default'}`;
+    return this.options?.id ?? `golang:${this.scriptPath || this.runPath}:${this.functionName || 'default'}`;
   }
 
   private findModuleRoot(startPath: string): string {
@@ -65,6 +73,7 @@ export class GolangProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
+    await this.initialize();
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     const moduleRoot = this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);

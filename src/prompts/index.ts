@@ -110,22 +110,17 @@ export async function processPrompt(
 
   const {
     extension,
+    filePath: promptPath,
     functionName,
     isPathPattern,
-    filePath,
-  }: {
-    extension?: string;
-    functionName?: string;
-    isPathPattern: boolean;
-    filePath: string;
-  } = parsePathOrGlob(basePath, prompt.raw);
+  } = await parsePathOrGlob(basePath, prompt.raw);
 
   if (isPathPattern && maxRecursionDepth > 0) {
-    const globbedPath = globSync(filePath.replace(/\\/g, '/'), {
+    const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
     logger.debug(
-      `Expanded prompt ${prompt.raw} to ${filePath} and then to ${JSON.stringify(globbedPath)}`,
+      `Expanded prompt ${prompt.raw} to ${promptPath} and then to ${JSON.stringify(globbedPath)}`,
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
@@ -147,31 +142,31 @@ export async function processPrompt(
   }
 
   if (extension === '.csv') {
-    return processCsvPrompts(filePath, prompt);
+    return processCsvPrompts(promptPath, prompt);
   }
   if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
+    return processJinjaFile(promptPath, prompt);
   }
   if (extension === '.json') {
-    return processJsonFile(filePath, prompt);
+    return processJsonFile(promptPath, prompt);
   }
   if (extension === '.jsonl') {
-    return processJsonlFile(filePath, prompt);
+    return processJsonlFile(promptPath, prompt);
   }
   if (extension && isJavascriptFile(extension)) {
-    return processJsFile(filePath, prompt, functionName);
+    return processJsFile(promptPath, prompt, functionName);
   }
   if (extension === '.md') {
-    return processMarkdownFile(filePath, prompt);
+    return processMarkdownFile(promptPath, prompt);
   }
   if (extension === '.py') {
-    return processPythonFile(filePath, prompt, functionName);
+    return processPythonFile(promptPath, prompt, functionName);
   }
   if (extension === '.txt') {
-    return processTxtFile(filePath, prompt);
+    return processTxtFile(promptPath, prompt);
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
-    return processYamlFile(filePath, prompt);
+    return processYamlFile(promptPath, prompt);
   }
   return [];
 }

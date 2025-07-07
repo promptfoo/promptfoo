@@ -23,9 +23,8 @@ export class IntentPlugin extends RedteamPluginBase {
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
     super(provider, purpose, injectVar, config);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
-    // Handle both string and array configs
-    const loadedIntents = maybeLoadFromExternalFile(config.intent) as (string | string[])[];
-    this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
+    // Note: This will be loaded asynchronously in generateTests
+    this.intents = [];
   }
 
   protected async getTemplate(): Promise<string> {
@@ -44,6 +43,10 @@ export class IntentPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
+    // Load intents here instead of in constructor
+    const loadedIntents = await maybeLoadFromExternalFile(this.config.intent) as (string | string[])[];
+    this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
+    
     // Instead of generating new prompts, we create one test case per intent
     const testCases: TestCase[] = [];
 

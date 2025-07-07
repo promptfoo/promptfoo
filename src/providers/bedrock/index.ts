@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
-import type { Agent } from 'http';
+import type { Agent } from 'node:http';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -308,7 +308,7 @@ export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
 }
 
 export interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
+  params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => Promise<any> | any;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
@@ -735,7 +735,7 @@ export const BEDROCK_MODEL = {
     },
   },
   CLAUDE_MESSAGES: {
-    params: (
+    params: async (
       config: BedrockClaudeMessagesCompletionOptions,
       prompt: string,
       stop?: string[],
@@ -811,7 +811,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -985,7 +985,7 @@ export const BEDROCK_MODEL = {
     },
   },
   COHERE_COMMAND_R: {
-    params: (
+    params: async (
       config: BedrockCohereCommandRGenerationOptions,
       prompt: string,
       stop?: string[],
@@ -1015,7 +1015,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadToolsFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', await maybeLoadToolsFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -1543,7 +1543,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(
+    const params = await model.params(
       { ...this.config, ...context?.prompt.config },
       prompt,
       stop,

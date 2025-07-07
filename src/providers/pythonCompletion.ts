@@ -23,58 +23,58 @@ interface PythonProviderConfig {
 export class PythonProvider implements ApiProvider {
   config: PythonProviderConfig;
 
-  private scriptPath: string;
-  private functionName: string | null;
+  private scriptPath: string = '';
+  private functionName: string | null = null;
+  public label: string | undefined;
+  private runPath: string;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
-  public label: string | undefined;
 
   constructor(
-    runPath: string,
+    scriptPath: string,
     private options?: ProviderOptions,
   ) {
-    const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
-      runPath,
-    );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
-    this.functionName = functionName || null;
-    this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
+    this.runPath = scriptPath;
     this.label = options?.label;
     this.config = options?.config ?? {};
   }
 
   id() {
-    return `python:${this.scriptPath}:${this.functionName || 'default'}`;
+    return this.options?.id ?? `python:${this.scriptPath || this.runPath}:${this.functionName || 'call_api'}`;
   }
 
-  /**
-   * Process any file:// references in the configuration
-   * This should be called after initialization
-   * @returns A promise that resolves when all file references have been processed
-   */
   public async initialize(): Promise<void> {
     // If already initialized, return immediately
     if (this.isInitialized) {
       return;
     }
 
-    // If initialization is in progress, return the existing promise
+    // If initialization is in progress, wait for it
     if (this.initializationPromise) {
       return this.initializationPromise;
     }
 
-    // Start initialization and store the promise
+    // Start initialization
     this.initializationPromise = (async () => {
       try {
+        // Parse path first
+        const { filePath: providerPath, functionName } = await parsePathOrGlob(
+          this.options?.config.basePath || '',
+          this.runPath,
+        );
+        this.scriptPath = path.relative(this.options?.config.basePath || '', providerPath);
+        this.functionName = functionName || null;
+        
+        // Process config file references
         this.config = await processConfigFileReferences(
           this.config,
           this.options?.config.basePath || '',
         );
+        
         this.isInitialized = true;
         logger.debug(`Initialized Python provider ${this.id()}`);
       } catch (error) {
-        // Reset the initialization promise so future calls can retry
+        // Reset initialization promise on error
         this.initializationPromise = null;
         throw error;
       }
@@ -97,9 +97,7 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
+    await this.initialize();
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -270,23 +268,17 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
+    await this.initialize();
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
+    await this.initialize();
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
+    await this.initialize();
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 }
