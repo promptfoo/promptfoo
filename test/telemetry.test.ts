@@ -60,6 +60,12 @@ jest.mock('../src/logger', () => ({
   },
 }));
 
+jest.mock('../src/globalConfig/accounts', () => ({
+  isLoggedIntoCloud: jest.fn().mockReturnValue(false),
+  getUserEmail: jest.fn().mockReturnValue('test@example.com'),
+  getUserId: jest.fn().mockReturnValue('test-user-id'),
+}));
+
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let fetchSpy: jest.SpyInstance;
@@ -303,7 +309,7 @@ describe('Telemetry', () => {
 
       expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
         distinctId: 'test-user-id',
-        properties: { email: 'test@example.com' },
+        properties: { email: 'test@example.com', isLoggedIntoCloud: false },
       });
       expect(mockPostHogInstance.flush).toHaveBeenCalledWith();
     });
