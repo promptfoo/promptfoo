@@ -267,7 +267,7 @@ describe('pluginOptions', () => {
     // Both conditions should be true for the original bug scenario
     expect(biasInCollections).toBe(true);
     expect(biasInAliased).toBe(true);
-    
+
     // Ensure bias only appears once in pluginOptions
     const biasOccurrences = pluginOptions.filter((p) => p === 'bias');
     expect(biasOccurrences).toHaveLength(1);
