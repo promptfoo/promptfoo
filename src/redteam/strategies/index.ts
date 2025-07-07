@@ -6,6 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { addAdvNoiseTestCases } from './advNoise';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -39,6 +40,15 @@ export interface Strategy {
 }
 
 export const Strategies: Strategy[] = [
+  {
+    id: 'adv-noise',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding adversarial noise to ${testCases.length} test cases`);
+      const newTestCases = addAdvNoiseTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} adversarial noise test cases`);
+      return newTestCases;
+    },
+  },
   {
     id: 'base64',
     action: async (testCases, injectVar) => {
