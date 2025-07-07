@@ -23,6 +23,24 @@ export async function fetchUserEmail(): Promise<string | null> {
   }
 }
 
+export async function fetchUserId(): Promise<string | null> {
+  try {
+    const response = await callApi('/user/id', {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user ID');
+    }
+
+    const data = await response.json();
+    return data.id;
+  } catch (error) {
+    console.error('Error fetching user ID:', error);
+    return null;
+  }
+}
+
 export async function updateEvalAuthor(evalId: string, author: string) {
   const response = await callApi(`/eval/${evalId}/author`, {
     method: 'PATCH',
