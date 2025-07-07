@@ -56,6 +56,7 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleFinishReason } from './finishReason';
 import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
@@ -78,6 +79,9 @@ import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleTraceErrorSpans } from './traceErrorSpans';
+import { handleTraceSpanCount } from './traceSpanCount';
+import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
@@ -105,6 +109,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   assertIndex,
+  traceId,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -113,6 +118,7 @@ export async function runAssertion({
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
+  traceId?: string;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -140,6 +146,23 @@ export async function runAssertion({
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
+
+  // Add trace data if traceId is available
+  if (traceId) {
+    try {
+      const { getTraceStore } = await import('../tracing/store');
+      const traceStore = getTraceStore();
+      const traceData = await traceStore.getTrace(traceId);
+      if (traceData) {
+        context.trace = {
+          traceId: traceData.traceId,
+          spans: traceData.spans || [],
+        };
+      }
+    } catch (error) {
+      logger.debug(`Failed to fetch trace data for assertion: ${error}`);
+    }
+  }
 
   // Render assertion values
   let renderedValue = assertion.value;
@@ -245,6 +268,7 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    'finish-reason': handleFinishReason,
     gleu: handleGleuScore,
     guardrails: handleGuardrails,
     'g-eval': handleGEval,
@@ -289,6 +313,9 @@ export async function runAssertion({
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
+    'trace-error-spans': handleTraceErrorSpans,
+    'trace-span-count': handleTraceSpanCount,
+    'trace-span-duration': handleTraceSpanDuration,
     webhook: handleWebhook,
     pi: handlePiScorer,
   };
@@ -321,6 +348,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -328,6 +356,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -384,6 +413,7 @@ export async function runAssertions({
         test,
         latencyMs,
         assertIndex: index,
+        traceId,
       });
 
       assertResult.addResult({

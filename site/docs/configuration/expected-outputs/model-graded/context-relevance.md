@@ -2,101 +2,64 @@
 sidebar_label: Context Relevance
 ---
 
-# Context Relevance
+# Context relevance
 
-The `context-relevance` assertion evaluates whether the retrieved context is relevant to the original query. This is crucial for RAG (Retrieval-Augmented Generation) applications to ensure that the retrieved information is actually useful for answering the question.
+The `context-relevance` assertion evaluates whether the provided context is relevant to answering the given query or question.
 
-### How to use it
-
-To use the `context-relevance` assertion type, add it to your test configuration like this:
+## Configuration
 
 ```yaml
 assert:
   - type: context-relevance
-    threshold: 0.8 # Score between 0 and 1
+    threshold: 0.8 # Score from 0 to 1
 ```
 
-Note: This assertion requires both `query` and `context` variables to be set in your test.
+## Providing context
+
+You can provide context in two ways:
+
+### Using context variables
+
+Include both query and context as variables in your test case:
+
+```yaml
+tests:
+  - vars:
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
+    assert:
+      - type: context-relevance
+        threshold: 0.8
+```
+
+### Extracting from provider responses
+
+If your provider returns context within the response, use `contextTransform`:
+
+```yaml
+assert:
+  - type: context-relevance
+    contextTransform: 'output.context'
+    threshold: 0.8
+```
+
+For complex response structures:
+
+```yaml
+assert:
+  - type: context-relevance
+    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
+    threshold: 0.8
+```
 
 ### How it works
 
 The context relevance checker:
 
-1. Analyzes the query and context
-2. Breaks down the context into individual statements
-3. Evaluates each statement's relevance to the query
-4. Calculates a relevance score based on the proportion of relevant statements
-
-A higher threshold requires the context to be more closely related to the query.
-
-### Example Configuration
-
-Here's a complete example showing how to use context relevance in a RAG system:
-
-```yaml
-prompts:
-  - |
-    Answer this question: {{query}}
-    Using this context: {{context}}
-providers:
-  - openai:gpt-4
-tests:
-  - vars:
-      query: 'What are our company holidays?'
-      context: file://docs/policies/holidays.md
-    assert:
-      - type: context-relevance
-        threshold: 0.8
-  - vars:
-      query: 'What is the dress code?'
-      context: file://docs/policies/attire.md
-    assert:
-      - type: context-relevance
-        threshold: 0.9
-```
-
-### Overriding the Grader
-
-Like other model-graded assertions, you can override the default grader:
-
-1. Using the CLI:
-
-   ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
-   ```
-
-2. Using test options:
-
-   ```yaml
-   defaultTest:
-     options:
-       provider: openai:gpt-4.1-mini
-   ```
-
-3. Using assertion-level override:
-   ```yaml
-   assert:
-     - type: context-relevance
-       threshold: 0.8
-       provider: openai:gpt-4.1-mini
-   ```
-
-### Customizing the Prompt
-
-You can customize the evaluation prompt using the `rubricPrompt` property:
-
-```yaml
-defaultTest:
-  options:
-    rubricPrompt: |
-      Context: {{context}}
-      Query: {{query}}
-
-      Break down the context into individual statements.
-      For each statement, mark it as [RELEVANT] if it helps answer the query,
-      or [NOT RELEVANT] if it does not.
-```
+1. Analyzes the relationship between the user's query and the provided context
+2. Evaluates whether the context contains information that helps answer the query
+3. Returns a score from 0 to 1, where 1 means the context is highly relevant to the query
 
 # Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.

@@ -25,10 +25,12 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 export const pluginOptions: string[] = [
-  ...COLLECTIONS,
-  ...REDTEAM_ALL_PLUGINS,
-  ...ALIASED_PLUGINS,
-  ...Object.keys(DATASET_PLUGIN_ALIASES),
+  ...new Set([
+    ...COLLECTIONS,
+    ...REDTEAM_ALL_PLUGINS,
+    ...ALIASED_PLUGINS,
+    ...Object.keys(DATASET_PLUGIN_ALIASES),
+  ]),
 ].sort();
 /**
  * Schema for individual redteam plugins

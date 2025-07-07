@@ -18,11 +18,13 @@ import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { TraceData } from './tracing';
 
 export * from './prompts';
 export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
+export * from './tracing';
 
 export type { EnvOverrides };
 
@@ -425,6 +427,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'cost',
   'equals',
   'factuality',
+  'finish-reason',
   'g-eval',
   'gleu',
   'guardrails',
@@ -454,6 +457,9 @@ export const BaseAssertionTypesSchema = z.enum([
   'rouge-n',
   'similar',
   'starts-with',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
   'webhook',
 ]);
 
@@ -528,6 +534,9 @@ export const AssertionSchema = z.object({
 
   // Process the output before running the assertion
   transform: z.string().optional(),
+
+  // Extract context from the output using a transform
+  contextTransform: z.string().optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -540,6 +549,7 @@ export interface AssertionValueFunctionContext {
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
+  trace?: TraceData;
 }
 
 export type AssertionValueFunction = (
@@ -547,7 +557,7 @@ export type AssertionValueFunction = (
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
-export type AssertionValue = string | string[] | object | AssertionValueFunction;
+export type AssertionValue = string | string[] | number | object | AssertionValueFunction;
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 

@@ -50,7 +50,21 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-from typing import Any, Dict, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, TypedDict, Union
+
+class TraceSpan(TypedDict):
+    spanId: str
+    parentSpanId: Optional[str]
+    name: str
+    startTime: int  # Unix timestamp in milliseconds
+    endTime: Optional[int]  # Unix timestamp in milliseconds
+    attributes: Optional[Dict[str, Any]]
+    statusCode: Optional[int]
+    statusMessage: Optional[str]
+
+class TraceData(TypedDict):
+    traceId: str
+    spans: List[TraceSpan]
 
 class AssertionValueFunctionContext(TypedDict):
     # Raw prompt sent to LLM
@@ -73,6 +87,9 @@ class AssertionValueFunctionContext(TypedDict):
 
     # The complete provider response
     providerResponse: Optional[Any]  # ProviderResponse type
+
+    # OpenTelemetry trace data (when tracing is enabled)
+    trace: Optional[TraceData]
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -184,6 +201,71 @@ Python snake_case fields are automatically mapped to camelCase:
 - `component_results` → `componentResults`
 - `tokens_used` → `tokensUsed`
   :::
+
+## Using trace data
+
+When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+
+```py
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    # Check if trace data is available
+    if not hasattr(context, 'trace') or context.trace is None:
+        # Tracing not enabled, skip trace-based checks
+        return True
+
+    # Access trace spans
+    spans = context.trace['spans']
+
+    # Example: Check for errors in any span
+    error_spans = [s for s in spans if s.get('statusCode', 0) >= 400]
+    if error_spans:
+        return {
+            'pass': False,
+            'score': 0,
+            'reason': f"Found {len(error_spans)} error spans"
+        }
+
+    # Example: Calculate total trace duration
+    if spans:
+        duration = max(s.get('endTime', 0) for s in spans) - min(s['startTime'] for s in spans)
+        if duration > 5000:  # 5 seconds
+            return {
+                'pass': False,
+                'score': 0,
+                'reason': f"Trace took too long: {duration}ms"
+            }
+
+    # Example: Check for specific operations
+    api_calls = [s for s in spans if 'http' in s['name'].lower()]
+    if len(api_calls) > 10:
+        return {
+            'pass': False,
+            'score': 0,
+            'reason': f"Too many API calls: {len(api_calls)}"
+        }
+
+    return True
+```
+
+Example YAML configuration:
+
+```yaml
+tests:
+  - vars:
+      query: "What's the weather?"
+    assert:
+      - type: python
+        value: |
+          # Ensure retrieval happened before response generation
+          if context.trace:
+              spans = context.trace['spans']
+              retrieval_span = next((s for s in spans if 'retrieval' in s['name']), None)
+              generation_span = next((s for s in spans if 'generation' in s['name']), None)
+              
+              if retrieval_span and generation_span:
+                  return retrieval_span['startTime'] < generation_span['startTime']
+          return True
+```
 
 ## Overriding the Python binary
 

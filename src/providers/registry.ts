@@ -830,6 +830,20 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('aimlapi:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createAimlApiProvider } = await import('./aimlapi');
+      return createAimlApiProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
     create: async (
       providerPath: string,
