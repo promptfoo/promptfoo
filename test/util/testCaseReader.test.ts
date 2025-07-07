@@ -21,6 +21,11 @@ import {
   readTestFiles,
 } from '../../src/util/testCaseReader';
 
+// Mock fetchWithTimeout before any imports that might use telemetry
+jest.mock('../../src/fetch', () => ({
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+}));
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
