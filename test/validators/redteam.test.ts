@@ -230,13 +230,9 @@ describe('pluginOptions', () => {
 
   it('should contain unique values from all source arrays', () => {
     // Create a manual set to verify our implementation
-    const manualSet = new Set([
-      ...COLLECTIONS,
-      ...REDTEAM_ALL_PLUGINS,
-      ...ALIASED_PLUGINS,
-    ]);
-    
-    expect(pluginOptions.length).toBe(manualSet.size);
+    const manualSet = new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]);
+
+    expect(pluginOptions).toHaveLength(manualSet.size);
     expect(new Set(pluginOptions).size).toBe(pluginOptions.length);
   });
 
@@ -247,10 +243,10 @@ describe('pluginOptions', () => {
 
   it('should contain all expected plugin types', () => {
     // Verify that at least one item from each source array is present
-    const hasCollectionItem = COLLECTIONS.some(item => pluginOptions.includes(item));
-    const hasRedteamPlugin = REDTEAM_ALL_PLUGINS.some(item => pluginOptions.includes(item));
-    const hasAliasedPlugin = ALIASED_PLUGINS.some(item => pluginOptions.includes(item));
-    
+    const hasCollectionItem = COLLECTIONS.some((item) => pluginOptions.includes(item));
+    const hasRedteamPlugin = REDTEAM_ALL_PLUGINS.some((item) => pluginOptions.includes(item));
+    const hasAliasedPlugin = ALIASED_PLUGINS.some((item) => pluginOptions.includes(item));
+
     expect(hasCollectionItem).toBe(true);
     expect(hasRedteamPlugin).toBe(true);
     expect(hasAliasedPlugin).toBe(true);
@@ -258,7 +254,7 @@ describe('pluginOptions', () => {
 
   it('should handle the specific bias duplicate case', () => {
     // Count occurrences of 'bias' in pluginOptions
-    const biasCount = pluginOptions.filter(option => option === 'bias').length;
+    const biasCount = pluginOptions.filter((option) => option === 'bias').length;
     expect(biasCount).toBe(1);
   });
 
@@ -266,11 +262,14 @@ describe('pluginOptions', () => {
     // Check if bias exists in multiple source arrays (which was the original issue)
     const biasInCollections = COLLECTIONS.includes('bias' as any);
     const biasInAliased = ALIASED_PLUGINS.includes('bias' as any);
+
+    // This test is specifically for the bias duplicate case
+    // Both conditions should be true for the original bug scenario
+    expect(biasInCollections).toBe(true);
+    expect(biasInAliased).toBe(true);
     
-    if (biasInCollections && biasInAliased) {
-      // If bias exists in both, ensure it only appears once in pluginOptions
-      const biasOccurrences = pluginOptions.filter(p => p === 'bias');
-      expect(biasOccurrences).toHaveLength(1);
-    }
+    // Ensure bias only appears once in pluginOptions
+    const biasOccurrences = pluginOptions.filter((p) => p === 'bias');
+    expect(biasOccurrences).toHaveLength(1);
   });
 });
