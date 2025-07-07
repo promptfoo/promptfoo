@@ -545,9 +545,10 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'), {
-        windowsPathsNoEscape: true,
-      }) || [];
+      const filePaths =
+        globSync(resolvedPath.replace(/\\/g, '/'), {
+          windowsPathsNoEscape: true,
+        }) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);

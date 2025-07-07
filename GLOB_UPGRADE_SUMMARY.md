@@ -40,6 +40,7 @@ Successfully upgraded glob from v10.4.5 to v11.0.3 in the promptfoo project.
 ## Standardization Findings
 
 The codebase already follows good practices:
+
 - Consistent use of `windowsPathsNoEscape: true` across most files
 - Proper path normalization with `.replace(/\\/g, '/')` for Windows compatibility
 - Only one instance found missing the Windows compatibility option (now fixed)
