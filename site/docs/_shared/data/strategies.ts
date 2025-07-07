@@ -141,7 +141,7 @@ export const strategies: Strategy[] = [
     displayName: 'Mischievous User',
     description: 'Mischievous user conversations',
     longDescription: 'Simulates a multi-turn conversation between a mischievous user and an agent',
-    cost: 'Low',
+    cost: 'High',
     asrIncrease: '10-20%',
     link: '/docs/red-team/strategies/mischievous-user/',
   },
