@@ -286,7 +286,7 @@ describe('AnthropicMessagesProvider', () => {
       const cacheKey =
         'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}';
 
-      await getCache().set(cacheKey, 'Test output');
+      await (await getCache()).set(cacheKey, 'Test output');
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(result).toMatchObject({
@@ -685,7 +685,7 @@ describe('AnthropicMessagesProvider', () => {
         const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
 
         const cacheKey = expect.stringContaining('anthropic:');
-        await getCache().set(
+        await (await getCache()).set(
           cacheKey,
           JSON.stringify({
             content: [{ type: 'text', text: 'Cached response' }],
@@ -710,7 +710,7 @@ describe('AnthropicMessagesProvider', () => {
             temperature: 0,
           });
 
-        await getCache().set(
+        await (await getCache()).set(
           specificCacheKey,
           JSON.stringify({
             content: [{ type: 'text', text: 'Cached response' }],

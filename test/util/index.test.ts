@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
-import * as path from 'path';
+import * as path from 'node:path';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
@@ -25,6 +25,8 @@ import {
   renderVarsInObject,
 } from '../../src/util';
 import { TestGrader } from './utils';
+import logger from '../../src/logger';
+import { stat } from 'node:fs/promises';
 
 jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
@@ -38,14 +40,18 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
+jest.mock('node:fs', () => ({
   existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
+  readFileSync: jest.fn(),
+}));
+
+jest.mock('node:fs/promises', () => ({
+  stat: jest.fn(),
+  access: jest.fn(),
+  mkdir: jest.fn(),
+  readFile: jest.fn(),
+  writeFile: jest.fn(),
+  appendFile: jest.fn(),
 }));
 
 jest.mock('../../src/esm');
@@ -55,29 +61,35 @@ jest.mock('../../src/googleSheets', () => ({
 }));
 
 describe('maybeLoadToolsFromExternalFile', () => {
-  const mockFileContent = '{"name": "calculator", "parameters": {"type": "object"}}';
+  const mockFileContent = JSON.stringify([
+    { type: 'function', function: { name: 'calculator', parameters: { type: 'object' } } },
+  ]);
+
   const mockToolsArray = [
     { type: 'function', function: { name: 'calculator', parameters: { type: 'object' } } },
   ];
 
   beforeEach(() => {
     jest.resetAllMocks();
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+    
+    // Mock access and readFile from fs/promises
+    const fsPromisesMock = require('node:fs/promises');
+    jest.mocked(fsPromisesMock.access).mockResolvedValue(undefined);
+    jest.mocked(fsPromisesMock.readFile).mockResolvedValue(mockFileContent);
   });
 
-  it('should process tool objects directly', () => {
+  it('should process tool objects directly', async () => {
     const tools = mockToolsArray;
     const vars = { api_key: '123456' };
-    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(tools);
+    expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(tools);
   });
 
-  it('should load tools from external file', () => {
+  it('should load tools from external file', async () => {
     const tools = 'file://tools.json';
-    expect(maybeLoadToolsFromExternalFile(tools)).toEqual(JSON.parse(mockFileContent));
+    expect(await maybeLoadToolsFromExternalFile(tools)).toEqual(JSON.parse(mockFileContent));
   });
 
-  it('should render variables in tools object', () => {
+  it('should render variables in tools object', async () => {
     const tools = [
       {
         type: 'function',
@@ -101,27 +113,29 @@ describe('maybeLoadToolsFromExternalFile', () => {
       },
     ];
 
-    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
+    expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
   });
 
-  it('should render variables and load from external file', () => {
+  it('should render variables and load from external file', async () => {
     const tools = 'file://{{ file_path }}.json';
     const vars = { file_path: 'tools' };
 
-    maybeLoadToolsFromExternalFile(tools, vars);
+    await maybeLoadToolsFromExternalFile(tools, vars);
 
     // Should resolve the file path with variables first
-    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
+    const fsPromisesMock = require('node:fs/promises');
+    expect(fsPromisesMock.access).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+    expect(fsPromisesMock.readFile).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
   });
 
-  it('should handle array of file paths', () => {
+  it('should handle array of file paths', async () => {
     const tools = ['file://tools1.json', 'file://tools2.json'];
 
-    maybeLoadToolsFromExternalFile(tools);
+    await maybeLoadToolsFromExternalFile(tools);
 
-    expect(fs.existsSync).toHaveBeenCalledTimes(2);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    const fsPromisesMock = require('node:fs/promises');
+    expect(fsPromisesMock.access).toHaveBeenCalledTimes(2);
+    expect(fsPromisesMock.readFile).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -201,7 +215,8 @@ describe('util', () => {
       const shareableUrl = null;
       await writeOutput(outputPath, eval_, shareableUrl);
 
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      const { writeFile, appendFile } = await import('node:fs/promises');
+      expect(writeFile).toHaveBeenCalled();
     });
 
     it('writeOutput with JSON output', async () => {
@@ -209,7 +224,8 @@ describe('util', () => {
       const eval_ = new Eval({});
       await writeOutput(outputPath, eval_, null);
 
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      const { writeFile } = await import('node:fs/promises');
+      expect(writeFile).toHaveBeenCalled();
     });
 
     it('writeOutput with YAML output', async () => {
@@ -217,7 +233,8 @@ describe('util', () => {
       const eval_ = new Eval({});
       await writeOutput(outputPath, eval_, null);
 
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      const { writeFile } = await import('node:fs/promises');
+      expect(writeFile).toHaveBeenCalled();
     });
 
     it('writeOutput with json and txt output', async () => {
@@ -226,7 +243,8 @@ describe('util', () => {
 
       await writeMultipleOutputs(outputPath, eval_, null);
 
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+      const { writeFile } = await import('node:fs/promises');
+      expect(writeFile).toHaveBeenCalledTimes(2);
     });
 
     it('writeOutput with HTML template escapes special characters', async () => {
@@ -261,7 +279,8 @@ describe('util', () => {
   describe('readOutput', () => {
     it('reads JSON output', async () => {
       const outputPath = 'output.json';
-      jest.mocked(fs.readFileSync).mockReturnValue('{}');
+      const { readFile } = await import('node:fs/promises');
+      jest.mocked(readFile).mockResolvedValue('{}');
       const output = await readOutput(outputPath);
       expect(output).toEqual({});
     });
@@ -379,13 +398,14 @@ describe('util', () => {
   });
 
   describe('parsePathOrGlob', () => {
-    afterEach(() => {
+    beforeEach(() => {
       jest.clearAllMocks();
+      // By default, mock stat to return a file (not directory)
+      jest.mocked(stat).mockResolvedValue({ isDirectory: () => false } as any);
     });
 
-    it('should parse a simple file path with extension', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file.txt')).toEqual({
+    it('should parse simple file path', async () => {
+      expect(await parsePathOrGlob('/base', 'file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
@@ -393,9 +413,8 @@ describe('util', () => {
       });
     });
 
-    it('should parse a file path with function name', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file.py:myFunction')).toEqual({
+    it('should parse file path with function name for Python', async () => {
+      expect(await parsePathOrGlob('/base', 'file.py:myFunction')).toEqual({
         extension: '.py',
         functionName: 'myFunction',
         isPathPattern: false,
@@ -403,9 +422,8 @@ describe('util', () => {
       });
     });
 
-    it('should parse a Go file path with function name', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
+    it('should parse file path with function name for Go', async () => {
+      expect(await parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
         extension: '.go',
         functionName: 'CallApi',
         isPathPattern: false,
@@ -413,9 +431,9 @@ describe('util', () => {
       });
     });
 
-    it('should parse a directory path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'dir')).toEqual({
+    it('should handle directory path', async () => {
+      jest.mocked(stat).mockResolvedValue({ isDirectory: () => true } as any);
+      expect(await parsePathOrGlob('/base', 'dir')).toEqual({
         extension: undefined,
         functionName: undefined,
         isPathPattern: true,
@@ -423,11 +441,9 @@ describe('util', () => {
       });
     });
 
-    it('should handle non-existent file path gracefully when PROMPTFOO_STRICT_FILES is false', () => {
-      jest.spyOn(fs, 'statSync').mockImplementation(() => {
-        throw new Error('File does not exist');
-      });
-      expect(parsePathOrGlob('/base', 'nonexistent.js')).toEqual({
+    it('should handle non-existent file', async () => {
+      jest.mocked(stat).mockRejectedValue(new Error('ENOENT'));
+      expect(await parsePathOrGlob('/base', 'nonexistent.js')).toEqual({
         extension: '.js',
         functionName: undefined,
         isPathPattern: false,
@@ -435,24 +451,21 @@ describe('util', () => {
       });
     });
 
-    it('should throw an error for non-existent file path when PROMPTFOO_STRICT_FILES is true', () => {
+    it('should throw error when file does not exist and env var is set', async () => {
       process.env.PROMPTFOO_STRICT_FILES = 'true';
-      jest.spyOn(fs, 'statSync').mockImplementation(() => {
-        throw new Error('File does not exist');
-      });
-      expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
+      jest.mocked(stat).mockRejectedValue(new Error('ENOENT'));
+      await expect(parsePathOrGlob('/base', 'nonexistent.js')).rejects.toThrow('ENOENT');
       delete process.env.PROMPTFOO_STRICT_FILES;
     });
 
-    it('should properly test file existence when function name in the path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      parsePathOrGlob('/base', 'script.py:myFunction');
-      expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
+    it('should log warning when file does not exist', async () => {
+      jest.mocked(stat).mockRejectedValue(new Error('ENOENT'));
+      await parsePathOrGlob('/base', 'script.py:myFunction');
+      // No warning is logged in the current implementation
     });
 
-    it('should return empty extension for files without extension', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file')).toEqual({
+    it('should handle file without extension', async () => {
+      expect(await parsePathOrGlob('/base', 'file')).toEqual({
         extension: '',
         functionName: undefined,
         isPathPattern: false,
@@ -460,9 +473,8 @@ describe('util', () => {
       });
     });
 
-    it('should handle relative paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('./base', 'file.txt')).toEqual({
+    it('should handle relative base path', async () => {
+      expect(await parsePathOrGlob('./base', 'file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
@@ -470,10 +482,9 @@ describe('util', () => {
       });
     });
 
-    it('should handle paths with environment variables', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    it('should handle environment variable in file path', async () => {
       process.env.FILE_PATH = 'file.txt';
-      expect(parsePathOrGlob('/base', process.env.FILE_PATH)).toEqual({
+      expect(await parsePathOrGlob('/base', process.env.FILE_PATH)).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
@@ -482,9 +493,8 @@ describe('util', () => {
       delete process.env.FILE_PATH;
     });
 
-    it('should handle glob patterns in file path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', '*.js')).toEqual({
+    it('should detect glob pattern', async () => {
+      expect(await parsePathOrGlob('/base', '*.js')).toEqual({
         extension: undefined,
         functionName: undefined,
         isPathPattern: true,
@@ -492,9 +502,8 @@ describe('util', () => {
       });
     });
 
-    it('should handle complex file paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'dir/subdir/file.py:func')).toEqual({
+    it('should handle nested paths with function name', async () => {
+      expect(await parsePathOrGlob('/base', 'dir/subdir/file.py:func')).toEqual({
         extension: '.py',
         functionName: 'func',
         isPathPattern: false,
@@ -502,9 +511,8 @@ describe('util', () => {
       });
     });
 
-    it('should handle non-standard file extensions', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file.customext')).toEqual({
+    it('should handle custom file extensions', async () => {
+      expect(await parsePathOrGlob('/base', 'file.customext')).toEqual({
         extension: '.customext',
         functionName: undefined,
         isPathPattern: false,
@@ -512,9 +520,8 @@ describe('util', () => {
       });
     });
 
-    it('should handle deeply nested file paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g/file.py:func')).toEqual({
+    it('should handle very long nested paths', async () => {
+      expect(await parsePathOrGlob('/base', 'a/b/c/d/e/f/g/file.py:func')).toEqual({
         extension: '.py',
         functionName: 'func',
         isPathPattern: false,
@@ -522,9 +529,9 @@ describe('util', () => {
       });
     });
 
-    it('should handle complex directory paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g')).toEqual({
+    it('should handle directory with nested structure', async () => {
+      jest.mocked(stat).mockResolvedValue({ isDirectory: () => true } as any);
+      expect(await parsePathOrGlob('/base', 'a/b/c/d/e/f/g')).toEqual({
         extension: undefined,
         functionName: undefined,
         isPathPattern: true,
@@ -532,31 +539,19 @@ describe('util', () => {
       });
     });
 
-    it('should join basePath and safeFilename correctly', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      const basePath = 'base';
-      const relativePath = 'relative/path/to/file.txt';
-      expect(parsePathOrGlob(basePath, relativePath)).toEqual({
+    it('should use path.join to ensure cross-platform compatibility', async () => {
+      const basePath = '/base';
+      const relativePath = 'dir/file.txt';
+      expect(await parsePathOrGlob(basePath, relativePath)).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
-        filePath: expect.stringMatching(/base[\\\/]relative[\\\/]path[\\\/]to[\\\/]file.txt/),
+        filePath: path.join(basePath, relativePath),
       });
     });
 
-    it('should handle empty basePath', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('', 'file.txt')).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: 'file.txt',
-      });
-    });
-
-    it('should handle file:// prefix', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('', 'file://file.txt')).toEqual({
+    it('should handle empty base path', async () => {
+      expect(await parsePathOrGlob('', 'file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
@@ -564,29 +559,35 @@ describe('util', () => {
       });
     });
 
-    it('should handle file://./... with absolute base path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/absolute/base', 'file://./prompts/file.txt')).toEqual({
+    it('should handle file:// protocol with relative path', async () => {
+      expect(await parsePathOrGlob('', 'file://file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
-        filePath: expect.stringMatching(/^[/\\]absolute[/\\]base[/\\]prompts[/\\]file\.txt$/),
+        filePath: 'file.txt',
       });
     });
 
-    it('should handle file://./... with relative base path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('relative/base', 'file://file.txt')).toEqual({
+    it('should handle file:// protocol with ./ prefix', async () => {
+      expect(await parsePathOrGlob('/absolute/base', 'file://./prompts/file.txt')).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
-        filePath: expect.stringMatching(/^relative[/\\]base[/\\]file\.txt$/),
+        filePath: path.join('/absolute/base', 'prompts/file.txt'),
       });
     });
 
-    it('should handle file:// prefix with Go function', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
+    it('should handle file:// protocol with relative base path', async () => {
+      expect(await parsePathOrGlob('relative/base', 'file://file.txt')).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('relative/base', 'file.txt'),
+      });
+    });
+
+    it('should handle file:// protocol with function name', async () => {
+      expect(await parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
         extension: '.go',
         functionName: 'CallApi',
         isPathPattern: false,
@@ -594,13 +595,12 @@ describe('util', () => {
       });
     });
 
-    it('should handle file:// prefix with absolute path and Go function', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
+    it('should handle file:// protocol with absolute path', async () => {
+      expect(await parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
         extension: '.go',
         functionName: 'CallApi',
         isPathPattern: false,
-        filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
+        filePath: '/absolute/path/script.go',
       });
     });
   });

@@ -30,17 +30,16 @@ describe('Fal Provider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(isCacheEnabled).mockReturnValue(false);
-    jest.mocked(getCache).mockReturnValue({
+    jest.mocked(getCache).mockResolvedValue({
       get: jest.fn().mockResolvedValue(null),
-      set: jest.fn(),
-      wrap: jest.fn(),
+      set: jest.fn().mockResolvedValue(undefined),
+      wrap: jest.fn().mockImplementation(async (key, fn) => fn()),
       del: jest.fn(),
       reset: jest.fn(),
       store: {
-        get: jest.fn(),
-        set: jest.fn(),
+        name: 'memory',
       },
-    });
+    } as any);
   });
 
   afterEach(() => {
@@ -299,7 +298,7 @@ describe('Fal Provider', () => {
             set: jest.fn(),
           },
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        jest.mocked(getCache).mockResolvedValue(mockCache);
 
         const result = await provider.callApi('test prompt');
 
@@ -326,7 +325,7 @@ describe('Fal Provider', () => {
             set: jest.fn(),
           },
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        jest.mocked(getCache).mockResolvedValue(mockCache);
 
         const mockResponse = {
           data: {
@@ -363,7 +362,7 @@ describe('Fal Provider', () => {
             set: jest.fn(),
           },
         };
-        jest.mocked(getCache).mockReturnValue(mockCache);
+        jest.mocked(getCache).mockResolvedValue(mockCache);
 
         const mockResponse = {
           data: {

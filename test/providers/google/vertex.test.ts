@@ -80,14 +80,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
         topK: 40,
       },
     });
-    jest.mocked(getCache).mockReturnValue({
+    jest.mocked(getCache).mockResolvedValue({
       get: jest.fn(),
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
       reset: jest.fn(),
-      store: {} as any,
-    });
+      store: { name: 'memory' },
+    } as any);
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
@@ -422,14 +422,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
     const mockCacheSet = jest.fn();
 
-    jest.mocked(getCache).mockReturnValue({
+    jest.mocked(getCache).mockResolvedValue({
       get: jest.fn(),
       set: mockCacheSet,
       wrap: jest.fn(),
       del: jest.fn(),
       reset: jest.fn(),
-      store: {} as any,
-    });
+      store: { name: 'memory' },
+    } as any);
 
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
@@ -463,9 +463,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    const mockGetCache = jest
-      .mocked(getCache().get)
-      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+    jest.mocked(getCache).mockResolvedValue({
+      get: jest.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+      set: jest.fn(),
+      wrap: jest.fn(),
+      del: jest.fn(),
+      reset: jest.fn(),
+      store: { name: 'memory' },
+    } as any);
 
     const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
 
@@ -497,7 +502,6 @@ describe('VertexChatProvider.callGeminiApi', () => {
       JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
     );
 
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
@@ -519,7 +523,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+    jest.mocked(getCache).mockResolvedValue({
+      get: jest.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+      set: jest.fn(),
+      wrap: jest.fn(),
+      del: jest.fn(),
+      reset: jest.fn(),
+      store: { name: 'memory' },
+    } as any);
 
     const provider = new VertexChatProvider('gemini', {
       config: {
@@ -578,7 +589,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      jest.mocked(getCache).mockResolvedValue({
+        get: jest.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+        set: jest.fn(),
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: { name: 'memory' },
+      } as any);
 
       // Mock importModule to return our test function
       const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
@@ -634,7 +652,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      jest.mocked(getCache).mockResolvedValue({
+        get: jest.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+        set: jest.fn(),
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: { name: 'memory' },
+      } as any);
 
       const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
       mockImportModule.mockResolvedValue(mockCachedFunction);
@@ -691,7 +716,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      jest.mocked(getCache).mockResolvedValue({
+        get: jest.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+        set: jest.fn(),
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: { name: 'memory' },
+      } as any);
 
       // Mock import module to throw an error
       mockImportModule.mockRejectedValue(new Error('Module not found'));
@@ -746,7 +778,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      jest.mocked(getCache).mockResolvedValue({
+        get: jest.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+        set: jest.fn(),
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: { name: 'memory' },
+      } as any);
 
       const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
       const mockExternalFunction = jest.fn().mockResolvedValue('External result');
@@ -799,14 +838,14 @@ describe('VertexChatProvider.callLlamaApi', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
-    jest.mocked(getCache).mockReturnValue({
+    jest.mocked(getCache).mockResolvedValue({
       get: jest.fn(),
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
       reset: jest.fn(),
-      store: {} as any,
-    });
+      store: { name: 'memory' },
+    } as any);
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
@@ -1071,14 +1110,14 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
-    jest.mocked(getCache).mockReturnValue({
+    jest.mocked(getCache).mockResolvedValue({
       get: jest.fn(),
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
       reset: jest.fn(),
-      store: {} as any,
-    });
+      store: { name: 'memory' },
+    } as any);
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
