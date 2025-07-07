@@ -30,14 +30,27 @@ const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
-try {
-  posthogClient = POSTHOG_KEY
-    ? new PostHog(POSTHOG_KEY, {
+
+// Lazy initialization of PostHog client
+function getPostHogClient(): PostHog | null {
+  // Check if telemetry is disabled before creating the client
+  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || process.env.IS_TESTING) {
+    return null;
+  }
+
+  if (posthogClient === null && POSTHOG_KEY) {
+    try {
+      posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
-      })
-    : null;
-} catch {
-  posthogClient = null;
+        // Disable automatic flushing to prevent background network calls
+        flushAt: 0,
+        flushInterval: 0,
+      });
+    } catch {
+      posthogClient = null;
+    }
+  }
+  return posthogClient;
 }
 
 const TELEMETRY_TIMEOUT_MS = 1000;
@@ -59,12 +72,20 @@ export class Telemetry {
       return;
     }
 
-    if (posthogClient) {
-      posthogClient.identify({
-        distinctId: this.id,
-        properties: { email: this.email },
-      });
-      posthogClient.flush();
+    const client = getPostHogClient();
+    if (client) {
+      try {
+        client.identify({
+          distinctId: this.id,
+          properties: { email: this.email },
+        });
+        client.flush().catch(() => {
+          // Silently ignore flush errors
+        });
+      } catch (error) {
+        // Silently ignore PostHog errors
+        logger.debug(`PostHog identify error: ${error}`);
+      }
     }
 
     fetchWithTimeout(
@@ -109,13 +130,21 @@ export class Telemetry {
     };
 
     // Do not use getEnvBool here - it will be mocked in tests
-    if (posthogClient && !process.env.IS_TESTING) {
-      posthogClient.capture({
-        distinctId: this.id,
-        event: eventName,
-        properties: propertiesWithMetadata,
-      });
-      posthogClient.flush();
+    const client = getPostHogClient();
+    if (client && !process.env.IS_TESTING) {
+      try {
+        client.capture({
+          distinctId: this.id,
+          event: eventName,
+          properties: propertiesWithMetadata,
+        });
+        client.flush().catch(() => {
+          // Silently ignore flush errors
+        });
+      } catch (error) {
+        // Silently ignore PostHog errors
+        logger.debug(`PostHog capture error: ${error}`);
+      }
     }
 
     const kaBody = {
