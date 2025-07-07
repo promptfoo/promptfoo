@@ -72,9 +72,11 @@ jest.mock('../../src/util/file', () => ({
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
-          // Get the mocked file content
+          // Extract the file path from the file:// URL
+          const filePath = value.slice('file://'.length);
+          // Get the mocked file content using the extracted path
           const fs = jest.requireMock('fs');
-          const fileContent = fs.readFileSync();
+          const fileContent = fs.readFileSync(filePath, 'utf-8');
           if (typeof fileContent === 'string') {
             try {
               result[key] = JSON.parse(fileContent);
