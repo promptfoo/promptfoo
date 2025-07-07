@@ -1,8 +1,3 @@
-// Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
-  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-}));
-
 import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -20,6 +15,11 @@ import {
   readTests,
   readTestFiles,
 } from '../../src/util/testCaseReader';
+
+// Mock fetchWithTimeout before any imports that might use telemetry
+jest.mock('../../src/fetch', () => ({
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
