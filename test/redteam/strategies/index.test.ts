@@ -24,6 +24,7 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
+      { id: 'custom' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -125,6 +126,27 @@ describe('loadStrategy', () => {
     await strategy.action(testCases, injectVar, config);
 
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding emoji encoding'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should load custom strategy', async () => {
+    const strategy = await loadStrategy('custom');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('custom');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call custom strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('custom');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding Custom'));
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
