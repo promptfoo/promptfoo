@@ -36,7 +36,6 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'prompt-injection': 1,
   retry: 1,
   rot13: 1,
-
   video: 1,
 };
 
