@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getEnvBool } from '../../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../../src/googleSheets';
 import logger from '../../../src/logger';
@@ -463,7 +463,7 @@ describe('Test Case Reader - Multiple Test Cases', () => {
   });
 
   it('processes file:// URLs for YAML files', async () => {
-    const yamlTests = [
+    const yamlTests: TestCase[] = [
       {
         description: 'Test 1',
         vars: { key1: 'value1' },
