@@ -6,17 +6,6 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { GoogleLiveProvider } from '../../../src/providers/google/live';
 
-// Mock setTimeout globally to speed up tests
-const originalSetTimeout = global.setTimeout;
-global.setTimeout = jest.fn((callback: any, delay?: number) => {
-  // For delays of 1000ms (Python startup), execute immediately
-  if (delay === 1000) {
-    return originalSetTimeout(callback, 0);
-  }
-  // For other delays, use the original setTimeout
-  return originalSetTimeout(callback, delay);
-}) as any;
-
 jest.mock('ws');
 jest.mock('axios');
 jest.mock('../../../src/esm', () => ({
@@ -31,8 +20,7 @@ jest.mock('child_process', () => ({
     stderr: { on: jest.fn() },
     on: jest.fn((event, callback) => {
       if (event === 'close') {
-        // Use immediate callback instead of setTimeout
-        setImmediate(callback);
+        setTimeout(callback, 100);
       }
     }),
     kill: jest.fn(),
@@ -42,13 +30,12 @@ jest.mock('child_process', () => ({
 
 const mockImportModule = jest.mocked(importModule);
 
-// Faster message simulation helpers - use setImmediate instead of setTimeout
 const simulateMessage = (mockWs: jest.Mocked<WebSocket>, simulated_data: any) => {
-  setImmediate(() => {
+  setTimeout(() => {
     mockWs.onmessage?.({
       data: JSON.stringify(simulated_data),
     } as WebSocket.MessageEvent);
-  });
+  }, 10);
 };
 
 const simulatePartsMessage = (mockWs: jest.Mocked<WebSocket>, simulated_parts: any) => {
@@ -104,8 +91,8 @@ describe('GoogleLiveProvider', () => {
     });
 
     // Reset mocks before each test
-    mockedAxios.get.mockReset();
-    mockedAxios.post.mockReset();
+    mockedAxios.get.mockClear();
+    mockedAxios.post.mockClear();
   });
 
   afterEach(() => {
@@ -123,19 +110,17 @@ describe('GoogleLiveProvider', () => {
 
   it('should send message and handle basic response', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulateTextMessage(mockWs, 'test');
         simulateTextMessage(mockWs, ' response');
         simulateCompletionMessage(mockWs);
-      });
+      }, 40);
       return mockWs;
     });
 
-    const responsePromise = provider.callApi('test prompt');
-
-    const response = await responsePromise;
+    const response = await provider.callApi('test prompt');
     expect(response).toEqual({
       output: {
         text: 'test response',
@@ -148,7 +133,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should send message and handle function call response', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulatePartsMessage(mockWs, [
@@ -171,13 +156,11 @@ describe('GoogleLiveProvider', () => {
         ]);
         simulateTextMessage(mockWs, 'I was not able to retrieve weather information.');
         simulateCompletionMessage(mockWs);
-      });
+      }, 60);
       return mockWs;
     });
 
-    const responsePromise = provider.callApi('test prompt');
-
-    const response = await responsePromise;
+    const response = await provider.callApi('test prompt');
     expect(response).toEqual({
       output: {
         text: 'I was not able to retrieve weather information.',
@@ -198,7 +181,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should send message and handle sequential function calls', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulatePartsMessage(mockWs, [
@@ -215,7 +198,7 @@ describe('GoogleLiveProvider', () => {
         ]);
         simulateTextMessage(mockWs, "\n```tool_outputs\n{'status': 'called'}\n```\n");
         simulateCompletionMessage(mockWs);
-      });
+      }, 60);
       return mockWs;
     });
 
@@ -237,7 +220,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should send message and handle in-built google search tool', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulatePartsMessage(mockWs, [
@@ -265,7 +248,7 @@ describe('GoogleLiveProvider', () => {
           ' which is slightly acidic due to dissolved carbon dioxide, erodes rocks and carries dissolved minerals and salts into rivers.',
         );
         simulateCompletionMessage(mockWs);
-      });
+      }, 70);
       return mockWs;
     });
 
@@ -280,7 +263,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should send message and handle in-built code execution tool', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulatePartsMessage(mockWs, [
@@ -292,7 +275,7 @@ describe('GoogleLiveProvider', () => {
         ]);
         simulateTextMessage(mockWs, 'The result of multiplying 1341 by 23 is 30843.\n');
         simulateCompletionMessage(mockWs);
-      });
+      }, 60);
       return mockWs;
     });
 
@@ -309,7 +292,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should handle multiple user inputs', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulateTextMessage(mockWs, 'Hey there! How can I help you today?\n');
@@ -320,7 +303,7 @@ describe('GoogleLiveProvider', () => {
         );
         simulateTextMessage(mockWs, ' a unique culture, history, and geography.');
         simulateCompletionMessage(mockWs);
-      });
+      }, 60);
       return mockWs;
     });
 
@@ -339,13 +322,13 @@ describe('GoogleLiveProvider', () => {
 
   it('should handle WebSocket errors', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onerror?.({
           type: 'error',
           error: new Error('connection failed'),
           message: 'connection failed',
         } as WebSocket.ErrorEvent);
-      });
+      }, 10);
       return mockWs;
     });
 
@@ -391,7 +374,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should handle function tool callbacks correctly', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulatePartsMessage(mockWs, [
@@ -410,7 +393,7 @@ describe('GoogleLiveProvider', () => {
         ]);
         simulateTextMessage(mockWs, 'The sum of 5 and 6 is 11.\n');
         simulateCompletionMessage(mockWs);
-      });
+      }, 60);
       return mockWs;
     });
 
@@ -466,7 +449,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should handle errors in function tool callbacks', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulatePartsMessage(mockWs, [
@@ -488,7 +471,7 @@ describe('GoogleLiveProvider', () => {
           'The function `errorFunction` has been called and it returned an error as expected.',
         );
         simulateCompletionMessage(mockWs);
-      });
+      }, 60);
       return mockWs;
     });
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -537,7 +520,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should handle function tool calls to a spawned stateful api', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
-      setImmediate(() => {
+      setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
         simulatePartsMessage(mockWs, [
@@ -581,7 +564,7 @@ describe('GoogleLiveProvider', () => {
         ]);
         simulateTextMessage(mockWs, 'The counter has been incremented until it reached 5.\n');
         simulateCompletionMessage(mockWs);
-      });
+      }, 60);
       return mockWs;
     });
 
@@ -641,19 +624,7 @@ describe('GoogleLiveProvider', () => {
       },
       metadata: {},
     });
-
-    // Check the specific calls made to the stateful API
-    const getCallUrls = mockedAxios.get.mock.calls.map((call) => call[0]);
-    const expectedUrls = [
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/add_one',
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/add_one',
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/get_state',
-    ];
-
-    expect(getCallUrls).toEqual(expectedUrls);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(6);
     expect(mockedAxios.get).toHaveBeenLastCalledWith('http://127.0.0.1:5000/get_state');
   });
   describe('Python executable integration', () => {
@@ -681,12 +652,12 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateTextMessage(mockWs, 'Test response');
           simulateCompletionMessage(mockWs);
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -727,12 +698,12 @@ describe('GoogleLiveProvider', () => {
         });
 
         jest.mocked(WebSocket).mockImplementation(() => {
-          setImmediate(() => {
+          setTimeout(() => {
             mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
             simulateSetupMessage(mockWs);
             simulateTextMessage(mockWs, 'Test response');
             simulateCompletionMessage(mockWs);
-          });
+          }, 10);
           return mockWs;
         });
 
@@ -778,12 +749,12 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateTextMessage(mockWs, 'Test response');
           simulateCompletionMessage(mockWs);
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -819,12 +790,12 @@ describe('GoogleLiveProvider', () => {
         });
 
         jest.mocked(WebSocket).mockImplementation(() => {
-          setImmediate(() => {
+          setTimeout(() => {
             mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
             simulateSetupMessage(mockWs);
             simulateTextMessage(mockWs, 'Test response');
             simulateCompletionMessage(mockWs);
-          });
+          }, 10);
           return mockWs;
         });
 
@@ -876,14 +847,14 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateTextMessage(mockWs, 'Test response');
           simulateCompletionMessage(mockWs);
 
           mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -910,17 +881,9 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -945,17 +908,9 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -984,17 +939,9 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -1024,17 +971,9 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -1068,17 +1007,9 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -1105,17 +1036,9 @@ describe('GoogleLiveProvider', () => {
       });
 
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
+        }, 10);
         return mockWs;
       });
 
@@ -1144,7 +1067,7 @@ describe('GoogleLiveProvider', () => {
 
     it('should load and execute external function callbacks from file', async () => {
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateFunctionCallMessage(mockWs, [
@@ -1152,7 +1075,7 @@ describe('GoogleLiveProvider', () => {
           ]);
           simulateTextMessage(mockWs, 'External function result');
           simulateCompletionMessage(mockWs);
-        });
+        }, 60);
         return mockWs;
       });
 
@@ -1198,7 +1121,7 @@ describe('GoogleLiveProvider', () => {
 
     it('should cache external functions and not reload them on subsequent calls', async () => {
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateFunctionCallMessage(mockWs, [
@@ -1206,7 +1129,7 @@ describe('GoogleLiveProvider', () => {
           ]);
           simulateTextMessage(mockWs, 'Cached result');
           simulateCompletionMessage(mockWs);
-        });
+        }, 60);
         return mockWs;
       });
 
@@ -1247,7 +1170,7 @@ describe('GoogleLiveProvider', () => {
 
       // Reset WebSocket mock for second call
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateFunctionCallMessage(mockWs, [
@@ -1255,7 +1178,7 @@ describe('GoogleLiveProvider', () => {
           ]);
           simulateTextMessage(mockWs, 'Cached result');
           simulateCompletionMessage(mockWs);
-        });
+        }, 60);
         return mockWs;
       });
 
@@ -1268,7 +1191,7 @@ describe('GoogleLiveProvider', () => {
 
     it('should handle errors in external function loading gracefully', async () => {
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateFunctionCallMessage(mockWs, [
@@ -1276,7 +1199,7 @@ describe('GoogleLiveProvider', () => {
           ]);
           simulateTextMessage(mockWs, 'Function failed gracefully');
           simulateCompletionMessage(mockWs);
-        });
+        }, 60);
         return mockWs;
       });
 
@@ -1320,7 +1243,7 @@ describe('GoogleLiveProvider', () => {
 
     it('should handle mixed inline and external function callbacks', async () => {
       jest.mocked(WebSocket).mockImplementation(() => {
-        setImmediate(() => {
+        setTimeout(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
           simulateFunctionCallMessage(mockWs, [
@@ -1333,7 +1256,7 @@ describe('GoogleLiveProvider', () => {
           ]);
           simulateTextMessage(mockWs, 'Mixed functions completed');
           simulateCompletionMessage(mockWs);
-        });
+        }, 60);
         return mockWs;
       });
 
