@@ -137,7 +137,6 @@ describe('Telemetry', () => {
     const _telemetry = new Telemetry();
     _telemetry.record('feature_used', { test: 'value' });
 
-    // Wait for async operations
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const fetchCalls = fetchSpy.mock.calls;
@@ -216,28 +215,22 @@ describe('Telemetry', () => {
   it('should not initialize PostHog client when telemetry is disabled', async () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
 
-    // Clear the module cache to force re-initialization
     jest.resetModules();
 
-    // Re-import to test initialization
     const telemetryModule = await import('../src/telemetry');
     const telemetryInstance = telemetryModule.default;
 
-    // Try to trigger telemetry - should not throw any errors
     telemetryInstance.record('eval_ran', { foo: 'bar' });
 
-    // Verify that PostHog methods were not called
     expect(sendEventSpy).toHaveBeenCalledTimes(0);
   });
 
-  // New tests for additional coverage
   describe('PostHog client initialization', () => {
     it('should initialize PostHog client when telemetry is enabled and POSTHOG_KEY is present', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
       process.env.IS_TESTING = '';
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
-      // Mock PostHog constructor
       const mockPostHog = jest.fn().mockImplementation(() => ({
         identify: jest.fn(),
         capture: jest.fn(),
@@ -252,7 +245,6 @@ describe('Telemetry', () => {
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
-      // Trigger identify to force PostHog client initialization
       _telemetry.identify();
 
       expect(mockPostHog).toHaveBeenCalledWith('test-posthog-key', {
@@ -265,7 +257,6 @@ describe('Telemetry', () => {
       process.env.IS_TESTING = '';
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
-      // Mock PostHog constructor to throw error
       const mockPostHog = jest.fn().mockImplementation(() => {
         throw new Error('PostHog initialization failed');
       });
@@ -278,7 +269,6 @@ describe('Telemetry', () => {
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
-      // Should not throw error even if PostHog initialization fails
       expect(() => _telemetry.identify()).not.toThrow();
     });
   });
@@ -386,7 +376,6 @@ describe('Telemetry', () => {
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
-      // Should not throw even if flush fails
       expect(() => _telemetry.identify()).not.toThrow();
     });
   });
@@ -396,12 +385,10 @@ describe('Telemetry', () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
       const _telemetry = new Telemetry();
 
-      // First call should record the disabled event
       _telemetry.record('eval_ran', { foo: 'bar' });
       expect(sendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
       expect(sendEventSpy).toHaveBeenCalledTimes(1);
 
-      // Second call should not record again
       sendEventSpy.mockClear();
       _telemetry.record('command_used', { name: 'test' });
       expect(sendEventSpy).not.toHaveBeenCalled();

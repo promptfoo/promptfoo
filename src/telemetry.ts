@@ -31,9 +31,7 @@ const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 
-// Lazy initialization of PostHog client
 function getPostHogClient(): PostHog | null {
-  // Check if telemetry is disabled before creating the client
   if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || process.env.IS_TESTING) {
     return null;
   }
@@ -80,7 +78,6 @@ export class Telemetry {
           // Silently ignore flush errors
         });
       } catch (error) {
-        // Silently ignore PostHog errors
         logger.debug(`PostHog identify error: ${error}`);
       }
     }
@@ -139,7 +136,6 @@ export class Telemetry {
           // Silently ignore flush errors
         });
       } catch (error) {
-        // Silently ignore PostHog errors
         logger.debug(`PostHog capture error: ${error}`);
       }
     }
