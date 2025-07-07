@@ -12,6 +12,11 @@ export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] 
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom'] as const;
+
+// Helper function to check if a strategy is a custom variant
+export const isCustomStrategy = (strategyId: string): boolean => {
+  return strategyId === 'custom' || strategyId.startsWith('custom:');
+};
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [

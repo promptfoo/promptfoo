@@ -19,6 +19,7 @@ import {
   Severity,
   type Strategy,
 } from '../redteam/constants';
+import { isCustomStrategy } from '../redteam/constants/strategies';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
@@ -99,6 +100,14 @@ export const strategyIdSchema = z
       },
       {
         message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
+      },
+    ),
+    z.string().refine(
+      (value) => {
+        return isCustomStrategy(value);
+      },
+      {
+        message: `Custom strategy variants must follow the pattern custom:label, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
       },
     ),
   ])
