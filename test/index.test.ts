@@ -115,6 +115,7 @@ describe('index.ts exports', () => {
       Graders: expect.any(Object),
       Plugins: expect.any(Object),
       Strategies: expect.any(Object),
+      generate: expect.any(Function),
     });
   });
 
