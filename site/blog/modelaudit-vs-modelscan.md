@@ -1,5 +1,5 @@
 ---
-title: ModelAudit vs ModelScan: Comparing ML Model Security Scanners
+title: 'ModelAudit vs ModelScan: Comparing ML Model Security Scanners'
 description: 'Compare ModelAudit and ModelScan for ML model security scanning. Learn how comprehensive format support and detection capabilities differ between these tools.'
 image: /img/blog/modelaudit/modelaudit-vs-modelscan.jpg
 date: 2025-07-06
