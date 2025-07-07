@@ -6,6 +6,7 @@ import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
+import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
@@ -58,6 +59,7 @@ import {
   LocalAiEmbeddingProvider,
 } from './localai';
 import { ManualInputProvider } from './manualInput';
+import { MCPProvider } from './mcp';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -1011,6 +1013,32 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const modelName = providerPath.split(':')[1];
       return new LlamaProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'mcp' || providerPath.startsWith('mcp:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      let config = providerOptions.config || { enabled: true };
+
+      // Handle mcp:<server_name> format for server-specific configs
+      if (splits.length > 1) {
+        const serverName = splits[1];
+        // User can configure specific server in the config
+        config = {
+          ...config,
+          serverName,
+        };
+      }
+
+      return new MCPProvider({
+        config,
+        id: providerOptions.id,
+      });
     },
   },
   {
