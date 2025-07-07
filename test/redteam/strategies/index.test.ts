@@ -43,32 +43,32 @@ describe('validateStrategies', () => {
   });
 
   it('should skip validation for file:// strategies', async () => {
-    const strategies: RedteamStrategyObject[] = [{ id: 'file://custom.js' }];
+    const strategies: RedteamStrategyObject[] = [{ id: 'file://playbook.js' }];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
-  describe('custom strategy validation', () => {
-    it('should validate simple custom strategy', async () => {
-      const strategies: RedteamStrategyObject[] = [{ id: 'custom' }];
+  describe('playbook strategy validation', () => {
+    it('should validate simple playbook strategy', async () => {
+      const strategies: RedteamStrategyObject[] = [{ id: 'playbook' }];
       await expect(validateStrategies(strategies)).resolves.toBeUndefined();
     });
 
-    it('should validate custom strategy variants with compound IDs', async () => {
+    it('should validate playbook strategy variants with compound IDs', async () => {
       const strategies: RedteamStrategyObject[] = [
-        { id: 'custom:aggressive' },
-        { id: 'custom:greeting-strategy' },
-        { id: 'custom:multi-word-variant' },
-        { id: 'custom:snake_case_variant' },
+        { id: 'playbook:aggressive' },
+        { id: 'playbook:greeting-strategy' },
+        { id: 'playbook:multi-word-variant' },
+        { id: 'playbook:snake_case_variant' },
       ];
       await expect(validateStrategies(strategies)).resolves.toBeUndefined();
     });
 
-    it('should validate custom strategies with config', async () => {
+    it('should validate playbook strategies with config', async () => {
       const strategies: RedteamStrategyObject[] = [
         {
-          id: 'custom:configured',
+          id: 'playbook:configured',
           config: {
-            strategyText: 'Custom strategy text',
+            strategyText: 'Playbook strategy text',
             stateful: true,
             temperature: 0.8,
           },
@@ -77,24 +77,24 @@ describe('validateStrategies', () => {
       await expect(validateStrategies(strategies)).resolves.toBeUndefined();
     });
 
-    it('should validate mixed strategies including custom variants', async () => {
+    it('should validate mixed strategies including playbook variants', async () => {
       const strategies: RedteamStrategyObject[] = [
         { id: 'basic' },
-        { id: 'custom' },
-        { id: 'custom:variant1' },
+        { id: 'playbook' },
+        { id: 'playbook:variant1' },
         { id: 'jailbreak' },
-        { id: 'custom:variant2', config: { strategyText: 'Custom text' } },
+        { id: 'playbook:variant2', config: { strategyText: 'Playbook text' } },
         { id: 'crescendo' },
       ];
       await expect(validateStrategies(strategies)).resolves.toBeUndefined();
     });
 
-    it('should validate custom strategies with complex variant names', async () => {
+    it('should validate playbook strategies with complex variant names', async () => {
       const strategies: RedteamStrategyObject[] = [
-        { id: 'custom:very-long-complex-variant-name-with-many-hyphens' },
-        { id: 'custom:variant_with_underscores_and_numbers_123' },
-        { id: 'custom:CamelCaseVariant' },
-        { id: 'custom:variant.with.dots' },
+        { id: 'playbook:very-long-complex-variant-name-with-many-hyphens' },
+        { id: 'playbook:variant_with_underscores_and_numbers_123' },
+        { id: 'playbook:CamelCaseVariant' },
+        { id: 'playbook:variant.with.dots' },
       ];
       await expect(validateStrategies(strategies)).resolves.toBeUndefined();
     });
@@ -110,12 +110,12 @@ describe('validateStrategies', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
-  it('should reject invalid custom-like strategy patterns', async () => {
+  it('should reject invalid playbook-like strategy patterns', async () => {
     const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const invalidStrategies: RedteamStrategyObject[] = [
-      { id: 'custom-invalid' },
-      { id: 'custom_invalid' },
-      { id: 'notcustom:variant' },
+      { id: 'playbook-invalid' },
+      { id: 'playbook_invalid' },
+      { id: 'notplaybook:variant' },
     ];
 
     await validateStrategies(invalidStrategies);
@@ -195,25 +195,25 @@ describe('loadStrategy', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
-  describe('custom strategy loading', () => {
-    it('should load simple custom strategy', async () => {
-      const strategy = await loadStrategy('custom');
+  describe('playbook strategy loading', () => {
+    it('should load simple playbook strategy', async () => {
+      const strategy = await loadStrategy('playbook');
       expect(strategy).toBeDefined();
-      expect(strategy.id).toBe('custom');
+      expect(strategy.id).toBe('playbook');
       expect(typeof strategy.action).toBe('function');
     });
 
-    it('should call custom strategy action with correct parameters including strategyId', async () => {
-      const strategy = await loadStrategy('custom');
+    it('should call playbook strategy action with correct parameters including strategyId', async () => {
+      const strategy = await loadStrategy('playbook');
       const testCases: TestCaseWithPlugin[] = [
         { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
       ];
       const injectVar = 'inject';
       const config = { strategyText: 'Test strategy' };
 
-      await strategy.action(testCases, injectVar, config, 'custom:test');
+      await strategy.action(testCases, injectVar, config, 'playbook:test');
 
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding Custom'));
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding Playbook'));
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
     });
   });
@@ -222,25 +222,25 @@ describe('loadStrategy', () => {
     await expect(loadStrategy('non-existent')).rejects.toThrow('Strategy not found: non-existent');
   });
 
-  it('should load custom file strategy', async () => {
-    const customStrategy = {
-      id: 'custom',
+  it('should load playbook file strategy', async () => {
+    const playbookStrategy = {
+      id: 'playbook',
       action: jest.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    jest.mocked(importModule).mockResolvedValue(playbookStrategy);
     (cliState as any).basePath = '/test/path';
 
-    const strategy = await loadStrategy('file://custom.js');
-    expect(strategy).toEqual(customStrategy);
+    const strategy = await loadStrategy('file://playbook.js');
+    expect(strategy).toEqual(playbookStrategy);
   });
 
-  it('should throw error for non-js custom file', async () => {
-    await expect(loadStrategy('file://custom.txt')).rejects.toThrow(
+  it('should throw error for non-js playbook file', async () => {
+    await expect(loadStrategy('file://playbook.txt')).rejects.toThrow(
       'Custom strategy file must be a JavaScript file',
     );
   });
 
-  it('should throw error for invalid custom strategy', async () => {
+  it('should throw error for invalid playbook strategy', async () => {
     jest.mocked(importModule).mockResolvedValue({});
 
     await expect(loadStrategy('file://invalid.js')).rejects.toThrow(
@@ -248,26 +248,26 @@ describe('loadStrategy', () => {
     );
   });
 
-  it('should use absolute path for custom strategy', async () => {
-    const customStrategy = {
-      id: 'custom',
+  it('should use absolute path for playbook strategy', async () => {
+    const playbookStrategy = {
+      id: 'playbook',
       action: jest.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    jest.mocked(importModule).mockResolvedValue(playbookStrategy);
 
-    await loadStrategy('file:///absolute/path/custom.js');
-    expect(importModule).toHaveBeenCalledWith('/absolute/path/custom.js');
+    await loadStrategy('file:///absolute/path/playbook.js');
+    expect(importModule).toHaveBeenCalledWith('/absolute/path/playbook.js');
   });
 
-  it('should use relative path from basePath for custom strategy', async () => {
-    const customStrategy = {
-      id: 'custom',
+  it('should use relative path from basePath for playbook strategy', async () => {
+    const playbookStrategy = {
+      id: 'playbook',
       action: jest.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    jest.mocked(importModule).mockResolvedValue(playbookStrategy);
     (cliState as any).basePath = '/base/path';
 
-    await loadStrategy('file://relative/custom.js');
-    expect(importModule).toHaveBeenCalledWith(path.join('/base/path', 'relative/custom.js'));
+    await loadStrategy('file://relative/playbook.js');
+    expect(importModule).toHaveBeenCalledWith(path.join('/base/path', 'relative/playbook.js'));
   });
 });
