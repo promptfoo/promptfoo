@@ -16,6 +16,11 @@ import {
   readTestFiles,
 } from '../../src/util/testCaseReader';
 
+// Mock fetchWithTimeout before any imports that might use telemetry
+jest.mock('../../src/fetch', () => ({
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+}));
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -25,7 +30,6 @@ jest.mock('glob', () => ({
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
-jest.mock('../../src/fetch');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -60,6 +64,20 @@ jest.mock('../../src/python/pythonUtils', () => ({
 jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: jest.fn(),
 }));
+
+jest.mock('../../src/telemetry', () => {
+  const mockTelemetry = {
+    record: jest.fn().mockResolvedValue(undefined),
+    identify: jest.fn(),
+    saveConsent: jest.fn().mockResolvedValue(undefined),
+    disabled: false,
+  };
+  return {
+    __esModule: true,
+    default: mockTelemetry,
+    Telemetry: jest.fn().mockImplementation(() => mockTelemetry),
+  };
+});
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),
