@@ -2,8 +2,7 @@ import React from 'react';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { Paper, Box, Typography, Chip, Checkbox, IconButton } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { DEFAULT_STRATEGIES, AGENTIC_STRATEGIES } from '@promptfoo/redteam/constants';
-import { MULTI_MODAL_STRATEGIES } from './constants';
+import { DEFAULT_STRATEGIES, AGENTIC_STRATEGIES, MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import type { StrategyCardData } from './types';
 
 const CONFIGURABLE_STRATEGIES = [

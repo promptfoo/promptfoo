@@ -11,6 +11,7 @@ import {
   MULTI_TURN_STRATEGIES,
   AGENTIC_STRATEGIES,
   DEFAULT_STRATEGIES,
+  MULTI_MODAL_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -21,7 +22,6 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 import {
   STRATEGY_PRESETS,
   PRESET_IDS,
