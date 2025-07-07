@@ -14,7 +14,7 @@ export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
-export const MULTI_MODAL_STRATEGIES = ['audio', 'video', 'image'] as const;
+export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
