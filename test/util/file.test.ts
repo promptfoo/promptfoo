@@ -285,12 +285,13 @@ describe('file utilities', () => {
       expect(await maybeLoadConfigFromExternalFile(undefined)).toBeUndefined();
     });
 
-    it('should handle deeply nested objects with multiple file references', () => {
+    it('should handle deeply nested objects with multiple file references', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
       jest
-        .mocked(fs.readFileSync)
-        .mockReturnValueOnce('{"nested": {"value": 123}}')
-        .mockReturnValueOnce('["item1", "item2"]')
-        .mockReturnValueOnce('deeply nested content');
+        .mocked(readFile)
+        .mockResolvedValueOnce('{"nested": {"value": 123}}')
+        .mockResolvedValueOnce('["item1", "item2"]')
+        .mockResolvedValueOnce('deeply nested content');
 
       const config = {
         level1: {
@@ -308,9 +309,9 @@ describe('file utilities', () => {
         topLevel: 'unchanged',
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
-      expect(fs.readFileSync).toHaveBeenCalledTimes(3);
+      expect(readFile).toHaveBeenCalledTimes(3);
       expect(result).toEqual({
         level1: {
           level2: {
@@ -328,12 +329,13 @@ describe('file utilities', () => {
       });
     });
 
-    it('should handle arrays with mixed content types including file references', () => {
+    it('should handle arrays with mixed content types including file references', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
       jest
-        .mocked(fs.readFileSync)
-        .mockReturnValueOnce('{"config": "loaded"}')
-        .mockReturnValueOnce('text content')
-        .mockReturnValueOnce('{"config": "loaded"}');
+        .mocked(readFile)
+        .mockResolvedValueOnce('{"config": "loaded"}')
+        .mockResolvedValueOnce('text content')
+        .mockResolvedValueOnce('{"config": "loaded"}');
 
       const config = {
         mixedArray: [
@@ -348,7 +350,7 @@ describe('file utilities', () => {
         ],
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual({
         mixedArray: [
@@ -364,7 +366,7 @@ describe('file utilities', () => {
       });
     });
 
-    it('should handle edge cases with empty objects and arrays', () => {
+    it('should handle edge cases with empty objects and arrays', async () => {
       const config = {
         emptyObject: {},
         emptyArray: [],
@@ -378,13 +380,14 @@ describe('file utilities', () => {
         },
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual(config);
     });
 
-    it('should preserve object keys that contain special characters', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('special content');
+    it('should preserve object keys that contain special characters', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValueOnce('special content');
 
       const config = {
         'key-with-dashes': 'file://special.txt',
@@ -395,7 +398,7 @@ describe('file utilities', () => {
         '': 'empty key',
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual({
         'key-with-dashes': 'special content',
@@ -407,8 +410,9 @@ describe('file utilities', () => {
       });
     });
 
-    it('should handle objects with prototype pollution attempts safely', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('malicious content');
+    it('should handle objects with prototype pollution attempts safely', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValueOnce('malicious content');
 
       const config = {
         __proto__: 'file://malicious.txt',
@@ -417,7 +421,7 @@ describe('file utilities', () => {
         normal: 'safe value',
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual({
         __proto__: 'malicious content',
@@ -427,8 +431,9 @@ describe('file utilities', () => {
       });
     });
 
-    it('should handle very large nested structures efficiently', () => {
-      jest.mocked(fs.readFileSync).mockReturnValue('file content');
+    it('should handle very large nested structures efficiently', async () => {
+      jest.mocked(access).mockResolvedValue(undefined);
+      jest.mocked(readFile).mockResolvedValue('file content');
 
       // Create a large nested structure
       const createNestedConfig = (depth: number): any => {
@@ -442,10 +447,10 @@ describe('file utilities', () => {
       };
 
       const config = createNestedConfig(10);
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
       // Should have loaded the file reference at the deepest level
-      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      expect(readFile).toHaveBeenCalledTimes(1);
 
       // Verify the structure is preserved
       let current = result;
@@ -457,7 +462,7 @@ describe('file utilities', () => {
       expect(current).toBe('file content');
     });
 
-    it('should handle functions and undefined values in objects gracefully', () => {
+    it('should handle functions and undefined values in objects gracefully', async () => {
       const testFunction = () => 'test';
 
       const config = {
@@ -470,7 +475,7 @@ describe('file utilities', () => {
         },
       };
 
-      const result = maybeLoadConfigFromExternalFile(config);
+      const result = await maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual(config);
       expect(result.func).toBe(testFunction);
