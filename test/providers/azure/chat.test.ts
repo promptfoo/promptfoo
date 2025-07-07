@@ -648,4 +648,281 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
   });
+
+  describe('guardrails and content filtering', () => {
+    let provider: AzureChatCompletionProvider;
+
+    beforeEach(() => {
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+        },
+      });
+    });
+
+    afterEach(() => {
+      jest.resetAllMocks();
+    });
+
+    it('should detect content filter triggered by finish_reason', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Some content',
+            },
+            finish_reason: 'content_filter',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+      });
+      expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should detect content filter in response content_filter_results', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Some content',
+            },
+            finish_reason: 'stop',
+            content_filter_results: {
+              hate: { filtered: true, severity: 'medium' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'safe' },
+              self_harm: { filtered: false, severity: 'safe' },
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+      });
+      expect(result.finishReason).toBe('stop');
+    });
+
+    it('should detect input filtering from prompt_filter_results', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Some content',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        prompt_filter_results: [
+          {
+            content_filter_results: {
+              hate: { filtered: true, severity: 'high' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'safe' },
+              self_harm: { filtered: false, severity: 'safe' },
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+      });
+      expect(result.finishReason).toBe('stop');
+    });
+
+    it('should detect both input and output filtering', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Some content',
+            },
+            finish_reason: 'content_filter',
+            content_filter_results: {
+              hate: { filtered: true, severity: 'medium' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'safe' },
+              self_harm: { filtered: false, severity: 'safe' },
+            },
+          },
+        ],
+        prompt_filter_results: [
+          {
+            content_filter_results: {
+              hate: { filtered: true, severity: 'high' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'safe' },
+              self_harm: { filtered: false, severity: 'safe' },
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: true,
+      });
+      expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should not flag when no content filtering is triggered', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Some content',
+            },
+            finish_reason: 'stop',
+            content_filter_results: {
+              hate: { filtered: false, severity: 'safe' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'safe' },
+              self_harm: { filtered: false, severity: 'safe' },
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.guardrails).toBeUndefined();
+      expect(result.finishReason).toBe('stop');
+    });
+
+    it('should handle HTTP 400 content filter error', async () => {
+      const mockResponse = {
+        error: {
+          message: 'Content was filtered due to policy violation',
+          code: 'content_filter',
+          status: 400,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Content was filtered due to policy violation');
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+      });
+    });
+  });
 });

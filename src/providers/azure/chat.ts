@@ -4,6 +4,7 @@ import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -191,6 +192,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
+      // Handle content filter errors (HTTP 400 with content_filter code)
       if (data.error) {
         if (data.error.code === 'content_filter' && data.error.status === 400) {
           return {
@@ -206,6 +208,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           error: `API response error: ${data.error.code} ${data.error.message}`,
         };
       }
+
       const hasDataSources = !!config.dataSources;
       const choice = hasDataSources
         ? data.choices.find(
@@ -215,12 +218,16 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : data.choices[0];
 
       const message = choice?.message;
+      const finishReason = normalizeFinishReason(choice?.finish_reason);
 
       // Handle structured output
       let output = message.content;
 
+      // Check if content was filtered based on finish_reason
+      const contentFilterTriggered = finishReason === 'content_filter';
+
       if (output == null) {
-        if (choice.finish_reason === 'content_filter') {
+        if (contentFilterTriggered) {
           output =
             "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
         } else {
@@ -242,22 +249,20 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
 
+      // Check for content filter results in the response
       const contentFilterResults = data.choices[0]?.content_filter_results;
       const promptFilterResults = data.prompt_filter_results;
 
-      const guardrailsTriggered = !!(
-        (contentFilterResults && Object.keys(contentFilterResults).length > 0) ||
-        (promptFilterResults && promptFilterResults.length > 0)
-      );
-
+      // Determine if input was flagged
       const flaggedInput =
         promptFilterResults?.some((result: any) =>
-          Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
+          Object.values(result.content_filter_results || {}).some((filter: any) => filter.filtered),
         ) ?? false;
 
-      const flaggedOutput = Object.values(contentFilterResults || {}).some(
-        (filter: any) => filter.filtered,
-      );
+      // Determine if output was flagged
+      const flaggedOutput =
+        contentFilterTriggered ||
+        Object.values(contentFilterResults || {}).some((filter: any) => filter.filtered);
 
       if (flaggedOutput) {
         logger.warn(
@@ -266,6 +271,16 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           )}`,
         );
       }
+
+      if (flaggedInput) {
+        logger.warn(
+          `Azure model ${this.deploymentName} input was flagged by content filter: ${JSON.stringify(
+            promptFilterResults,
+          )}`,
+        );
+      }
+
+      const guardrailsTriggered = flaggedInput || flaggedOutput;
 
       return {
         output,
@@ -289,6 +304,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             },
         cached,
         logProbs,
+        ...(finishReason && { finishReason }),
         cost: calculateAzureCost(
           this.deploymentName,
           config,
@@ -298,9 +314,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         ...(guardrailsTriggered
           ? {
               guardrails: {
+                flagged: true,
                 flaggedInput,
                 flaggedOutput,
-                flagged: flaggedInput || flaggedOutput,
               },
             }
           : {}),
