@@ -168,7 +168,7 @@ export class MCPClient {
         try {
           const result = await client.callTool({ name, arguments: args });
           return {
-            content: result?.content?.toString() || '',
+            content: JSON.stringify(result?.content) || '',
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);

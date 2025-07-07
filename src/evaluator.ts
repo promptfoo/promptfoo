@@ -654,46 +654,12 @@ class Evaluator {
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
-
-      // Check if any providers are MCP providers
-      const hasMcpProviders = testSuite.providers.some(
-        (provider) => provider.id().startsWith('mcp') || provider.id().includes('mcp'),
-      );
-
-      let basePrompt = testSuite.prompts[0].raw;
-
-      // If MCP providers are detected, modify the base prompt to include tool call instructions
-      if (hasMcpProviders) {
-        basePrompt = `${basePrompt}
-
-IMPORTANT: When generating variations of this prompt, ensure that each generated prompt is structured as a JSON string that represents a tool call with the following format:
-{
-  "tool": "tool_name",
-  "args": {
-    "param1": "value1",
-    "param2": "value2"
-  }
-}
-
-The generated prompts should focus on testing different:
-- Tool names and their variations
-- Parameter combinations and edge cases
-- Invalid inputs for security testing
-- Error conditions and boundary testing
-
-Each prompt variation should be a valid JSON tool call that can be used to test MCP server functionality.`;
-      }
-
-      const { prompts: newPrompts, error } = await generatePrompts(basePrompt, 1);
+      const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
       if (error || !newPrompts) {
         throw new Error(`Failed to generate prompts: ${error}`);
       }
 
       logger.info(chalk.blue('Generated prompts:'));
-      if (hasMcpProviders) {
-        logger.info(chalk.yellow('Note: Prompts are generated for MCP tool call testing'));
-      }
-
       let numAdded = 0;
       for (const prompt of newPrompts) {
         logger.info('--------------------------------------------------------');

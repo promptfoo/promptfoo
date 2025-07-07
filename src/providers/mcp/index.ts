@@ -63,31 +63,39 @@ export class MCPProvider implements ApiProvider {
       // Ensure initialization is complete
       await this.initializationPromise;
 
-      // Extract tool call information from context variables
-      const vars = context?.vars || {};
+      // Parse the prompt as JSON to extract tool call information
+      let toolCallData: any;
+      try {
+        toolCallData = JSON.parse(context?.vars.prompt as string);
+      } catch {
+        return {
+          error:
+            'Invalid JSON in prompt. MCP provider expects a JSON payload with tool call information.',
+        };
+      }
 
-      // Tool name can be specified in multiple ways
-      const toolName = vars.tool || vars.toolName || vars.function || vars.functionName;
+      // Extract tool name from various possible fields
+      const toolName =
+        toolCallData.tool ||
+        toolCallData.toolName ||
+        toolCallData.function ||
+        toolCallData.functionName ||
+        toolCallData.name;
 
       if (!toolName || typeof toolName !== 'string') {
         return {
           error:
-            'No tool specified. Please provide tool name in test variables (e.g., tool: "function_name")',
+            'No tool name found in JSON payload. Expected format: {"tool": "function_name", "args": {...}}',
         };
       }
 
-      // Tool arguments can be specified as 'args', 'arguments', or 'params'
-      let toolArgs = vars.args || vars.arguments || vars.params || {};
-
-      // If args is a string, try to parse it as JSON
-      if (typeof toolArgs === 'string') {
-        try {
-          toolArgs = JSON.parse(toolArgs);
-        } catch {
-          // If parsing fails, treat it as a single argument
-          toolArgs = { input: toolArgs };
-        }
-      }
+      // Extract tool arguments from various possible fields
+      let toolArgs =
+        toolCallData.args ||
+        toolCallData.arguments ||
+        toolCallData.params ||
+        toolCallData.parameters ||
+        {};
 
       // Ensure toolArgs is an object
       if (typeof toolArgs !== 'object' || toolArgs === null || Array.isArray(toolArgs)) {
@@ -118,6 +126,7 @@ export class MCPProvider implements ApiProvider {
         metadata: {
           toolName,
           toolArgs: finalArgs,
+          originalPayload: toolCallData,
         },
       };
     } catch (error) {
