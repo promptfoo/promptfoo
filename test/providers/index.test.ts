@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import child_process from 'child_process';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import * as path from 'path';
 import Stream from 'stream';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
@@ -43,7 +43,10 @@ import RedteamImageIterativeProvider from '../../src/redteam/providers/iterative
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import type { ProviderOptionsMap, ProviderFunction } from '../../src/types';
 
-jest.mock('fs');
+jest.mock('node:fs', () => ({
+  readFileSync: jest.fn(),
+  existsSync: jest.fn(),
+}));
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
@@ -56,16 +59,6 @@ jest.mock('proxy-agent', () => ({
 jest.mock('../../src/esm', () => ({
   ...jest.requireActual('../../src/esm'),
   importModule: jest.fn(),
-}));
-
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
-
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
 }));
 
 jest.mock('../../src/database', () => ({
@@ -681,13 +674,13 @@ describe('loadApiProvider', () => {
   it('loadApiProvider with file://*.py', async () => {
     const provider = await loadApiProvider('file://script.py:function_name');
     expect(provider).toBeInstanceOf(PythonProvider);
-    expect(provider.id()).toBe('python:script.py:function_name');
+    expect(provider.id()).toBe('python:script.py:function_name:call_api');
   });
 
   it('loadApiProvider with python:*.py', async () => {
     const provider = await loadApiProvider('python:script.py');
     expect(provider).toBeInstanceOf(PythonProvider);
-    expect(provider.id()).toBe('python:script.py:default');
+    expect(provider.id()).toBe('python:script.py:call_api');
   });
 
   it('loadApiProvider with promptfoo:redteam:iterative', async () => {
