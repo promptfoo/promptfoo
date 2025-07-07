@@ -102,17 +102,7 @@ jest.mock('@aws-sdk/client-sagemaker-runtime', () => {
     // Different response formats based on endpoint name
     let responseBody;
 
-    if (command.EndpointName.includes('openai')) {
-      responseBody = {
-        choices: [
-          {
-            message: {
-              content: 'This is a response from OpenAI-compatible endpoint',
-            },
-          },
-        ],
-      };
-    } else if (command.EndpointName.includes('anthropic')) {
+    if (command.EndpointName.includes('anthropic')) {
       responseBody = {
         content: [
           {
@@ -223,19 +213,6 @@ describe('SageMakerCompletionProvider', () => {
     expect(result.error).toContain('SageMaker API error');
   });
 
-  it('should call SageMaker endpoint with proper request for OpenAI format', async () => {
-    const provider = new SageMakerCompletionProvider('openai-endpoint', {
-      config: {
-        modelType: 'openai',
-      },
-    });
-
-    const result = await provider.callApi('test prompt');
-
-    expect(result.output).toBe('This is a response from OpenAI-compatible endpoint');
-    expect(result.tokenUsage).toBeDefined();
-  });
-
   it('should call SageMaker endpoint with proper request for Anthropic format', async () => {
     const provider = new SageMakerCompletionProvider('anthropic-endpoint', {
       config: {
@@ -285,9 +262,9 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   it('should handle JSON formatted prompts', async () => {
-    const provider = new SageMakerCompletionProvider('openai-endpoint', {
+    const provider = new SageMakerCompletionProvider('anthropic-endpoint', {
       config: {
-        modelType: 'openai',
+        modelType: 'anthropic',
       },
     });
 
@@ -298,7 +275,7 @@ describe('SageMakerCompletionProvider', () => {
 
     const result = await provider.callApi(jsonPrompt);
 
-    expect(result.output).toBe('This is a response from OpenAI-compatible endpoint');
+    expect(result.output).toBe('This is a response from Claude-compatible endpoint');
   });
 
   it('should use custom content type if provided', async () => {
@@ -510,15 +487,15 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   it('should include model type in the response metadata', async () => {
-    const provider = new SageMakerCompletionProvider('openai-endpoint', {
+    const provider = new SageMakerCompletionProvider('anthropic-endpoint', {
       config: {
-        modelType: 'openai',
+        modelType: 'anthropic',
       },
     });
 
     const result = await provider.callApi('test prompt');
 
-    expect(result.metadata?.modelType).toBe('openai');
+    expect(result.metadata?.modelType).toBe('anthropic');
   });
 });
 
@@ -554,9 +531,9 @@ describe('SageMakerEmbeddingProvider', () => {
   });
 
   it('should format embedding request according to model type', async () => {
-    const openaiProvider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+    const anthropicProvider = new SageMakerEmbeddingProvider('embedding-endpoint', {
       config: {
-        modelType: 'openai',
+        modelType: 'anthropic',
       },
     });
 
@@ -566,10 +543,10 @@ describe('SageMakerEmbeddingProvider', () => {
       },
     });
 
-    const openaiResult = await openaiProvider.callEmbeddingApi('test text');
+    const anthropicResult = await anthropicProvider.callEmbeddingApi('test text');
     const huggingfaceResult = await huggingfaceProvider.callEmbeddingApi('test text');
 
-    expect(openaiResult.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
+    expect(anthropicResult.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
     expect(huggingfaceResult.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
   });
 
@@ -624,10 +601,10 @@ describe('SageMaker Provider Registry', () => {
   });
 
   it('should load SageMaker provider with model type', async () => {
-    const provider = await loadApiProvider('sagemaker:openai:my-openai-endpoint');
+    const provider = await loadApiProvider('sagemaker:anthropic:my-anthropic-endpoint');
 
     expect(provider).toBeDefined();
-    expect(provider.id()).toBe('sagemaker:my-openai-endpoint');
+    expect(provider.id()).toBe('sagemaker:my-anthropic-endpoint');
     // We can't easily test the modelType config here since it's internal
   });
 
@@ -713,54 +690,6 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
           top_p: 0.95,
           stop: undefined, // No stop sequences provided
         },
-      });
-    });
-
-    it('should format OpenAI payload correctly with JSON messages', () => {
-      const provider = new SageMakerCompletionProvider('openai-endpoint', {
-        config: {
-          modelType: 'openai',
-          maxTokens: 1000,
-          temperature: 0.5,
-          stopSequences: ['\n\n'],
-        },
-      });
-
-      const messages = JSON.stringify([
-        { role: 'user', content: 'What is the weather like today?' },
-      ]);
-
-      const payload = provider.formatPayload(messages);
-      const parsedPayload = JSON.parse(payload);
-
-      expect(parsedPayload).toEqual({
-        messages: [{ role: 'user', content: 'What is the weather like today?' }],
-        max_tokens: 1000,
-        temperature: 0.5,
-        top_p: 1.0, // Default value
-        stop: ['\n\n'],
-      });
-    });
-
-    it('should format OpenAI payload correctly with plain text fallback', () => {
-      const provider = new SageMakerCompletionProvider('openai-endpoint', {
-        config: {
-          modelType: 'openai',
-          maxTokens: 800,
-          temperature: 0.3,
-        },
-      });
-
-      const prompt = 'Complete this sentence: The best part about programming is';
-      const payload = provider.formatPayload(prompt);
-      const parsedPayload = JSON.parse(payload);
-
-      expect(parsedPayload).toEqual({
-        prompt: 'Complete this sentence: The best part about programming is',
-        max_tokens: 800,
-        temperature: 0.3,
-        top_p: 1.0,
-        stop: undefined,
       });
     });
 
@@ -919,7 +848,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
       const provider = new SageMakerCompletionProvider('test-endpoint', {
         config: {
-          modelType: 'openai',
+          modelType: 'anthropic',
         },
       });
 
@@ -977,21 +906,15 @@ describe('SageMakerCompletionProvider - Response Parsing', () => {
     });
 
     it('should prioritize generated_text over model-specific parsing', async () => {
-      const provider = new SageMakerCompletionProvider('openai-endpoint', {
+      const provider = new SageMakerCompletionProvider('llama-endpoint', {
         config: {
-          modelType: 'openai',
+          modelType: 'llama',
         },
       });
 
       const responseBody = JSON.stringify({
         generated_text: 'JumpStart format response',
-        choices: [
-          {
-            message: {
-              content: 'OpenAI format response',
-            },
-          },
-        ],
+        generation: 'Llama format response',
       });
 
       const result = await provider.parseResponse(responseBody);
@@ -1074,7 +997,6 @@ describe('SageMakerCompletionProvider - Parameter Validation', () => {
   it('should validate supported model types', () => {
     const supportedTypes = SageMakerCompletionProvider.SAGEMAKER_MODEL_TYPES;
 
-    expect(supportedTypes).toContain('openai');
     expect(supportedTypes).toContain('anthropic');
     expect(supportedTypes).toContain('llama');
     expect(supportedTypes).toContain('huggingface');

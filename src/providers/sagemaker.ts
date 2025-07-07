@@ -49,7 +49,7 @@ interface SageMakerOptions {
   transform?: string; // Transform function or file path to transform prompts
 
   // Model type for request/response handling
-  modelType?: 'openai' | 'anthropic' | 'llama' | 'huggingface' | 'jumpstart' | 'custom';
+  modelType?: 'anthropic' | 'llama' | 'huggingface' | 'jumpstart' | 'custom';
 
   // Response format options
   responseFormat?: {
@@ -395,14 +395,7 @@ export abstract class SageMakerGenericProvider {
  * Provider for text generation with SageMaker endpoints
  */
 export class SageMakerCompletionProvider extends SageMakerGenericProvider implements ApiProvider {
-  static SAGEMAKER_MODEL_TYPES = [
-    'openai',
-    'anthropic',
-    'llama',
-    'huggingface',
-    'jumpstart',
-    'custom',
-  ];
+  static SAGEMAKER_MODEL_TYPES = ['anthropic', 'llama', 'huggingface', 'jumpstart', 'custom'];
 
   /**
    * Format the request payload based on model type
@@ -425,33 +418,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     logger.debug(`Formatting payload for model type: ${modelType}`);
 
     switch (modelType) {
-      case 'openai':
-        try {
-          // Try to parse as JSON array of messages
-          const messages = JSON.parse(prompt);
-          if (Array.isArray(messages)) {
-            payload = {
-              messages,
-              max_tokens: maxTokens,
-              temperature,
-              top_p: topP,
-              stop: stopSequences.length > 0 ? stopSequences : undefined,
-            };
-          } else {
-            throw new Error('Not valid messages format');
-          }
-        } catch {
-          // Fall back to text completion format
-          payload = {
-            prompt,
-            max_tokens: maxTokens,
-            temperature,
-            top_p: topP,
-            stop: stopSequences.length > 0 ? stopSequences : undefined,
-          };
-        }
-        break;
-
       case 'anthropic':
         try {
           const messages = JSON.parse(prompt);
@@ -602,14 +568,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     switch (modelType) {
-      case 'openai':
-        return (
-          responseJson.choices?.[0]?.message?.content ||
-          responseJson.choices?.[0]?.text ||
-          responseJson.generation ||
-          responseJson
-        );
-
       case 'anthropic':
         return responseJson.content?.[0]?.text || responseJson.completion || responseJson;
 
@@ -939,7 +897,7 @@ export class SageMakerEmbeddingProvider
     logger.debug(`Formatting embedding payload for model type: ${modelType}`);
 
     switch (modelType) {
-      case 'openai':
+      case 'anthropic':
         payload = JSON.stringify({
           input: transformedText,
           model: 'embedding',
