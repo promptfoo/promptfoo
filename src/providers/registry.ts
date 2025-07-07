@@ -6,12 +6,12 @@ import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
-import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
+import RedteamCustomProvider from '../redteam/providers/playbook';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';

@@ -1,4 +1,4 @@
-import { addPlaybook } from '../../../src/redteam/strategies/custom';
+import { addPlaybook } from '../../../src/redteam/strategies/playbook';
 import type { TestCase } from '../../../src/types';
 
 describe('addPlaybook', () => {

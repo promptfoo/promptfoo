@@ -1,7 +1,13 @@
 import { getGraderById } from '../../../../src/redteam/graders';
-import { MemorySystem, PlaybookProvider } from '../../../../src/redteam/providers/custom';
+import {
+  MemorySystem,
+  PlaybookProvider,
+} from '../../../../src/redteam/providers/playbook';
 import type { Message } from '../../../../src/redteam/providers/shared';
-import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+import {
+  redteamProviderManager,
+  tryUnblocking,
+} from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
