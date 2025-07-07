@@ -1,0 +1,158 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'MCP tool evaluation and security testing'
+
+prompts:
+  - 'MCP Tool Call Test'
+
+providers:
+  - id: mcp
+    label: 'MCP Security Tester'
+    config:
+      enabled: true
+      servers:
+        - name: security-test-server
+          path: ./example-server.js
+      verbose: true
+      debug: true
+
+tests:
+  # Test basic file reading
+  - vars:
+      tool: 'read_file'
+      args:
+        path: 'package.json'
+    assert:
+      - type: not-empty
+      - type: contains
+        value: 'simple-mcp-example'
+
+  # Test path traversal prevention
+  - vars:
+      tool: 'read_file'
+      args:
+        path: '../../../etc/passwd'
+    assert:
+      - type: contains
+        value: 'Path traversal not allowed'
+
+  # Test restricted file access
+  - vars:
+      tool: 'read_file'
+      args:
+        path: '/etc/passwd'
+    assert:
+      - type: contains
+        value: 'Permission denied'
+
+  # Test command execution blocking
+  - vars:
+      tool: 'execute_command'
+      args:
+        command: 'rm -rf /'
+    assert:
+      - type: contains
+        value: 'Dangerous command blocked'
+
+  # Test safe command execution
+  - vars:
+      tool: 'execute_command'
+      args:
+        command: 'echo'
+        args: ['Hello World']
+    assert:
+      - type: contains
+        value: 'Hello World'
+
+  # Test SSRF prevention
+  - vars:
+      tool: 'fetch_url'
+      args:
+        url: 'http://localhost:8080/admin'
+    assert:
+      - type: contains
+        value: 'Internal network access blocked'
+
+  # Test SQL injection prevention
+  - vars:
+      tool: 'query_database'
+      args:
+        query: 'SELECT * FROM users; DROP TABLE users;'
+    assert:
+      - type: contains
+        value: 'dangerous SQL query blocked'
+
+  # Test safe database query
+  - vars:
+      tool: 'query_database'
+      args:
+        query: 'SELECT name FROM products WHERE category = ?'
+        params: ['electronics']
+    assert:
+      - type: contains
+        value: 'Mock query result'
+
+  # Test data sanitization
+  - vars:
+      tool: 'process_data'
+      args:
+        data: '<script>alert("xss")</script>Hello World'
+        operation: 'sanitize'
+    assert:
+      - type: contains
+        value: '[SCRIPT_REMOVED]'
+      - type: contains
+        value: 'Hello World'
+
+  # Test JSON validation
+  - vars:
+      tool: 'process_data'
+      args:
+        data: '{"valid": "json"}'
+        operation: 'validate'
+        format: 'json'
+    assert:
+      - type: contains
+        value: 'Valid JSON data'
+
+  # Test system information access
+  - vars:
+      tool: 'get_system_info'
+      args:
+        info_type: 'cpu'
+        detailed: true
+    assert:
+      - type: contains
+        value: 'Intel i7'
+
+  # Test invalid tool name
+  - vars:
+      tool: 'hack_system'
+      args:
+        target: 'everything'
+    assert:
+      - type: contains
+        value: 'Unknown tool'
+
+  # Test file write restrictions
+  - vars:
+      tool: 'write_file'
+      args:
+        path: '/etc/shadow'
+        content: 'malicious content'
+    assert:
+      - type: contains
+        value: 'Permission denied'
+
+  # Test JSON string arguments
+  - vars:
+      tool: 'get_system_info'
+      args: '{"info_type": "memory", "detailed": false}'
+    assert:
+      - type: contains
+        value: 'Memory'
+
+outputPath: './output'
+
+evaluateOptions:
+  maxConcurrency: 1 # MCP connections may need to be sequential
+  delay: 500 # Short delay between tool calls

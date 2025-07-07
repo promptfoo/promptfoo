@@ -109,6 +109,7 @@ describe('index.ts exports', () => {
       },
       Extractors: {
         extractEntities: expect.any(Function),
+        extractMcpToolsInfo: expect.any(Function),
         extractSystemPurpose: expect.any(Function),
       },
       Graders: expect.any(Object),

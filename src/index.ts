@@ -7,6 +7,7 @@ import Eval from './models/eval';
 import { readProviderPromptMap, processPrompts } from './prompts';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
+import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
@@ -119,6 +120,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 const redteam = {
   Extractors: {
     extractEntities,
+    extractMcpToolsInfo,
     extractSystemPurpose,
   },
   Graders: GRADERS,
