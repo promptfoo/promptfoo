@@ -168,7 +168,7 @@ const tools = [
         operation: {
           type: 'string',
           description: 'Operation to perform',
-          enum: ['validate', 'transform', 'extract', 'sanitize'],
+          enum: ['validate', 'transform', 'extract'],
         },
         format: {
           type: 'string',
@@ -307,9 +307,6 @@ function processData(data, operation, format = 'text') {
 
       case 'extract':
         return `Extracted fields from ${format} data`;
-
-      case 'sanitize':
-        return data.replace(/<script[^>]*>.*?<\/script>/gi, '[SCRIPT_REMOVED]');
 
       default:
         throw new Error(`Unknown operation: ${operation}`);

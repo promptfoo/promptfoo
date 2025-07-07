@@ -167,8 +167,27 @@ export class MCPClient {
       if (serverTools.some((tool) => tool.name === name)) {
         try {
           const result = await client.callTool({ name, arguments: args });
+
+          // Handle different content types appropriately
+          let content = '';
+          if (result?.content) {
+            if (typeof result.content === 'string') {
+              // Try to parse JSON first, fall back to raw string
+              try {
+                const parsed = JSON.parse(result.content);
+                content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+              } catch {
+                content = result.content;
+              }
+            } else if (Buffer.isBuffer(result.content)) {
+              content = result.content.toString();
+            } else {
+              content = JSON.stringify(result.content);
+            }
+          }
+
           return {
-            content: JSON.stringify(result?.content) || '',
+            content,
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
