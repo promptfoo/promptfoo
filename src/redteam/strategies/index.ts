@@ -6,12 +6,12 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { isCustomStrategy } from '../constants/strategies';
+import { isPlaybookStrategy } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
-import { addCustom } from './custom';
+import { addPlaybook } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
@@ -96,11 +96,11 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'custom',
-    action: async (testCases, injectVar, config, strategyId = 'custom') => {
-      logger.debug(`Adding Custom to ${testCases.length} test cases`);
-      const newTestCases = addCustom(testCases, injectVar, config, strategyId);
-      logger.debug(`Added ${newTestCases.length} Custom test cases`);
+    id: 'playbook',
+    action: async (testCases, injectVar, config, strategyId = 'playbook') => {
+      logger.debug(`Adding Playbook to ${testCases.length} test cases`);
+      const newTestCases = addPlaybook(testCases, injectVar, config, strategyId);
+      logger.debug(`Added ${newTestCases.length} Playbook test cases`);
       return newTestCases;
     },
   },
@@ -304,9 +304,9 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
       continue;
     }
 
-    // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
-    if (isCustomStrategy(strategy.id)) {
-      continue; // Custom strategies are always valid
+    // Check if it's a playbook strategy variant (e.g., playbook:greeting-strategy)
+    if (isPlaybookStrategy(strategy.id)) {
+      continue; // Playbook strategies are always valid
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

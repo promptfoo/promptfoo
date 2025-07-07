@@ -19,7 +19,7 @@ import {
   Severity,
   type Strategy,
 } from '../redteam/constants';
-import { isCustomStrategy } from '../redteam/constants/strategies';
+import { isPlaybookStrategy } from '../redteam/constants/strategies';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
@@ -104,10 +104,10 @@ export const strategyIdSchema = z
     ),
     z.string().refine(
       (value) => {
-        return isCustomStrategy(value);
+        return isPlaybookStrategy(value);
       },
       {
-        message: `Custom strategy variants must follow the pattern custom:label, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
+        message: `Playbook strategy variants must follow the pattern playbook:label, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
       },
     ),
   ])

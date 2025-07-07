@@ -11,7 +11,7 @@ const CONFIGURABLE_STRATEGIES = [
   'best-of-n',
   'goat',
   'crescendo',
-  'custom',
+  'playbook',
   'pandamonium',
   'jailbreak',
   'jailbreak:tree',
