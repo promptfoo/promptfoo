@@ -32,7 +32,7 @@ const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 let posthogClient: PostHog | null = null;
 
 function getPostHogClient(): PostHog | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || process.env.IS_TESTING) {
+  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
     return null;
   }
 
@@ -62,8 +62,7 @@ export class Telemetry {
   }
 
   identify() {
-    // Do not use getEnvBool here - it will be mocked in tests
-    if (this.disabled || process.env.IS_TESTING) {
+    if (this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }
 
@@ -123,9 +122,8 @@ export class Telemetry {
       isRunningInCi: isCI(),
     };
 
-    // Do not use getEnvBool here - it will be mocked in tests
     const client = getPostHogClient();
-    if (client && !process.env.IS_TESTING) {
+    if (client && !getEnvBool('IS_TESTING')) {
       try {
         client.capture({
           distinctId: this.id,

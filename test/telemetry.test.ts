@@ -34,7 +34,7 @@ jest.mock('../src/envars', () => ({
       return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
     }
     if (key === 'IS_TESTING') {
-      return false;
+      return process.env.IS_TESTING === 'true' || process.env.IS_TESTING === '1';
     }
     return false;
   }),
