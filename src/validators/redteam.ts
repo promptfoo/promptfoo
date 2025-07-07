@@ -23,7 +23,6 @@ import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '..
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-// Use Set to ensure uniqueness as some plugins (like 'bias') may appear in multiple source arrays
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
 ].sort();
