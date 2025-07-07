@@ -1,8 +1,8 @@
 import { parse as csvParse } from 'csv-parse/sync';
-import * as fs from 'fs';
+import { access, readFile } from 'node:fs/promises';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
-import * as path from 'path';
+import * as path from 'node:path';
 import cliState from '../cliState';
 
 /**
@@ -35,12 +35,12 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  *
  * @throws {Error} If the specified file does not exist.
  */
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+export async function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
   if (Array.isArray(filePath)) {
-    return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path);
+    return Promise.all(filePath.map(async (path) => {
+      const content: any = await maybeLoadFromExternalFile(path);
       return content;
-    });
+    }));
   }
 
   if (typeof filePath !== 'string') {
@@ -54,11 +54,13 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
 
   const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
-  if (!fs.existsSync(finalPath)) {
+  try {
+    await access(finalPath);
+  } catch {
     throw new Error(`File does not exist: ${finalPath}`);
   }
 
-  const contents = fs.readFileSync(finalPath, 'utf8');
+  const contents = await readFile(finalPath, 'utf8');
   if (finalPath.endsWith('.json')) {
     return JSON.parse(contents);
   }
@@ -94,14 +96,14 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
   return path.join(process.cwd(), filePath);
 }
 
-export function maybeLoadConfigFromExternalFile(config: any): any {
+export async function maybeLoadConfigFromExternalFile(config: any): Promise<any> {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item));
+    return Promise.all(config.map((item) => maybeLoadConfigFromExternalFile(item)));
   }
   if (config && typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      result[key] = maybeLoadConfigFromExternalFile(config[key]);
+      result[key] = await maybeLoadConfigFromExternalFile(config[key]);
     }
     return result;
   }

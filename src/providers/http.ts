@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import { readFileSync } from 'node:fs';
 import http from 'http';
 import httpZ from 'http-z';
 import path from 'path';
@@ -122,7 +122,7 @@ export async function generateSignature(
   isPath: boolean = true,
 ): Promise<string> {
   try {
-    const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
+    const privateKey = isPath ? readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
     const data = getNunjucksEngine()
       .renderString(signatureDataTemplate, {
         signatureTimestamp,
@@ -665,10 +665,12 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+  }
 
-    if (this.config.request) {
-      this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
-    } else {
+  private async ensureRequestLoaded(): Promise<void> {
+    if (this.config.request && typeof this.config.request === 'string' && this.config.request.startsWith('file://')) {
+      this.config.request = (await maybeLoadFromExternalFile(this.config.request)) as string;
+    } else if (!this.config.request) {
       invariant(
         this.config.body || this.config.method === 'GET',
         `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
@@ -811,6 +813,8 @@ export class HttpProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    await this.ensureRequestLoaded();
+    
     const vars = {
       ...(context?.vars || {}),
       prompt,

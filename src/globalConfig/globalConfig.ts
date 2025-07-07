@@ -2,15 +2,15 @@
  * Functions for manipulating the global configuration file, which lives at
  * ~/.promptfoo/promptfoo.yaml by default.
  */
-import { randomUUID } from 'crypto';
-import * as fs from 'fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import yaml from 'js-yaml';
-import * as path from 'path';
+import * as path from 'node:path';
 import type { GlobalConfig } from '../configTypes';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
 export function writeGlobalConfig(config: GlobalConfig): void {
-  fs.writeFileSync(
+  writeFileSync(
     path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
     yaml.dump(config),
   );
@@ -20,17 +20,17 @@ export function readGlobalConfig(): GlobalConfig {
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = { id: randomUUID() };
-  if (fs.existsSync(configFilePath)) {
-    globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
+  if (existsSync(configFilePath)) {
+    globalConfig = (yaml.load(readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
     if (!globalConfig?.id) {
       globalConfig = { ...globalConfig, id: randomUUID() };
       writeGlobalConfig(globalConfig);
     }
   } else {
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
+    if (!existsSync(configDir)) {
+      mkdirSync(configDir, { recursive: true });
     }
-    fs.writeFileSync(configFilePath, yaml.dump(globalConfig));
+    writeFileSync(configFilePath, yaml.dump(globalConfig));
   }
 
   return globalConfig;

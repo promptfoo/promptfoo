@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import { readFileSync } from 'node:fs';
 import type { Prompt } from '../../types';
 import { PROMPT_DELIMITER } from '../constants';
 
@@ -9,7 +9,7 @@ import { PROMPT_DELIMITER } from '../constants';
  * @returns Array of prompts extracted from the file.
  */
 export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
+  const fileContent = readFileSync(filePath, 'utf-8');
 
   const lines = fileContent.split(/\r?\n/);
   const prompts: Prompt[] = [];

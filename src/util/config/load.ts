@@ -1,7 +1,7 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import { access, readFile } from 'node:fs/promises';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
@@ -35,6 +35,8 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
+import { parse as parseCsv } from 'csv-parse/sync';
+import dotenv from 'dotenv';
 
 /**
  * Type guard to check if a test case has vars property
@@ -162,7 +164,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
+    const rawConfig = yaml.load(await readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
@@ -229,7 +231,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
-  if (!fs.existsSync(configPath)) {
+  try {
+    await access(configPath);
+  } catch {
     return undefined;
   }
   return readConfig(configPath);
@@ -482,7 +486,7 @@ export async function resolveConfigs(
       process.exit(1);
     }
     const modelOutputs = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
+      await readFile(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
     ) as string[] | { output: string; tags?: string[] }[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];

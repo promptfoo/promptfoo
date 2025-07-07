@@ -2,7 +2,10 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
+import dedent from 'dedent';
+import dotenv from 'dotenv';
+import { globSync } from 'glob';
+import { existsSync, readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -127,16 +130,16 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
     if (typeof value === 'string' && value.startsWith('file://')) {
       const filePath = value.slice('file://'.length);
 
-      if (!fs.existsSync(filePath)) {
+      if (!existsSync(filePath)) {
         throw new Error(`File not found: ${filePath}`);
       }
 
       if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+        config[key] = yaml.load(readFileSync(filePath, 'utf8'));
       } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        config[key] = JSON.parse(readFileSync(filePath, 'utf8'));
       } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
+        config[key] = readFileSync(filePath, 'utf8');
       }
     }
   }

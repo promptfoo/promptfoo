@@ -1,6 +1,6 @@
-﻿import fs from 'fs';
-import os from 'os';
-import path from 'path';
+﻿import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
@@ -149,7 +149,7 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
+    writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
 
     await new Promise<void>((resolve, reject) => {
@@ -176,7 +176,7 @@ export async function runPython(
       }
     });
 
-    const output = await fs.readFileSync(outputPath, 'utf-8');
+    const output = readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
 
     let result: { type: 'final_result'; data: any } | undefined;
@@ -221,7 +221,7 @@ export async function runPython(
     await Promise.all(
       [tempJsonPath, outputPath].map((file) => {
         try {
-          fs.unlinkSync(file);
+          unlinkSync(file);
         } catch (error) {
           logger.error(`Error removing ${file}: ${error}`);
         }

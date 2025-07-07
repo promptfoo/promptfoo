@@ -1,4 +1,5 @@
-import * as fs from 'fs';
+import { readFileSync } from 'node:fs';
+import nunjucks from 'nunjucks';
 import type { Prompt } from '../../types';
 
 /**
@@ -10,7 +11,7 @@ import type { Prompt } from '../../types';
  * @returns Array of one `Prompt` object.
  */
 export function processJinjaFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const content = fs.readFileSync(filePath, 'utf8');
+  const content = readFileSync(filePath, 'utf8');
   return [
     {
       raw: content,

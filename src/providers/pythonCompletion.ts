@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
@@ -103,7 +103,7 @@ export class PythonProvider implements ApiProvider {
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
-    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    const fileHash = sha256(readFileSync(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(

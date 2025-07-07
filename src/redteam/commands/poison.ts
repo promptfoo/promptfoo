@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import * as fs from 'fs';
+import dedent from 'dedent';
+import { readdirSync, statSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -38,11 +39,11 @@ type Document = {
 };
 
 export function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
-  const files = fs.readdirSync(dirPath);
+  const files = readdirSync(dirPath);
 
   files.forEach((file) => {
     const fullPath = path.join(dirPath, file);
-    if (fs.statSync(fullPath).isDirectory()) {
+    if (statSync(fullPath).isDirectory()) {
       arrayOfFiles = getAllFiles(fullPath, arrayOfFiles);
     } else {
       arrayOfFiles.push(fullPath);
@@ -90,7 +91,7 @@ export async function poisonDocument(
   logger.debug(`Poisoning ${JSON.stringify(doc)}`);
 
   try {
-    const documentContent = doc.isFile ? fs.readFileSync(doc.docLike, 'utf-8') : doc.docLike;
+    const documentContent = doc.isFile ? readFileSync(doc.docLike, 'utf-8') : doc.docLike;
     const result = await generatePoisonedDocument(documentContent, goal);
 
     if (doc.isFile) {
@@ -108,14 +109,14 @@ export async function poisonDocument(
       outputFilePath = path.join(outputDir, docPath);
 
       // Create necessary subdirectories
-      fs.mkdirSync(path.dirname(outputFilePath), { recursive: true });
+      mkdirSync(path.dirname(outputFilePath), { recursive: true });
     } else {
       // Generate a filename for / from the document content
       const hash = Buffer.from(documentContent).toString('base64').slice(0, 8);
       outputFilePath = path.join(outputDir, `poisoned-${hash}.txt`);
     }
 
-    fs.writeFileSync(outputFilePath, result.poisonedDocument);
+    writeFileSync(outputFilePath, result.poisonedDocument);
     logger.debug(`Wrote poisoned document to ${outputFilePath}`);
 
     logger.info(chalk.green(`✓ Successfully poisoned ${doc.isFile ? doc.docLike : 'document'}`));
@@ -135,7 +136,7 @@ export async function doPoisonDocuments(options: PoisonOptions) {
   const outputDir = options.outputDir || 'poisoned-documents';
 
   // Always create output directory since we're always using it
-  fs.mkdirSync(outputDir, { recursive: true });
+  mkdirSync(outputDir, { recursive: true });
 
   logger.info(chalk.blue('Generating poisoned documents...'));
 
@@ -144,8 +145,8 @@ export async function doPoisonDocuments(options: PoisonOptions) {
 
   for (const doc of options.documents) {
     // Is the document a ∈{file|directory} path or document content?
-    if (fs.existsSync(doc)) {
-      const stat = fs.statSync(doc);
+    if (existsSync(doc)) {
+      const stat = statSync(doc);
       if (stat.isDirectory()) {
         docs = [
           ...docs,
@@ -166,7 +167,7 @@ export async function doPoisonDocuments(options: PoisonOptions) {
   );
 
   // Write summary YAML file
-  fs.writeFileSync(outputPath, yaml.dump({ documents: results }));
+  writeFileSync(outputPath, yaml.dump({ documents: results }));
   logger.info(chalk.green(`\nWrote ${results.length} poisoned documents summary to ${outputPath}`));
 }
 

@@ -262,7 +262,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const cacheKey = `mistral:${JSON.stringify(params)}`;
     if (isCacheEnabled()) {
-      const cache = getCache();
+      const cache = await getCache();
       if (cache) {
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
         if (cachedResult) {
@@ -330,7 +330,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     if (isCacheEnabled()) {
       try {
-        await getCache().set(cacheKey, result);
+        await (await getCache()).set(cacheKey, result);
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }

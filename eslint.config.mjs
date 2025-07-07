@@ -82,6 +82,7 @@ export default [
       'unicorn/no-lonely-if': 'error',
       'unicorn/no-negated-condition': 'error',
       'unicorn/prefer-number-properties': 'error',
+      'unicorn/prefer-node-protocol': 'error',
       'unused-imports/no-unused-imports': 'error',
       // 250508(Will): Latent Type-info Errors;
       // These need to be addressed in separate PRs.

@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import { readFileSync } from 'node:fs';
 import type { Prompt } from '../../types';
 
 /**
@@ -8,7 +8,7 @@ import type { Prompt } from '../../types';
  * @returns Array of prompts extracted from the file.
  */
 export function processJsonlFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
+  const fileContent = readFileSync(filePath, 'utf-8');
   const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
   const containsMultiple = jsonLines.length > 1;
   return jsonLines.map((json) => ({

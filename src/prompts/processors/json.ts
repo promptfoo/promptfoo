@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import { readFileSync } from 'node:fs';
 import type { Prompt } from '../../types';
 
 /**
@@ -11,7 +11,7 @@ import type { Prompt } from '../../types';
  * @throws Will throw an error if the file cannot be read.
  */
 export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const fileContents = fs.readFileSync(filePath, 'utf8');
+  const fileContents = readFileSync(filePath, 'utf8');
   // NOTE: We do not validate if this is a valid JSON file.
   return [
     {

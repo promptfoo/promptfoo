@@ -318,7 +318,7 @@ export class WatsonXProvider implements ApiProvider {
     const modelId = this.getModelId();
     const projectId = this.getProjectId();
 
-    const cache = getCache();
+    const cache = await getCache();
     const configHash = generateConfigHash(this.options.config);
     const cacheKey = `watsonx:${this.modelName}:${configHash}:${prompt}`;
     const cacheEnabled = isCacheEnabled();

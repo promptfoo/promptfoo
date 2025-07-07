@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import chokidar from 'chokidar';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'fs';
+import { stat } from 'node:fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
@@ -95,6 +95,15 @@ export function formatTokenUsage(usage: Partial<TokenUsage>): string {
   return parts.join(' / ');
 }
 
+async function isDirectory(configPath: string): Promise<boolean> {
+  try {
+    const stats = await stat(configPath);
+    return stats.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -131,7 +140,7 @@ export async function doEval(
     if (cmdObj.config !== undefined) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
-        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+        if (await isDirectory(configPath)) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadDefaultConfig(configPath);
           if (newConfigPath) {

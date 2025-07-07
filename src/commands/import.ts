@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import fs from 'fs';
+import { readFile } from 'node:fs/promises';
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
@@ -7,15 +7,15 @@ import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 
-export function importCommand(program: Command) {
+export async function importCommand(program: Command) {
   program
     .command('import <file>')
     .description('Import an eval record from a JSON file')
-    .action(async (file) => {
+    .action(async (file: string) => {
       const db = getDb();
       let evalId: string;
       try {
-        const fileContent = fs.readFileSync(file, 'utf-8');
+        const fileContent = await readFile(file, 'utf-8');
         const evalData = JSON.parse(fileContent);
         if (evalData.results.version === 3) {
           logger.debug('Importing v3 eval');

@@ -1,6 +1,6 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import logger from '../logger';
 import { runPython } from './pythonUtils';
 
@@ -21,7 +21,7 @@ export async function runPythonCode(
     `temp-python-code-${Date.now()}-${Math.random().toString(16).slice(2)}.py`,
   );
   try {
-    fs.writeFileSync(tempFilePath, code);
+    writeFileSync(tempFilePath, code);
     // Necessary to await so temp file doesn't get deleted.
     const result = await runPython(tempFilePath, method, args);
     return result;
@@ -30,7 +30,7 @@ export async function runPythonCode(
     throw error;
   } finally {
     try {
-      fs.unlinkSync(tempFilePath);
+      unlinkSync(tempFilePath);
     } catch (error) {
       logger.error(`Error removing temporary file: ${error}`);
     }

@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
-import fs from 'fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -41,8 +41,8 @@ export function getFileHashes(scriptParts: string[]): string[] {
 
   for (const part of scriptParts) {
     const cleanPart = part.replace(/^['"]|['"]$/g, '');
-    if (fs.existsSync(cleanPart) && fs.statSync(cleanPart).isFile()) {
-      const fileContent = fs.readFileSync(cleanPart);
+    if (existsSync(cleanPart) && statSync(cleanPart).isFile()) {
+      const fileContent = readFileSync(cleanPart);
       const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
       fileHashes.push(fileHash);
       logger.debug(`File hash for ${cleanPart}: ${fileHash}`);

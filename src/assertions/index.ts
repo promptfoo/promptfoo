@@ -1,7 +1,7 @@
 import async from 'async';
-import fs from 'fs';
+import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import logger from '../logger';
@@ -464,7 +464,7 @@ export async function runCompareAssertion(
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(fs.readFileSync(filePath, 'utf-8')) as Assertion[];
+    const assertions = yaml.load(readFileSync(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }

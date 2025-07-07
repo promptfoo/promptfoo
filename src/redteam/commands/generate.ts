@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import { createHash } from 'crypto';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
@@ -46,7 +46,7 @@ import type {
 } from '../types';
 
 function getConfigHash(configPath: string): string {
-  const content = fs.readFileSync(configPath, 'utf8');
+  const content = readFileSync(configPath, 'utf8');
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
 }
 
@@ -106,11 +106,11 @@ export async function doGenerateRedteam(
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
+  if (!options.force && existsSync(outputPath) && configPath && existsSync(configPath)) {
     // Skip hash check for .burp files since they're not YAML
     if (!outputPath.endsWith('.burp')) {
       const redteamContent = yaml.load(
-        fs.readFileSync(outputPath, 'utf8'),
+        readFileSync(outputPath, 'utf8'),
       ) as Partial<UnifiedConfig>;
       const storedHash = redteamContent.metadata?.configHash;
       const currentHash = getConfigHash(configPath);
@@ -345,7 +345,7 @@ export async function doGenerateRedteam(
       })
       .filter((line) => line.length > 0)
       .join('\n');
-    fs.writeFileSync(options.output, outputLines);
+    writeFileSync(options.output, outputLines);
     logger.info(
       chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
     );
@@ -353,7 +353,7 @@ export async function doGenerateRedteam(
     return {};
   } else if (options.output) {
     const existingYaml = configPath
-      ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
+      ? (yaml.load(readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
@@ -420,7 +420,7 @@ export async function doGenerateRedteam(
     }
     printBorder();
   } else if (options.write && configPath) {
-    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    const existingConfig = yaml.load(readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     const existingTests = existingConfig.tests;
     let testsArray: any[] = [];
     if (Array.isArray(existingTests)) {

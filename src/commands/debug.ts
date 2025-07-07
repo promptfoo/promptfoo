@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import * as fs from 'fs';
+import { access } from 'node:fs/promises';
 import * as os from 'os';
 import { version } from '../../package.json';
 import { getEnvString } from '../envars';
@@ -41,22 +41,28 @@ async function doDebug(options: DebugOptions): Promise<void> {
     },
   };
 
-  // Try to load config if available
-  const configPath = options.config || options.defaultConfigPath;
-  if (configPath && fs.existsSync(configPath)) {
-    debugInfo.configInfo.configExists = true;
-    try {
-      const resolved = await resolveConfigs(
-        {
-          config: [configPath],
-        },
-        options.defaultConfig,
-      );
-      debugInfo.configInfo.configContent = resolved;
-    } catch (err) {
-      debugInfo.configInfo.configContent = `Error loading config: ${err}`;
+      // Try to load config if available
+    let configPath = options.config || options.defaultConfigPath;
+    if (configPath) {
+      try {
+        await access(configPath);
+        debugInfo.configInfo.configExists = true;
+        try {
+          const resolved = await resolveConfigs(
+            {
+              config: [configPath],
+            },
+            options.defaultConfig,
+          );
+          debugInfo.configInfo.configContent = resolved;
+        } catch (err) {
+          debugInfo.configInfo.configContent = `Error loading config: ${err}`;
+        }
+      } catch {
+        // File doesn't exist
+        configPath = undefined;
+      }
     }
-  }
 
   printBorder();
   logger.info(chalk.bold('Promptfoo Debug Information'));

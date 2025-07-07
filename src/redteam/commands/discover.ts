@@ -3,7 +3,8 @@ import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
 import { randomUUID } from 'crypto';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import dotenv from 'dotenv';
+import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
@@ -317,7 +318,7 @@ export function discoverCommand(
       // If user provides a config, read the target from it:
       if (args.config) {
         // Validate that the config is a valid path:
-        if (!fs.existsSync(args.config)) {
+        if (!existsSync(args.config)) {
           throw new Error(`Config not found at ${args.config}`);
         }
 

@@ -1,7 +1,7 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import { readFileSync } from 'node:fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
@@ -41,7 +41,7 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
+      const yamlData = yaml.load(readFileSync(p, 'utf-8'));
       Object.assign(ret, yamlData);
     }
   }
@@ -136,7 +136,7 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - local',
     });
     const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = readFileSync(resolvedVarsPath, 'utf-8');
     const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
     try {
@@ -179,7 +179,7 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = readFileSync(resolvedVarsPath, 'utf-8');
     const jsonData = yaml.load(fileContent) as any;
     const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
     return testCases.map((item, idx) => ({
@@ -193,7 +193,7 @@ export async function readStandaloneTestsFile(
       feature: 'jsonl tests file',
     });
 
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = readFileSync(resolvedVarsPath, 'utf-8');
 
     return fileContent
       .split('\n')
@@ -209,7 +209,7 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
-    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+    rows = yaml.load(readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
 
   return rows.map((row, idx) => {
@@ -241,7 +241,7 @@ export async function readTest(
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
     const testBasePath = path.dirname(testFilePath);
-    const rawTestCase = yaml.load(fs.readFileSync(testFilePath, 'utf-8')) as TestCaseWithVarsFile;
+    const rawTestCase = yaml.load(readFileSync(testFilePath, 'utf-8')) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, testBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -343,10 +343,10 @@ export async function loadTestsFromGlob(
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-      testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      testCases = yaml.load(readFileSync(testFile, 'utf-8')) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
-      const fileContent = fs.readFileSync(testFile, 'utf-8');
+      const fileContent = readFileSync(testFile, 'utf-8');
       testCases = fileContent
         .split('\n')
         .filter((line) => line.trim())

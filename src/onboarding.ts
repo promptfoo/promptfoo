@@ -4,8 +4,8 @@ import { ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import fs from 'fs';
-import path from 'path';
+import { access, mkdir, writeFile } from 'node:fs/promises';
+import * as path from 'node:path';
 import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
@@ -271,6 +271,15 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
     );
 }
 
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function askForPermissionToOverwrite({
   absolutePath,
   relativePath,
@@ -280,7 +289,7 @@ async function askForPermissionToOverwrite({
   relativePath: string;
   required: boolean;
 }): Promise<boolean> {
-  if (!fs.existsSync(absolutePath)) {
+  if (!(await exists(absolutePath))) {
     return true;
   }
 
@@ -302,7 +311,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   const outDirectory = directory || '.';
   const outDirAbsolute = path.join(process.cwd(), outDirectory);
 
-  async function writeFile({
+  async function writeFileIfPermitted({
     file,
     contents,
     required,
@@ -327,7 +336,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       }
     }
 
-    fs.writeFileSync(absolutePath, contents);
+    await writeFile(absolutePath, contents);
     logger.info(`⌛ Wrote ${relativePath}`);
   }
 
@@ -336,8 +345,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   let action: string;
   let language: string;
 
-  if (!fs.existsSync(outDirAbsolute)) {
-    fs.mkdirSync(outDirAbsolute, { recursive: true });
+  if (!(await exists(outDirAbsolute))) {
+    await mkdir(outDirAbsolute, { recursive: true });
   }
 
   if (interactive) {
@@ -512,7 +521,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
             typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
         )
       ) {
-        await writeFile({
+        await writeFileIfPermitted({
           file: 'provider.js',
           contents: JAVASCRIPT_PROVIDER,
           required: true,
@@ -521,7 +530,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       if (
         providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
-        await writeFile({
+        await writeFileIfPermitted({
           file: 'provider.sh',
           contents: BASH_PROVIDER,
           required: true,
@@ -535,7 +544,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
               (choice.startsWith('file://') && choice.endsWith('.py'))),
         )
       ) {
-        await writeFile({
+        await writeFileIfPermitted({
           file: 'provider.py',
           contents: PYTHON_PROVIDER,
           required: true,
@@ -561,13 +570,13 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     if (action === 'rag' || action === 'agent') {
       if (language === 'javascript') {
-        await writeFile({
+        await writeFileIfPermitted({
           file: 'context.js',
           contents: JAVASCRIPT_VAR,
           required: true,
         });
       } else {
-        await writeFile({
+        await writeFileIfPermitted({
           file: 'context.py',
           contents: PYTHON_VAR,
           required: true,
@@ -593,13 +602,13 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language,
   });
 
-  await writeFile({
+  await writeFileIfPermitted({
     file: 'README.md',
     contents: DEFAULT_README,
     required: false,
   });
 
-  await writeFile({
+  await writeFileIfPermitted({
     file: 'promptfooconfig.yaml',
     contents: config,
     required: true,

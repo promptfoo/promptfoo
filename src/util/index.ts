@@ -1,11 +1,12 @@
-import { stringify } from 'csv-stringify/sync';
+import async from 'async';
+import chalk from 'chalk';
+import { stringify as csvStringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
-import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
+import * as path from 'node:path';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -33,6 +34,8 @@ import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
+import { access, mkdir, readFile, stat, writeFile, appendFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -92,18 +95,18 @@ export async function writeOutput(
 
   // Ensure the directory exists
   const outputDir = path.dirname(outputPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
+  if (!(await exists(outputDir))) {
+    await mkdir(outputDir, { recursive: true });
   }
 
   if (outputExtension === 'csv') {
     // Write headers first
     const headers = getHeaderForTable(evalRecord);
 
-    const headerCsv = stringify([
+    const headerCsv = csvStringify([
       [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
     ]);
-    fs.writeFileSync(outputPath, headerCsv);
+    await writeFile(outputPath, headerCsv);
 
     // Write body rows in batches
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
@@ -115,17 +118,17 @@ export async function writeOutput(
         }
         tableRows[result.testIdx].push(result);
       }
-      const batchCsv = stringify(
+      const batchCsv = csvStringify(
         Object.values(tableRows).map((results) => {
           const row = convertTestResultsToTableRow(results, headers.vars);
           return [...row.vars, ...row.outputs.map(outputToSimpleString)];
         }),
       );
-      fs.appendFileSync(outputPath, batchCsv);
+      await appendFile(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
     const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
+    await writeFile(
       outputPath,
       JSON.stringify(
         {
@@ -140,7 +143,7 @@ export async function writeOutput(
     );
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
+    await writeFile(
       outputPath,
       yaml.dump({
         evalId: evalRecord.id,
@@ -153,7 +156,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const template = await readFile(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const htmlTable = [
       [
         ...table.head.vars,
@@ -166,11 +169,11 @@ export async function writeOutput(
       table: htmlTable,
       results: summary,
     });
-    fs.writeFileSync(outputPath, htmlOutput);
+    await writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
       const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
-      fs.appendFileSync(outputPath, text);
+      await appendFile(outputPath, text);
     }
   }
 }
@@ -190,7 +193,7 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
 
   switch (ext) {
     case 'json':
-      return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
+      return JSON.parse(await readFile(outputPath, 'utf-8')) as OutputFile;
     default:
       throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
   }
@@ -326,7 +329,7 @@ export function parsePathOrGlob(
   // verify that filename without function exists
   let stats;
   try {
-    stats = fs.statSync(path.join(basePath, filename));
+    stats = await stat(path.join(basePath, filename));
   } catch (err) {
     if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
       throw err;
@@ -366,9 +369,21 @@ export function isRunningUnderNpx(): boolean {
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  */
-export function maybeLoadToolsFromExternalFile(
-  tools: any,
-  vars?: Record<string, string | object>,
-): any {
+export async function maybeLoadTools(tools: string | object | undefined, vars: Record<string, any>) {
+  if (!tools) {
+    return undefined;
+  }
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
+}
+
+// Alias for backward compatibility
+export const maybeLoadToolsFromExternalFile = maybeLoadTools;
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }

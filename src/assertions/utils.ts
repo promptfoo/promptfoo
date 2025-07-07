@@ -1,6 +1,6 @@
-import fs from 'fs';
+import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
@@ -57,7 +57,7 @@ export async function loadFromJavaScriptFile(
 export function processFileReference(fileRef: string): object | string {
   const basePath = cliState.basePath || '';
   const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
-  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const fileContent = readFileSync(filePath, 'utf8');
   const extension = path.extname(filePath);
   if (['.json', '.yaml', '.yml'].includes(extension)) {
     return yaml.load(fileContent) as object;

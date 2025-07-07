@@ -1,8 +1,8 @@
 import cacheManager from 'cache-manager';
 import type { Cache } from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
-import fs from 'fs';
-import path from 'path';
+import { access, mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
@@ -16,15 +16,17 @@ let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 const cacheType =
   getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
 
-export function getCache() {
+export async function getCache() {
   if (!cacheInstance) {
     let cachePath = '';
     if (cacheType === 'disk' && enabled) {
       cachePath =
         getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-      if (!fs.existsSync(cachePath)) {
+      try {
+        await access(cachePath);
+      } catch {
         logger.info(`Creating cache folder at ${cachePath}.`);
-        fs.mkdirSync(cachePath, { recursive: true });
+        await mkdir(cachePath, { recursive: true });
       }
     }
     cacheInstance = cacheManager.caching({
@@ -162,8 +164,12 @@ export function disableCache() {
   enabled = false;
 }
 
+export async function resetCache() {
+  return (await getCache()).reset();
+}
+
 export async function clearCache() {
-  return getCache().reset();
+  return (await getCache()).reset();
 }
 
 export function isCacheEnabled() {

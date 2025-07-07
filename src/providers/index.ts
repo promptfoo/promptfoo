@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import fs from 'fs';
+import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import cliState from '../cliState';
 import logger from '../logger';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
@@ -52,7 +52,7 @@ export async function loadApiProvider(
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    const fileContent = yaml.load(readFileSync(modulePath, 'utf8')) as ProviderOptions;
     invariant(fileContent, `Provider config ${filePath} is undefined`);
 
     // If fileContent is an array, it contains multiple providers
@@ -154,7 +154,7 @@ async function loadProvidersFromFile(
     ? relativePath
     : path.join(basePath || process.cwd(), relativePath);
 
-  const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as
+  const fileContent = yaml.load(readFileSync(modulePath, 'utf8')) as
     | ProviderOptions
     | ProviderOptions[];
   invariant(fileContent, `Provider config ${relativePath} is undefined`);

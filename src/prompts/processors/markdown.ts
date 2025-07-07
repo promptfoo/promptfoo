@@ -1,8 +1,8 @@
-import fs from 'fs';
+import { readFileSync } from 'node:fs';
 import type { Prompt } from '../../types';
 
 export function processMarkdownFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const content = fs.readFileSync(filePath, 'utf8');
+  const content = readFileSync(filePath, 'utf8');
   return [
     {
       raw: content,
