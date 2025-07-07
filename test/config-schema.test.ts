@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
+import * as fs from 'fs';
+import * as path from 'path';
 
 describe('config-schema.json', () => {
   let schema: any;
@@ -15,10 +15,10 @@ describe('config-schema.json', () => {
 
     // Initialize AJV for schema validation
     // Use strict: false to avoid issues with regex patterns
-    ajv = new Ajv({ 
-      strict: false, 
+    ajv = new Ajv({
+      strict: false,
       allErrors: true,
-      validateFormats: false  // Disable format validation to avoid regex issues
+      validateFormats: false, // Disable format validation to avoid regex issues
     });
     addFormats(ajv);
   });
@@ -44,15 +44,18 @@ describe('config-schema.json', () => {
 
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
-      const findPluginEnums = (obj: any, path: string = ''): Array<{ path: string; values: string[] }> => {
+      const findPluginEnums = (
+        obj: any,
+        path: string = '',
+      ): Array<{ path: string; values: string[] }> => {
         const results: Array<{ path: string; values: string[] }> = [];
-        
+
         if (obj && typeof obj === 'object') {
           // Check if this is an enum array that looks like a plugin list
           if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
             results.push({ path, values: obj.enum });
           }
-          
+
           // Recursively search through the object
           for (const [key, value] of Object.entries(obj)) {
             if (key !== 'enum') {
@@ -60,25 +63,25 @@ describe('config-schema.json', () => {
             }
           }
         }
-        
+
         return results;
       };
 
       const pluginEnums = findPluginEnums(schema);
-      
+
       // Should find at least the plugin enums
       expect(pluginEnums.length).toBeGreaterThan(0);
-      
+
       // Check each enum for duplicates
       pluginEnums.forEach(({ path, values }) => {
         const uniqueValues = [...new Set(values)];
         const duplicates = values.filter((item, index) => values.indexOf(item) !== index);
-        
+
         if (duplicates.length > 0) {
           console.error(`Duplicates found at ${path}:`, duplicates);
         }
-        
-        expect(values.length).toBe(uniqueValues.length);
+
+        expect(values).toHaveLength(uniqueValues.length);
       });
     });
 
@@ -86,31 +89,31 @@ describe('config-schema.json', () => {
       // Find all enum arrays that contain plugins
       const findAllEnums = (obj: any): string[][] => {
         const results: string[][] = [];
-        
+
         if (obj && typeof obj === 'object') {
           if (Array.isArray(obj.enum) && obj.enum.length > 10 && obj.enum.includes('bias')) {
             results.push(obj.enum);
           }
-          
+
           for (const value of Object.values(obj)) {
             results.push(...findAllEnums(value));
           }
         }
-        
+
         return results;
       };
 
       const allEnums = findAllEnums(schema);
-      
+
       // Should find at least 2 (one for string type, one for object id)
       expect(allEnums.length).toBeGreaterThanOrEqual(2);
-      
+
       // All plugin enums should be identical
-      if (allEnums.length > 1) {
-        const firstEnum = allEnums[0].sort();
-        for (let i = 1; i < allEnums.length; i++) {
-          expect(allEnums[i].sort()).toEqual(firstEnum);
-        }
+      const firstEnum = allEnums[0]?.sort();
+      expect(firstEnum).toBeDefined();
+
+      for (let i = 1; i < allEnums.length; i++) {
+        expect(allEnums[i].sort()).toEqual(firstEnum);
       }
     });
 
@@ -120,34 +123,37 @@ describe('config-schema.json', () => {
           if (Array.isArray(obj.enum) && obj.enum.includes('bias')) {
             return obj.enum;
           }
-          
+
           for (const value of Object.values(obj)) {
             const result = findPluginEnum(value);
-            if (result) return result;
+            if (result) {
+              return result;
+            }
           }
         }
-        
+
         return null;
       };
 
       const pluginEnum = findPluginEnum(schema);
       expect(pluginEnum).not.toBeNull();
-      
-      if (pluginEnum) {
-        // Check for some expected plugins
-        expect(pluginEnum).toContain('bias');
-        expect(pluginEnum).toContain('bias:age');
-        expect(pluginEnum).toContain('bias:disability');
-        expect(pluginEnum).toContain('bias:gender');
-        expect(pluginEnum).toContain('bias:race');
-        expect(pluginEnum).toContain('default');
-        expect(pluginEnum).toContain('harmful');
-        expect(pluginEnum).toContain('pii');
-        
-        // Ensure 'bias' appears only once
-        const biasCount = pluginEnum.filter(p => p === 'bias').length;
-        expect(biasCount).toBe(1);
-      }
+
+      // Use non-null assertion since we've already checked it's not null
+      const plugins = pluginEnum!;
+
+      // Check for some expected plugins
+      expect(plugins).toContain('bias');
+      expect(plugins).toContain('bias:age');
+      expect(plugins).toContain('bias:disability');
+      expect(plugins).toContain('bias:gender');
+      expect(plugins).toContain('bias:race');
+      expect(plugins).toContain('default');
+      expect(plugins).toContain('harmful');
+      expect(plugins).toContain('pii');
+
+      // Ensure 'bias' appears only once
+      const biasCount = plugins.filter((p) => p === 'bias').length;
+      expect(biasCount).toBe(1);
     });
   });
 
@@ -162,7 +168,7 @@ describe('config-schema.json', () => {
     it('should have redteam configuration', () => {
       const properties = schema.definitions?.PromptfooConfigSchema?.properties;
       expect(properties).toHaveProperty('redteam');
-      
+
       const redteamConfig = properties?.redteam;
       expect(redteamConfig).toBeDefined();
       expect(redteamConfig.type).toBe('object');
@@ -174,27 +180,27 @@ describe('config-schema.json', () => {
       // Find pattern fields in the schema
       const findPatterns = (obj: any): string[] => {
         const patterns: string[] = [];
-        
+
         if (obj && typeof obj === 'object') {
           if (typeof obj.pattern === 'string') {
             patterns.push(obj.pattern);
           }
-          
+
           for (const value of Object.values(obj)) {
             patterns.push(...findPatterns(value));
           }
         }
-        
+
         return patterns;
       };
 
       const patterns = findPatterns(schema);
-      
+
       // Check that file:// patterns are properly escaped
-      const filePatterns = patterns.filter(p => p.includes('file'));
+      const filePatterns = patterns.filter((p) => p.includes('file'));
       expect(filePatterns.length).toBeGreaterThan(0);
-      
-      filePatterns.forEach(pattern => {
+
+      filePatterns.forEach((pattern) => {
         // The pattern should have proper escaping for the colon
         expect(pattern).toMatch(/file.*\\/);
       });
@@ -214,7 +220,7 @@ describe('config-schema.json', () => {
       // Verify the schema follows zod-to-json-schema conventions
       expect(schema.$ref).toBe('#/definitions/PromptfooConfigSchema');
       expect(schema.definitions).toBeDefined();
-      
+
       // Check that the main schema definition exists
       const mainDef = schema.definitions.PromptfooConfigSchema;
       expect(mainDef).toBeDefined();
@@ -225,7 +231,7 @@ describe('config-schema.json', () => {
       // This test ensures the schema generation is deterministic
       // We'll check that key structures are present
       const properties = schema.definitions?.PromptfooConfigSchema?.properties;
-      
+
       // Core properties that should always exist
       expect(properties).toHaveProperty('prompts');
       expect(properties).toHaveProperty('providers');
@@ -235,4 +241,4 @@ describe('config-schema.json', () => {
       expect(properties).toHaveProperty('defaultTest');
     });
   });
-}); 
+});
