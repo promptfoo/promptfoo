@@ -1,0 +1,3 @@
+documents:
+  - poisonedDocument: poisoned content
+    intendedResult: result

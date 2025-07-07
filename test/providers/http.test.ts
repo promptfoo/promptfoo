@@ -1770,6 +1770,17 @@ describe('HttpProvider', () => {
       undefined,
     );
   });
+
+  it('should require body or GET method', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        // Missing body
+      },
+    });
+    
+    await expect(provider.callApi('test')).rejects.toThrow(/Expected HTTP provider http:\/\/test.com to have a config containing {body}/);
+  });
 });
 
 describe('createTransformRequest', () => {
@@ -1969,16 +1980,7 @@ describe('constructor validation', () => {
     }).toThrow('Expected string, received number');
   });
 
-  it('should require body or GET method', () => {
-    expect(() => {
-      new HttpProvider('http://test.com', {
-        config: {
-          method: 'POST',
-          // Missing body
-        },
-      });
-    }).toThrow(/Expected HTTP provider http:\/\/test.com to have a config containing {body}/);
-  });
+
 });
 
 describe('content type handling', () => {

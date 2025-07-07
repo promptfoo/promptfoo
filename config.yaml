@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: desc
+prompts:
+  - prompt1
+tests:
+  - test1

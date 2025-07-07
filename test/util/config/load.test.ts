@@ -1,8 +1,8 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
+import * as path from 'node:path';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
@@ -22,7 +22,12 @@ jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
 }));
 
-jest.mock('fs');
+jest.mock('node:fs');
+
+jest.mock('node:fs/promises', () => ({
+  readFile: jest.fn(),
+  access: jest.fn(),
+}));
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
@@ -91,6 +96,18 @@ describe('combineConfigs', () => {
     jest.restoreAllMocks();
   });
 
+  // Helper function to mock readFile
+  const _mockReadFile = (mockImplementation: (path: string) => string | Promise<string>) => {
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      const result = mockImplementation(path);
+      if (result) {
+        return result;
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
+  };
+
   it('reads from existing configs', async () => {
     const config1 = {
       description: 'test1',
@@ -140,26 +157,17 @@ describe('combineConfigs', () => {
       sharing: true,
     };
 
+    const { readFile } = jest.requireMock('node:fs/promises');
     jest
-      .mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
-          if (typeof path === 'string' && path === 'config1.json') {
-            return JSON.stringify(config1);
-          } else if (typeof path === 'string' && path === 'config2.json') {
-            return JSON.stringify(config2);
-          }
-          return Buffer.from('');
-        },
-      )
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2))
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2))
-      .mockReturnValue(Buffer.from(''));
+      .mocked(readFile)
+      .mockImplementation(async (path: string) => {
+        if (path === 'config1.json') {
+          return JSON.stringify(config1);
+        } else if (path === 'config2.json') {
+          return JSON.stringify(config2);
+        }
+        throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+      });
 
     jest.mocked(fs.readdirSync).mockReturnValue([]);
     jest.mocked(fs.statSync).mockImplementation(() => {
@@ -246,7 +254,6 @@ describe('combineConfigs', () => {
       expect.anything(),
     );
 
-    expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
       description: 'test1, test2',
       tags: { tag1: 'value1' },
@@ -282,8 +289,9 @@ describe('combineConfigs', () => {
 
   it('combines configs with provider-specific prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
-      if (typeof path === 'string' && path.endsWith('config.json')) {
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path.endsWith('config.json')) {
         return JSON.stringify({
           prompts: [
             { id: 'file://prompt1.txt', label: 'My first prompt' },
@@ -302,7 +310,7 @@ describe('combineConfigs', () => {
           tests: [{ vars: { topic: 'bananas' } }],
         });
       }
-      return Buffer.from('');
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
     });
 
     const result = await combineConfigs(['config.json']);
@@ -369,27 +377,21 @@ describe('combineConfigs', () => {
 
   it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest
-      .mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
-          if (typeof path === 'string' && path.endsWith('config1.json')) {
-            return JSON.stringify({
-              description: 'test1',
-              prompts: ['file://prompt1.txt', 'prompt2'],
-            });
-          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
-            return JSON.stringify({
-              description: 'test2',
-              prompts: ['file://prompt3.txt', 'prompt4'],
-            });
-          }
-          return Buffer.from('');
-        },
-      );
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path.endsWith('config1.json')) {
+        return JSON.stringify({
+          description: 'test1',
+          prompts: ['file://prompt1.txt', 'prompt2'],
+        });
+      } else if (path.endsWith('config2.json')) {
+        return JSON.stringify({
+          description: 'test2',
+          prompts: ['file://prompt3.txt', 'prompt4'],
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
@@ -425,27 +427,21 @@ describe('combineConfigs', () => {
 
   it('de-duplicates prompts when reading configs', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest
-      .mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
-          if (typeof path === 'string' && path.endsWith('config1.json')) {
-            return JSON.stringify({
-              description: 'test1',
-              prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
-            });
-          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
-            return JSON.stringify({
-              description: 'test2',
-              prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
-            });
-          }
-          return Buffer.from('');
-        },
-      );
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path.endsWith('config1.json')) {
+        return JSON.stringify({
+          description: 'test1',
+          prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
+        });
+      } else if (path.endsWith('config2.json')) {
+        return JSON.stringify({
+          description: 'test2',
+          prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
@@ -487,10 +483,15 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -516,10 +517,15 @@ describe('combineConfigs', () => {
       extensions: ['extension3'],
     };
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn(console, 'warn').mockImplementation();
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -543,10 +549,15 @@ describe('combineConfigs', () => {
       extensions: ['extension1'],
     };
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -562,18 +573,19 @@ describe('combineConfigs', () => {
   });
 
   it('warns when multiple configs and extensions are detected', async () => {
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(
-        JSON.stringify({
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify({
           extensions: ['extension1'],
-        }),
-      )
-      .mockReturnValueOnce(
-        JSON.stringify({
+        });
+      } else if (path === 'config2.json') {
+        return JSON.stringify({
           extensions: ['extension2'],
-        }),
-      );
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
