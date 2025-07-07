@@ -607,18 +607,19 @@ describe('combineConfigs', () => {
   });
 
   it('warns when multiple extensions are detected and multiple configs are provided', async () => {
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(
-        JSON.stringify({
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify({
           extensions: ['extension1', 'extension2'],
-        }),
-      )
-      .mockReturnValueOnce(
-        JSON.stringify({
+        });
+      } else if (path === 'config2.json') {
+        return JSON.stringify({
           description: 'Config without extensions',
-        }),
-      );
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
@@ -639,30 +640,30 @@ describe('combineConfigs', () => {
   });
 
   it('should only set redteam config when at least one individual config has redteam settings', async () => {
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(
-        JSON.stringify({
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify({
           description: 'Config without redteam',
           providers: ['provider1'],
-        }),
-      )
-      .mockReturnValueOnce(
-        JSON.stringify({
+        });
+      } else if (path === 'config2.json') {
+        return JSON.stringify({
           description: 'Config with redteam',
           providers: ['provider2'],
           redteam: {
             plugins: ['plugin1'],
             strategies: ['strategy1'],
           },
-        }),
-      )
-      .mockReturnValueOnce(
-        JSON.stringify({
+        });
+      } else if (path === 'config3.json') {
+        return JSON.stringify({
           description: 'Another config without redteam',
           providers: ['provider3'],
-        }),
-      );
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json', 'config3.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -686,20 +687,21 @@ describe('combineConfigs', () => {
   });
 
   it('should not set redteam config when no individual configs have redteam settings', async () => {
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(
-        JSON.stringify({
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify({
           description: 'Config without redteam',
           providers: ['provider1'],
-        }),
-      )
-      .mockReturnValueOnce(
-        JSON.stringify({
+        });
+      } else if (path === 'config2.json') {
+        return JSON.stringify({
           description: 'Another config without redteam',
           providers: ['provider2'],
-        }),
-      );
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -734,10 +736,15 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -776,10 +783,15 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -823,10 +835,15 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -869,10 +886,15 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -900,10 +922,15 @@ describe('combineConfigs', () => {
     };
     const config2 = {};
 
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config1.json') {
+        return JSON.stringify(config1);
+      } else if (path === 'config2.json') {
+        return JSON.stringify(config2);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -1138,12 +1165,16 @@ describe('resolveConfigs', () => {
     const defaultConfig = {};
 
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
-        prompts: ['prompt1'],
-        providers: ['openai:foobar'],
-      }),
-    );
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify({
+          prompts: ['prompt1'],
+          providers: ['openai:foobar'],
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await resolveConfigs(cmdObj, defaultConfig);
@@ -1163,13 +1194,17 @@ describe('resolveConfigs', () => {
     const prompt =
       'You are a helpful assistant. You are given a prompt and you must answer it. {{testPrompt}}';
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
-        prompts: [prompt],
-        providers: ['openai:gpt-4'],
-        scenarios: 'file://scenarios.yaml',
-      }),
-    );
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify({
+          prompts: [prompt],
+          providers: ['openai:gpt-4'],
+          scenarios: 'file://scenarios.yaml',
+        });
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
 
     jest
       .mocked(maybeLoadFromExternalFile)
@@ -1235,7 +1270,13 @@ describe('resolveConfigs', () => {
       prompts: ['Act as a travel guide for {{location}}'],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify(promptfooConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
@@ -1254,7 +1295,13 @@ describe('resolveConfigs', () => {
       prompts: ['Act as a travel guide for {{location}}'],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify(promptfooConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     expect(
@@ -1279,13 +1326,19 @@ describe('readConfig', () => {
       providers: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify(mockConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
 
     const result = await readConfig('config.json');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith('config.json', 'utf-8');
+    expect(readFile).toHaveBeenCalledWith('config.json', 'utf-8');
   });
 
   it('should read YAML config file', async () => {
@@ -1294,13 +1347,19 @@ describe('readConfig', () => {
       providers: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.yaml') {
+        return yaml.dump(mockConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
 
     const result = await readConfig('config.yaml');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+    expect(readFile).toHaveBeenCalledWith('config.yaml', 'utf-8');
   });
 
   it('should read JavaScript config file', async () => {
@@ -1332,7 +1391,13 @@ describe('readConfig', () => {
       targets: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify(mockConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
 
     const result = await readConfig('config.json');
@@ -1352,7 +1417,13 @@ describe('readConfig', () => {
       plugins: ['plugin1'],
       strategies: ['strategy1'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify(mockConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
 
     const result = await readConfig('config.json');
@@ -1377,7 +1448,13 @@ describe('readConfig', () => {
         { vars: { anotherVar: 'anotherValue', prompt: 'yo mama' } },
       ],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.json') {
+        return JSON.stringify(mockConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
 
     const result = await readConfig('config.json');
@@ -1405,12 +1482,18 @@ describe('readConfig', () => {
       tests: [{ vars: { text: 'test text' } }],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.yaml') {
+        return yaml.dump(mockConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValueOnce(dereferencedConfig);
 
     const result = await readConfig('config.yaml');
     expect(result).toEqual(dereferencedConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+    expect(readFile).toHaveBeenCalledWith('config.yaml', 'utf-8');
   });
 
   it('should throw validation error for invalid dereferenced config', async () => {
@@ -1424,7 +1507,13 @@ describe('readConfig', () => {
       providers: [{ invalid: true }],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'config.yaml') {
+        return yaml.dump(mockConfig);
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValueOnce(dereferencedConfig);
     jest.mocked(fs.existsSync).mockReturnValueOnce(true);
 
@@ -1439,7 +1528,13 @@ describe('readConfig', () => {
   });
 
   it('should handle empty YAML file by defaulting to empty object', async () => {
-    jest.spyOn(fs, 'readFileSync').mockReturnValue('');
+    const { readFile } = jest.requireMock('node:fs/promises');
+    jest.mocked(readFile).mockImplementation(async (path: string) => {
+      if (path === 'empty.yaml') {
+        return '';
+      }
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    });
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
     jest.spyOn(yaml, 'load').mockReturnValue(null);
     jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue({});
@@ -1449,6 +1544,6 @@ describe('readConfig', () => {
     expect(result).toEqual({
       prompts: ['{{prompt}}'],
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith('empty.yaml', 'utf-8');
+    expect(readFile).toHaveBeenCalledWith('empty.yaml', 'utf-8');
   });
 });
