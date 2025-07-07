@@ -1,15 +1,18 @@
 ---
+title: ModelAudit vs ModelScan: Comparing ML Model Security Scanners
 description: 'Compare ModelAudit and ModelScan for ML model security scanning. Learn how comprehensive format support and detection capabilities differ between these tools.'
 image: /img/blog/modelaudit/modelaudit-vs-modelscan.jpg
 date: 2025-07-06
 authors: [ian]
 ---
 
-# Comparing ML Model Security Scanners: ModelAudit vs ModelScan
+# ModelAudit vs ModelScan: Comparing ML Model Security Scanners
 
 As organizations increasingly adopt machine learning models from various sources, ensuring their security has become critical. Two tools have emerged to address this need: Promptfoo's [ModelAudit](/docs/model-audit/) and Protect AI's ModelScan.
 
 To help security teams understand their options, we conducted an comparison using 11 test files containing documented security vulnerabilities. **The setup of this comparison is entirely open-source and can be [accessed on Github](https://github.com/promptfoo/modelaudit-comparisons#)**.
+
+<!-- truncate -->
 
 ## Test Methodology
 
@@ -101,7 +104,7 @@ Notable differences:
 
 Model Audit is also not just a CLI - it comes with an optional UI via the `promptfoo` package:
 
-![modelaudit ui](/docs/modelaudit/model-audit-results.png)
+![modelaudit ui](/img/docs/modelaudit/model-audit-results.png)
 
 ## Practical Implications
 
