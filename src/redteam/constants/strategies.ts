@@ -17,9 +17,9 @@ export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
-  'mischievous-user',
   'jailbreak',
   'jailbreak:tree',
+  'mischievous-user',
   'pandamonium',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
@@ -46,7 +46,6 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'gcg',
   'goat',
-  'mischievous-user',
   'hex',
   'homoglyph',
   'image',
@@ -55,6 +54,7 @@ export const ADDITIONAL_STRATEGIES = [
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
+  'mischievous-user',
   'morse',
   'multilingual',
   'pandamonium',

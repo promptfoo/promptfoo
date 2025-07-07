@@ -79,6 +79,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
+  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
@@ -122,7 +123,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rbac: 'Tests role-based access control implementation',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
