@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Simple Azure OpenAI vision test
+
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What animal do you see in this image? Answer in one word."
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg"
+            }
+          }
+        ]
+      }
+    ]
+
+providers:
+  - id: azure:chat:promptfoo
+
+tests:
+  - assert:
+      - type: icontains
+        value: cat 

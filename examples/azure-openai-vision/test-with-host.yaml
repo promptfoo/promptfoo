@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI vision test with explicit host configuration
+
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe what you see in this image in 2-3 sentences."
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Lynx_lynx_poing.jpg/320px-Lynx_lynx_poing.jpg"
+            }
+          }
+        ]
+      }
+    ]
+
+providers:
+  - id: azure:chat:promptfoo
+    config:
+      # IMPORTANT: Replace this with your actual Azure OpenAI resource name
+      apiHost: 'YOUR-RESOURCE-NAME.openai.azure.com'
+      # The API key will be loaded from AZURE_API_KEY environment variable
+      # Optional: Specify API version (defaults to latest)
+      apiVersion: '2024-08-06'
+
+tests:
+  - assert:
+      - type: contains-any
+        value:
+          - lynx
+          - wild
+          - cat
+          - forest
+          - animal 

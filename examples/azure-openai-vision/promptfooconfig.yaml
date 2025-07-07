@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI vision model image analysis with GPT-4o
+
+prompts:
+  # Prompt format for vision models - must be in chat message format
+  - file://prompt.json
+
+providers:
+  # Azure OpenAI GPT-4o deployment (vision-capable)
+  - id: azure:chat:gpt-4o-deployment
+    label: Azure GPT-4o
+    config:
+      apiHost: 'your-resource-name.openai.azure.com'
+      # Use environment variable for API key
+      apiKey: ${AZURE_OPENAI_API_KEY}
+      # Important: Use a recent API version that supports vision
+      apiVersion: '2024-10-21'
+
+  # Optional: Compare with standard OpenAI
+  # - id: openai:gpt-4o
+  #   label: OpenAI GPT-4o
+  #   config:
+  #     apiKey: ${OPENAI_API_KEY}
+
+tests:
+  # Test 1: Image from URL
+  - vars:
+      question: 'What do you see in this image? Describe any notable features.'
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/640px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+    assert:
+      - type: contains
+        value: boardwalk
+      - type: contains-any
+        value:
+          - nature
+          - wooden
+          - path
+          - marsh
+          - wetland
+
+  # Test 2: Base64 encoded image (small test image)
+  - vars:
+      question: 'What colors do you see in this image?'
+      # This will be replaced with actual base64 data via transformVars
+      image_url: 'data:image/png;base64,{{base64_image}}'
+    options:
+      transformVars: |
+        // Create a simple 2x2 pixel test image with red, green, blue, and white pixels
+        // This is a minimal PNG for testing base64 handling
+        const base64_image = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAADklEQVQIHWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+        return { ...vars, base64_image };
+    assert:
+      - type: llm-rubric
+        value: The response mentions seeing colors or pixels in the image
+
+  # Test 3: Practical example - receipt analysis
+  - vars:
+      question: 'Can you extract the total amount from this receipt?'
+      image_url: 'https://raw.githubusercontent.com/Azure-Samples/cognitive-services-REST-api-samples/master/curl/form-recognizer/rest-api/receipt.png'
+    assert:
+      - type: contains-any
+        value:
+          - '14.50'
+          - '$14.50'
+          - 'fourteen'
+      - type: llm-rubric
+        value: The response correctly identifies a total or amount from the receipt
+
+  # Test 4: Multiple aspects analysis
+  - vars:
+      question: |
+        Please analyze this image and tell me:
+        1. What is the main subject?
+        2. What is the setting or environment?
+        3. Are there any text or numbers visible?
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ada_Lovelace_portrait.jpg/440px-Ada_Lovelace_portrait.jpg'
+    assert:
+      - type: contains-any
+        value:
+          - Ada
+          - Lovelace
+          - woman
+          - portrait
+      - type: llm-rubric
+        value: The response addresses all three questions asked about the image
+
+# Default test configuration
+defaultTest:
+  options:
+    # Optional: Set temperature for consistent results
+    provider:
+      config:
+        temperature: 0.1
+        max_tokens: 500 
