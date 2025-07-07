@@ -1,5 +1,4 @@
 import type { TestCase } from '../../types';
-import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../constants/strategies';
 
 export function addMischievousUser(
   testCases: TestCase[],
@@ -9,7 +8,7 @@ export function addMischievousUser(
   return testCases.map((testCase) => ({
     ...testCase,
     provider: {
-      id: `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
+      id: 'promptfoo:redteam:mischievous-user',
       config: {
         injectVar,
         ...config,
@@ -21,7 +20,7 @@ export function addMischievousUser(
     })),
     metadata: {
       ...testCase.metadata,
-      strategyId: REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
+      strategyId: 'mischievous-user',
     },
   }));
 }

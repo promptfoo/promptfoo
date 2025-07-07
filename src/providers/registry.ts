@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../redteam/constants/strategies';
 import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
@@ -1055,8 +1054,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) =>
-      providerPath === `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`,
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:mischievous-user',
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

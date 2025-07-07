@@ -1,10 +1,9 @@
 import { SimulatedUser, type Message } from '../../providers/simulatedUser';
 import type { ProviderResponse, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
-import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../constants/strategies';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
-const PROVIDER_ID = `promptfoo:redteam:${REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID}`;
+const PROVIDER_ID = 'promptfoo:redteam:mischievous-user';
 
 type Config = {
   injectVar: string;

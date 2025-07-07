@@ -1,5 +1,4 @@
 import type { Strategy } from '@promptfoo/redteam/constants';
-import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '@promptfoo/redteam/constants/strategies';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import type { Config } from '../../types';
 
@@ -27,6 +26,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:tree': 150,
   leetspeak: 1,
   'math-prompt': 1,
+  'mischievous-user': 5,
   morse: 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
   'other-encodings': 1,
@@ -36,7 +36,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'prompt-injection': 1,
   retry: 1,
   rot13: 1,
-  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]: 5,
+
   video: 1,
 };
 

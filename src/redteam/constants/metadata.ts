@@ -1,6 +1,5 @@
 import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
 import type { Plugin } from './plugins';
-import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from './strategies';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
@@ -123,8 +122,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rbac: 'Tests role-based access control implementation',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]:
-    'Simulates a multi-turn conversation between a mischievous user and an agent',
+  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
@@ -252,7 +250,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
-  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]: 'Mischievous User',
+  'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
@@ -735,8 +733,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
-  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]:
-    'Simulates a multi-turn conversation between a mischievous user and an agent',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
@@ -747,6 +743,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
+  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse:
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
@@ -774,7 +771,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
-  [REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID]: 'Mischievous User',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
@@ -784,6 +780,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
+  'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
   'other-encodings': 'Collection of Text Encodings',

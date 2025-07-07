@@ -2,7 +2,6 @@ import path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../../../src/redteam/constants/strategies';
 import { validateStrategies, loadStrategy } from '../../../src/redteam/strategies';
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types';
 
@@ -25,7 +24,7 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
-      { id: REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID },
+      { id: 'mischievous-user' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -130,15 +129,15 @@ describe('loadStrategy', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
-  it('should load simulated user strategy', async () => {
-    const strategy = await loadStrategy(REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID);
+  it('should load mischievous user strategy', async () => {
+    const strategy = await loadStrategy('mischievous-user');
     expect(strategy).toBeDefined();
-    expect(strategy.id).toBe(REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID);
+    expect(strategy.id).toBe('mischievous-user');
     expect(typeof strategy.action).toBe('function');
   });
 
-  it('should call simulated user strategy action with correct parameters', async () => {
-    const strategy = await loadStrategy(REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID);
+  it('should call mischievous user strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('mischievous-user');
     const testCases: TestCaseWithPlugin[] = [
       { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
     ];
@@ -148,7 +147,7 @@ describe('loadStrategy', () => {
     await strategy.action(testCases, injectVar, config);
 
     expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Adding simulated user test cases'),
+      expect.stringContaining('Adding mischievous user test cases'),
     );
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });

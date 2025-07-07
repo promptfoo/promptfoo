@@ -8,22 +8,16 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
-export const REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID = 'mischievous-user';
-
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = [
-  'crescendo',
-  'goat',
-  REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
-] as const;
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'mischievous-user'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
-  REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
+  'mischievous-user',
   'jailbreak',
   'jailbreak:tree',
   'pandamonium',
@@ -52,7 +46,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'gcg',
   'goat',
-  REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
+  'mischievous-user',
   'hex',
   'homoglyph',
   'image',
@@ -98,7 +92,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'jailbreak:tree',
   'gcg',
   'citation',
-  REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
+  'mischievous-user',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];

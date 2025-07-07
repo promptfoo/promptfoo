@@ -6,7 +6,6 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -113,7 +112,7 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
+    id: 'mischievous-user',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
       const newTestCases = addMischievousUser(testCases, injectVar, config);
