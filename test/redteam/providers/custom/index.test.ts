@@ -1,13 +1,7 @@
 import { getGraderById } from '../../../../src/redteam/graders';
-import {
-  CustomProvider,
-  MemorySystem,
-} from '../../../../src/redteam/providers/custom';
+import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom';
 import type { Message } from '../../../../src/redteam/providers/shared';
-import {
-  redteamProviderManager,
-  tryUnblocking,
-} from '../../../../src/redteam/providers/shared';
+import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
@@ -646,4 +640,4 @@ describe('CustomProvider', () => {
     // Verify sessionId was set in context vars
     expect((context.vars as any).sessionId).toBe('test-session-123');
   });
-}); 
+});

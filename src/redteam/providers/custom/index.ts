@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -16,19 +15,13 @@ import type {
   TokenUsage,
 } from '../../../types';
 import invariant from '../../../util/invariant';
-import {
-  extractFirstJsonObject,
-  safeJsonStringify,
-} from '../../../util/json';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
-import {
-  EVAL_SYSTEM_PROMPT,
-  REFUSAL_SYSTEM_PROMPT,
-} from '../crescendo/prompts';
+import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import type { Message } from '../shared';
 import {
   getLastMessageContent,
@@ -166,7 +159,7 @@ export class CustomProvider implements ApiProvider {
 
   constructor(config: CustomConfig) {
     invariant(config.strategyText, 'CustomProvider requires strategyText in config');
-    
+
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
     this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
@@ -187,9 +180,7 @@ export class CustomProvider implements ApiProvider {
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
 
-    logger.debug(
-      `[Custom] CustomProvider initialized with config: ${JSON.stringify(config)}`,
-    );
+    logger.debug(`[Custom] CustomProvider initialized with config: ${JSON.stringify(config)}`);
   }
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
@@ -315,7 +306,9 @@ export class CustomProvider implements ApiProvider {
       try {
         // Generate system prompt for each round with updated currentRound
         const systemPrompt = this.nunjucks.renderString(CUSTOM_PARENT_TEMPLATE, {
-          customStrategyText: this.config.strategyText || 'Follow the conversation naturally to achieve the objective.',
+          customStrategyText:
+            this.config.strategyText ||
+            'Follow the conversation naturally to achieve the objective.',
           conversationObjective: this.userGoal,
           currentRound: roundNum, // 0-indexed to match user's expectation
           maxTurns: this.maxTurns,
@@ -473,9 +466,7 @@ export class CustomProvider implements ApiProvider {
 
           if (backtrackCount >= this.maxBacktracks) {
             exitReason = 'Max backtracks reached';
-            logger.debug(
-              `[Custom] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`,
-            );
+            logger.debug(`[Custom] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`);
             break;
           }
 
@@ -702,9 +693,7 @@ export class CustomProvider implements ApiProvider {
     `);
 
     if (Object.keys(parsedOutput).length !== expectedKeys.length) {
-      logger.debug(
-        `[Custom] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`,
-      );
+      logger.debug(`[Custom] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`);
     }
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -846,9 +835,7 @@ export class CustomProvider implements ApiProvider {
   }
 
   private async getEvalScore(lastResponse: string): Promise<[any, TokenUsage | undefined]> {
-    logger.debug(
-      `[Custom] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
-    );
+    logger.debug(`[Custom] Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
     const evalInput = JSON.stringify({
       conversationObjective: this.userGoal,
       responseToEvaluateInput: lastResponse,
@@ -932,4 +919,4 @@ export class CustomProvider implements ApiProvider {
   }
 }
 
-export default CustomProvider; 
+export default CustomProvider;
