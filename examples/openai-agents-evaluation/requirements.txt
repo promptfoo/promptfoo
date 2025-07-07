@@ -1,0 +1,11 @@
+swarm-agent>=0.1.0
+openai>=1.50.0
+
+# OpenTelemetry for tracing
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+
+# Optional tools
+requests>=2.31.0
+numpy>=1.24.0 

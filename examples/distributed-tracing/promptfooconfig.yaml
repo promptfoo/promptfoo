@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Distributed tracing across multiple services
+
+# Enable tracing with forwarding
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+  # Forward traces to external collector
+  forwarding:
+    enabled: true
+    endpoint: '${OTLP_COLLECTOR_ENDPOINT:-http://localhost:4318}'
+    headers:
+      Authorization: 'Bearer ${OTLP_AUTH_TOKEN:-}'
+
+prompts:
+  - "{{query}}"
+
+providers:
+  # Main orchestrator service
+  - id: orchestrator
+    label: "Orchestrator Service"
+    python: services/orchestrator.py
+    config:
+      service_name: "orchestrator"
+  
+  # Search service
+  - id: search
+    label: "Search Service"
+    file: services/search.js
+    config:
+      service_name: "search-api"
+  
+  # RAG pipeline service
+  - id: rag
+    label: "RAG Pipeline"
+    python: services/rag_pipeline.py
+    config:
+      service_name: "rag-service"
+  
+  # Microservice composition
+  - id: microservices
+    label: "Full Microservice Stack"
+    python: services/gateway.py
+    config:
+      services:
+        - search
+        - rag
+        - cache
+        - auth
+
+tests:
+  # Test distributed search
+  - vars:
+      query: "What are the latest AI trends in 2025?"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention current AI trends"
+      - type: latency
+        threshold: 3000
+  
+  # Test with caching
+  - vars:
+      query: "Explain quantum computing basics"
+    metadata:
+      cache_enabled: true
+    assert:
+      - type: contains-any
+        value: ["quantum", "qubit", "superposition", "entanglement"]
+  
+  # Test error propagation
+  - vars:
+      query: "TRIGGER_ERROR: Test error handling"
+    assert:
+      - type: llm-rubric
+        value: "Should handle error gracefully"
+  
+  # Test multi-service coordination
+  - vars:
+      query: "Compare GPT-4 and Claude 3 performance on coding tasks"
+    assert:
+      - type: javascript
+        value: |
+          // Check that response includes comparison
+          const hasGPT = output.toLowerCase().includes('gpt');
+          const hasClaude = output.toLowerCase().includes('claude');
+          const hasComparison = output.toLowerCase().includes('compar');
+          return hasGPT && hasClaude && hasComparison; 

@@ -1,0 +1,163 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate LangChain agents with tools, memory, and advanced chains
+
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+prompts:
+  - "{{task}}"
+
+providers:
+  # Basic LangChain agent
+  - id: basic-chain
+    label: "Basic LangChain"
+    python: providers/basic_chain.py
+    config:
+      model: "gpt-4.1"
+  
+  # ReAct agent with tools
+  - id: react-agent
+    label: "ReAct Agent"
+    python: providers/react_agent.py
+    config:
+      model: "gpt-4.1"
+      tools:
+        - search
+        - calculator
+        - code_interpreter
+  
+  # Agent with memory
+  - id: memory-agent
+    label: "Memory Agent"
+    python: providers/memory_agent.py
+    config:
+      model: "o4-mini"
+      memory_type: "conversation_summary"
+  
+  # LangGraph agent
+  - id: langgraph-agent
+    label: "LangGraph Agent"
+    python: providers/langgraph_agent.py
+    config:
+      model: "claude-3-7-sonnet-20250219"
+      graph_type: "plan_and_execute"
+  
+  # RAG chain
+  - id: rag-chain
+    label: "RAG Chain"
+    python: providers/rag_chain.py
+    config:
+      model: "gpt-4.1"
+      embedding_model: "text-embedding-3-large"
+      retriever: "multi_query"
+
+tests:
+  # Test 1: Basic chain functionality
+  - vars:
+      task: "Explain the concept of transformer architecture in machine learning"
+    assert:
+      - type: contains-any
+        value: ["attention", "transformer", "encoder", "decoder", "self-attention"]
+      - type: llm-rubric
+        value: "Explanation should be technically accurate and well-structured"
+  
+  # Test 2: Tool usage with ReAct
+  - vars:
+      task: "Search for the current stock price of NVIDIA and calculate the market cap if there are 2.49 billion shares outstanding"
+    assert:
+      - type: contains-any
+        value: ["NVIDIA", "NVDA", "market cap", "billion"]
+      - type: javascript
+        value: |
+          // Check for calculation
+          return /\d+(\.\d+)?\s*(billion|trillion)/i.test(output);
+  
+  # Test 3: Memory retention
+  - vars:
+      task: "My name is Alice and I work at TechCorp. What's the weather like today?"
+    metadata:
+      test_memory: true
+    assert:
+      - type: llm-rubric
+        value: "Should acknowledge the introduction and answer about weather"
+  
+  # Test 4: Complex reasoning with LangGraph
+  - vars:
+      task: "Create a step-by-step plan to migrate a monolithic application to microservices, including risk assessment"
+    assert:
+      - type: contains-all
+        value: ["microservices", "migration", "risk", "step"]
+      - type: llm-rubric
+        value: |
+          Plan should include:
+          1. Assessment phase
+          2. Service identification
+          3. Migration strategy
+          4. Risk mitigation
+          5. Rollback plan
+  
+  # Test 5: RAG with retrieval
+  - vars:
+      task: "Based on our documentation, what are the best practices for error handling in our API?"
+    assert:
+      - type: llm-rubric
+        value: "Should reference specific documentation and provide concrete examples"
+      - type: contains-any
+        value: ["error", "exception", "status code", "retry"]
+  
+  # Test 6: Multi-step tool usage
+  - vars:
+      task: "Find the latest research papers on quantum computing from 2024, summarize the top 3, and create a comparison table"
+    assert:
+      - type: contains-any
+        value: ["quantum", "2024", "research", "paper"]
+      - type: llm-rubric
+        value: "Should include summaries and a comparison table"
+
+# Scenarios for specific use cases
+scenarios:
+  conversational:
+    description: "Test conversational memory"
+    config:
+      provider:
+        id: memory-agent
+        config:
+          memory_window: 10
+    tests:
+      - vars:
+          task: "I'm planning a trip to Japan"
+        assert:
+          - type: contains-any
+            value: ["Japan", "trip", "travel"]
+      - vars:
+          task: "What are some good restaurants there?"
+        assert:
+          - type: contains
+            value: "Japan"
+          - type: llm-rubric
+            value: "Should remember the context is about Japan"
+  
+  research:
+    description: "Research assistant scenario"
+    config:
+      provider:
+        id: rag-chain
+        config:
+          sources:
+            - "technical_docs"
+            - "research_papers"
+            - "web_search"
+    tests:
+      - vars:
+          task: "Research the latest developments in federated learning and privacy-preserving ML"
+        assert:
+          - type: contains-any
+            value: ["federated", "privacy", "differential privacy", "secure"]
+          - type: llm-rubric
+            value: "Should cite sources and provide recent information"
+
+outputPath: results/langchain-evaluation.json 

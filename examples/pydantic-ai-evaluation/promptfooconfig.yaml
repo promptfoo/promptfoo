@@ -1,0 +1,150 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate PydanticAI agents with type-safe structured outputs
+
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+prompts:
+  - "{{query}}"
+
+providers:
+  # Basic PydanticAI agent
+  - id: basic-agent
+    label: "Basic Agent"
+    python: providers/basic_agent.py
+    config:
+      model: "openai:gpt-4o-mini"
+  
+  # Agent with structured output
+  - id: structured-agent
+    label: "Structured Output Agent"
+    python: providers/structured_agent.py
+    config:
+      model: "openai:o4-mini"
+  
+  # Agent with tools and dependencies
+  - id: advanced-agent
+    label: "Advanced Agent with Tools"
+    python: providers/advanced_agent.py
+    config:
+      model: "anthropic:claude-3-7-sonnet-20250219"
+      enable_tools: true
+  
+  # Agent with validation
+  - id: validated-agent
+    label: "Validated Output Agent"
+    python: providers/validated_agent.py
+    config:
+      model: "openai:gpt-4.1"
+      strict_validation: true
+
+tests:
+  # Test 1: Basic query handling
+  - vars:
+      query: "What are the top 3 programming languages for AI development in 2025?"
+    assert:
+      - type: contains-any
+        value: ["Python", "Rust", "TypeScript", "Julia"]
+      - type: llm-rubric
+        value: "Response should list exactly 3 languages with brief explanations"
+  
+  # Test 2: Structured data extraction
+  - vars:
+      query: "Extract key information from this text: John Doe, age 32, works as a Senior Engineer at TechCorp since 2019. His email is john@techcorp.com and phone is +1-555-0123."
+    assert:
+      - type: contains-all
+        value: ["John Doe", "32", "Senior Engineer", "TechCorp", "2019"]
+      - type: javascript
+        value: |
+          // Check for structured extraction
+          const hasEmail = output.includes('john@techcorp.com');
+          const hasPhone = output.includes('555-0123');
+          return hasEmail && hasPhone;
+  
+  # Test 3: Complex reasoning with validation
+  - vars:
+      query: "Plan a week-long tech conference with 500 attendees. Include venue requirements, budget estimate, and suggested agenda."
+    assert:
+      - type: llm-rubric
+        value: |
+          Response must include:
+          1. Venue specifications (capacity, facilities)
+          2. Budget breakdown with numbers
+          3. Daily agenda outline
+          4. Logistical considerations
+      - type: contains-any
+        value: ["venue", "budget", "agenda", "schedule", "cost"]
+  
+  # Test 4: Tool usage and calculations
+  - vars:
+      query: "Calculate the total cost of cloud infrastructure for a startup: 10 servers at $50/month each, 1TB storage at $0.023/GB, and 50TB bandwidth at $0.09/GB"
+    assert:
+      - type: javascript
+        value: |
+          // Check for calculation presence
+          const hasServerCost = /\$?500/.test(output);
+          const hasStorageCost = /\$?23/.test(output);
+          const hasBandwidthCost = /\$?4,?500/.test(output);
+          const hasTotal = /\$?5,?023/.test(output);
+          return hasServerCost || hasTotal;
+  
+  # Test 5: Error handling with validation
+  - vars:
+      query: "Parse this invalid JSON and extract user data: {name: 'Alice', age: '25', email: alice@example}"
+    assert:
+      - type: llm-rubric
+        value: "Should handle the invalid JSON gracefully and still extract available information"
+      - type: contains-any
+        value: ["Alice", "25", "alice@example", "error", "invalid"]
+  
+  # Test 6: Multi-step workflow
+  - vars:
+      query: "Create a data pipeline plan: 1) Ingest data from PostgreSQL, 2) Transform using Python, 3) Load into Snowflake, 4) Create dashboard in Tableau"
+    assert:
+      - type: contains-all
+        value: ["PostgreSQL", "Python", "Snowflake", "Tableau"]
+      - type: llm-rubric
+        value: "Should provide a detailed step-by-step implementation plan"
+
+# Scenarios for specific use cases
+scenarios:
+  data-extraction:
+    description: "Structured data extraction scenario"
+    config:
+      provider:
+        id: structured-agent
+        config:
+          output_schema: "PersonInfo"
+    tests:
+      - vars:
+          query: "Extract person details: Sarah Johnson, CTO at StartupXYZ, sarah.j@startup.xyz, based in San Francisco"
+        assert:
+          - type: is-json
+          - type: javascript
+            value: |
+              const data = JSON.parse(output);
+              return data.name === "Sarah Johnson" && 
+                     data.role === "CTO" && 
+                     data.email === "sarah.j@startup.xyz";
+
+  validation-testing:
+    description: "Test validation and error handling"
+    config:
+      provider:
+        id: validated-agent
+        config:
+          validation_level: "strict"
+    tests:
+      - vars:
+          query: "Process this data with age validation: {name: 'Bob', age: 250}"
+        assert:
+          - type: contains
+            value: "validation"
+          - type: llm-rubric
+            value: "Should reject invalid age and explain why"
+
+outputPath: results/pydantic-ai-evaluation.json 

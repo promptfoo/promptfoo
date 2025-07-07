@@ -1,0 +1,148 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate OpenAI Agents SDK with multi-agent orchestration
+
+# Enable tracing for agent interactions
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+prompts:
+  - "{{task}}"
+
+providers:
+  # Single agent configuration
+  - id: single-agent
+    label: "Single Agent"
+    python: providers/single_agent.py
+    config:
+      model: "gpt-4.1"
+      temperature: 0.7
+  
+  # Multi-agent with handoffs
+  - id: multi-agent
+    label: "Multi-Agent System"
+    python: providers/multi_agent.py
+    config:
+      model: "gpt-4.1"
+      enable_handoffs: true
+  
+  # Agent with tools
+  - id: agent-with-tools
+    label: "Tool-Using Agent"
+    python: providers/agent_tools.py
+    config:
+      model: "o4-mini"
+      tools:
+        - calculator
+        - web_search
+        - code_executor
+
+# Test scenarios for agent capabilities
+tests:
+  # Test 1: Simple task handling
+  - vars:
+      task: "What's the weather forecast for San Francisco this week?"
+    assert:
+      - type: contains-any
+        value: ["weather", "forecast", "San Francisco", "temperature"]
+      - type: latency
+        threshold: 3000
+  
+  # Test 2: Multi-step reasoning
+  - vars:
+      task: "Plan a 5-day conference in Tokyo for 200 AI researchers, including venue, catering, and schedule"
+    assert:
+      - type: llm-rubric
+        value: |
+          Response should include:
+          1. Venue recommendations with capacity
+          2. Catering options
+          3. Daily schedule outline
+          4. Budget considerations
+      - type: javascript
+        value: |
+          const hasVenue = output.toLowerCase().includes('venue') || output.toLowerCase().includes('center');
+          const hasSchedule = output.toLowerCase().includes('schedule') || output.toLowerCase().includes('day');
+          const hasCatering = output.toLowerCase().includes('catering') || output.toLowerCase().includes('food');
+          return hasVenue && hasSchedule && hasCatering;
+  
+  # Test 3: Tool usage for calculations
+  - vars:
+      task: "Calculate the ROI of investing $50,000 in AI infrastructure with expected 15% annual growth over 5 years"
+    assert:
+      - type: contains-any
+        value: ["ROI", "return", "investment", "%", "growth"]
+      - type: javascript
+        value: |
+          // Check for numerical calculation
+          const hasNumbers = /\d+[,.]?\d*/.test(output);
+          const hasPercentage = /%/.test(output);
+          return hasNumbers && hasPercentage;
+  
+  # Test 4: Agent handoff scenario
+  - vars:
+      task: "I need help with both travel planning to Japan and learning basic Japanese phrases"
+    assert:
+      - type: llm-rubric
+        value: "Response should address both travel planning and language learning"
+      - type: contains-any
+        value: ["travel", "flight", "hotel", "Japanese", "phrases", "language"]
+  
+  # Test 5: Error handling
+  - vars:
+      task: "Book me a flight to Mars next Tuesday at 3 PM"
+    assert:
+      - type: llm-rubric
+        value: "Should politely explain this is not currently possible"
+      - type: not-contains
+        value: "booking confirmed"
+  
+  # Test 6: Context retention
+  - vars:
+      task: "My company builds AI tools. Suggest a marketing strategy for our new code assistant product."
+    assert:
+      - type: contains-any
+        value: ["AI", "code", "developer", "marketing", "strategy"]
+      - type: llm-rubric
+        value: "Strategy should be specific to AI/developer tools market"
+
+# Scenarios for specific use cases
+scenarios:
+  customer-support:
+    description: "Customer support agent scenario"
+    config:
+      provider:
+        id: multi-agent
+        config:
+          agents:
+            - technical_support
+            - billing_support
+            - escalation_manager
+    tests:
+      - vars:
+          task: "My API key isn't working and I was charged twice last month"
+        assert:
+          - type: llm-rubric
+            value: "Should address both technical and billing issues"
+
+  research-assistant:
+    description: "Research assistant with web search"
+    config:
+      provider:
+        id: agent-with-tools
+        config:
+          tools:
+            - web_search
+            - document_analyzer
+            - citation_formatter
+    tests:
+      - vars:
+          task: "Research the latest developments in quantum computing and summarize key breakthroughs from 2024-2025"
+        assert:
+          - type: contains-any
+            value: ["quantum", "qubit", "2024", "2025", "breakthrough"]
+
+# Output configuration
+outputPath: results/openai-agents-evaluation.json 

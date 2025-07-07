@@ -1,0 +1,167 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate CrewAI multi-agent crews with role-based collaboration
+
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+prompts:
+  - "{{project}}"
+
+providers:
+  # Single agent crew
+  - id: single-agent-crew
+    label: "Single Agent Crew"
+    python: providers/single_agent_crew.py
+    config:
+      model: "gpt-4.1"
+  
+  # Research crew with multiple agents
+  - id: research-crew
+    label: "Research Crew"
+    python: providers/research_crew.py
+    config:
+      model: "gpt-4.1"
+      agents:
+        - researcher
+        - analyst
+        - writer
+  
+  # Development crew
+  - id: dev-crew
+    label: "Development Crew"
+    python: providers/dev_crew.py
+    config:
+      model: "o4-mini"
+      agents:
+        - architect
+        - developer
+        - tester
+        - reviewer
+  
+  # Marketing crew
+  - id: marketing-crew
+    label: "Marketing Crew"
+    python: providers/marketing_crew.py
+    config:
+      model: "claude-3-7-sonnet-20250219"
+      agents:
+        - market_researcher
+        - content_creator
+        - strategist
+
+tests:
+  # Test 1: Simple task delegation
+  - vars:
+      project: "Write a blog post about the benefits of AI in healthcare"
+    assert:
+      - type: contains-any
+        value: ["healthcare", "AI", "artificial intelligence", "medical", "patient"]
+      - type: llm-rubric
+        value: "Should be a well-structured blog post with introduction, main points, and conclusion"
+  
+  # Test 2: Research project
+  - vars:
+      project: "Research and analyze the competitive landscape for AI code assistants in 2025"
+    assert:
+      - type: contains-any
+        value: ["GitHub Copilot", "Cursor", "Codeium", "Amazon Q", "competition"]
+      - type: llm-rubric
+        value: |
+          Should include:
+          1. Market overview
+          2. Key players analysis
+          3. Feature comparison
+          4. Market trends
+          5. Recommendations
+  
+  # Test 3: Software development project
+  - vars:
+      project: "Design and implement a REST API for a task management system with user authentication"
+    assert:
+      - type: contains-any
+        value: ["API", "endpoint", "authentication", "REST", "HTTP"]
+      - type: javascript
+        value: |
+          const hasEndpoints = /\/(tasks?|users?|auth)/.test(output);
+          const hasMethods = /(GET|POST|PUT|DELETE)/.test(output);
+          const hasAuth = /auth|token|jwt/i.test(output);
+          return hasEndpoints && hasMethods && hasAuth;
+  
+  # Test 4: Marketing campaign
+  - vars:
+      project: "Create a go-to-market strategy for a new AI-powered project management tool targeting startups"
+    assert:
+      - type: contains-all
+        value: ["startup", "strategy", "marketing", "target"]
+      - type: llm-rubric
+        value: |
+          Strategy should include:
+          1. Target audience analysis
+          2. Positioning statement
+          3. Marketing channels
+          4. Launch timeline
+          5. Success metrics
+  
+  # Test 5: Complex multi-agent collaboration
+  - vars:
+      project: "Plan and execute a company-wide migration from monolith to microservices architecture"
+    assert:
+      - type: contains-any
+        value: ["microservices", "migration", "architecture", "phase", "risk"]
+      - type: llm-rubric
+        value: "Should show clear delegation between planning, technical, and execution roles"
+  
+  # Test 6: Creative project
+  - vars:
+      project: "Develop a creative campaign for promoting sustainable AI practices in tech companies"
+    assert:
+      - type: contains-any
+        value: ["sustainable", "green", "carbon", "energy", "responsible"]
+      - type: llm-rubric
+        value: "Should include creative elements like slogans, visuals concepts, and campaign ideas"
+
+# Scenarios for specific crew configurations
+scenarios:
+  startup-crew:
+    description: "Lean startup crew configuration"
+    config:
+      provider:
+        id: research-crew
+        config:
+          agents:
+            - generalist
+            - advisor
+          max_iterations: 3
+    tests:
+      - vars:
+          project: "Validate a business idea for an AI-powered personal finance assistant"
+        assert:
+          - type: contains-any
+            value: ["market", "validation", "MVP", "customer", "revenue"]
+  
+  enterprise-crew:
+    description: "Enterprise-scale crew with specialized roles"
+    config:
+      provider:
+        id: dev-crew
+        config:
+          agents:
+            - architect
+            - security_expert
+            - devops
+            - qa_lead
+            - project_manager
+    tests:
+      - vars:
+          project: "Design a secure, scalable data platform for processing sensitive healthcare data"
+        assert:
+          - type: contains-all
+            value: ["security", "compliance", "HIPAA", "encryption", "scalable"]
+          - type: llm-rubric
+            value: "Should address security, compliance, and scalability comprehensively"
+
+outputPath: results/crewai-evaluation.json 
