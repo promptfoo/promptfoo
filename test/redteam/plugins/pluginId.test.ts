@@ -8,7 +8,7 @@ import {
   HARM_PLUGINS,
   PII_PLUGINS,
   BIAS_PLUGINS,
-} from '../../../src/redteam/constants';
+} from '../../../src/redteam/constants/plugins';
 
 describe('Plugin IDs', () => {
   const findPluginIdAssignments = (fileContent: string): string[] => {

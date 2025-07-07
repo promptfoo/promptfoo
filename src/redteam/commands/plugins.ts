@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import logger from '../../logger';
-import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../constants';
+import { subCategoryDescriptions } from '../constants/metadata';
+import { ALL_PLUGINS, DEFAULT_PLUGINS } from '../constants/plugins';
 
 export function pluginsCommand(program: Command) {
   program

@@ -28,15 +28,14 @@ import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
+import type { Severity } from '../constants/metadata';
 import {
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  DEFAULT_STRATEGIES,
   type Plugin,
   REDTEAM_MODEL,
-  type Severity,
-} from '../constants';
+} from '../constants/plugins';
+import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../constants/strategies';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,

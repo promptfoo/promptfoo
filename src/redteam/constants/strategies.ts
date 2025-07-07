@@ -23,19 +23,6 @@ export const AGENTIC_STRATEGIES = [
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
-export const DATASET_PLUGINS = [
-  'beavertails',
-  'cyberseceval',
-  'donotanswer',
-  'harmbench',
-  'toxic-chat',
-  'aegis',
-  'pliny',
-  'unsafebench',
-  'xstest',
-] as const;
-export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
-
 export const ADDITIONAL_STRATEGIES = [
   'audio',
   'base64',

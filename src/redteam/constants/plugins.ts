@@ -263,7 +263,6 @@ export const ADDITIONAL_PLUGINS = [
   'ssrf',
   'system-prompt-override',
   'tool-discovery',
-  'tool-discovery:multi-turn',
   'dataset:unsafebench',
   'dataset:xstest',
 ] as const;
@@ -293,6 +292,20 @@ export const DATASET_PLUGINS = [
 ] as const;
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
+// Legacy dataset plugin names (for backward compatibility)
+export const LEGACY_DATASET_PLUGINS = [
+  'aegis',
+  'beavertails',
+  'cyberseceval',
+  'donotanswer',
+  'harmbench',
+  'toxic-chat',
+  'pliny',
+  'unsafebench',
+  'xstest',
+] as const;
+export type LegacyDatasetPlugin = (typeof LEGACY_DATASET_PLUGINS)[number];
+
 // Dataset plugins that don't use strategies (standalone dataset plugins)
 export const DATASET_EXEMPT_PLUGINS = ['dataset:pliny', 'dataset:unsafebench'] as const;
 
@@ -315,7 +328,8 @@ export type Plugin =
   | PIIPlugin
   | BiasPlugin
   | AgenticPlugin
-  | DatasetPlugin;
+  | DatasetPlugin
+  | LegacyDatasetPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[
@@ -333,5 +347,6 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...CONFIG_REQUIRED_PLUGINS,
     ...AGENTIC_PLUGINS,
     ...DATASET_PLUGINS,
+    ...LEGACY_DATASET_PLUGINS,
   ]),
 ].sort() as Plugin[];

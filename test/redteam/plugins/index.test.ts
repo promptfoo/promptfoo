@@ -9,7 +9,8 @@ import {
   ADDITIONAL_PLUGINS,
   HARM_PLUGINS,
   ALL_PLUGINS,
-} from '../../../src/redteam/constants';
+  DATASET_PLUGINS,
+} from '../../../src/redteam/constants/plugins';
 import { Plugins } from '../../../src/redteam/plugins';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
@@ -368,17 +369,22 @@ describe('Plugins', () => {
         ...Object.keys(HARM_PLUGINS),
         ...PII_PLUGINS,
         ...ADDITIONAL_PLUGINS,
+        ...DATASET_PLUGINS,
       ];
 
       // Check that each expected plugin is registered
+      const missingPlugins: string[] = [];
       expectedPlugins.forEach((pluginKey) => {
         const plugin = Plugins.find((p) => p.key === pluginKey);
-        expect(plugin).toBeDefined();
+        if (!plugin) {
+          missingPlugins.push(pluginKey);
+        }
       });
 
-      // Check the actual count matches the expected count
-      // Note: We don't expect exact equality because some plugins like collections may not be in the expected list
-      expect(Plugins.length).toBeGreaterThanOrEqual(expectedPlugins.length);
+      expect(missingPlugins).toEqual([]);
+
+      // Note: We don't check exact count because some plugins (like intent, policy) are registered
+      // but not included in the expected list above
     });
 
     it('should have unique plugin keys', () => {

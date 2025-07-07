@@ -4,7 +4,7 @@ import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
-} from '../../constants';
+} from '../../constants/plugins';
 import { getShortPluginId } from '../../util';
 
 export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {

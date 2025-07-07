@@ -11,19 +11,17 @@ import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../ty
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import type { StrategyExemptPlugin } from './constants';
+import { ALIASED_PLUGIN_MAPPINGS } from './constants/frameworks';
+import { riskCategorySeverityMap, Severity } from './constants/metadata';
+import type { StrategyExemptPlugin } from './constants/plugins';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  riskCategorySeverityMap,
-  Severity,
-  STRATEGY_COLLECTION_MAPPINGS,
-  STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
   BIAS_PLUGINS,
-} from './constants';
+} from './constants/plugins';
+import { STRATEGY_COLLECTION_MAPPINGS, STRATEGY_COLLECTIONS } from './constants/strategies';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';

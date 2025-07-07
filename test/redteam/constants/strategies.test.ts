@@ -3,7 +3,6 @@ import {
   DEFAULT_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   AGENTIC_STRATEGIES,
-  DATASET_PLUGINS,
   ADDITIONAL_STRATEGIES,
   STRATEGY_COLLECTIONS,
   STRATEGY_COLLECTION_MAPPINGS,
@@ -36,20 +35,6 @@ describe('strategies constants', () => {
       'jailbreak',
       'jailbreak:tree',
       'pandamonium',
-    ]);
-  });
-
-  it('should have correct dataset plugins', () => {
-    expect(DATASET_PLUGINS).toEqual([
-      'beavertails',
-      'cyberseceval',
-      'donotanswer',
-      'harmbench',
-      'toxic-chat',
-      'aegis',
-      'pliny',
-      'unsafebench',
-      'xstest',
     ]);
   });
 

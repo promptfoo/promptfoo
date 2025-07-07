@@ -1,6 +1,6 @@
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types';
 import invariant from '../../../util/invariant';
-import type { HARM_PLUGINS } from '../../constants';
+import type { HARM_PLUGINS } from '../../constants/plugins';
 import { RedteamPluginBase } from '../base';
 import { getHarmfulAssertions, createTestCase } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';

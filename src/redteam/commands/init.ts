@@ -22,16 +22,9 @@ import { setupEnv, isRunningUnderNpx } from '../../util';
 import { BrowserBehavior } from '../../util/server';
 import { checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import {
-  type Plugin,
-  ADDITIONAL_STRATEGIES,
-  ALL_PLUGINS,
-  DEFAULT_PLUGINS,
-  DEFAULT_STRATEGIES,
-  type Strategy,
-  subCategoryDescriptions,
-  HARM_PLUGINS,
-} from '../constants';
+import { subCategoryDescriptions } from '../constants/metadata';
+import { type Plugin, ALL_PLUGINS, DEFAULT_PLUGINS, HARM_PLUGINS } from '../constants/plugins';
+import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES, type Strategy } from '../constants/strategies';
 import { doGenerateRedteam } from './generate';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

@@ -1,25 +1,29 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   DATASET_PLUGIN_ALIASES,
+} from '../redteam/constants/frameworks';
+import { Severity } from '../redteam/constants/metadata';
+import {
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  ALL_STRATEGIES,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  DEFAULT_STRATEGIES,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   type Plugin,
-  Severity,
+} from '../redteam/constants/plugins';
+import {
+  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
+  ALL_STRATEGIES,
+  DEFAULT_STRATEGIES,
   type Strategy,
-} from '../redteam/constants';
+} from '../redteam/constants/strategies';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';

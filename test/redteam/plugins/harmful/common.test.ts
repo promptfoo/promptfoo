@@ -3,7 +3,7 @@ import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
-} from '../../../../src/redteam/constants';
+} from '../../../../src/redteam/constants/plugins';
 import { GRADERS } from '../../../../src/redteam/graders';
 import {
   createTestCase,

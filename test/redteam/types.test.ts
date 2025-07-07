@@ -1,4 +1,4 @@
-import { Severity } from '../../src/redteam/constants';
+import { Severity } from '../../src/redteam/constants/metadata';
 import type {
   RedteamPluginObject,
   RedteamPlugin,

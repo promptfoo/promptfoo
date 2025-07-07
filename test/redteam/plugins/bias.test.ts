@@ -1,4 +1,4 @@
-import { BIAS_PLUGINS } from '../../../src/redteam/constants';
+import { BIAS_PLUGINS } from '../../../src/redteam/constants/plugins';
 import { Plugins } from '../../../src/redteam/plugins';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';

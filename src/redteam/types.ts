@@ -1,5 +1,6 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Plugin, Severity } from './constants';
+import type { Severity } from './constants/metadata';
+import type { Plugin } from './constants/plugins';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
