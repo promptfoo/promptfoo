@@ -67,8 +67,19 @@ export default function StrategyConfigDialog({
     setNumTests(value);
   };
 
+  const isCustomStrategyValid = () => {
+    if (strategy === 'custom') {
+      return localConfig.strategyText && localConfig.strategyText.trim().length > 0;
+    }
+    return true;
+  };
+
   const handleSave = () => {
     if (!strategy) {
+      return;
+    }
+
+    if (!isCustomStrategyValid()) {
       return;
     }
 
@@ -335,7 +346,12 @@ export default function StrategyConfigDialog({
               setLocalConfig({ ...localConfig, strategyText: e.target.value });
             }}
             placeholder="Describe how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc."
-            helperText="Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc."
+            helperText={
+              !localConfig.strategyText || localConfig.strategyText.trim().length === 0
+                ? 'Strategy text is required for custom strategy'
+                : 'Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc.'
+            }
+            error={!localConfig.strategyText || localConfig.strategyText.trim().length === 0}
           />
 
           <TextField
@@ -605,7 +621,7 @@ export default function StrategyConfigDialog({
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={strategy === 'retry' && (!!error || !numTests)}
+          disabled={(strategy === 'retry' && (!!error || !numTests)) || !isCustomStrategyValid()}
         >
           Save
         </Button>
