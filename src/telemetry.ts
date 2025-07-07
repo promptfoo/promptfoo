@@ -42,9 +42,6 @@ function getPostHogClient(): PostHog | null {
     try {
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
-        // Disable automatic flushing to prevent background network calls
-        flushAt: 0,
-        flushInterval: 0,
       });
     } catch {
       posthogClient = null;
