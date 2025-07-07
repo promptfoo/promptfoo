@@ -174,7 +174,9 @@ export class MCPProvider implements ApiProvider {
   }
 
   // Get all available tools
-  getAvailableTools() {
+  async getAvailableTools() {
+    await this.initializationPromise;
+
     return this.mcpClient.getAllTools();
   }
 
