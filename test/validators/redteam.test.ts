@@ -229,7 +229,6 @@ describe('pluginOptions', () => {
   });
 
   it('should contain unique values from all source arrays', () => {
-    // Create a manual set to verify our implementation
     const manualSet = new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]);
 
     expect(pluginOptions).toHaveLength(manualSet.size);
@@ -242,7 +241,6 @@ describe('pluginOptions', () => {
   });
 
   it('should contain all expected plugin types', () => {
-    // Verify that at least one item from each source array is present
     const hasCollectionItem = COLLECTIONS.some((item) => pluginOptions.includes(item));
     const hasRedteamPlugin = REDTEAM_ALL_PLUGINS.some((item) => pluginOptions.includes(item));
     const hasAliasedPlugin = ALIASED_PLUGINS.some((item) => pluginOptions.includes(item));
@@ -253,22 +251,18 @@ describe('pluginOptions', () => {
   });
 
   it('should handle the specific bias duplicate case', () => {
-    // Count occurrences of 'bias' in pluginOptions
     const biasCount = pluginOptions.filter((option) => option === 'bias').length;
     expect(biasCount).toBe(1);
   });
 
   it('should deduplicate when source arrays have overlapping values', () => {
-    // Check if bias exists in multiple source arrays (which was the original issue)
     const biasInCollections = COLLECTIONS.includes('bias' as any);
     const biasInAliased = ALIASED_PLUGINS.includes('bias' as any);
 
     // This test is specifically for the bias duplicate case
-    // Both conditions should be true for the original bug scenario
     expect(biasInCollections).toBe(true);
     expect(biasInAliased).toBe(true);
 
-    // Ensure bias only appears once in pluginOptions
     const biasOccurrences = pluginOptions.filter((p) => p === 'bias');
     expect(biasOccurrences).toHaveLength(1);
   });

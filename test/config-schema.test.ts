@@ -56,7 +56,6 @@ describe('config-schema.json', () => {
             results.push({ path, values: obj.enum });
           }
 
-          // Recursively search through the object
           for (const [key, value] of Object.entries(obj)) {
             if (key !== 'enum') {
               results.push(...findPluginEnums(value, path ? `${path}.${key}` : key));
@@ -69,10 +68,8 @@ describe('config-schema.json', () => {
 
       const pluginEnums = findPluginEnums(schema);
 
-      // Should find at least the plugin enums
       expect(pluginEnums.length).toBeGreaterThan(0);
 
-      // Check each enum for duplicates
       pluginEnums.forEach(({ path, values }) => {
         const uniqueValues = [...new Set(values)];
         const duplicates = values.filter((item, index) => values.indexOf(item) !== index);
@@ -86,7 +83,6 @@ describe('config-schema.json', () => {
     });
 
     it('should have consistent plugin lists across different locations', () => {
-      // Find all enum arrays that contain plugins
       const findAllEnums = (obj: any): string[][] => {
         const results: string[][] = [];
 
@@ -108,7 +104,6 @@ describe('config-schema.json', () => {
       // Should find at least 2 (one for string type, one for object id)
       expect(allEnums.length).toBeGreaterThanOrEqual(2);
 
-      // All plugin enums should be identical
       const firstEnum = allEnums[0]?.sort();
       expect(firstEnum).toBeDefined();
 
@@ -141,7 +136,6 @@ describe('config-schema.json', () => {
       // Use non-null assertion since we've already checked it's not null
       const plugins = pluginEnum!;
 
-      // Check for some expected plugins
       expect(plugins).toContain('bias');
       expect(plugins).toContain('bias:age');
       expect(plugins).toContain('bias:disability');
@@ -151,7 +145,6 @@ describe('config-schema.json', () => {
       expect(plugins).toContain('harmful');
       expect(plugins).toContain('pii');
 
-      // Ensure 'bias' appears only once
       const biasCount = plugins.filter((p) => p === 'bias').length;
       expect(biasCount).toBe(1);
     });
@@ -177,7 +170,6 @@ describe('config-schema.json', () => {
     });
 
     it('should validate that plugin patterns are properly escaped', () => {
-      // Find pattern fields in the schema
       const findPatterns = (obj: any): string[] => {
         const patterns: string[] = [];
 
@@ -196,12 +188,10 @@ describe('config-schema.json', () => {
 
       const patterns = findPatterns(schema);
 
-      // Check that file:// patterns are properly escaped
       const filePatterns = patterns.filter((p) => p.includes('file'));
       expect(filePatterns.length).toBeGreaterThan(0);
 
       filePatterns.forEach((pattern) => {
-        // The pattern should have proper escaping for the colon
         expect(pattern).toMatch(/file.*\\/);
       });
     });
