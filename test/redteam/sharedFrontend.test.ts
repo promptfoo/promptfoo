@@ -98,7 +98,7 @@ describe('getUnifiedConfig', () => {
   it('should transform strategies with stateful config', () => {
     const configWithStrategies: SavedRedteamConfig = {
       ...baseConfig,
-      strategies: ['basic', 'goat', { id: 'custom', config: { option: true } }],
+      strategies: ['basic', 'goat', { id: 'playbook', config: { option: true } }],
     };
 
     const result = getUnifiedConfig(configWithStrategies);
@@ -106,7 +106,7 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.strategies).toEqual([
       { id: 'basic' },
       { id: 'goat', config: { stateful: true } },
-      { id: 'custom', config: { option: true, stateful: true } },
+      { id: 'playbook', config: { option: true, stateful: true } },
     ]);
   });
 
