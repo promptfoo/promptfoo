@@ -1,5 +1,5 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 describe('generated-constants.ts', () => {
   const EXPECTED_CONTENT = `// This file is a placeholder for development.
