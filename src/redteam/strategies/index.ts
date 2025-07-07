@@ -115,9 +115,9 @@ export const Strategies: Strategy[] = [
   {
     id: REDTEAM_MISCHIEVOUS_USER_STRATEGY_ID,
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding simulated user test cases to ${testCases.length} test cases`);
+      logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
       const newTestCases = addMischievousUser(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} simulated user test cases`);
+      logger.debug(`Added ${newTestCases.length} mischievous user test cases`);
       return newTestCases;
     },
   },
