@@ -81,3 +81,5 @@ const _ALL_STRATEGIES = [
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
+
+export { _ALL_STRATEGIES };
