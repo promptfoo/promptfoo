@@ -5,7 +5,7 @@ import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { POSTHOG_KEY } from './generated-constants';
-import { getUserEmail, getUserId } from './globalConfig/accounts';
+import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
 
 export const TelemetryEventSchema = z.object({
@@ -72,7 +72,10 @@ export class Telemetry {
       try {
         client.identify({
           distinctId: this.id,
-          properties: { email: this.email },
+          properties: {
+            email: this.email,
+            isLoggedIntoCloud: isLoggedIntoCloud(),
+          },
         });
         client.flush().catch(() => {
           // Silently ignore flush errors
