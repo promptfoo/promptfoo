@@ -61,6 +61,20 @@ jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: jest.fn(),
 }));
 
+jest.mock('../../src/telemetry', () => {
+  const mockTelemetry = {
+    record: jest.fn().mockResolvedValue(undefined),
+    identify: jest.fn(),
+    saveConsent: jest.fn().mockResolvedValue(undefined),
+    disabled: false,
+  };
+  return {
+    __esModule: true,
+    default: mockTelemetry,
+    Telemetry: jest.fn().mockImplementation(() => mockTelemetry),
+  };
+});
+
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
