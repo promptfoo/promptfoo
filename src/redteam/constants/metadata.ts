@@ -1,9 +1,8 @@
-import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+  ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
@@ -142,7 +141,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
+  ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
@@ -283,7 +282,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
-  [MEMORY_POISONING_PLUGIN_ID]: Severity.High,
+  ['agentic:memory-poisoning']: Severity.High,
   aegis: Severity.Medium,
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
@@ -403,7 +402,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii',
     'prompt-extraction',
 
-    MEMORY_POISONING_PLUGIN_ID,
+    'agentic:memory-poisoning',
   ],
 
   'Compliance & Legal': [
@@ -502,7 +501,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
+  ['agentic:memory-poisoning']: 'AgenticMemoryPoisoning',
   aegis: 'Aegis',
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
@@ -605,7 +604,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+  ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
