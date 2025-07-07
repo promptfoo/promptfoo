@@ -7,8 +7,10 @@ import {
   PII_PLUGINS,
   DEFAULT_PLUGINS,
   Severity,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  ALIASED_PLUGINS,
 } from '../../src/redteam/constants';
-import { RedteamConfigSchema } from '../../src/validators/redteam';
+import { RedteamConfigSchema, pluginOptions } from '../../src/validators/redteam';
 
 describe('RedteamConfigSchema', () => {
   it('should validate basic config', () => {
@@ -217,5 +219,58 @@ describe('RedteamConfigSchema', () => {
     };
 
     expect(() => RedteamConfigSchema.parse(config)).not.toThrow();
+  });
+});
+
+describe('pluginOptions', () => {
+  it('should not contain duplicate entries', () => {
+    const duplicates = pluginOptions.filter((item, index) => pluginOptions.indexOf(item) !== index);
+    expect(duplicates).toEqual([]);
+  });
+
+  it('should contain unique values from all source arrays', () => {
+    // Create a manual set to verify our implementation
+    const manualSet = new Set([
+      ...COLLECTIONS,
+      ...REDTEAM_ALL_PLUGINS,
+      ...ALIASED_PLUGINS,
+    ]);
+    
+    expect(pluginOptions.length).toBe(manualSet.size);
+    expect(new Set(pluginOptions).size).toBe(pluginOptions.length);
+  });
+
+  it('should be sorted alphabetically', () => {
+    const sortedCopy = [...pluginOptions].sort();
+    expect(pluginOptions).toEqual(sortedCopy);
+  });
+
+  it('should contain all expected plugin types', () => {
+    // Verify that at least one item from each source array is present
+    const hasCollectionItem = COLLECTIONS.some(item => pluginOptions.includes(item));
+    const hasRedteamPlugin = REDTEAM_ALL_PLUGINS.some(item => pluginOptions.includes(item));
+    const hasAliasedPlugin = ALIASED_PLUGINS.some(item => pluginOptions.includes(item));
+    
+    expect(hasCollectionItem).toBe(true);
+    expect(hasRedteamPlugin).toBe(true);
+    expect(hasAliasedPlugin).toBe(true);
+  });
+
+  it('should handle the specific bias duplicate case', () => {
+    // Count occurrences of 'bias' in pluginOptions
+    const biasCount = pluginOptions.filter(option => option === 'bias').length;
+    expect(biasCount).toBe(1);
+  });
+
+  it('should deduplicate when source arrays have overlapping values', () => {
+    // Check if bias exists in multiple source arrays (which was the original issue)
+    const biasInCollections = COLLECTIONS.includes('bias' as any);
+    const biasInAliased = ALIASED_PLUGINS.includes('bias' as any);
+    
+    if (biasInCollections && biasInAliased) {
+      // If bias exists in both, ensure it only appears once in pluginOptions
+      const biasOccurrences = pluginOptions.filter(p => p === 'bias');
+      expect(biasOccurrences).toHaveLength(1);
+    }
   });
 });
