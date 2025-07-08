@@ -6,13 +6,13 @@ providers:
   # Requires appropriate API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
   - id: litellm:gpt-4.1-mini
     label: GPT-4.1 Mini (direct)
-    
+
   - id: litellm:claude-4-sonnet
     label: Claude 4 Sonnet (direct)
-    
+
   - id: litellm:gemini-1.5-flash
     label: Gemini 1.5 Flash (direct)
-  
+
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-large
     label: Text Embedding (direct)
@@ -32,7 +32,7 @@ tests:
         value: 'Bonjour, le monde!'
         threshold: 0.8
         provider: litellm:embedding:text-embedding-3-large
-        
+
   - vars:
       topic: 'artificial intelligence'
     assert:

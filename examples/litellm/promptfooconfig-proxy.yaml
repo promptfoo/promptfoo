@@ -7,17 +7,17 @@ providers:
     label: GPT-4.1 Mini (via proxy)
     config:
       apiBaseUrl: http://localhost:4000
-      
+
   - id: litellm:claude-4-sonnet
     label: Claude 4 Sonnet (via proxy)
     config:
       apiBaseUrl: http://localhost:4000
-      
+
   - id: litellm:gemini-1.5-flash
     label: Gemini 1.5 Flash (via proxy)
     config:
       apiBaseUrl: http://localhost:4000
-  
+
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-large
     label: Text Embedding (via proxy)
@@ -39,7 +39,7 @@ tests:
         value: 'Bonjour, le monde!'
         threshold: 0.8
         provider: litellm:embedding:text-embedding-3-large
-        
+
   - vars:
       topic: 'artificial intelligence'
     assert:
@@ -47,4 +47,4 @@ tests:
         value: |
           // Check if output is a haiku (3 lines)
           const lines = output.trim().split('\n').filter(line => line.trim());
-          return lines.length === 3; 
+          return lines.length === 3;

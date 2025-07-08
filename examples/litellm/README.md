@@ -26,6 +26,7 @@ When using LiteLLM directly, promptfoo will make API calls directly to the under
 ### Option 2: LiteLLM Proxy Server
 
 Run a LiteLLM proxy server that handles authentication and routing to various providers. This is useful for:
+
 - Centralized API key management
 - Load balancing and fallbacks
 - Cost tracking and rate limiting
@@ -36,6 +37,7 @@ Run a LiteLLM proxy server that handles authentication and routing to various pr
 Set up the required API keys based on your usage method:
 
 ### For Direct Usage:
+
 ```bash
 export OPENAI_API_KEY=your-openai-key      # For GPT models
 export ANTHROPIC_API_KEY=your-anthropic-key # For Claude models
@@ -43,6 +45,7 @@ export GOOGLE_AI_API_KEY=your-google-key    # For Gemini models
 ```
 
 ### For Proxy Server:
+
 ```bash
 export LITELLM_API_KEY=your-litellm-key     # If your proxy requires authentication
 ```
@@ -61,6 +64,7 @@ providers:
 ```
 
 Run evaluation:
+
 ```bash
 npx promptfoo@latest eval
 ```
@@ -70,6 +74,7 @@ npx promptfoo@latest eval
 Start a LiteLLM proxy server to centralize model access:
 
 #### Using Docker:
+
 ```bash
 docker run -p 4000:4000 \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
@@ -81,12 +86,14 @@ docker run -p 4000:4000 \
 ```
 
 #### Using Python:
+
 ```bash
 pip install litellm
 litellm --model gpt-4.1-mini --model claude-4-sonnet
 ```
 
 #### Using Config File:
+
 ```bash
 litellm --config litellm_config.yaml
 ```
@@ -98,7 +105,7 @@ providers:
   - id: litellm:gpt-4.1-mini
     config:
       apiBaseUrl: http://localhost:4000
-      apiKey: ${LITELLM_API_KEY}  # Optional, if proxy requires auth
+      apiKey: ${LITELLM_API_KEY} # Optional, if proxy requires auth
 ```
 
 ### Method 3: Custom LiteLLM Server URL
@@ -133,6 +140,7 @@ providers:
 ## Supported Models
 
 This example uses:
+
 - OpenAI GPT-4.1 Mini (chat)
 - Anthropic Claude 4 Sonnet (chat)
 - Google Gemini 1.5 Flash (chat)
@@ -150,6 +158,7 @@ See [LiteLLM docs](https://docs.litellm.ai/docs/providers) for all 400+ supporte
 ## Expected Output
 
 The evaluation will show:
+
 - Translation quality comparisons between models
 - Similarity scores for translations using embeddings
 - Pass/fail results for each assertion
@@ -160,12 +169,14 @@ The evaluation will show:
 ### Connection Issues
 
 1. **Direct usage**: Ensure API keys are set correctly:
+
    ```bash
    echo $OPENAI_API_KEY
    echo $ANTHROPIC_API_KEY
    ```
 
 2. **Proxy server**: Verify the server is running:
+
    ```bash
    curl http://localhost:4000/health
    ```
@@ -191,8 +202,8 @@ model_list:
     litellm_params:
       model: openai/gpt-4.1-mini
       api_key: ${OPENAI_API_KEY}
-    
-  - model_name: gpt-4.1-mini  # Same name for load balancing
+
+  - model_name: gpt-4.1-mini # Same name for load balancing
     litellm_params:
       model: azure/gpt-4-mini
       api_key: ${AZURE_API_KEY}
