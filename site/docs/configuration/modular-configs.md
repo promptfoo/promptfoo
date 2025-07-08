@@ -1,7 +1,7 @@
 ---
-sidebar_position: 8
+sidebar_position: 999
 sidebar_label: Managing Large Configs
-title: Managing Large Configurations - Modular Configuration Best Practices
+title: Managing Large Promptfoo Configurations
 description: Learn how to structure, organize, and modularize large promptfoo configurations for better maintainability and reusability.
 keywords:
   [
@@ -18,7 +18,7 @@ keywords:
 
 # Managing Large Configurations
 
-As your promptfoo evaluations grow more complex, you'll need strategies to keep your configurations manageable, maintainable, and reusable. This guide covers best practices for organizing large configurations and making them modular.
+As your Promptfoo evaluations grow more complex, you'll need strategies to keep your configurations manageable, maintainable, and reusable. This guide covers best practices for organizing large configurations and making them modular.
 
 ## Separate Configuration Files
 
@@ -90,7 +90,7 @@ tests:
     question: What is 15 + 27?
   assert:
     - type: contains
-      value: "42"
+      value: '42'
     - type: javascript
       value: /4[2]/.test(output)
 
@@ -99,7 +99,7 @@ tests:
     question: If Sarah has 3 apples and gives away 1, how many does she have left?
   assert:
     - type: contains
-      value: "2"
+      value: '2'
 ```
 
 ### Environment-Specific Configurations
@@ -118,13 +118,13 @@ env: file://configs/env-prod.yaml
 ```yaml title="configs/providers-prod.yaml"
 # Production providers with rate limiting
 - id: gpt-4o-mini-prod
-  provider: openai:gpt-4o-mini
+  provider: # ...
   config:
     temperature: 0.1
     max_tokens: 500
     requestsPerMinute: 100
 - id: claude-3-sonnet-prod
-  provider: anthropic:claude-3-5-sonnet-20241022
+  provider: # ...
   config:
     temperature: 0.1
     max_tokens: 500
@@ -153,11 +153,11 @@ assertionTemplates:
   lengthCheck: &lengthCheck
     type: javascript
     value: output.length > 20 && output.length < 500
-  
+
   qualityCheck: &qualityCheck
     type: llm-rubric
     value: Response should be clear, helpful, and well-structured
-    
+
   safetyCheck: &safetyCheck
     type: llm-rubric
     value: Response should not contain harmful or inappropriate content
@@ -174,8 +174,8 @@ tests:
     assert:
       - *lengthCheck
       - *qualityCheck
-      
-  - description: Long response test  
+
+  - description: Long response test
     vars:
       input: Explain machine learning in detail
     assert:
@@ -192,10 +192,7 @@ Use JavaScript configurations for complex logic:
 const baseConfig = {
   description: 'Dynamic configuration example',
   prompts: ['file://prompts/base-prompt.txt'],
-  providers: [
-    'openai:gpt-4o-mini',
-    'anthropic:claude-3-5-sonnet-20241022'
-  ],
+  providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet-20241022'],
 };
 
 // Generate test cases programmatically
@@ -241,38 +238,34 @@ module.exports = {
 Create configurations that adapt based on environment:
 
 ```javascript title="promptfooconfig.js"
-const isDevelopment = process.env.NODE_ENV === 'development';
-const isProduction = process.env.NODE_ENV === 'production';
+const isQuickTest = process.env.TEST_MODE === 'quick';
+const isComprehensive = process.env.TEST_MODE === 'comprehensive';
 
 const baseConfig = {
-  description: 'Environment-adaptive configuration',
+  description: 'Test mode adaptive configuration',
   prompts: ['file://prompts/'],
 };
 
-// Development configuration
-if (isDevelopment) {
+// Quick test configuration
+if (isQuickTest) {
   module.exports = {
     ...baseConfig,
     providers: [
-      'openai:gpt-4o-mini',  // Cheaper for development
+      'openai:gpt-4o-mini', // Faster for quick testing
     ],
-    tests: 'file://tests/dev/',  // Smaller test suite
+    tests: 'file://tests/quick/', // Smaller test suite
     env: {
       LOG_LEVEL: 'debug',
     },
   };
 }
 
-// Production configuration
-if (isProduction) {
+// Comprehensive test configuration
+if (isComprehensive) {
   module.exports = {
     ...baseConfig,
-    providers: [
-      'openai:gpt-4o-mini',
-      'anthropic:claude-3-5-sonnet-20241022',
-      'openai:gpt-4o',
-    ],
-    tests: 'file://tests/prod/',  // Full test suite
+    providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet-20241022', 'openai:gpt-4o'],
+    tests: 'file://tests/comprehensive/', // Full test suite
     env: {
       LOG_LEVEL: 'info',
     },
