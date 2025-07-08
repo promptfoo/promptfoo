@@ -20,6 +20,7 @@ const defaultProviders: ProviderOptions[] = (
       id: 'openai:gpt-4.1',
       label: 'OpenAI: GPT-4.1',
       config: {
+        apiKey: '',
         organization: '',
         temperature: 0.5,
         max_tokens: 1024,
@@ -639,7 +640,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   };
 
   const handleSave = (providerId: string, config: Record<string, any>) => {
-    onChange(providers.map((p) => (p.id === providerId && !p.label ? { ...p, config } : p)));
+    onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
     setSelectedProvider(null);
   };
 
