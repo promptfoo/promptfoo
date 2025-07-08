@@ -240,11 +240,17 @@ export async function doEval(
     };
 
     if (cmdObj.grader) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
     }
     if (cmdObj.var) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
@@ -721,12 +727,16 @@ export function evalCommand(
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      defaultConfig.defaultTest?.options?.prefix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.prefix
+        : undefined,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is appended to every prompt.',
-      defaultConfig.defaultTest?.options?.suffix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.suffix
+        : undefined,
     )
     .option(
       '--var <key=value>',
