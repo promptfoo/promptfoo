@@ -255,7 +255,10 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(synthesize).toHaveBeenCalledWith({
+      abortSignal: undefined,
+      delay: undefined,
       language: undefined,
+      maxConcurrency: undefined,
       numTests: undefined,
       purpose: 'Test purpose',
       plugins: expect.any(Array),
@@ -263,6 +266,7 @@ describe('doGenerateRedteam', () => {
       strategies: expect.any(Array),
       targetLabels: [],
       showProgressBar: true,
+      testGenerationInstructions: '',
     });
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({

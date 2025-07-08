@@ -6,7 +6,9 @@ import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { readProviderPromptMap, processPrompts } from './prompts';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
+import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
+import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
@@ -119,6 +121,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 const redteam = {
   Extractors: {
     extractEntities,
+    extractMcpToolsInfo,
     extractSystemPurpose,
   },
   Graders: GRADERS,
@@ -128,14 +131,15 @@ const redteam = {
     Plugin: RedteamPluginBase,
     Grader: RedteamGraderBase,
   },
+  generate: doGenerateRedteam,
+  run: doRedteamRun,
 };
 
-export { assertions, cache, doRedteamRun, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
 
 export default {
   assertions,
   cache,
-  doRedteamRun,
   evaluate,
   guardrails,
   loadApiProvider,

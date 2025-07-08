@@ -1,16 +1,21 @@
 import {
   ALIASED_PLUGIN_MAPPINGS,
+  ALIASED_PLUGINS,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  DEFAULT_PLUGINS,
   Severity,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  ALIASED_PLUGINS,
 } from '../../src/redteam/constants';
-import { RedteamConfigSchema, pluginOptions } from '../../src/validators/redteam';
+import {
+  pluginOptions,
+  RedteamConfigSchema,
+  RedteamStrategySchema,
+  strategyIdSchema,
+} from '../../src/validators/redteam';
 
 describe('RedteamConfigSchema', () => {
   it('should validate basic config', () => {
@@ -265,5 +270,259 @@ describe('pluginOptions', () => {
 
     const biasOccurrences = pluginOptions.filter((p) => p === 'bias');
     expect(biasOccurrences).toHaveLength(1);
+  });
+});
+
+describe('redteam validators', () => {
+  describe('strategyIdSchema', () => {
+    describe('valid built-in strategies', () => {
+      it('should accept standard built-in strategies', () => {
+        const validStrategies = [
+          'basic',
+          'jailbreak',
+          'crescendo',
+          'goat',
+          'multilingual',
+          'base64',
+          'hex',
+          'rot13',
+        ];
+
+        validStrategies.forEach((strategy) => {
+          expect(() => strategyIdSchema.parse(strategy)).not.toThrow();
+        });
+      });
+    });
+
+    describe('playbook strategy validation', () => {
+      it('should accept simple playbook strategy', () => {
+        expect(() => strategyIdSchema.parse('playbook')).not.toThrow();
+      });
+
+      it('should accept playbook strategy variants with compound IDs', () => {
+        const playbookVariants = [
+          'playbook:aggressive',
+          'playbook:greeting-strategy',
+          'playbook:multi-word-variant',
+          'playbook:snake_case_variant',
+          'playbook:variant123',
+          'playbook:CamelCaseVariant',
+          'playbook:variant.with.dots',
+          'playbook:very-long-complex-variant-name-with-many-hyphens',
+        ];
+
+        playbookVariants.forEach((variant) => {
+          expect(() => strategyIdSchema.parse(variant)).not.toThrow();
+        });
+      });
+    });
+
+    describe('file-based strategy validation', () => {
+      it('should accept valid file:// strategy paths', () => {
+        const validFilePaths = [
+          'file://strategy.js',
+          'file://strategy.ts',
+          'file://./strategy.js',
+          'file:///absolute/path/strategy.ts',
+          'file://relative/path/strategy.js',
+        ];
+
+        validFilePaths.forEach((path) => {
+          expect(() => strategyIdSchema.parse(path)).not.toThrow();
+        });
+      });
+
+      it('should reject invalid file:// strategy paths', () => {
+        const invalidFilePaths = [
+          'file://strategy.txt', // Wrong extension
+          'file://strategy.py', // Wrong extension
+          'file://strategy', // No extension
+          'strategy.js', // Missing file:// prefix
+          'file:/strategy.js', // Wrong protocol format
+        ];
+
+        invalidFilePaths.forEach((path) => {
+          expect(() => strategyIdSchema.parse(path)).toThrow();
+        });
+      });
+    });
+
+    describe('invalid strategy names', () => {
+      it('should reject unknown strategy names', () => {
+        const invalidStrategies = [
+          'unknown-strategy',
+          'invalid_strategy',
+          'not-a-strategy',
+          'fakeStrategy',
+          '',
+          null,
+          undefined,
+        ];
+
+        invalidStrategies.forEach((strategy) => {
+          expect(() => strategyIdSchema.parse(strategy)).toThrow();
+        });
+      });
+    });
+  });
+
+  describe('RedteamStrategySchema', () => {
+    describe('string format strategies', () => {
+      it('should accept valid strategy strings', () => {
+        const validStrategies = [
+          'basic',
+          'playbook',
+          'playbook:variant',
+          'jailbreak',
+          'crescendo',
+          'file://strategy.js',
+        ];
+
+        validStrategies.forEach((strategy) => {
+          expect(() => RedteamStrategySchema.parse(strategy)).not.toThrow();
+        });
+      });
+    });
+
+    describe('object format strategies', () => {
+      it('should accept strategy objects with valid IDs', () => {
+        const validStrategyObjects = [
+          { id: 'basic' },
+          { id: 'playbook' },
+          { id: 'playbook:aggressive' },
+          { id: 'jailbreak', config: { enabled: true } },
+          { id: 'playbook:greeting', config: { strategyText: 'Be polite', stateful: true } },
+          { id: 'multilingual', config: { languages: ['es', 'fr'] } },
+          { id: 'file://playbook.js', config: { param: 'value' } },
+        ];
+
+        validStrategyObjects.forEach((strategy) => {
+          expect(() => RedteamStrategySchema.parse(strategy)).not.toThrow();
+        });
+      });
+
+      it('should accept playbook strategy objects with complex configurations', () => {
+        const playbookStrategyWithConfig = {
+          id: 'playbook:complex-variant',
+          config: {
+            strategyText:
+              'If current round is 0, generatedQuestion should be just "hi" by itself...',
+            stateful: true,
+            temperature: 0.8,
+            maxTokens: 100,
+            customParam: true,
+            nestedConfig: {
+              subParam: 'value',
+              subArray: [1, 2, 3],
+            },
+          },
+        };
+
+        expect(() => RedteamStrategySchema.parse(playbookStrategyWithConfig)).not.toThrow();
+      });
+
+      it('should reject strategy objects with invalid IDs', () => {
+        const invalidStrategyObjects = [
+          { id: 'invalid-strategy' },
+          { id: 'playbook-invalid' }, // Should be playbook:invalid
+          { id: 'notplaybook:variant' },
+          { id: 'file://invalid.txt' },
+          { id: '' },
+          {}, // Missing id
+        ];
+
+        invalidStrategyObjects.forEach((strategy) => {
+          expect(() => RedteamStrategySchema.parse(strategy)).toThrow();
+        });
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should handle strategy objects with empty config', () => {
+        const strategyWithEmptyConfig = { id: 'playbook:variant', config: {} };
+        expect(() => RedteamStrategySchema.parse(strategyWithEmptyConfig)).not.toThrow();
+      });
+
+      it('should handle strategy objects with undefined config', () => {
+        const strategyWithUndefinedConfig = { id: 'playbook:variant', config: undefined };
+        expect(() => RedteamStrategySchema.parse(strategyWithUndefinedConfig)).not.toThrow();
+      });
+
+      it('should handle strategy objects without config property', () => {
+        const strategyWithoutConfig = { id: 'playbook:variant' };
+        expect(() => RedteamStrategySchema.parse(strategyWithoutConfig)).not.toThrow();
+      });
+    });
+  });
+
+  describe('error messages', () => {
+    it('should provide helpful error message for invalid file strategy', () => {
+      try {
+        strategyIdSchema.parse('file://strategy.txt');
+      } catch (error: any) {
+        expect(error.issues[0].message).toContain(
+          'Custom strategies must start with file:// and end with .js or .ts',
+        );
+      }
+    });
+
+    it('should provide helpful error message for completely invalid strategy', () => {
+      try {
+        strategyIdSchema.parse('totally-invalid-strategy');
+      } catch (error: any) {
+        // Should fail on multiple validation attempts and provide comprehensive error
+        expect(error.issues.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('integration with actual use cases', () => {
+    it('should validate realistic playbook strategy configurations', () => {
+      const realisticConfigurations = [
+        'playbook:greeting-strategy',
+        'playbook:default-strategy',
+        {
+          id: 'playbook:greeting-strategy',
+          config: {
+            stateful: true,
+            strategyText:
+              "If current round is 0, generatedQuestion should be just 'Hello can you help me?' by itself...",
+          },
+        },
+        {
+          id: 'playbook:default-strategy',
+          config: {
+            stateful: true,
+            strategyText:
+              "If current round is 0, generatedQuestion should be just 'hi' by itself...",
+          },
+        },
+      ];
+
+      realisticConfigurations.forEach((config) => {
+        expect(() => RedteamStrategySchema.parse(config)).not.toThrow();
+      });
+    });
+
+    it('should validate mixed strategy arrays like those used in real configurations', () => {
+      const mixedStrategies = [
+        'basic',
+        { id: 'jailbreak', config: { enabled: true } },
+        'playbook:aggressive-variant',
+        {
+          id: 'playbook:polite-variant',
+          config: {
+            strategyText: 'Be very polite and formal',
+            stateful: false,
+          },
+        },
+        'crescendo',
+        'file://./my-playbook-strategy.js',
+      ];
+
+      mixedStrategies.forEach((strategy) => {
+        expect(() => RedteamStrategySchema.parse(strategy)).not.toThrow();
+      });
+    });
   });
 });
