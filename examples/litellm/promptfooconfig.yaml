@@ -1,0 +1,126 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: LiteLLM chat and embedding evaluation
+
+prompts:
+  - 'Translate the following text to {{language}}: "{{text}}"'
+  - |
+    You are a professional translator. Translate this text to {{language}}, maintaining the tone and style:
+    
+    "{{text}}"
+    
+    Provide only the translation, no explanations.
+
+providers:
+  # Chat models via LiteLLM
+  - id: litellm:chat:gpt-4o-mini
+    label: GPT-4o Mini
+    config:
+      apiBaseUrl: http://localhost:4000
+      temperature: 0.3
+      
+  - id: litellm:claude-3-5-sonnet-20241022
+    label: Claude 3.5 Sonnet
+    config:
+      apiBaseUrl: http://localhost:4000
+      temperature: 0.3
+
+# Configure embedding provider for similarity checks
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: litellm:embedding:text-embedding-3-small
+        config:
+          apiBaseUrl: http://localhost:4000
+
+tests:
+  # Basic translation tests
+  - vars:
+      language: French
+      text: "The quick brown fox jumps over the lazy dog"
+    assert:
+      - type: contains
+        value: "renard"
+      - type: contains
+        value: "chien"
+      - type: similar
+        threshold: 0.8
+        value: "Le renard brun rapide saute par-dessus le chien paresseux"
+      - type: llm-rubric
+        value: "Is this a grammatically correct French translation that preserves the meaning?"
+
+  - vars:
+      language: Spanish
+      text: "Good morning! How are you today?"
+    assert:
+      - type: contains-any
+        value: ["Buenos días", "Buen día"]
+      - type: contains-any
+        value: ["¿Cómo estás?", "¿Cómo está?"]
+      - type: similar
+        threshold: 0.85
+        value: "¡Buenos días! ¿Cómo estás hoy?"
+
+  - vars:
+      language: German
+      text: "I love learning new languages"
+    assert:
+      - type: contains
+        value: "Sprachen"
+      - type: similar
+        threshold: 0.8
+        value: "Ich liebe es, neue Sprachen zu lernen"
+      - type: not-contains
+        value: "English"
+
+  # Test idiomatic expressions
+  - vars:
+      language: Japanese
+      text: "It's raining cats and dogs"
+    assert:
+      - type: similar
+        threshold: 0.7
+        value: "土砂降りです"
+      - type: llm-rubric
+        value: "Does the translation convey heavy rain using an appropriate Japanese expression?"
+
+  # Test formal vs informal
+  - vars:
+      language: French
+      text: "Hello, how may I help you?"
+    assert:
+      - type: contains-any
+        value: ["Bonjour", "Bonsoir"]
+      - type: contains-any
+        value: ["puis-je", "peux"]
+      - type: similar
+        threshold: 0.8
+        value: "Bonjour, comment puis-je vous aider?"
+      - type: llm-rubric
+        value: "Is this translation appropriately formal for a customer service context?"
+
+  # Test technical vocabulary
+  - vars:
+      language: Spanish
+      text: "The algorithm uses machine learning to optimize performance"
+    assert:
+      - type: contains-all
+        value: ["algoritmo", "aprendizaje"]
+      - type: similar
+        threshold: 0.85
+        value: "El algoritmo utiliza aprendizaje automático para optimizar el rendimiento"
+      - type: not-contains
+        value: "machine learning"  # Should be translated
+
+  # Test cultural adaptation
+  - vars:
+      language: Chinese (Simplified)
+      text: "Happy Thanksgiving!"
+    assert:
+      - type: llm-rubric
+        value: |
+          Does the translation appropriately handle this culturally-specific greeting?
+          It should either translate it literally or adapt it to a culturally appropriate equivalent.
+      - type: similar
+        threshold: 0.6
+        value: "感恩节快乐！" 
