@@ -188,6 +188,7 @@ interface PromptfooAgentOptions {
   env?: EnvOverrides;
   id?: string;
   instructions?: string;
+  task?: string;
 }
 
 export class PromptfooSimulatedUserProvider implements ApiProvider {
@@ -212,7 +213,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const messages = JSON.parse(prompt);
     const body = {
-      task: 'agent',
+      task: this.options.task || 'tau',
       instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),

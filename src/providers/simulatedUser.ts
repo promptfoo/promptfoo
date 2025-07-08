@@ -47,6 +47,14 @@ export class SimulatedUser implements ApiProvider {
     return this.identifier;
   }
 
+  // Protected method that can be overridden by subclasses to customize the user provider
+  protected createUserProvider(instructions: string): PromptfooSimulatedUserProvider {
+    return new PromptfooSimulatedUserProvider({ 
+      instructions,
+      // Default SimulatedUser uses 'tau' task
+    });
+  }
+
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
@@ -101,7 +109,7 @@ export class SimulatedUser implements ApiProvider {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
-    const userProvider = new PromptfooSimulatedUserProvider({ instructions });
+    const userProvider = this.createUserProvider(instructions);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
     const messages: Message[] = [];

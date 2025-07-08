@@ -1,6 +1,7 @@
 import { SimulatedUser, type Message } from '../../providers/simulatedUser';
 import type { ProviderResponse, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
+import { PromptfooSimulatedUserProvider } from '../../providers/promptfoo';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
 const PROVIDER_ID = 'promptfoo:redteam:mischievous-user';
@@ -27,6 +28,14 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
 
   id() {
     return PROVIDER_ID;
+  }
+
+  // Override to use a specific task for mischievous-user
+  protected createUserProvider(instructions: string): PromptfooSimulatedUserProvider {
+    return new PromptfooSimulatedUserProvider({ 
+      instructions,
+      task: 'mischievous-user',
+    });
   }
 
   serializeOutput(
