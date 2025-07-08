@@ -453,7 +453,7 @@ Common issues and solutions:
 
 ### Example
 
-For a complete working example including URL and base64 images, see the [azure-openai-vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-vision).
+See the [azure-openai-vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-vision) for a complete working example with image analysis.
 
 ## Using DeepSeek Models
 
@@ -602,4 +602,4 @@ See the guide on [How to eval OpenAI assistants](/docs/guides/evaluate-openai-as
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
 - [Azure OpenAI Assistant Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant) - Complete working examples with various tool configurations
-- [Azure OpenAI Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-vision) - Working example of using vision models with Azure OpenAI
+- [Azure OpenAI Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-vision) - Example of analyzing images with Azure OpenAI

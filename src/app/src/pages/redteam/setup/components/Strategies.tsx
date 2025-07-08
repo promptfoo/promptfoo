@@ -10,6 +10,7 @@ import {
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
   DEFAULT_STRATEGIES,
+  MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
@@ -21,7 +22,6 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import {
   PRESET_IDS,

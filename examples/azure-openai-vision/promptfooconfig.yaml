@@ -1,94 +1,49 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Azure OpenAI vision model image analysis with GPT-4o
+description: Azure OpenAI vision model image analysis
 
 prompts:
-  # Prompt format for vision models - must be in chat message format
+  # Vision models require a specific message format with content arrays
   - file://prompt.json
 
 providers:
-  # Azure OpenAI GPT-4o deployment (vision-capable)
-  - id: azure:chat:gpt-4o-deployment
-    label: Azure GPT-4o
+  - id: azure:chat:your-deployment-name # Replace with your deployment name
     config:
-      apiHost: 'your-resource-name.openai.azure.com'
-      # Use environment variable for API key
-      apiKey: ${AZURE_OPENAI_API_KEY}
-      # Important: Use a recent API version that supports vision
-      apiVersion: '2024-10-21'
-
-  # Optional: Compare with standard OpenAI
-  # - id: openai:gpt-4o
-  #   label: OpenAI GPT-4o
-  #   config:
-  #     apiKey: ${OPENAI_API_KEY}
+      apiHost: 'your-resource.openai.azure.com' # Replace with your resource
+      apiKey: ${AZURE_API_KEY}
+      apiVersion: '2025-01-01-preview'
+      temperature: 0.1
+      max_tokens: 500
 
 tests:
-  # Test 1: Image from URL
+  # Test 1: Analyze an image from URL
   - vars:
-      question: 'What do you see in this image? Describe any notable features.'
-      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/640px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+      question: 'What do you see in this image?'
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg'
     assert:
-      - type: contains
-        value: boardwalk
-      - type: contains-any
-        value:
-          - nature
-          - wooden
-          - path
-          - marsh
-          - wetland
+      - type: icontains
+        value: cat
 
-  # Test 2: Base64 encoded image (small test image)
+  # Test 2: Extract text from a receipt
   - vars:
-      question: 'What colors do you see in this image?'
-      # This will be replaced with actual base64 data via transformVars
-      image_url: 'data:image/png;base64,{{base64_image}}'
-    options:
-      transformVars: |
-        // Create a simple 2x2 pixel test image with red, green, blue, and white pixels
-        // This is a minimal PNG for testing base64 handling
-        const base64_image = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAADklEQVQIHWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
-        return { ...vars, base64_image };
-    assert:
-      - type: llm-rubric
-        value: The response mentions seeing colors or pixels in the image
-
-  # Test 3: Practical example - receipt analysis
-  - vars:
-      question: 'Can you extract the total amount from this receipt?'
+      question: 'What is the total amount on this receipt?'
       image_url: 'https://raw.githubusercontent.com/Azure-Samples/cognitive-services-REST-api-samples/master/curl/form-recognizer/rest-api/receipt.png'
     assert:
       - type: contains-any
         value:
           - '14.50'
           - '$14.50'
-          - 'fourteen'
-      - type: llm-rubric
-        value: The response correctly identifies a total or amount from the receipt
 
-  # Test 4: Multiple aspects analysis
+  # Test 3: Analyze a local image (base64 encoded)
   - vars:
-      question: |
-        Please analyze this image and tell me:
-        1. What is the main subject?
-        2. What is the setting or environment?
-        3. Are there any text or numbers visible?
-      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ada_Lovelace_portrait.jpg/440px-Ada_Lovelace_portrait.jpg'
+      question: 'Describe this image'
+      image_url: 'data:image/jpeg;base64,{{base64_image}}'
+    options:
+      transformVars: |
+        // Use a simple 1x1 red pixel PNG for testing
+        const base64_image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+        return { ...vars, base64_image };
     assert:
-      - type: contains-any
-        value:
-          - Ada
-          - Lovelace
-          - woman
-          - portrait
-      - type: llm-rubric
-        value: The response addresses all three questions asked about the image
-
-# Default test configuration
-defaultTest:
-  options:
-    # Optional: Set temperature for consistent results
-    provider:
-      config:
-        temperature: 0.1
-        max_tokens: 500 
+      - type: javascript
+        value: output.length > 10 # Basic check that we got a response
+# Note: Provider-specific settings like temperature should be set in the provider config above
+# to avoid overriding authentication settings

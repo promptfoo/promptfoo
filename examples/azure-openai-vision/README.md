@@ -1,29 +1,29 @@
 # Azure OpenAI Vision Example
 
-This example demonstrates how to use Azure OpenAI's vision-capable models (like GPT-4o) to analyze images using promptfoo.
-
-## Features Demonstrated
-
-- Using Azure OpenAI with vision/image inputs
-- Testing with both URL-based and base64-encoded images
-- Proper message formatting for vision models
-- Various image analysis scenarios (object detection, OCR, detailed analysis)
+This example demonstrates how to use Azure OpenAI's vision-capable models to analyze images with promptfoo.
 
 ## Prerequisites
 
-1. An Azure OpenAI resource with a GPT-4o or GPT-4 Turbo with Vision deployment
-2. Your Azure OpenAI endpoint and API key
+1. An Azure OpenAI resource with a vision-capable deployment (e.g., GPT-4.1 Mini, GPT-4o)
+2. Your Azure OpenAI API key
 
 ## Setup
 
-1. Set your environment variables:
+1. Set your Azure API key in your environment or `.env` file:
+
    ```bash
-   export AZURE_OPENAI_API_KEY="your-api-key-here"
+   export AZURE_API_KEY="your-api-key-here"
    ```
 
-2. Update the `promptfooconfig.yaml` file:
-   - Replace `your-resource-name` with your actual Azure OpenAI resource name
-   - Replace `gpt-4o-deployment` with your actual deployment name
+2. Update `promptfooconfig.yaml` with your Azure resource details:
+   ```yaml
+   providers:
+     - id: azure:chat:your-deployment-name
+       config:
+         apiHost: 'your-resource.openai.azure.com'
+         apiKey: ${AZURE_API_KEY}
+         apiVersion: '2025-01-01-preview'
+   ```
 
 ## Running the Example
 
@@ -31,86 +31,58 @@ This example demonstrates how to use Azure OpenAI's vision-capable models (like 
 npx promptfoo@latest eval
 ```
 
-To view the results in the web UI:
+View results in the web UI:
+
 ```bash
 npx promptfoo@latest view
 ```
 
-## Configuration Details
+## How It Works
 
-### Important Settings
+### Message Format
 
-1. **API Version**: The example uses `apiVersion: '2024-10-21'` which supports vision capabilities. Make sure to use this version or newer.
+Vision models require a specific message format with content arrays. See `prompt.json` for the format:
 
-2. **Message Format**: Vision models require a specific message format with content arrays:
-   ```json
-   {
-     "role": "user",
-     "content": [
-       {
-         "type": "text",
-         "text": "Your question here"
-       },
-       {
-         "type": "image_url",
-         "image_url": {
-           "url": "image URL or base64 data URI"
-         }
-       }
-     ]
-   }
-   ```
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "{{question}}"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{image_url}}"
+        }
+      }
+    ]
+  }
+]
+```
 
-3. **Base64 Images**: When using base64-encoded images, use the format:
-   ```
-   data:image/jpeg;base64,YOUR_BASE64_DATA
-   data:image/png;base64,YOUR_BASE64_DATA
-   ```
+### Image Input Options
 
-### Test Cases
+1. **URL Images**: Direct URLs to images on the web
+2. **Base64 Images**: Local images encoded as base64 data URIs
 
-The example includes several test cases:
+### Example Tests
 
-1. **Basic Image Analysis**: Tests the model's ability to describe what's in an image
-2. **Base64 Image Handling**: Verifies that base64-encoded images work correctly
-3. **OCR/Text Extraction**: Tests extracting text or numbers from images (e.g., receipts)
-4. **Detailed Analysis**: Tests multi-aspect image analysis
+The example includes three test cases:
+
+1. Basic image recognition (cat image)
+2. OCR/text extraction (receipt analysis)
+3. Local image analysis using base64 encoding
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **"Model doesn't understand image data"**
-   - Ensure your deployment uses a vision-capable model (GPT-4o or GPT-4 Turbo with Vision)
-   - Verify the API version is recent (2024-10-21 or newer)
-   - Check that the message format matches the example
-
-2. **Base64 images not working**
-   - Ensure the data URI format is correct: `data:image/[type];base64,[data]`
-   - Keep base64 images reasonably sized
-   - Verify the base64 encoding is valid
-
-3. **Authentication errors**
-   - Verify your API key is set correctly
-   - Ensure your resource name and deployment name are correct
-   - Check that your deployment is active in Azure Portal
-
-### Image Limitations
-
-- Maximum image size: 20MB for URLs
-- Supported formats: JPEG, PNG, GIF, BMP, WEBP
-- Images are resized to fit within 2048 x 2048 pixels while preserving aspect ratio
-
-## Comparing with OpenAI
-
-To compare results with standard OpenAI, uncomment the OpenAI provider in the configuration and set your OpenAI API key:
-
-```bash
-export OPENAI_API_KEY="your-openai-api-key"
-```
+- **401 Unauthorized**: Check your API key is set correctly
+- **404 Not Found**: Verify your deployment name matches your Azure resource
+- **"Model doesn't understand image data"**: Ensure you're using a vision-capable model and API version 2024-10-21 or newer
 
 ## Additional Resources
 
-- [Azure OpenAI Vision Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/gpt-with-vision)
-- [promptfoo Azure Provider Documentation](https://promptfoo.dev/docs/providers/azure/)
-- [OpenAI Vision Best Practices](https://platform.openai.com/docs/guides/vision) 
+- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+- [Promptfoo Azure Provider Docs](https://promptfoo.dev/docs/providers/azure)
