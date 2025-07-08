@@ -2,7 +2,21 @@
 sidebar_label: LiteLLM
 title: LiteLLM Provider - Access 400+ LLMs with Unified API
 description: Use LiteLLM with promptfoo to evaluate 400+ language models through a unified OpenAI-compatible interface. Supports chat, completion, and embedding models.
-keywords: [litellm, llm provider, openai compatible, language models, ai evaluation, gpt-4, claude, gemini, llama, mistral, embeddings, promptfoo]
+keywords:
+  [
+    litellm,
+    llm provider,
+    openai compatible,
+    language models,
+    ai evaluation,
+    gpt-4,
+    claude,
+    gemini,
+    llama,
+    mistral,
+    embeddings,
+    promptfoo,
+  ]
 ---
 
 # LiteLLM
@@ -99,7 +113,7 @@ All LiteLLM parameters are supported:
 
 ```yaml
 providers:
-  - id: litellm:claude-3.7-sonnet
+  - id: litellm:claude-4-sonnet
     config:
       apiKey: ${ANTHROPIC_API_KEY}
       temperature: 0.7
@@ -129,10 +143,10 @@ description: LiteLLM evaluation example
 providers:
   # Chat models
   - id: litellm:gpt-4.1-mini
-  - id: litellm:claude-3.7-sonnet
+  - id: litellm:claude-4-sonnet
     config:
       apiKey: ${ANTHROPIC_API_KEY}
-      
+
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-large
 
@@ -157,7 +171,7 @@ tests:
 LiteLLM supports models from all major providers:
 
 - **OpenAI**: GPT-4.1, GPT-4, GPT-3.5, embeddings, and more
-- **Anthropic**: Claude 3.7, Claude 3.5, Claude 3, and earlier models
+- **Anthropic**: Claude 4, Claude 3.7, Claude 3.5, Claude 3, and earlier models
 - **Google**: Gemini and PaLM models
 - **Meta**: Llama models
 - **Mistral**: All Mistral models

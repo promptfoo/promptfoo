@@ -11,8 +11,8 @@ providers:
     config:
       apiBaseUrl: http://localhost:4000
 
-  - id: litellm:claude-3.7-sonnet
-    label: Claude 3.7 Sonnet
+  - id: litellm:claude-4-sonnet
+    label: Claude 4 Sonnet
     config:
       apiBaseUrl: http://localhost:4000
 
@@ -28,19 +28,19 @@ defaultTest:
 tests:
   - vars:
       language: French
-      text: "Hello, how are you today?"
+      text: 'Hello, how are you today?'
     assert:
       - type: contains-any
-        value: ["Bonjour", "Salut"]
+        value: ['Bonjour', 'Salut']
       - type: similar
         threshold: 0.8
         value: "Bonjour, comment allez-vous aujourd'hui?"
 
   - vars:
       language: Spanish
-      text: "The weather is beautiful"
+      text: 'The weather is beautiful'
     assert:
       - type: contains-any
-        value: ["hermoso", "bonito", "bello"]
+        value: ['hermoso', 'bonito', 'bello']
       - type: llm-rubric
-        value: "The translation should be grammatically correct Spanish and preserve the meaning"
+        value: 'The translation should be grammatically correct Spanish and preserve the meaning'

@@ -1,12 +1,64 @@
-# litellm (LiteLLM Provider Example)
+# LiteLLM Example
 
-You can run this example with:
+This example demonstrates how to use the LiteLLM provider with promptfoo to evaluate multiple models through a unified interface.
 
+## Features
+
+- Chat models (GPT-4, Claude 4, Gemini)
+- Embedding models for similarity assertions
+- Direct LiteLLM provider usage
+- LiteLLM proxy server configuration
+
+## Setup
+
+1. Install dependencies:
+   ```bash
+   npm install -g promptfoo
+   ```
+
+2. Set up environment variables:
+   ```bash
+   export OPENAI_API_KEY=your-openai-key
+   export ANTHROPIC_API_KEY=your-anthropic-key
+   export GOOGLE_AI_API_KEY=your-google-key
+   ```
+
+3. (Optional) Start LiteLLM proxy server:
+   ```bash
+   litellm --config litellm_config.yaml
+   ```
+
+## Running the Evaluation
+
+### Direct provider usage (no proxy):
 ```bash
-npx promptfoo@latest init --example litellm
+promptfoo eval
 ```
 
-This example demonstrates how to use LiteLLM with promptfoo for both chat completions and embeddings. LiteLLM provides a unified interface to 400+ LLMs through an OpenAI-compatible API.
+### With proxy server:
+```bash
+# Start the proxy first
+litellm --config litellm_config.yaml
+
+# In another terminal
+promptfoo eval -c promptfooconfig-proxy.yaml
+```
+
+## Configuration Files
+
+- `promptfooconfig.yaml` - Direct LiteLLM provider usage
+- `promptfooconfig-proxy.yaml` - Using LiteLLM through proxy server
+- `litellm_config.yaml` - LiteLLM proxy configuration
+
+## Supported Models
+
+This example uses:
+- OpenAI GPT-4.1 Mini
+- Anthropic Claude 4 Sonnet
+- Google Gemini 1.5 Flash
+- OpenAI Text Embedding 3 Large
+
+See [LiteLLM docs](https://docs.litellm.ai/docs/providers) for all 400+ supported models.
 
 ## Environment Variables
 
@@ -22,7 +74,7 @@ docker run -p 4000:4000 \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
   ghcr.io/berriai/litellm:main-latest \
   --model gpt-4.1-mini \
-  --model claude-3.7-sonnet \
+  --model claude-4-sonnet \
   --model text-embedding-3-large
 ```
 
@@ -45,7 +97,7 @@ npx promptfoo@latest eval
 
 - **Chat Completions**: Compares translations across multiple models
 - **Embeddings**: Uses LiteLLM's embedding support for similarity assertions
-- **Model Comparison**: Evaluates GPT-4.1 Mini vs Claude 3.7 Sonnet
+- **Model Comparison**: Evaluates GPT-4.1 Mini vs Claude 4 Sonnet
 - **Advanced Assertions**: Demonstrates similarity checks, contains assertions, and LLM rubrics
 
 ## Expected Output
