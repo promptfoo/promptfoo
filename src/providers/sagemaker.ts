@@ -736,6 +736,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       // Handle known errors:
       if (typeof output === 'object' && output !== null && 'code' in output) {
         const code = output.code;
+        // 424 has been observed to result from malformed request payloads, specifically incorrect keys within the
+        // `parameters` object.
         if (Number.isInteger(code) && code === 424) {
           const errorMessage = `API Error: 424${output?.message ? ` ${output.message}` : ''}\n${JSON.stringify(output)}`;
           logger.error(errorMessage);
