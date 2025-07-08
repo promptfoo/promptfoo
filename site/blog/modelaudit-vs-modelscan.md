@@ -23,7 +23,7 @@ Our comparison focused on real-world attack vectors commonly found in ML model s
 - **2 archive files**: With path traversal and embedded executable attacks
 - **1 PMML file**: For format validation testing
 
-Each test file was scanned with both tools (ModelAudit v0.1.0 and ModelScan v0.8.5) in December 2024, with results independently verified.
+Each test file was scanned with both tools (ModelAudit v0.1.0 and ModelScan v0.8.5) in June 2025, with results independently verified.
 
 ## Key Findings
 

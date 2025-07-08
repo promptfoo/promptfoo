@@ -108,7 +108,7 @@ function CreateDropdown() {
           Eval
         </MenuItem>
         <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
-          Red team
+          Red Team
         </MenuItem>
       </Menu>
     </>

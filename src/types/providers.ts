@@ -113,6 +113,7 @@ export interface GuardrailResponse {
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
   flagged?: boolean;
+  reason?: string;
 }
 
 export interface ProviderResponse {
