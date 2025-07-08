@@ -733,6 +733,16 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       const output = await this.parseResponse(responseBody);
 
+      // Handle known errors:
+      if (typeof output === 'object' && output !== null && 'code' in output) {
+        const code = output.code;
+        if (Number.isInteger(code) && code === 424) {
+          const errorMessage = `API Error: 424${output?.message ? ` ${output.message}` : ''}\n${JSON.stringify(output)}`;
+          logger.error(errorMessage);
+          return { error: errorMessage };
+        }
+      }
+
       // Calculate token usage estimation (very rough estimate)
       // Note: 4 characters per token is a simplified approximation
       const promptTokens = Math.ceil(payload.length / 4);
