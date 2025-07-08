@@ -25,7 +25,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 /**
  * Zod schema for validating SageMaker options
  */
-export const SageMakerOptionsSchema = z
+export const SageMakerConfigSchema = z
   .object({
     // AWS credentials options
     accessKeyId: z.string().optional(),
@@ -66,7 +66,7 @@ export const SageMakerOptionsSchema = z
   })
   .strict();
 
-type SageMakerOptions = z.infer<typeof SageMakerOptionsSchema>;
+type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
 /**
  * Base class for SageMaker providers with common functionality
@@ -74,7 +74,7 @@ type SageMakerOptions = z.infer<typeof SageMakerOptionsSchema>;
 export abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
-  config: SageMakerOptions;
+  config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
   transform?: string; // Transform function for modifying prompts before sending
@@ -85,7 +85,7 @@ export abstract class SageMakerGenericProvider {
   constructor(
     endpointName: string,
     options: {
-      config?: SageMakerOptions;
+      config?: SageMakerConfig;
       id?: string;
       env?: EnvOverrides;
       delay?: number;
@@ -98,7 +98,7 @@ export abstract class SageMakerGenericProvider {
 
     // Validate the config
     try {
-      this.config = config ? SageMakerOptionsSchema.parse(config) : {};
+      this.config = config ? SageMakerConfigSchema.parse(config) : {};
     } catch (error) {
       const zodError = error as z.ZodError;
       logger.error(
