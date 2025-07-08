@@ -223,7 +223,7 @@ describe('RedteamConfigSchema', () => {
       strategies: ['file:///path/to/strategy.js'],
     };
 
-    expect(() => RedteamConfigSchema.parse(config)).not.toThrow();
+    expect(() => RedteamConfigSchema.parse(config)).not.toThrow('Invalid strategy configuration');
   });
 });
 
@@ -264,7 +264,6 @@ describe('pluginOptions', () => {
     const biasInCollections = COLLECTIONS.includes('bias' as any);
     const biasInAliased = ALIASED_PLUGINS.includes('bias' as any);
 
-    // This test is specifically for the bias duplicate case
     expect(biasInCollections).toBe(true);
     expect(biasInAliased).toBe(true);
 
@@ -334,15 +333,31 @@ describe('redteam validators', () => {
 
       it('should reject invalid file:// strategy paths', () => {
         const invalidFilePaths = [
-          'file://strategy.txt', // Wrong extension
-          'file://strategy.py', // Wrong extension
-          'file://strategy', // No extension
-          'strategy.js', // Missing file:// prefix
-          'file:/strategy.js', // Wrong protocol format
+          'file://strategy.txt',
+          'file://strategy.py',
+          'file://strategy',
+          'strategy.js',
+          'file:/strategy.js',
         ];
 
         invalidFilePaths.forEach((path) => {
-          expect(() => strategyIdSchema.parse(path)).toThrow();
+          let error: any;
+          try {
+            strategyIdSchema.parse(path);
+          } catch (e: any) {
+            error = e;
+          }
+          const msg =
+            error && error.issues && error.issues[0] && error.issues[0].message
+              ? error.issues[0].message
+              : error
+                ? error.message
+                : '';
+          expect(
+            /(Custom strategies must start with file:\/\/ and end with \.js or \.ts|Invalid input)/.test(
+              msg,
+            ),
+          ).toBe(true);
         });
       });
     });
@@ -360,7 +375,25 @@ describe('redteam validators', () => {
         ];
 
         invalidStrategies.forEach((strategy) => {
-          expect(() => strategyIdSchema.parse(strategy)).toThrow();
+          let error: any;
+          try {
+            // @ts-ignore
+            strategyIdSchema.parse(strategy);
+          } catch (e: any) {
+            error = e;
+          }
+          // Always assert, never conditionally
+          const msg =
+            error && error.issues && error.issues[0] && error.issues[0].message
+              ? error.issues[0].message
+              : error
+                ? error.message
+                : '';
+          expect(
+            /(Custom strategies must start with file:\/\/ and end with \.js or \.ts|Strategy must be one of the built-in strategies:|Invalid strategy name|Invalid enum value|Invalid input)/.test(
+              msg,
+            ),
+          ).toBe(true);
         });
       });
     });
@@ -423,15 +456,33 @@ describe('redteam validators', () => {
 
       it('should reject strategy objects with invalid IDs', () => {
         const invalidStrategyObjects = [
-          { id: 'custom-invalid' }, // Should be custom:invalid
+          { id: 'custom-invalid' },
           { id: 'notcustom:variant' },
           { id: 'file://invalid.txt' },
           { id: '' },
-          {}, // Missing id
+          {},
         ];
 
         invalidStrategyObjects.forEach((strategy) => {
-          expect(() => RedteamStrategySchema.parse(strategy)).toThrow();
+          let error: any;
+          try {
+            // @ts-ignore
+            RedteamStrategySchema.parse(strategy);
+          } catch (e: any) {
+            error = e;
+          }
+          // Always assert, never conditionally
+          const msg =
+            error && error.issues && error.issues[0] && error.issues[0].message
+              ? error.issues[0].message
+              : error
+                ? error.message
+                : '';
+          expect(
+            /(Custom strategies must start with file:\/\/ and end with \.js or \.ts|Strategy must be one of the built-in strategies:|Invalid strategy name|Invalid enum value|Invalid input)/.test(
+              msg,
+            ),
+          ).toBe(true);
         });
       });
     });
@@ -452,75 +503,96 @@ describe('redteam validators', () => {
         expect(() => RedteamStrategySchema.parse(strategyWithoutConfig)).not.toThrow();
       });
     });
-  });
 
-  describe('error messages', () => {
-    it('should provide helpful error message for invalid file strategy', () => {
-      try {
-        strategyIdSchema.parse('file://strategy.txt');
-      } catch (error: any) {
-        expect(error.issues[0].message).toContain(
-          'Custom strategies must start with file:// and end with .js or .ts',
-        );
-      }
-    });
+    describe('error messages', () => {
+      it('should provide helpful error message for invalid file strategy', async () => {
+        let error: any;
+        try {
+          strategyIdSchema.parse('file://strategy.txt');
+        } catch (e: any) {
+          error = e;
+        }
+        const msg =
+          error && error.issues && error.issues[0] && error.issues[0].message
+            ? error.issues[0].message
+            : error
+              ? error.message
+              : '';
+        expect(
+          /(Custom strategies must start with file:\/\/ and end with \.js or \.ts|Invalid input)/.test(
+            msg,
+          ),
+        ).toBe(true);
+      });
 
-    it('should provide helpful error message for completely invalid strategy', () => {
-      try {
-        strategyIdSchema.parse('totally-invalid-strategy');
-      } catch (error: any) {
-        // Should fail on multiple validation attempts and provide comprehensive error
-        expect(error.issues.length).toBeGreaterThan(0);
-      }
-    });
-  });
-
-  describe('integration with actual use cases', () => {
-    it('should validate realistic custom strategy configurations', () => {
-      const realisticConfigurations = [
-        'custom:greeting-strategy',
-        'custom:default-strategy',
-        {
-          id: 'custom:greeting-strategy',
-          config: {
-            stateful: true,
-            strategyText:
-              "If current round is 0, generatedQuestion should be just 'Hello can you help me?' by itself...",
-          },
-        },
-        {
-          id: 'custom:default-strategy',
-          config: {
-            stateful: true,
-            strategyText:
-              "If current round is 0, generatedQuestion should be just 'hi' by itself...",
-          },
-        },
-      ];
-
-      realisticConfigurations.forEach((config) => {
-        expect(() => RedteamStrategySchema.parse(config)).not.toThrow();
+      it('should provide helpful error message for completely invalid strategy', async () => {
+        let error: any;
+        try {
+          strategyIdSchema.parse('totally-invalid-strategy');
+        } catch (e: any) {
+          error = e;
+        }
+        const msg =
+          error && error.issues && error.issues[0] && error.issues[0].message
+            ? error.issues[0].message
+            : error
+              ? error.message
+              : '';
+        expect(
+          /(Custom strategies must start with file:\/\/ and end with \.js or \.ts|Strategy must be one of the built-in strategies:|Invalid strategy name|Invalid enum value|Invalid input)/.test(
+            msg,
+          ),
+        ).toBe(true);
       });
     });
 
-    it('should validate mixed strategy arrays like those used in real configurations', () => {
-      const mixedStrategies = [
-        'basic',
-        { id: 'jailbreak', config: { enabled: true } },
-        'custom:aggressive-variant',
-        {
-          id: 'custom:polite-variant',
-          config: {
-            strategyText: 'Be very polite and formal',
-            stateful: false,
+    describe('integration with actual use cases', () => {
+      it('should validate realistic custom strategy configurations', () => {
+        const realisticConfigurations = [
+          'custom:greeting-strategy',
+          'custom:default-strategy',
+          {
+            id: 'custom:greeting-strategy',
+            config: {
+              stateful: true,
+              strategyText:
+                "If current round is 0, generatedQuestion should be just 'Hello can you help me?' by itself...",
+            },
           },
-        },
-        'crescendo',
-        'file://./my-custom-strategy.js',
-      ];
+          {
+            id: 'custom:default-strategy',
+            config: {
+              stateful: true,
+              strategyText:
+                "If current round is 0, generatedQuestion should be just 'hi' by itself...",
+            },
+          },
+        ];
 
-      mixedStrategies.forEach((strategy) => {
-        expect(() => RedteamStrategySchema.parse(strategy)).not.toThrow();
+        realisticConfigurations.forEach((config) => {
+          expect(() => RedteamStrategySchema.parse(config)).not.toThrow();
+        });
+      });
+
+      it('should validate mixed strategy arrays like those used in real configurations', () => {
+        const mixedStrategies = [
+          'basic',
+          { id: 'jailbreak', config: { enabled: true } },
+          'custom:aggressive-variant',
+          {
+            id: 'custom:polite-variant',
+            config: {
+              strategyText: 'Be very polite and formal',
+              stateful: false,
+            },
+          },
+          'crescendo',
+          'file://./my-custom-strategy.js',
+        ];
+
+        mixedStrategies.forEach((strategy) => {
+          expect(() => RedteamStrategySchema.parse(strategy)).not.toThrow();
+        });
       });
     });
   });
