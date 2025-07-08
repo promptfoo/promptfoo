@@ -1,34 +1,64 @@
-# Azure OpenAI Vision Example
+# azure-openai-vision
 
 This example demonstrates how to use Azure OpenAI's vision-capable models to analyze images with promptfoo.
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example azure-openai-vision
+```
+
+## Features
+
+- Analyze images from URLs or local files
+- Extract text from images (OCR)
+- Compare responses across different vision models
+- Test image understanding capabilities
+
 ## Prerequisites
 
-1. An Azure OpenAI resource with a vision-capable deployment (e.g., GPT-4.1 Mini, GPT-4o)
+1. An Azure OpenAI resource with a vision-capable deployment (e.g., GPT-4o, GPT-4 Turbo with Vision)
 2. Your Azure OpenAI API key
 
 ## Setup
 
-1. Set your Azure API key in your environment or `.env` file:
+### Environment Variables
 
-   ```bash
-   export AZURE_API_KEY="your-api-key-here"
-   ```
+This example requires the following environment variable:
 
-2. Update `promptfooconfig.yaml` with your Azure resource details:
-   ```yaml
-   providers:
-     - id: azure:chat:your-deployment-name
-       config:
-         apiHost: 'your-resource.openai.azure.com'
-         apiKey: ${AZURE_API_KEY}
-         apiVersion: '2025-01-01-preview'
-   ```
+- `AZURE_API_KEY` - Your Azure OpenAI API key
+
+You can set this in a `.env` file or export it directly:
+
+```bash
+export AZURE_API_KEY="your-api-key-here"
+```
+
+### Configuration
+
+Update `promptfooconfig.yaml` with your Azure resource details:
+
+```yaml
+providers:
+  - id: azure:chat:your-deployment-name
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: ${AZURE_API_KEY}
+      apiVersion: '2025-01-01-preview' # Minimum: 2024-10-21
+```
 
 ## Running the Example
 
+Basic evaluation:
+
 ```bash
 npx promptfoo@latest eval
+```
+
+Compare multiple models:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig-compare-models.yaml
 ```
 
 View results in the web UI:
@@ -37,11 +67,9 @@ View results in the web UI:
 npx promptfoo@latest view
 ```
 
-## How It Works
+## Message Format
 
-### Message Format
-
-Vision models require a specific message format with content arrays. See `prompt.json` for the format:
+Vision models require a specific message format with content arrays containing both text and image inputs. The format is defined in `prompt.json`:
 
 ```json
 [
@@ -63,26 +91,58 @@ Vision models require a specific message format with content arrays. See `prompt
 ]
 ```
 
-### Image Input Options
+## Image Input Methods
 
-1. **URL Images**: Direct URLs to images on the web
-2. **Base64 Images**: Local images encoded as base64 data URIs
+### URL Images
 
-### Example Tests
+Provide direct URLs to images hosted on the web:
 
-The example includes three test cases:
+```yaml
+image_url: 'https://example.com/image.jpg'
+```
 
-1. Basic image recognition (cat image)
-2. OCR/text extraction (receipt analysis)
-3. Local image analysis using base64 encoding
+### Base64 Images
+
+Convert local images to base64 data URIs using the included utility:
+
+```bash
+node convert-image-to-base64.js path/to/your/image.jpg
+```
+
+Then use the output in your test:
+
+```yaml
+image_url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...'
+```
+
+## Test Cases
+
+This example includes three test scenarios:
+
+1. **Basic Recognition**: Identifies objects in an image
+2. **Text Extraction**: Extracts text/numbers from receipts or documents
+3. **Base64 Handling**: Demonstrates local image analysis
+
+## Image Limitations
+
+- Maximum size: 20MB for URL images
+- Supported formats: JPEG, PNG, GIF, BMP, WEBP
+- Images are automatically resized to 2048x2048 pixels (preserving aspect ratio)
 
 ## Troubleshooting
 
-- **401 Unauthorized**: Check your API key is set correctly
-- **404 Not Found**: Verify your deployment name matches your Azure resource
-- **"Model doesn't understand image data"**: Ensure you're using a vision-capable model and API version 2024-10-21 or newer
+| Error                                 | Solution                                          |
+| ------------------------------------- | ------------------------------------------------- |
+| 401 Unauthorized                      | Verify your `AZURE_API_KEY` is correct            |
+| 404 Not Found                         | Check deployment name matches your Azure resource |
+| "Model doesn't understand image data" | Ensure deployment uses a vision-capable model     |
+| Invalid API version                   | Use API version `2024-10-21` or newer             |
+
+## Cost Considerations
+
+Vision models typically have higher token costs due to image processing. Monitor your usage through the Azure portal.
 
 ## Additional Resources
 
-- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
-- [Promptfoo Azure Provider Docs](https://promptfoo.dev/docs/providers/azure)
+- [Azure OpenAI Vision Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/gpt-with-vision)
+- [Promptfoo Azure Provider Documentation](https://promptfoo.dev/docs/providers/azure)

@@ -1,5 +1,8 @@
 ---
 sidebar_position: 4
+title: Azure OpenAI Provider
+description: Configure and use Azure OpenAI models with promptfoo for evaluations, including GPT-4, reasoning models, and vision capabilities
+keywords: [azure, openai, gpt-4, vision, reasoning models, evaluation]
 ---
 
 # Azure
@@ -150,7 +153,9 @@ providers:
 ```
 
 :::tip
+
 All other [OpenAI provider](/docs/providers/openai) environment variables and configuration properties are supported.
+
 :::
 
 ## Using client credentials
@@ -178,12 +183,6 @@ providers:
 These credentials will be used to obtain an access token for the Azure OpenAI API.
 
 The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not specified. The `azureTokenScope` defaults to 'https://cognitiveservices.azure.com/.default', the scope required to authenticate with Azure Cognitive Services.
-
-You must also install a peer dependency from Azure:
-
-```sh
-npm i @azure/identity
-```
 
 ## Model-graded tests
 
@@ -426,8 +425,13 @@ prompts:
 
 For local images, use base64 encoding with the correct data URI format:
 
-```yaml
-{ 'type': 'image_url', 'image_url': { 'url': 'data:image/jpeg;base64,YOUR_BASE64_DATA' } }
+```json
+{
+  "type": "image_url",
+  "image_url": {
+    "url": "data:image/jpeg;base64,YOUR_BASE64_DATA"
+  }
+}
 ```
 
 ### Image Limitations
@@ -441,7 +445,7 @@ For local images, use base64 encoding with the correct data URI format:
 
 Common issues and solutions:
 
-1. **"Model doesn't understand image data"**
+1. **Model doesn't understand image data**
    - Ensure your deployment uses a vision-capable model
    - Verify API version is `2024-10-21` or newer
    - Check message format matches the examples above
@@ -492,7 +496,7 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 ## Assistants
 
-To eval an OpenAI assistant on Azure, first create a deployment for the assistant and create an assistant in the Azure web UI.
+To evaluate an OpenAI assistant on Azure, first create a deployment for the assistant and create an assistant in the Azure web UI.
 
 Then install the peer dependency locally:
 
@@ -577,7 +581,7 @@ Make sure to:
 
 ### Simple Example
 
-Here's an example of a simple full assistant eval:
+Here's an example of a simple full assistant evaluation:
 
 ```yaml
 prompts:
@@ -595,7 +599,7 @@ tests:
 
 For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [azure-openai-assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant).
 
-See the guide on [How to eval OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
+See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
 
 ## See Also
 

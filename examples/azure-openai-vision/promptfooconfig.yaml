@@ -6,16 +6,16 @@ prompts:
   - file://prompt.json
 
 providers:
-  - id: azure:chat:your-deployment-name # Replace with your deployment name
+  - id: azure:chat:your-deployment-name # Replace with your deployment
     config:
       apiHost: 'your-resource.openai.azure.com' # Replace with your resource
       apiKey: ${AZURE_API_KEY}
-      apiVersion: '2025-01-01-preview'
+      apiVersion: '2025-01-01-preview' # Minimum: 2024-10-21 for vision
       temperature: 0.1
       max_tokens: 500
 
 tests:
-  # Test 1: Analyze an image from URL
+  # Test 1: Basic object recognition
   - vars:
       question: 'What do you see in this image?'
       image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg'
@@ -23,7 +23,7 @@ tests:
       - type: icontains
         value: cat
 
-  # Test 2: Extract text from a receipt
+  # Test 2: OCR - Extract text from receipt
   - vars:
       question: 'What is the total amount on this receipt?'
       image_url: 'https://raw.githubusercontent.com/Azure-Samples/cognitive-services-REST-api-samples/master/curl/form-recognizer/rest-api/receipt.png'
@@ -33,17 +33,17 @@ tests:
           - '14.50'
           - '$14.50'
 
-  # Test 3: Analyze a local image (base64 encoded)
+  # Test 3: Local image analysis (base64)
   - vars:
       question: 'Describe this image'
       image_url: 'data:image/jpeg;base64,{{base64_image}}'
     options:
       transformVars: |
-        // Use a simple 1x1 red pixel PNG for testing
+        // Example: 1x1 red pixel for testing
         const base64_image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
         return { ...vars, base64_image };
     assert:
       - type: javascript
-        value: output.length > 10 # Basic check that we got a response
+        value: output.length > 10 # Verify we got a response
 # Note: Provider-specific settings like temperature should be set in the provider config above
 # to avoid overriding authentication settings
