@@ -85,6 +85,9 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
         }
       } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
         const parsed = yaml.load(contents);
+        if (parsed === null || parsed === undefined) {
+          continue; // Skip empty files
+        }
         if (Array.isArray(parsed)) {
           allContents.push(...parsed);
         } else {
@@ -92,7 +95,14 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
         }
       } else if (matchedFile.endsWith('.csv')) {
         const records = csvParse(contents, { columns: true });
-        allContents.push(...records);
+        // If single column, return array of values to match single file behavior
+        if (records.length > 0 && Object.keys(records[0]).length === 1) {
+          allContents.push(
+            ...records.map((record: Record<string, string>) => Object.values(record)[0]),
+          );
+        } else {
+          allContents.push(...records);
+        }
       } else {
         allContents.push(contents);
       }

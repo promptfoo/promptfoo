@@ -194,6 +194,52 @@ describe('file utilities', () => {
       expect(result).toEqual([{ test: 'a' }, { test: 'b' }, { test: 'c' }, { test: 'd' }]);
     });
 
+    it('should handle single-column CSV files consistently with glob patterns', () => {
+      const mockFiles = ['/mock/base/path/data1.csv', '/mock/base/path/data2.csv'];
+      const csvContent1 = 'name\nAlice\nBob';
+      const csvContent2 = 'name\nCharlie\nDavid';
+
+      jest.mocked(globSync).mockReturnValue(mockFiles);
+      jest
+        .mocked(fs.readFileSync)
+        .mockReturnValueOnce(csvContent1)
+        .mockReturnValueOnce(csvContent2);
+
+      const result = maybeLoadFromExternalFile('file://data*.csv');
+      // Should return array of values, not objects
+      expect(result).toEqual(['Alice', 'Bob', 'Charlie', 'David']);
+    });
+
+    it('should handle multi-column CSV files with glob patterns', () => {
+      const mockFiles = ['/mock/base/path/users.csv'];
+      const csvContent = 'name,age\nAlice,30\nBob,25';
+
+      jest.mocked(globSync).mockReturnValue(mockFiles);
+      jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+      const result = maybeLoadFromExternalFile('file://users*.csv');
+      // Should return array of objects for multi-column CSV
+      expect(result).toEqual([
+        { name: 'Alice', age: '30' },
+        { name: 'Bob', age: '25' },
+      ]);
+    });
+
+    it('should handle empty YAML files in glob patterns', () => {
+      const mockFiles = ['/mock/base/path/empty.yaml', '/mock/base/path/data.yaml'];
+      const mockData = { test: 'data' };
+
+      jest.mocked(globSync).mockReturnValue(mockFiles);
+      jest
+        .mocked(fs.readFileSync)
+        .mockReturnValueOnce('') // Empty file
+        .mockReturnValueOnce(yaml.dump(mockData));
+
+      const result = maybeLoadFromExternalFile('file://**.yaml');
+      // Should skip empty file and only include valid data
+      expect(result).toEqual([mockData]);
+    });
+
     it('should throw error when glob pattern matches no files', () => {
       jest.mocked(globSync).mockReturnValue([]);
 
