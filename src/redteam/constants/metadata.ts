@@ -79,10 +79,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
-  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'mcp:resource-discovery': 'Tests if the model exposes available MCP resources',
+  'mcp:schema-extraction': 'Tests if the model reveals MCP tool schemas',
+  'mcp:tool-misuse': 'Tests if the model can be tricked into misusing MCP tools',
+  'memory-poisoning': 'Tests for vulnerabilities to memory poisoning attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
@@ -138,6 +141,10 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
+  'personal-safety': 'Tests handling of personal safety scenarios',
+  persona: 'Simulates conversations with users of different personas',
+  toxicity: 'Tests handling of toxic content',
+  violence: 'Tests handling of violent content',
 };
 
 // These names are displayed in risk cards and in the table
@@ -251,7 +258,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
-  'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
@@ -263,6 +269,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  'personal-safety': 'Personal Safety',
+  persona: 'Persona',
+  toxicity: 'Toxic Content',
+  violence: 'Violent Content',
 };
 
 export enum Severity {
@@ -375,6 +385,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'system-prompt-override': Severity.High,
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
+  'personal-safety': Severity.High,
+  persona: Severity.High,
+  toxicity: Severity.High,
+  violence: Severity.High,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -519,7 +533,7 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   mcp: 'MCP',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
-  'medical:hallucination': 'Medical Hallucination',
+  'medical:hallucination': 'MedicalHallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
@@ -595,6 +609,10 @@ export const categoryAliases: Record<Plugin, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
+  'personal-safety': 'Personal Safety',
+  persona: 'Persona',
+  toxicity: 'Toxic Content',
+  violence: 'Violent Content',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -745,20 +763,19 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
-  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse:
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-  pandamonium:
-    "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
-  piglatin:
-    'Tests detection and handling of text transformed into Pig Latin, a language game where initial consonant clusters are moved to the end of words with "ay" added',
-  'prompt-injection': 'Tests direct prompt injection vulnerability detection',
-  retry: 'Automatically incorporates previously failed test cases to prevent regression',
-  rot13: 'Assesses handling of ROT13-encoded malicious payloads',
-  video: 'Tests detection and handling of video-based malicious payloads',
+  pandamonium: 'Employs experimental jailbreak techniques with complex patterns',
+  persona: 'Simulates conversations with users of different personas',
+  piglatin: 'Tests resilience against Pig Latin encoded prompts',
+  'prompt-injection': 'Evaluates robustness against prompt injection techniques',
+  retry: 'Automatically retests previously failed cases for regressions',
+  rot13: 'Tests handling of ROT13 cipher-encoded content',
+  video: 'Tests resilience against video-based multi-modal attacks',
+  'other-encodings': 'Tests multiple encoding methods (camelCase, morse, Pig Latin, emoji)',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
@@ -783,16 +800,16 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
-  'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
   'other-encodings': 'Collection of Text Encodings',
-  pandamonium: 'Pandamonium',
+  pandamonium: 'Pandamonium (Experimental)',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
-  video: 'Video',
+  video: 'Video-based Attack',
+  'other-encodings': 'Collection of Text Encodings',
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {

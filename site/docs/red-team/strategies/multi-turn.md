@@ -18,7 +18,7 @@ You can use it with the following configuration:
 strategies:
   - crescendo
   - goat
-  - mischievous-user
+  - persona
 ```
 
 Or tune it with the following parameters:
@@ -36,7 +36,7 @@ strategies:
       maxTurns: 5
       stateful: false
       continueAfterSuccess: false
-  - id: mischievous-user
+  - id: persona
     config:
       maxTurns: 5
       stateful: false
@@ -109,7 +109,7 @@ The backtracking automation also saves an enormous amount of time compared to ma
 ## Related Concepts
 
 - [GOAT Strategy](goat.md) - Multi-turn jailbreak with a generative offensive agent tester
-- [Mischievous User Strategy](mischievous-user.md) - Multi-turn conversations with a mischievous user
+- [Persona Strategy](persona.md) - Multi-turn conversations with users of different personas
 - [Iterative Jailbreaks](iterative.md) - Single-turn version of this approach
 - [Tree-based Jailbreaks](tree.md) - Alternative approach to jailbreaking
 - [The Crescendo Attack](https://crescendo-the-multiturn-jailbreak.github.io//) from Microsoft Research

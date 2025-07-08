@@ -1,6 +1,6 @@
 import type { TestCase } from '../../types';
 
-export function addMischievousUser(
+export function addPersona(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
@@ -8,7 +8,7 @@ export function addMischievousUser(
   return testCases.map((testCase) => ({
     ...testCase,
     provider: {
-      id: 'promptfoo:redteam:mischievous-user',
+      id: 'promptfoo:redteam:persona',
       config: {
         injectVar,
         ...config,
@@ -16,11 +16,11 @@ export function addMischievousUser(
     },
     assert: testCase.assert?.map((assertion) => ({
       ...assertion,
-      metric: `${assertion.metric}/MischievousUser`,
+      metric: `${assertion.metric}/Persona`,
     })),
     metadata: {
       ...testCase.metadata,
-      strategyId: 'mischievous-user',
+      strategyId: 'persona',
     },
   }));
-}
+} 

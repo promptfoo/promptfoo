@@ -137,13 +137,13 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Multi-turn',
-    strategy: 'mischievous-user',
-    displayName: 'Mischievous User',
-    description: 'Mischievous user conversations',
-    longDescription: 'Simulates a multi-turn conversation between a mischievous user and an agent',
+    strategy: 'persona',
+    displayName: 'Persona',
+    description: 'User persona simulations',
+    longDescription: 'Simulates conversations with users of different personas',
     cost: 'High',
     asrIncrease: '10-20%',
-    link: '/docs/red-team/strategies/mischievous-user/',
+    link: '/docs/red-team/strategies/persona/',
   },
   {
     category: 'Static (Single-Turn)',

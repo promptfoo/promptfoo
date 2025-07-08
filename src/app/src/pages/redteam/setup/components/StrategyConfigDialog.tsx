@@ -101,7 +101,7 @@ export default function StrategyConfigDialog({
       strategy === 'pandamonium' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
-      strategy === 'mischievous-user'
+      strategy === 'persona'
     ) {
       if (!isCustomStrategyValid()) {
         return;
@@ -291,6 +291,59 @@ export default function StrategyConfigDialog({
             placeholder="Maximum candidates per step (optional)"
             InputProps={{ inputProps: { min: 1 } }}
             helperText="Maximum number of candidate prompts to generate in each step (optional)"
+          />
+        </Box>
+      );
+    } else if (strategy === 'persona') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Configure the persona strategy parameters. This simulates conversations with users of different personas.
+          </Typography>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            label="Persona Description"
+            value={localConfig.persona || ''}
+            onChange={(e) => setLocalConfig({ ...localConfig, persona: e.target.value })}
+            placeholder="Describe the persona (e.g., 'You are a busy executive who needs quick, concise answers')"
+            helperText="Leave blank to use the default mischievous persona"
+          />
+
+          <TextField
+            fullWidth
+            label="Max Turns"
+            type="number"
+            value={localConfig.maxTurns || 5}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
+              setLocalConfig({ ...localConfig, maxTurns: value });
+            }}
+            placeholder="Maximum number of conversation turns (default: 5)"
+            InputProps={{ inputProps: { min: 1, max: 20 } }}
+            helperText="Maximum number of back-and-forth exchanges with the model"
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localConfig.stateful !== false}
+                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
+                color="primary"
+              />
+            }
+            label={
+              <Box component="span">
+                <Typography variant="body2" component="span">
+                  Stateful
+                </Typography>
+                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                  - Enable to maintain conversation history (recommended)
+                </Typography>
+              </Box>
+            }
           />
         </Box>
       );

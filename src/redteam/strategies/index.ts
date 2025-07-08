@@ -20,10 +20,10 @@ import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
-import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
+import { addPersona } from './persona';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -124,11 +124,11 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'mischievous-user',
+    id: 'persona',
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
-      const newTestCases = addMischievousUser(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} mischievous user test cases`);
+      logger.debug(`Adding persona test cases to ${testCases.length} test cases`);
+      const newTestCases = addPersona(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} persona test cases`);
       return newTestCases;
     },
   },

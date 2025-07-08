@@ -27,7 +27,7 @@ describe('strategies constants', () => {
   });
 
   it('should have correct multi-turn strategies', () => {
-    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'custom', 'mischievous-user']);
+    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'custom', 'persona']);
   });
 
   it('should have correct agentic strategies', () => {
@@ -37,7 +37,7 @@ describe('strategies constants', () => {
       'custom',
       'jailbreak',
       'jailbreak:tree',
-      'mischievous-user',
+      'persona',
       'pandamonium',
     ]);
   });
@@ -75,10 +75,10 @@ describe('strategies constants', () => {
       'jailbreak:tree',
       'leetspeak',
       'math-prompt',
-      'mischievous-user',
       'morse',
       'multilingual',
       'pandamonium',
+      'persona',
       'piglatin',
       'prompt-injection',
       'retry',

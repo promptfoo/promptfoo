@@ -189,6 +189,7 @@ interface PromptfooAgentOptions {
   id?: string;
   instructions?: string;
   task?: string;
+  persona?: string;
 }
 
 export class PromptfooSimulatedUserProvider implements ApiProvider {
@@ -212,13 +213,17 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const messages = JSON.parse(prompt);
-    const body = {
+    const body: any = {
       task: this.options.task || 'tau',
       instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),
       version: VERSION,
     };
+
+    if (this.options.persona) {
+      body.persona = this.options.persona;
+    }
 
     logger.debug(`Calling promptfoo agent API with body: ${JSON.stringify(body)}`);
     try {

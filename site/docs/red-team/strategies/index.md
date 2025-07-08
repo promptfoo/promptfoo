@@ -98,7 +98,7 @@ redteam:
   strategies:
     - goat
     - crescendo
-    - mischievous-user
+    - persona
 ```
 
 ## Implementation Guide
