@@ -95,15 +95,15 @@ export abstract class SageMakerGenericProvider {
 
     // Validate the config
     try {
-      this.config = config ? SageMakerConfigSchema.parse(config) : {};
+      SageMakerConfigSchema.parse(config);
     } catch (error) {
       const zodError = error as z.ZodError;
-      logger.error(
+      logger.warn(
         `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\nIssues: ${JSON.stringify(zodError.issues)}`,
       );
-      throw new Error('Invalid SageMaker config');
     }
 
+    this.config = config ?? {};
     this.delay = delay || this.config.delay;
     this.transform = transform || this.config.transform;
     this.providerId = id; // Store custom ID if provided
