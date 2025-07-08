@@ -1,9 +1,9 @@
 # Test Images
 
-Place your test images in this directory:
+This directory contains sample images for the Azure OpenAI vision example:
 
-- street-sign.jpg - An image with text for OCR testing
-- landscape.jpg - A scenic image for scene analysis
-- abstract-art.png - An image for artistic interpretation
+- `cat.jpg` - A cat photo from Wikimedia Commons (CC BY-SA)
+- `stop-sign.jpg` - A stop sign from Wikimedia Commons (Public Domain)
+- `landscape.jpg` - A nature boardwalk from Wikimedia Commons (CC0)
 
-Images will be automatically loaded and converted to base64 when using file:// paths.
+These images are automatically loaded and converted to base64 when using `file://` paths in the configuration.
