@@ -21,9 +21,9 @@ docker run -p 4000:4000 \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
   ghcr.io/berriai/litellm:main-latest \
-  --model gpt-4o-mini \
-  --model claude-3-5-sonnet-20241022 \
-  --model text-embedding-3-small
+  --model gpt-4.1-mini \
+  --model claude-3.7-sonnet \
+  --model text-embedding-3-large
 ```
 
 Or with a config file:
@@ -45,7 +45,7 @@ npx promptfoo@latest eval
 
 - **Chat Completions**: Compares translations across multiple models
 - **Embeddings**: Uses LiteLLM's embedding support for similarity assertions
-- **Model Comparison**: Evaluates GPT-4o Mini vs Claude 3.5 Sonnet
+- **Model Comparison**: Evaluates GPT-4.1 Mini vs Claude 3.7 Sonnet
 - **Advanced Assertions**: Demonstrates similarity checks, contains assertions, and LLM rubrics
 
 ## Expected Output

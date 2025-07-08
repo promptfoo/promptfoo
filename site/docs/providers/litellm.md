@@ -30,9 +30,9 @@ Example:
 
 ```yaml
 providers:
-  - id: litellm:gpt-4o-mini
+  - id: litellm:gpt-4.1-mini
   # or
-  - id: litellm:chat:gpt-4o-mini
+  - id: litellm:chat:gpt-4.1-mini
 ```
 
 #### Completion models
@@ -53,7 +53,7 @@ Example:
 
 ```yaml
 providers:
-  - id: litellm:embedding:text-embedding-3-small
+  - id: litellm:embedding:text-embedding-3-large
 ```
 
 ### 2. Using with LiteLLM proxy server
@@ -62,7 +62,7 @@ If you're running a LiteLLM proxy server:
 
 ```yaml
 providers:
-  - id: litellm:gpt-4o-mini
+  - id: litellm:gpt-4.1-mini
     config:
       apiBaseUrl: http://localhost:4000
       apiKey: ${LITELLM_API_KEY}
@@ -74,7 +74,7 @@ Since LiteLLM uses the OpenAI format, you can use the OpenAI provider:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       apiBaseUrl: http://localhost:4000
       apiKey: ${LITELLM_API_KEY}
@@ -86,7 +86,7 @@ providers:
 
 ```yaml
 providers:
-  - id: litellm:gpt-4o-mini
+  - id: litellm:gpt-4.1-mini
     config:
       apiKey: ${OPENAI_API_KEY}
       temperature: 0.7
@@ -99,7 +99,7 @@ All LiteLLM parameters are supported:
 
 ```yaml
 providers:
-  - id: litellm:claude-3-5-sonnet-20241022
+  - id: litellm:claude-3.7-sonnet
     config:
       apiKey: ${ANTHROPIC_API_KEY}
       temperature: 0.7
@@ -128,13 +128,13 @@ description: LiteLLM evaluation example
 
 providers:
   # Chat models
-  - id: litellm:gpt-4o-mini
-  - id: litellm:claude-3-5-sonnet-20241022
+  - id: litellm:gpt-4.1-mini
+  - id: litellm:claude-3.7-sonnet
     config:
       apiKey: ${ANTHROPIC_API_KEY}
-
+      
   # Embedding model for similarity checks
-  - id: litellm:embedding:text-embedding-3-small
+  - id: litellm:embedding:text-embedding-3-large
 
 prompts:
   - 'Translate this to {{language}}: {{text}}'
@@ -149,15 +149,15 @@ tests:
       - type: similar
         value: 'Bonjour, le monde!'
         threshold: 0.8
-        provider: litellm:embedding:text-embedding-3-small
+        provider: litellm:embedding:text-embedding-3-large
 ```
 
 ## Supported Models
 
 LiteLLM supports models from all major providers:
 
-- **OpenAI**: GPT-4, GPT-3.5, embeddings, and more
-- **Anthropic**: Claude models
+- **OpenAI**: GPT-4.1, GPT-4, GPT-3.5, embeddings, and more
+- **Anthropic**: Claude 3.7, Claude 3.5, Claude 3, and earlier models
 - **Google**: Gemini and PaLM models
 - **Meta**: Llama models
 - **Mistral**: All Mistral models

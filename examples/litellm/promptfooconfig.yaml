@@ -6,13 +6,13 @@ prompts:
 
 providers:
   # Chat models via LiteLLM
-  - id: litellm:gpt-4o-mini
-    label: GPT-4o Mini
+  - id: litellm:gpt-4.1-mini
+    label: GPT-4.1 Mini
     config:
       apiBaseUrl: http://localhost:4000
 
-  - id: litellm:claude-3-5-sonnet-20241022
-    label: Claude 3.5 Sonnet
+  - id: litellm:claude-3.7-sonnet
+    label: Claude 3.7 Sonnet
     config:
       apiBaseUrl: http://localhost:4000
 
@@ -21,26 +21,26 @@ defaultTest:
   options:
     provider:
       embedding:
-        id: litellm:embedding:text-embedding-3-small
+        id: litellm:embedding:text-embedding-3-large
         config:
           apiBaseUrl: http://localhost:4000
 
 tests:
   - vars:
       language: French
-      text: 'Hello, how are you today?'
+      text: "Hello, how are you today?"
     assert:
       - type: contains-any
-        value: ['Bonjour', 'Salut']
+        value: ["Bonjour", "Salut"]
       - type: similar
         threshold: 0.8
         value: "Bonjour, comment allez-vous aujourd'hui?"
 
   - vars:
       language: Spanish
-      text: 'The weather is beautiful'
+      text: "The weather is beautiful"
     assert:
       - type: contains-any
-        value: ['hermoso', 'bonito', 'bello']
+        value: ["hermoso", "bonito", "bello"]
       - type: llm-rubric
-        value: 'The translation should be grammatically correct Spanish and preserve the meaning'
+        value: "The translation should be grammatically correct Spanish and preserve the meaning"

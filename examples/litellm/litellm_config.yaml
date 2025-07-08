@@ -1,17 +1,17 @@
 model_list:
-  - model_name: gpt-4o-mini
+  - model_name: gpt-4.1-mini
     litellm_params:
-      model: openai/gpt-4o-mini
+      model: openai/gpt-4.1-mini
       api_key: os.environ/OPENAI_API_KEY
 
-  - model_name: claude-3-5-sonnet-20241022
+  - model_name: claude-3.7-sonnet
     litellm_params:
-      model: anthropic/claude-3-5-sonnet-20241022
+      model: anthropic/claude-3.7-sonnet
       api_key: os.environ/ANTHROPIC_API_KEY
 
-  - model_name: text-embedding-3-small
+  - model_name: text-embedding-3-large
     litellm_params:
-      model: openai/text-embedding-3-small
+      model: openai/text-embedding-3-large
       api_key: os.environ/OPENAI_API_KEY
 
 litellm_settings:
