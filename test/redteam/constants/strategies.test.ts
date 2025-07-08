@@ -8,6 +8,7 @@ import {
   MULTI_TURN_STRATEGIES,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
+  isCustomStrategy,
 } from '../../../src/redteam/constants/strategies';
 
 describe('strategies constants', () => {
@@ -105,5 +106,11 @@ describe('strategies constants', () => {
     ].sort();
 
     expect(ALL_STRATEGIES).toEqual(expectedStrategies);
+  });
+
+  it('should correctly identify custom strategies', () => {
+    expect(isCustomStrategy('custom')).toBe(true);
+    expect(isCustomStrategy('custom:test')).toBe(true);
+    expect(isCustomStrategy('other')).toBe(false);
   });
 });
