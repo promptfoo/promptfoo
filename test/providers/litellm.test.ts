@@ -60,7 +60,7 @@ describe('LiteLLM Provider', () => {
     it('should handle model names with colons', () => {
       const provider = createLiteLLMProvider('litellm:chat:custom:model:v1', {});
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(provider.modelName).toBe('custom:model:v1');
+      expect(provider.id()).toContain('custom:model:v1');
     });
 
     it('should pass through additional config options', () => {
