@@ -382,30 +382,24 @@ This means you're using a reasoning model without setting the `isReasoningModel`
 
 ## Using Vision Models
 
-Azure OpenAI supports vision-capable models like GPT-4o, GPT-4.1. These models can analyze images and provide textual responses about them.
+Azure OpenAI supports vision-capable models like GPT-4o and GPT-4.1 for image analysis.
 
 ### Configuration
 
-Vision models require:
-
-1. A deployment with a vision-capable model (GPT-4o, GPT-4.1)
-2. API version `2024-10-21` or newer
-3. Proper message formatting with image inputs
-
 ```yaml
 providers:
-  - id: azure:chat:gpt-4.1-deployment
+  - id: azure:chat:gpt-4o
     config:
       apiHost: 'your-resource-name.openai.azure.com'
-      # apiKey is omitted - loaded from AZURE_API_KEY environment variable
-      apiVersion: '2025-01-01-preview' # Minimum: 2024-10-21 for vision support
+      apiVersion: '2024-10-21' # or newer for vision support
 ```
 
-Note: Vision support in Azure OpenAI requires specific model deployments. Not all GPT-4 deployments support vision - ensure your deployment uses a model variant with vision capabilities.
+### Image Input
 
-### Image Input Format
-
-Vision models require a specific message format with content arrays:
+Vision models require a specific message format. Images can be provided as:
+- **URLs**: Direct image links
+- **Local files**: Using `file://` paths (automatically converted to base64)
+- **Base64**: Data URIs with format `data:image/jpeg;base64,YOUR_DATA`
 
 ```yaml
 prompts:
@@ -421,47 +415,21 @@ prompts:
           {
             "type": "image_url",
             "image_url": {
-              "url": "https://example.com/image.jpg"
+              "url": "{{image_url}}"
             }
           }
         ]
       }
     ]
+
+tests:
+  - vars:
+      image_url: https://example.com/image.jpg  # URL
+  - vars:
+      image_url: file://assets/image.jpg        # Local file (auto base64)
+  - vars:
+      image_url: data:image/jpeg;base64,/9j/4A... # Base64
 ```
-
-### Base64 Images
-
-For local images, use base64 encoding with the correct data URI format:
-
-```json
-{
-  "type": "image_url",
-  "image_url": {
-    "url": "data:image/jpeg;base64,YOUR_BASE64_DATA"
-  }
-}
-```
-
-### Image Limitations
-
-- Maximum image size: 20MB for URLs
-- Supported formats: JPEG, PNG, GIF, BMP, WEBP
-- Images are resized to fit within 2048 x 2048 pixels while preserving aspect ratio
-- Maximum 10 images per request
-
-### Troubleshooting Vision Issues
-
-Common issues and solutions:
-
-1. **Model doesn't understand image data**
-   - Ensure your deployment uses a vision-capable model
-   - Verify API version is `2024-10-21` or newer
-   - Check message format matches the examples above
-
-2. **Base64 images not working**
-   - Ensure correct data URI format: `data:image/[type];base64,[data]`
-   - Verify base64 encoding is valid
-   - Keep images reasonably sized
 
 ### Example
 
