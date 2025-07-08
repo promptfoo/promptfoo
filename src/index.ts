@@ -132,14 +132,14 @@ const redteam = {
     Grader: RedteamGraderBase,
   },
   generate: doGenerateRedteam,
+  run: doRedteamRun,
 };
 
-export { assertions, cache, doRedteamRun, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
 
 export default {
   assertions,
   cache,
-  doRedteamRun,
   evaluate,
   guardrails,
   loadApiProvider,
