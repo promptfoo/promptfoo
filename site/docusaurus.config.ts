@@ -129,6 +129,10 @@ const config: Config = {
               label: 'Model Security',
             },
             {
+              to: '/mcp/',
+              label: 'MCP Proxy',
+            },
+            {
               to: '/docs/getting-started/',
               label: 'Evaluations',
             },
@@ -238,6 +242,10 @@ const config: Config = {
             {
               label: 'Enterprise',
               href: '/pricing/',
+            },
+            {
+              label: 'MCP Proxy',
+              to: '/mcp/',
             },
             {
               label: 'Status',
