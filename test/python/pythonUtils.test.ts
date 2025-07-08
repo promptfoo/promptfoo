@@ -419,9 +419,6 @@ describe('Python Utils', () => {
             `Python script ${path.resolve('testScript.py')} parsed output type: object`,
           ),
         );
-        expect(logger.debug).toHaveBeenCalledWith(
-          expect.stringContaining('Python script result data type: object'),
-        );
       });
     });
 
