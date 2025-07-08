@@ -15,29 +15,30 @@ providers:
       max_tokens: 500
 
 tests:
-  # Test 1: Animal recognition (URL)
+  # Test 1: Load image from URL
   - vars:
-      question: What animal is this?
+      question: What animal is in this image?
       image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg
     assert:
       - type: contains
         value: cat
 
-  # Test 2: OCR (local file)
+  # Test 2: Load image from local file (automatically converted to base64)
   - vars:
-      question: What does the sign say?
-      image_url: file://assets/stop-sign.jpg
+      question: What color is the cat in this image?
+      image_url: file://assets/cat.jpg
     assert:
-      - type: contains
-        value: STOP
+      - type: contains-any
+        value: [orange, ginger, tabby]
 
-  # Test 3: Scene description (local file)
+  # Test 3: Load image as base64 data URI
   - vars:
-      question: Describe this scene in one sentence.
-      image_url: file://assets/landscape.jpg
+      question: Is there a cat in this image?
+      image_url: data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wgARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGgP//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEABj8Cf//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAT8hf//aAAwDAQACAAMAAAAQ/wD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/EH//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/EH//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/EH//2Q==
     assert:
-      - type: llm-rubric
-        value: The description mentions a boardwalk or wooden path
+      - type: equals
+        value: "Yes"
+
 # Note: If you see 401 errors, ensure:
 # 1. Your AZURE_API_KEY environment variable is set correctly
 # 2. The apiHost matches your Azure OpenAI resource name

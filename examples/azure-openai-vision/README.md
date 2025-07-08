@@ -25,17 +25,15 @@ npx promptfoo@latest init --example azure-openai-vision
    npx promptfoo@latest eval
    ```
 
-## What This Example Does
+## What This Example Demonstrates
 
-- Analyzes a cat photo from Wikipedia
-- Reads text from a stop sign
-- Describes a nature scene
+Three ways to provide images to vision models:
 
-The example shows three ways to provide images:
+1. **URL**: Direct link to an image on the web
+2. **Local file**: Using `file://` paths (automatically converted to base64)
+3. **Base64**: Pre-encoded image data URI
 
-- **URLs**: Direct links to images
-- **Local files**: Using `file://` paths (automatically converted to base64)
-- **Base64**: Pre-encoded image data
+All three methods analyze the same cat image to show different loading approaches.
 
 ## Troubleshooting
 

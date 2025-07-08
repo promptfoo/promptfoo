@@ -1,9 +1,7 @@
 # Test Images
 
-This directory contains sample images for the Azure OpenAI vision example:
+This directory contains a sample image for the Azure OpenAI vision example:
 
-- `cat.jpg` - A cat photo from Wikimedia Commons (CC BY-SA)
-- `stop-sign.jpg` - A stop sign from Wikimedia Commons (Public Domain)
-- `landscape.jpg` - A nature boardwalk from Wikimedia Commons (CC0)
+- `cat.jpg` - A cat photo used to demonstrate three different ways to load images (URL, file://, and base64)
 
-These images are automatically loaded and converted to base64 when using `file://` paths in the configuration.
+The image is automatically loaded and converted to base64 when using `file://` paths in the configuration.
