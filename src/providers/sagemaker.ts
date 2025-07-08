@@ -46,17 +46,19 @@ export const SageMakerOptionsSchema = z
     stopSequences: z.array(z.string()).optional(),
 
     // Provider behavior options
-    delay: z.number().optional(),
-    transform: z.string().optional(),
+    delay: z.number().optional(), // Delay between API calls in milliseconds
+    transform: z.string().optional(), // Transform function or file path to transform prompts
 
     // Model type for request/response handling
+    // TODO(Will): What is custom? User uploaded model?
+    // - Jumpstart is a model service, not a model type.
     modelType: z.enum(['openai', 'llama', 'huggingface', 'jumpstart', 'custom']).optional(),
 
     // Response format options
     responseFormat: z
       .object({
         type: z.string().optional(),
-        path: z.string().optional(),
+        path: z.string().optional(), // JavaScript expression to extract content (formerly JSONPath)
       })
       .optional(),
 
