@@ -8,9 +8,9 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
-import MCPProxyDiagramMUI from '../components/McpProxyDiagram';
+import MCPProxyDiagram from '../components/McpProxyDiagram';
 import NewsletterForm from '../components/NewsletterForm';
-import styles from './llm-vulnerability-scanner.module.css';
+import styles from './mcp.module.css';
 
 function HeroSection() {
   return (
@@ -110,7 +110,7 @@ function ActionOrientedSection() {
           Our MCP proxy sits between your users and AI applications and MCP servers, providing
           enterprise-grade security, monitoring, and access control.
         </p>
-        <MCPProxyDiagramMUI />
+        <MCPProxyDiagram />
       </div>
     </section>
   );

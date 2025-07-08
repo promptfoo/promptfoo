@@ -11,7 +11,7 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
-export default function MCPProxyDiagramGrid() {
+export default function MCPProxyDiagram() {
   const AV = 80; // avatar diameter
   const PROXY_D = 200; // proxy circle diameter
 

@@ -171,8 +171,8 @@ function HomepageWalkthrough() {
     },
     {
       id: 4,
-      caption: 'MCP Proxy',
-      mobileCaption: 'MCP Proxy',
+      caption: 'MCP',
+      mobileCaption: 'MCP',
       image: '/img/mcp-proxy-dashboard.png',
       image2x: '/img/mcp-proxy-dashboard.png',
       description: (
