@@ -152,4 +152,25 @@ describe('handleGuardrail', () => {
       assertion: baseAssertion,
     });
   });
+
+  it('should use custom reason when provided in guardrails', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      providerResponse: {
+        guardrails: {
+          flagged: true,
+          reason: 'Custom safety violation reason',
+        },
+        output: 'test output',
+      },
+    };
+
+    const result = await handleGuardrails(params);
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Custom safety violation reason',
+      assertion: baseAssertion,
+    });
+  });
 });
