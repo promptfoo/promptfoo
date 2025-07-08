@@ -15,6 +15,10 @@ import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
+import {
+  clearGlobalAbortController,
+  getGlobalAbortController,
+} from '../../src/util/abortController';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -25,6 +29,7 @@ jest.mock('../../src/migrate');
 jest.mock('../../src/providers');
 jest.mock('../../src/share');
 jest.mock('../../src/table');
+jest.mock('../../src/util/abortController');
 jest.mock('fs');
 jest.mock('path', () => {
   // Use actual path module for platform-agnostic tests
@@ -65,6 +70,24 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     jest.clearAllMocks();
+
+    // Mock global abort controller for all tests
+    const mockAbortController = {
+      signal: {
+        aborted: false,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+        onabort: null,
+        reason: undefined,
+        throwIfAborted: jest.fn(),
+      },
+      abort: jest.fn(),
+    } as any;
+
+    jest.mocked(getGlobalAbortController).mockReturnValue(mockAbortController);
+    jest.mocked(clearGlobalAbortController).mockImplementation(() => {});
+
     jest.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -381,5 +404,223 @@ describe('Provider Token Tracking', () => {
 
     const claudeUsage = tracker.getProviderUsage('anthropic:claude-3');
     expect(claudeUsage).toEqual(providerUsageData['anthropic:claude-3']);
+  });
+});
+
+describe('Abort Controller Integration', () => {
+  let mockAbortController: jest.Mocked<AbortController>;
+  let mockEvalRecord: jest.Mocked<Eval>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Create mock abort controller
+    mockAbortController = {
+      signal: {
+        aborted: false,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+        onabort: null,
+        reason: undefined,
+        throwIfAborted: jest.fn(),
+      },
+      abort: jest.fn(),
+    } as any;
+
+    // Create mock eval record
+    mockEvalRecord = {
+      id: 'test-eval',
+      results: [],
+      clearResults: jest.fn(),
+      prompts: [
+        {
+          metrics: {
+            testPassCount: 5,
+            testFailCount: 2,
+            testErrorCount: 1,
+            tokenUsage: {
+              total: 100,
+              prompt: 40,
+              completion: 60,
+              cached: 10,
+              numRequests: 3,
+            },
+          },
+        },
+      ],
+    } as any;
+
+    // Mock resolveConfigs for abort controller tests
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: {},
+      testSuite: {
+        prompts: [],
+        providers: [],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(getGlobalAbortController).mockReturnValue(mockAbortController);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+  });
+
+  it('should integrate global abort controller with evaluation', async () => {
+    const cmdObj = { write: false };
+    const evaluateOptions = {};
+
+    await doEval(cmdObj, {}, undefined, evaluateOptions);
+
+    expect(getGlobalAbortController).toHaveBeenCalledWith();
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        abortSignal: mockAbortController.signal,
+      }),
+    );
+    expect(clearGlobalAbortController).toHaveBeenCalledWith();
+  });
+
+  it('should combine existing abort signal with global abort controller', async () => {
+    const existingAbortController = new AbortController();
+    const cmdObj = { write: false };
+    const evaluateOptions = { abortSignal: existingAbortController.signal };
+
+    // Mock AbortSignal.any
+    const combinedSignal = { aborted: false } as AbortSignal;
+    jest.spyOn(AbortSignal, 'any').mockReturnValue(combinedSignal);
+
+    await doEval(cmdObj, {}, undefined, evaluateOptions);
+
+    expect(AbortSignal.any).toHaveBeenCalledWith([
+      existingAbortController.signal,
+      mockAbortController.signal,
+    ]);
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        abortSignal: combinedSignal,
+      }),
+    );
+  });
+
+  it('should handle aborted evaluation gracefully', async () => {
+    // Create a fresh mock controller with aborted signal
+    const abortedController = {
+      signal: {
+        aborted: true,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+        onabort: null,
+        reason: undefined,
+        throwIfAborted: jest.fn(),
+      },
+      abort: jest.fn(),
+    } as any;
+
+    jest.mocked(getGlobalAbortController).mockReturnValue(abortedController);
+
+    const mockInfo = jest.spyOn(logger, 'info');
+    const cmdObj = { write: false };
+
+    await doEval(cmdObj, {}, undefined, {});
+
+    expect(mockInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluation cancelled. Showing partial results...'),
+    );
+    expect(clearGlobalAbortController).toHaveBeenCalledWith();
+  });
+
+  it('should handle evaluation error with cancellation check', async () => {
+    const error = new Error('Test error');
+    jest.mocked(evaluate).mockRejectedValue(error);
+
+    // Create a fresh mock controller with non-aborted signal
+    const nonAbortedController = {
+      signal: {
+        aborted: false,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+        onabort: null,
+        reason: undefined,
+        throwIfAborted: jest.fn(),
+      },
+      abort: jest.fn(),
+    } as any;
+
+    jest.mocked(getGlobalAbortController).mockReturnValue(nonAbortedController);
+
+    const cmdObj = { write: false };
+
+    await expect(doEval(cmdObj, {}, undefined, {})).rejects.toThrow('Test error');
+    expect(clearGlobalAbortController).toHaveBeenCalledWith();
+  });
+
+  it('should handle evaluation error from cancellation', async () => {
+    const error = new Error('Operation cancelled');
+    jest.mocked(evaluate).mockRejectedValue(error);
+
+    // Create a fresh mock controller with aborted signal
+    const abortedController = {
+      signal: {
+        aborted: true,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+        onabort: null,
+        reason: undefined,
+        throwIfAborted: jest.fn(),
+      },
+      abort: jest.fn(),
+    } as any;
+
+    jest.mocked(getGlobalAbortController).mockReturnValue(abortedController);
+
+    const mockInfo = jest.spyOn(logger, 'info');
+    const cmdObj = { write: false };
+
+    const result = await doEval(cmdObj, {}, undefined, {});
+
+    expect(mockInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluation cancelled. Showing partial results...'),
+    );
+    expect(result).toBeDefined(); // Just check that we get a result back
+    expect(clearGlobalAbortController).toHaveBeenCalledWith();
+  });
+
+  it('should show cancelled status in output messages', async () => {
+    // Create a fresh mock controller with aborted signal
+    const abortedController = {
+      signal: {
+        aborted: true,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+        onabort: null,
+        reason: undefined,
+        throwIfAborted: jest.fn(),
+      },
+      abort: jest.fn(),
+    } as any;
+
+    jest.mocked(getGlobalAbortController).mockReturnValue(abortedController);
+
+    const mockInfo = jest.spyOn(logger, 'info');
+    const cmdObj = { write: true };
+
+    await doEval(cmdObj, {}, undefined, {});
+
+    // Check for cancelled status messages
+    expect(mockInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluation cancelled (partial results saved)'),
+    );
+    expect(mockInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Status: Cancelled (showing partial results)'),
+    );
   });
 });

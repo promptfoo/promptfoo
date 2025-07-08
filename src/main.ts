@@ -31,6 +31,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
+import { setupSignalHandlers } from './util/abortController';
 import { loadDefaultConfig } from './util/config/default';
 
 /**
@@ -70,6 +71,9 @@ export function addCommonOptionsRecursively(command: Command) {
 }
 
 async function main() {
+  // Setup signal handlers for graceful cancellation
+  setupSignalHandlers();
+
   await checkForUpdates();
   await runDbMigrations();
 
