@@ -7,66 +7,45 @@ import type { OpenAiCompletionOptions } from './openai/types';
 
 type LiteLLMCompletionOptions = OpenAiCompletionOptions;
 
-type LiteLLMProviderOptions = ProviderOptions & {
-  config?: LiteLLMCompletionOptions;
-};
-
-// Legacy provider class for backward compatibility
-export class LiteLLMProvider extends OpenAiChatCompletionProvider {
-  constructor(modelName: string, providerOptions: LiteLLMProviderOptions) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'LITELLM_API_KEY',
-        apiKeyRequired: false,
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'http://0.0.0.0:4000',
-      },
-    });
-  }
-
-  id(): string {
-    return `litellm:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[LiteLLM Provider ${this.modelName}]`;
-  }
-
-  toJSON() {
-    return {
-      provider: 'litellm',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.getApiKey() && { apiKey: undefined }),
-      },
-    };
-  }
+interface LiteLLMProviderOptions {
+  config?: ProviderOptions;
+  id?: string;
+  env?: EnvOverrides;
 }
-
-// Alias for backward compatibility
-export class LiteLLMChatProvider extends LiteLLMProvider {}
 
 /**
  * Creates a LiteLLM provider using OpenAI-compatible endpoints
  *
  * LiteLLM supports chat, completion, and embedding models through its proxy server.
  * All parameters are automatically passed through to the LiteLLM API.
+ *
+ * @example
+ * // Chat model (default)
+ * createLiteLLMProvider('litellm:gpt-4')
+ * createLiteLLMProvider('litellm:chat:gpt-4')
+ *
+ * // Completion model
+ * createLiteLLMProvider('litellm:completion:gpt-3.5-turbo-instruct')
+ *
+ * // Embedding model
+ * createLiteLLMProvider('litellm:embedding:text-embedding-3-large')
  */
 export function createLiteLLMProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: LiteLLMProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
+  const providerType = splits[1];
 
+  // Extract model name based on provider type
+  const modelName = ['chat', 'completion', 'embedding', 'embeddings'].includes(providerType)
+    ? splits.slice(2).join(':')
+    : splits.slice(1).join(':');
+
+  // Prepare LiteLLM-specific configuration
   const config = options.config?.config || {};
-  const litellmConfig = {
-    ...options,
+  const litellmConfig: ProviderOptions & { config?: LiteLLMCompletionOptions } = {
+    ...options.config,
     config: {
       apiKeyEnvar: 'LITELLM_API_KEY',
       apiKeyRequired: false,
@@ -75,18 +54,20 @@ export function createLiteLLMProvider(
     },
   };
 
-  if (splits[1] === 'chat') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, litellmConfig);
-  } else if (splits[1] === 'completion') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiCompletionProvider(modelName, litellmConfig);
-  } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiEmbeddingProvider(modelName, litellmConfig);
-  } else {
-    // If no specific type is provided, default to chat for backward compatibility
-    const modelName = splits.slice(1).join(':');
-    return new LiteLLMChatProvider(modelName, litellmConfig);
+  // Create the appropriate provider based on type
+  switch (providerType) {
+    case 'completion':
+      return new OpenAiCompletionProvider(modelName, litellmConfig);
+
+    case 'embedding':
+    case 'embeddings':
+      return new OpenAiEmbeddingProvider(modelName, litellmConfig);
+
+    case 'chat':
+      return new OpenAiChatCompletionProvider(modelName, litellmConfig);
+
+    default:
+      // Default to chat for backward compatibility (e.g., 'litellm:gpt-4')
+      return new OpenAiChatCompletionProvider(modelName, litellmConfig);
   }
 }

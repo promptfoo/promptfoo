@@ -1,4 +1,4 @@
-import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
+import { createLiteLLMProvider } from '../../src/providers/litellm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
@@ -7,7 +7,7 @@ describe('LiteLLM Provider', () => {
   describe('createLiteLLMProvider', () => {
     it('should create a chat provider by default', () => {
       const provider = createLiteLLMProvider('litellm:gpt-4', {});
-      expect(provider).toBeInstanceOf(LiteLLMProvider);
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     });
 
     it('should create a chat provider when explicitly specified', () => {
@@ -25,13 +25,13 @@ describe('LiteLLM Provider', () => {
       expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
     });
 
-    it('should create an embedding provider with embeddings alias', () => {
+    it('should support embeddings alias', () => {
       const provider = createLiteLLMProvider('litellm:embeddings:text-embedding-3-small', {});
       expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
     });
 
     it('should use custom apiBaseUrl from config', () => {
-      const customUrl = 'https://custom-litellm-server.com';
+      const customUrl = 'https://custom.litellm.com';
       const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
         config: {
           config: {
@@ -56,35 +56,24 @@ describe('LiteLLM Provider', () => {
       const provider = createLiteLLMProvider('litellm:chat:gpt-4', {});
       expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
     });
-  });
 
-  describe('LiteLLMProvider (legacy)', () => {
-    it('should create a provider with the correct id', () => {
-      const provider = new LiteLLMProvider('gpt-4', {});
-      expect(provider.id()).toBe('litellm:gpt-4');
+    it('should handle model names with colons', () => {
+      const provider = createLiteLLMProvider('litellm:chat:custom:model:v1', {});
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+      expect(provider.modelName).toBe('custom:model:v1');
     });
 
-    it('should return correct string representation', () => {
-      const provider = new LiteLLMProvider('gpt-4', {});
-      expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
-    });
-
-    it('should return correct JSON representation', () => {
-      const provider = new LiteLLMProvider('gpt-4', {});
-      const json = provider.toJSON();
-      expect(json.provider).toBe('litellm');
-      expect(json.model).toBe('gpt-4');
-    });
-
-    it('should use custom config options', () => {
-      const provider = new LiteLLMProvider('gpt-4', {
+    it('should pass through additional config options', () => {
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
         config: {
-          apiBaseUrl: 'https://custom-server.com',
-          temperature: 0.7,
+          config: {
+            temperature: 0.7,
+            max_tokens: 100,
+          },
         },
       });
-      expect(provider.config.apiBaseUrl).toBe('https://custom-server.com');
       expect(provider.config.temperature).toBe(0.7);
+      expect(provider.config.max_tokens).toBe(100);
     });
   });
 });
