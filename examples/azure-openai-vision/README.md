@@ -33,7 +33,7 @@ Three ways to provide images to vision models:
 2. **Local file**: Using `file://` paths (automatically converted to base64)
 3. **Base64**: Pre-encoded image data URI
 
-All three methods analyze the same cat image to show different loading approaches.
+All three methods analyze the same Earth image to show different loading approaches.
 
 ## Troubleshooting
 
@@ -47,7 +47,3 @@ If you get a 401 error, check:
 
 - [Azure OpenAI Vision Docs](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/gpt-with-vision)
 - [Promptfoo Azure Provider](https://www.promptfoo.dev/docs/providers/azure/)
-
-## Image Attribution
-
-- Cat image: [Cat03.jpg](https://commons.wikimedia.org/wiki/File:Cat03.jpg) by Kgbo, CC BY-SA 4.0
