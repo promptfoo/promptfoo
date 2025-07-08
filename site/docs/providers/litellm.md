@@ -1,5 +1,8 @@
 ---
 sidebar_label: LiteLLM
+title: LiteLLM Provider - Access 400+ LLMs with Unified API
+description: Use LiteLLM with promptfoo to evaluate 400+ language models through a unified OpenAI-compatible interface. Supports chat, completion, and embedding models.
+keywords: [litellm, llm provider, openai compatible, language models, ai evaluation, gpt-4, claude, gemini, llama, mistral, embeddings, promptfoo]
 ---
 
 # LiteLLM
