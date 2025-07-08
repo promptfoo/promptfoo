@@ -1,5 +1,5 @@
-import { Severity } from '../../src/redteam/constants';
 import type { Plugin } from '../../src/redteam/constants';
+import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
 
@@ -106,7 +106,7 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.strategies).toEqual([
       { id: 'basic' },
       { id: 'goat', config: { stateful: true } },
-      { id: 'custom', config: { option: true } },
+      { id: 'custom', config: { option: true, stateful: true } },
     ]);
   });
 
