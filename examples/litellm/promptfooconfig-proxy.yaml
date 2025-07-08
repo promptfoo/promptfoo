@@ -1,21 +1,28 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: LiteLLM provider example - direct usage (no proxy)
+description: LiteLLM provider example using proxy server
 
 providers:
-  # Direct LiteLLM usage - connects to providers via LiteLLM library
-  # Requires appropriate API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+  # Connect to LiteLLM proxy server
   - id: litellm:gpt-4.1-mini
-    label: GPT-4.1 Mini (direct)
-    
+    label: GPT-4.1 Mini (via proxy)
+    config:
+      apiBaseUrl: http://localhost:4000
+      
   - id: litellm:claude-4-sonnet
-    label: Claude 4 Sonnet (direct)
-    
+    label: Claude 4 Sonnet (via proxy)
+    config:
+      apiBaseUrl: http://localhost:4000
+      
   - id: litellm:gemini-1.5-flash
-    label: Gemini 1.5 Flash (direct)
+    label: Gemini 1.5 Flash (via proxy)
+    config:
+      apiBaseUrl: http://localhost:4000
   
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-large
-    label: Text Embedding (direct)
+    label: Text Embedding (via proxy)
+    config:
+      apiBaseUrl: http://localhost:4000
 
 prompts:
   - 'Translate this to {{language}}: {{text}}'
@@ -40,4 +47,4 @@ tests:
         value: |
           // Check if output is a haiku (3 lines)
           const lines = output.trim().split('\n').filter(line => line.trim());
-          return lines.length === 3;
+          return lines.length === 3; 
