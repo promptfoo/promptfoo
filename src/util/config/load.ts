@@ -615,6 +615,10 @@ export async function resolveConfigs(
     (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
   ) {
     fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+    // Flatten the scenarios array in case glob patterns were used
+    fileConfig.scenarios = fileConfig.scenarios.flat();
+    // Update config.scenarios with the flattened array
+    config.scenarios = fileConfig.scenarios;
   }
   if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
