@@ -659,11 +659,8 @@ export async function doEval(
             ),
           );
         }
-        logger.info('\nDone.');
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
-      } else {
-        logger.info('\nDone.');
       }
     }
     if (testSuite.redteam) {
