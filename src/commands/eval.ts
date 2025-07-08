@@ -170,6 +170,21 @@ export async function doEval(
       );
     }
 
+    // TODO(faizan): Crazy condition to see when we run the example redteam config.
+    // Remove this once we have a better way to track this.
+    if (
+      config.redteam &&
+      Array.isArray(config.providers) &&
+      config.providers.length > 0 &&
+      typeof config.providers[0] === 'object' &&
+      config.providers[0].id === 'http' &&
+      config.providers[0].config.url.includes('promptfoo.app')
+    ) {
+      telemetry.record('feature_used', {
+        feature: 'redteam_run_with_example',
+      });
+    }
+
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {
@@ -225,11 +240,17 @@ export async function doEval(
     };
 
     if (cmdObj.grader) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
     }
     if (cmdObj.var) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
@@ -708,12 +729,16 @@ export function evalCommand(
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      defaultConfig.defaultTest?.options?.prefix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.prefix
+        : undefined,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is appended to every prompt.',
-      defaultConfig.defaultTest?.options?.suffix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.suffix
+        : undefined,
     )
     .option(
       '--var <key=value>',

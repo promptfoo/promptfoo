@@ -1,5 +1,3 @@
-import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
-
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
 // Redteam configuration defaults
@@ -139,7 +137,7 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:privacy',
 ] as const;
 
-export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
+export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 export const COLLECTIONS = [
@@ -275,7 +273,7 @@ export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
-  MEMORY_POISONING_PLUGIN_ID,
+  'agentic:memory-poisoning',
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
