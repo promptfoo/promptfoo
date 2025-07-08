@@ -397,6 +397,7 @@ providers:
 ### Image Input
 
 Vision models require a specific message format. Images can be provided as:
+
 - **URLs**: Direct image links
 - **Local files**: Using `file://` paths (automatically converted to base64)
 - **Base64**: Data URIs with format `data:image/jpeg;base64,YOUR_DATA`
@@ -424,9 +425,9 @@ prompts:
 
 tests:
   - vars:
-      image_url: https://example.com/image.jpg  # URL
+      image_url: https://example.com/image.jpg # URL
   - vars:
-      image_url: file://assets/image.jpg        # Local file (auto base64)
+      image_url: file://assets/image.jpg # Local file (auto base64)
   - vars:
       image_url: data:image/jpeg;base64,/9j/4A... # Base64
 ```
