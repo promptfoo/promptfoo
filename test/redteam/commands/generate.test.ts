@@ -102,7 +102,7 @@ describe('doGenerateRedteam', () => {
         providers: [],
         tests: [],
       },
-    ]);
+    ] as any);
 
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
@@ -234,6 +234,9 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should use purpose when no config is provided', async () => {
+    // Mock extractMcpToolsInfo to return empty string for this test
+    jest.mocked(extractMcpToolsInfo).mockResolvedValue('');
+
     const options: RedteamCliGenerateOptions = {
       purpose: 'Test purpose',
       cache: true,
@@ -751,7 +754,7 @@ describe('doGenerateRedteam', () => {
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
-        prompts: [{ raw: 'Test prompt' }],
+        prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
         tests: [],
       },
       config: {
@@ -795,7 +798,7 @@ describe('doGenerateRedteam', () => {
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
-        prompts: [{ raw: 'Test prompt' }],
+        prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
         tests: [],
       },
       config: {
