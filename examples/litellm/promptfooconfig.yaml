@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: LiteLLM chat and embedding evaluation
+description: LiteLLM chat and embedding evaluation with latest models
 
 prompts:
   - 'Translate the following text to {{language}}: "{{text}}"'
@@ -11,15 +11,36 @@ prompts:
     Provide only the translation, no explanations.
 
 providers:
-  # Chat models via LiteLLM
-  - id: litellm:chat:gpt-4o-mini
-    label: GPT-4o Mini
+  # Latest OpenAI models via LiteLLM
+  - id: litellm:chat:gpt-4.1
+    label: GPT-4.1
     config:
       apiBaseUrl: http://localhost:4000
       temperature: 0.3
       
-  - id: litellm:claude-3-5-sonnet-20241022
-    label: Claude 3.5 Sonnet
+  - id: litellm:o3-mini
+    label: O3 Mini
+    config:
+      apiBaseUrl: http://localhost:4000
+      temperature: 0.3
+  
+  # Claude 4 series
+  - id: litellm:claude-4-sonnet-20250514
+    label: Claude 4 Sonnet
+    config:
+      apiBaseUrl: http://localhost:4000
+      temperature: 0.3
+  
+  # DeepSeek R1 reasoning model
+  - id: litellm:deepseek-r1
+    label: DeepSeek R1
+    config:
+      apiBaseUrl: http://localhost:4000
+      temperature: 0.6  # Recommended for DeepSeek R1
+  
+  # Gemini 2.5 series
+  - id: litellm:gemini-2.5-flash
+    label: Gemini 2.5 Flash
     config:
       apiBaseUrl: http://localhost:4000
       temperature: 0.3
@@ -34,93 +55,66 @@ defaultTest:
           apiBaseUrl: http://localhost:4000
 
 tests:
-  # Basic translation tests
   - vars:
       language: French
-      text: "The quick brown fox jumps over the lazy dog"
+      text: "Hello, world! How are you today?"
     assert:
-      - type: contains
-        value: "renard"
-      - type: contains
-        value: "chien"
+      - type: contains-any
+        value: ["Bonjour", "Salut"]
+      - type: contains-any
+        value: ["monde", "tout le monde"]
       - type: similar
+        value: "Bonjour le monde! Comment allez-vous aujourd'hui?"
         threshold: 0.8
-        value: "Le renard brun rapide saute par-dessus le chien paresseux"
-      - type: llm-rubric
-        value: "Is this a grammatically correct French translation that preserves the meaning?"
-
+      - type: icontains
+        value: "comment"
+        
   - vars:
       language: Spanish
-      text: "Good morning! How are you today?"
+      text: "The weather is beautiful today."
     assert:
       - type: contains-any
-        value: ["Buenos días", "Buen día"]
+        value: ["clima", "tiempo"]
       - type: contains-any
-        value: ["¿Cómo estás?", "¿Cómo está?"]
+        value: ["hermoso", "bonito", "bello"]
       - type: similar
-        threshold: 0.85
-        value: "¡Buenos días! ¿Cómo estás hoy?"
-
+        value: "El clima está hermoso hoy."
+        threshold: 0.8
+        
   - vars:
       language: German
-      text: "I love learning new languages"
+      text: "I love programming with artificial intelligence."
     assert:
+      - type: contains-any
+        value: ["liebe", "mag"]
+      - type: contains-any
+        value: ["Programmierung", "Programmieren"]
       - type: contains
-        value: "Sprachen"
+        value: "künstlich"
       - type: similar
+        value: "Ich liebe das Programmieren mit künstlicher Intelligenz."
         threshold: 0.8
-        value: "Ich liebe es, neue Sprachen zu lernen"
-      - type: not-contains
-        value: "English"
-
-  # Test idiomatic expressions
+        
   - vars:
       language: Japanese
-      text: "It's raining cats and dogs"
+      text: "Good morning! Have a nice day!"
     assert:
+      - type: contains-any
+        value: ["おはよう", "おはようございます"]
+      - type: contains-any
+        value: ["良い一日", "素敵な一日", "いい一日"]
       - type: similar
+        value: "おはようございます！良い一日を！"
         threshold: 0.7
-        value: "土砂降りです"
-      - type: llm-rubric
-        value: "Does the translation convey heavy rain using an appropriate Japanese expression?"
 
-  # Test formal vs informal
+# Optional: Configure specific assertions for reasoning models
   - vars:
       language: French
-      text: "Hello, how may I help you?"
+      text: "Can you explain quantum computing in simple terms?"
     assert:
       - type: contains-any
-        value: ["Bonjour", "Bonsoir"]
+        value: ["quantique", "informatique quantique"]
       - type: contains-any
-        value: ["puis-je", "peux"]
-      - type: similar
-        threshold: 0.8
-        value: "Bonjour, comment puis-je vous aider?"
+        value: ["qubits", "superposition", "intrication"]
       - type: llm-rubric
-        value: "Is this translation appropriately formal for a customer service context?"
-
-  # Test technical vocabulary
-  - vars:
-      language: Spanish
-      text: "The algorithm uses machine learning to optimize performance"
-    assert:
-      - type: contains-all
-        value: ["algoritmo", "aprendizaje"]
-      - type: similar
-        threshold: 0.85
-        value: "El algoritmo utiliza aprendizaje automático para optimizar el rendimiento"
-      - type: not-contains
-        value: "machine learning"  # Should be translated
-
-  # Test cultural adaptation
-  - vars:
-      language: Chinese (Simplified)
-      text: "Happy Thanksgiving!"
-    assert:
-      - type: llm-rubric
-        value: |
-          Does the translation appropriately handle this culturally-specific greeting?
-          It should either translate it literally or adapt it to a culturally appropriate equivalent.
-      - type: similar
-        threshold: 0.6
-        value: "感恩节快乐！" 
+        value: "The translation should maintain technical accuracy while being in French" 
