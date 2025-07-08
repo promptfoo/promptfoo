@@ -11,12 +11,21 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'mischievous-user'] as const;
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom', 'mischievous-user'] as const;
+
+// Helper function to check if a strategy is a custom variant
+export const isCustomStrategy = (strategyId: string): boolean => {
+  return strategyId === 'custom' || strategyId.startsWith('custom:');
+};
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
+
+export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
+export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
+  'custom',
   'jailbreak',
   'jailbreak:tree',
   'mischievous-user',
@@ -44,6 +53,7 @@ export const ADDITIONAL_STRATEGIES = [
   'camelcase',
   'citation',
   'crescendo',
+  'custom',
   'gcg',
   'goat',
   'hex',
@@ -92,6 +102,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'jailbreak:tree',
   'gcg',
   'citation',
+  'custom',
   'mischievous-user',
 ] as const;
 

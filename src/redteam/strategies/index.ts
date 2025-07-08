@@ -6,10 +6,12 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { isCustomStrategy } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
+import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
@@ -36,6 +38,7 @@ export interface Strategy {
     testCases: TestCaseWithPlugin[],
     injectVar: string,
     config: Record<string, any>,
+    strategyId?: string,
   ) => Promise<TestCase[]>;
 }
 
@@ -90,6 +93,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
       const newTestCases = addCrescendo(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'custom',
+    action: async (testCases, injectVar, config, strategyId = 'custom') => {
+      logger.debug(`Adding Custom to ${testCases.length} test cases`);
+      const newTestCases = addCustom(testCases, injectVar, config, strategyId);
+      logger.debug(`Added ${newTestCases.length} Custom test cases`);
       return newTestCases;
     },
   },
@@ -300,6 +312,11 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
     // Skip validation for file:// strategies since they're loaded dynamically
     if (strategy.id.startsWith('file://')) {
       continue;
+    }
+
+    // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
+    if (isCustomStrategy(strategy.id)) {
+      continue; // Custom strategies are always valid
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

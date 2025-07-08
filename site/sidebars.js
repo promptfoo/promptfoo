@@ -185,7 +185,7 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Custom',
         collapsed: true,
-        items: ['red-team/strategies/custom'],
+        items: ['red-team/strategies/custom-strategy', 'red-team/strategies/custom'],
       },
       {
         type: 'category',
