@@ -107,5 +107,3 @@ export const CONFIGURABLE_STRATEGIES = [
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
-
-export const MULTI_MODAL_STRATEGIES = ['audio', 'video', 'image'] as const;
