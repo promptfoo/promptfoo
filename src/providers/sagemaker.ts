@@ -22,6 +22,7 @@ import type { TransformContext } from '../util/transform';
  */
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'custom'] as const;
 /**
  * Zod schema for validating SageMaker options
  */
@@ -52,7 +53,7 @@ export const SageMakerConfigSchema = z
     // Model type for request/response handling
     // TODO(Will): What is custom? User uploaded model?
     // - Jumpstart is a model service, not a model type.
-    modelType: z.enum(['openai', 'llama', 'huggingface', 'jumpstart', 'custom']).optional(),
+    modelType: z.enum(SUPPORTED_MODEL_TYPES).optional(),
 
     // Response format options
     responseFormat: z
@@ -68,6 +69,14 @@ export const SageMakerConfigSchema = z
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
+type SageMakerOptions = {
+  config?: SageMakerConfig;
+  id: string;
+  env?: EnvOverrides;
+  delay?: number;
+  transform?: string;
+};
+
 /**
  * Base class for SageMaker providers with common functionality
  */
@@ -82,16 +91,7 @@ export abstract class SageMakerGenericProvider {
   // Custom provider ID, separate from the id() method
   private providerId?: string;
 
-  constructor(
-    endpointName: string,
-    options: {
-      config?: SageMakerConfig;
-      id?: string;
-      env?: EnvOverrides;
-      delay?: number;
-      transform?: string;
-    } = {},
-  ) {
+  constructor(endpointName: string, options: SageMakerOptions) {
     const { config, id, env, delay, transform } = options;
     this.env = env;
     this.endpointName = endpointName;
@@ -416,13 +416,57 @@ export abstract class SageMakerGenericProvider {
  * Provider for text generation with SageMaker endpoints
  */
 export class SageMakerCompletionProvider extends SageMakerGenericProvider implements ApiProvider {
-  static SAGEMAKER_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'custom'];
+  readonly modelType: SageMakerConfig['modelType'];
+
+  constructor(endpointName: string, options: SageMakerOptions) {
+    super(endpointName, options);
+
+    this.modelType = this.parseModelType(options);
+  }
+
+  /**
+   * Model type must be specified within the Provider ID or the `config.modelType` field.
+   * @param options
+   */
+  private parseModelType(options: SageMakerOptions): SageMakerConfig['modelType'] {
+    const providerId = options.id;
+    const configModelType = options.config?.modelType;
+
+    // If an ID is provided, attempt to extract the model type from it
+    const match = providerId.match(/^sagemaker:(?<modelType>.+):.+$/);
+    if (match) {
+      const modelTypeFromId = match.groups!.modelType;
+
+      // Validate the model type from ID
+      if (SUPPORTED_MODEL_TYPES.includes(modelTypeFromId as any)) {
+        return modelTypeFromId as SageMakerConfig['modelType'];
+      } else {
+        throw new Error(
+          `Invalid model type "${modelTypeFromId}" in provider ID. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
+        );
+      }
+    }
+
+    // If a model type is provided in the config, validate it
+    if (configModelType) {
+      if (SUPPORTED_MODEL_TYPES.includes(configModelType)) {
+        return configModelType;
+      } else {
+        throw new Error(
+          `Invalid model type "${configModelType}" in config. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
+        );
+      }
+    }
+
+    throw new Error(
+      'Model type must be provided either in config.modelType or as part of the provider ID format "sagemaker:<model_type>:<endpoint>"',
+    );
+  }
 
   /**
    * Format the request payload based on model type
    */
   formatPayload(prompt: string): string {
-    const modelType = this.config.modelType || 'custom';
     const maxTokens = this.config.maxTokens || getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') || 1024;
     const temperature =
       typeof this.config.temperature === 'number'
@@ -436,9 +480,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     let payload: any;
 
-    logger.debug(`Formatting payload for model type: ${modelType}`);
+    logger.debug(`Formatting payload for model type: ${this.modelType}`);
 
-    switch (modelType) {
+    switch (this.modelType) {
       case 'openai':
         try {
           // Try to parse as JSON array of messages
@@ -544,10 +588,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
    * Parse the response from SageMaker endpoint
    */
   async parseResponse(responseBody: string): Promise<any> {
-    const modelType = this.config.modelType || 'custom';
     let responseJson;
 
-    logger.debug(`Parsing response for model type: ${modelType}`);
+    logger.debug(`Parsing response for model type: ${this.modelType}`);
 
     try {
       responseJson = JSON.parse(responseBody);
@@ -579,7 +622,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       return responseJson.generated_text;
     }
 
-    switch (modelType) {
+    switch (this.modelType) {
       case 'openai':
         return (
           responseJson.choices?.[0]?.message?.content ||
