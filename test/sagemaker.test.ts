@@ -1024,14 +1024,134 @@ describe('SageMakerCompletionProvider - Parameter Validation', () => {
     expect(provider.id()).toBe('custom-provider-id');
   });
 
-  it('should validate supported model types', () => {
-    const supportedTypes = SageMakerCompletionProvider.SAGEMAKER_MODEL_TYPES;
+  describe('should validate supported model types', () => {
+    it('Should extract OpenAI model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:openai:test-endpoint',
+      });
 
-    expect(supportedTypes).toContain('openai');
-    expect(supportedTypes).toContain('llama');
-    expect(supportedTypes).toContain('huggingface');
-    expect(supportedTypes).toContain('jumpstart');
-    expect(supportedTypes).toContain('custom');
+      expect(provider.modelType).toBe('openai');
+    });
+
+    it('Should extract OpenAI model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'openai',
+        },
+      });
+
+      expect(provider.modelType).toBe('openai');
+    });
+
+    it('Should extract Llama model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:llama:test-endpoint',
+      });
+      expect(provider.modelType).toBe('llama');
+    });
+
+    it('Should extract Llama model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'llama',
+        },
+      });
+
+      expect(provider.modelType).toBe('llama');
+    });
+
+    it('Should extract HuggingFace model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:huggingface:test-endpoint',
+      });
+
+      expect(provider.modelType).toBe('huggingface');
+    });
+
+    it('Should extract HuggingFace model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'huggingface',
+        },
+      });
+
+      expect(provider.modelType).toBe('huggingface');
+    });
+
+    it('Should extract JumpStart model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:jumpstart:test-endpoint',
+      });
+
+      expect(provider.modelType).toBe('jumpstart');
+    });
+
+    it('Should extract JumpStart model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'jumpstart',
+        },
+      });
+
+      expect(provider.modelType).toBe('jumpstart');
+    });
+
+    it('Should extract custom model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'custom',
+        },
+      });
+
+      expect(provider.modelType).toBe('custom');
+    });
+
+    it('Should extract custom model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:custom:test-endpoint',
+      });
+
+      expect(provider.modelType).toBe('custom');
+    });
+
+    it('Should throw an error if the model type within the provider ID is not supported', () => {
+      expect(() => {
+        new SageMakerCompletionProvider('test-endpoint', {
+          id: 'sagemaker:invalid:test-endpoint',
+        });
+      }).toThrow(
+        'Invalid model type "invalid" in provider ID. Valid types are: openai, llama, huggingface, jumpstart, custom',
+      );
+    });
+
+    it('Should throw an error if the model type within the config is not supported', () => {
+      expect(() => {
+        new SageMakerCompletionProvider('test-endpoint', {
+          id: 'sagemaker:test-endpoint',
+          config: {
+            //@ts-expect-error: Typechecking is not enforced at runtime
+            modelType: 'invalid',
+          },
+        });
+      }).toThrow(
+        'Invalid model type "invalid" in config. Valid types are: openai, llama, huggingface, jumpstart, custom',
+      );
+    });
+
+    it('Should throw an error if no model type is provided', () => {
+      expect(() => {
+        new SageMakerCompletionProvider('test-endpoint', {
+          id: 'sagemaker:test-endpoint',
+        });
+      }).toThrow(
+        'Model type must be provided either in config.modelType or as part of the provider ID format "sagemaker:<model_type>:<endpoint>"',
+      );
+    });
   });
 
   it('should handle delay configuration from context', async () => {
