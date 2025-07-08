@@ -10,6 +10,7 @@ import type {
   CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  ProviderOptions,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { transform } from '../util/transform';
@@ -69,13 +70,9 @@ export const SageMakerConfigSchema = z
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
-type SageMakerOptions = {
+interface SageMakerOptions extends ProviderOptions {
   config?: SageMakerConfig;
-  id: string;
-  env?: EnvOverrides;
-  delay?: number;
-  transform?: string;
-};
+}
 
 /**
  * Base class for SageMaker providers with common functionality
@@ -421,19 +418,15 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   constructor(endpointName: string, options: SageMakerOptions) {
     super(endpointName, options);
 
-    this.modelType = this.parseModelType(options);
+    this.modelType = this.parseModelType(options.config?.modelType);
   }
 
   /**
-   * Model type must be specified within the Provider ID or the `config.modelType` field.
-   * @param options
+   * Model type must be specified within the id or the `config.modelType` field.
    */
-  private parseModelType(options: SageMakerOptions): SageMakerConfig['modelType'] {
-    const providerId = options.id;
-    const configModelType = options.config?.modelType;
-
+  private parseModelType(modelType: SageMakerConfig['modelType']): SageMakerConfig['modelType'] {
     // If an ID is provided, attempt to extract the model type from it
-    const match = providerId.match(/^sagemaker:(?<modelType>.+):.+$/);
+    const match = this.id().match(/^sagemaker:(?<modelType>.+):.+$/);
     if (match) {
       const modelTypeFromId = match.groups!.modelType;
 
@@ -448,12 +441,12 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // If a model type is provided in the config, validate it
-    if (configModelType) {
-      if (SUPPORTED_MODEL_TYPES.includes(configModelType)) {
-        return configModelType;
+    if (modelType) {
+      if (SUPPORTED_MODEL_TYPES.includes(modelType)) {
+        return modelType;
       } else {
         throw new Error(
-          `Invalid model type "${configModelType}" in config. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
+          `Invalid model type "${modelType}" in config. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
         );
       }
     }
