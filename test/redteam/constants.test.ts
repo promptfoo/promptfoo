@@ -201,7 +201,7 @@ describe('constants', () => {
     );
   });
 
-  it('should have MEMORY_POISONING_PLUGIN_ID in Security & Access Control category', () => {
+  it('should have agentic:memory-poisoning in Security & Access Control category', () => {
     expect(riskCategories['Security & Access Control']).toBeDefined();
     expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
   });
