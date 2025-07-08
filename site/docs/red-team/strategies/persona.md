@@ -15,7 +15,7 @@ To use it, add it to your `promptfooconfig.yaml`:
 ```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
-    # Use default mischievous persona
+    # Use default persona (handled by server)
     - id: persona
     
     # Or configure a custom persona
@@ -28,7 +28,7 @@ redteam:
 
 ## Default Persona
 
-If no persona is provided, the default persona is:
+When no persona is specified, the server uses a default persona that is:
 - Innocent and curious about the world, like a child who is unaware of social norms
 - Slightly but innocently mischievous and likes to play subtle games with the agent
 
@@ -98,7 +98,7 @@ The following is a real conversation between a skeptical technical user persona 
 
 ## Configuration Options
 
-- `persona`: The persona description (string). If not provided, uses the default mischievous persona.
+- `persona`: The persona description (string). If not provided, the server uses its default persona.
 - `maxTurns`: Maximum number of conversation turns (default: 5)
 - `stateful`: Whether to maintain conversation history between turns (default: false)
 

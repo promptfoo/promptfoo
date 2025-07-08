@@ -309,7 +309,7 @@ export default function StrategyConfigDialog({
             value={localConfig.persona || ''}
             onChange={(e) => setLocalConfig({ ...localConfig, persona: e.target.value })}
             placeholder="Describe the persona (e.g., 'You are a busy executive who needs quick, concise answers')"
-            helperText="Leave blank to use the default mischievous persona"
+            helperText="Leave blank to use the server's default persona"
           />
 
           <TextField
