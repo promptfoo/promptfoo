@@ -1,81 +1,103 @@
 # azure-openai-vision (Azure OpenAI Vision Model Example)
 
-This example demonstrates how to use Azure OpenAI's vision-capable models to analyze images with promptfoo.
+This example demonstrates how to use Azure OpenAI's vision models (like GPT-4o) to analyze images.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example azure-openai-vision
+npx promptfoo@latest eval
 ```
 
 ## Features Demonstrated
 
-- Using Azure OpenAI's vision models (GPT-4o, GPT-4 Turbo with Vision)
-- Analyzing images from URLs and base64-encoded local files
-- JSON-formatted prompts for multi-modal inputs
-- Testing OCR and image understanding capabilities
-- Proper Azure authentication configuration
+- 🖼️ Image analysis using URLs and local files
+- 📝 OCR (Optical Character Recognition)
+- 🎨 Complex scene understanding
+- 🔍 Object and species identification
 
 ## Prerequisites
 
-1. An Azure OpenAI resource with a vision-capable deployment
-2. Your Azure OpenAI API key set as `AZURE_API_KEY` environment variable
+1. An Azure OpenAI resource with a GPT-4 Vision deployment (e.g., gpt-4o)
+2. Your Azure API key set as an environment variable
 
 ## Setup
 
-Set your Azure API key:
+1. Set your Azure API key:
 
-```bash
-export AZURE_API_KEY="your-api-key-here"
-```
+   ```bash
+   export AZURE_API_KEY=your-api-key-here
+   ```
 
-Update `promptfooconfig.yaml` with your deployment details:
+2. Update `promptfooconfig.yaml` with your Azure OpenAI deployment details:
+   - `apiHost`: Your Azure OpenAI endpoint (e.g., `your-resource.openai.azure.com`)
+   - `apiVersion`: The API version (e.g., `2024-02-15-preview`)
 
-```yaml
-providers:
-  - id: azure:chat:your-deployment-name
-    config:
-      apiHost: 'your-resource.openai.azure.com'
-      # apiKey is omitted - loaded from AZURE_API_KEY
-      apiVersion: '2025-01-01-preview'
-```
+3. Add your test images to the `assets/` directory:
+   - `street-sign.jpg` - An image containing text for OCR testing
+   - `landscape.jpg` - A scenic image for complex scene analysis
+   - `abstract-art.png` - An image for artistic interpretation
 
 ## Running the Example
 
 ```bash
-# Run the evaluation
-npx promptfoo eval
-
-# View results in the web UI
-npx promptfoo view
+npx promptfoo@latest eval
 ```
 
-## Converting Local Images
-
-To test with local images, convert them to base64:
+Then view the results:
 
 ```bash
-node convert-image-to-base64.js path/to/your/image.jpg
+npx promptfoo@latest view
 ```
 
-Then use the output in your test cases as a data URI.
+## Image Input Methods
+
+This example demonstrates three ways to provide images:
+
+1. **Direct URLs**: Use any publicly accessible image URL
+
+   ```yaml
+   image_url: https://example.com/image.jpg
+   ```
+
+2. **Local files**: Use `file://` to automatically load and encode local images
+
+   ```yaml
+   image_url: file://assets/my-image.jpg
+   ```
+
+3. **Base64 data**: Provide pre-encoded base64 image data
+   ```yaml
+   image_url: data:image/jpeg;base64,/9j/4AAQSkZJRg...
+   ```
+
+When using `file://` paths, promptfoo automatically:
+
+- Loads the image file
+- Converts it to base64
+- Formats it correctly for the vision API
 
 ## Troubleshooting
 
-### 401 Authentication Error
+### 401 Unauthorized Error
 
-- Ensure `AZURE_API_KEY` is set correctly
-- Don't use `${AZURE_API_KEY}` syntax in config - omit `apiKey` field entirely
-- Verify your deployment name matches exactly (case-sensitive)
-- Check `apiHost` is just the hostname without `https://`
+- Verify your `AZURE_API_KEY` environment variable is set correctly
+- Check that your Azure endpoint and deployment name are correct
+- Ensure your API key has access to the specified deployment
 
-### Model Doesn't Understand Images
+### 404 Not Found Error
 
-- Ensure your deployment uses a vision-capable model
-- Verify API version is `2024-10-21` or newer
-- Check message format matches the JSON structure in `prompt.json`
+- Verify the deployment name in your configuration
+- Check that you're using a vision-capable model (e.g., gpt-4o)
+- Ensure the API version supports vision features
 
-## Documentation
+### Image Loading Issues
+
+- For local files, ensure the path is relative to where you run promptfoo
+- Check that image files exist and have proper read permissions
+- Supported formats: JPEG, PNG, GIF, WebP
+
+## Learn More
 
 - [Azure OpenAI Vision Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/gpt-with-vision)
-- [promptfoo Azure Provider Documentation](https://promptfoo.dev/docs/providers/azure#using-vision-models)
+- [Promptfoo Azure Provider Documentation](https://www.promptfoo.dev/docs/providers/azure/)
+- [Promptfoo Configuration Reference](https://www.promptfoo.dev/docs/configuration/reference/)

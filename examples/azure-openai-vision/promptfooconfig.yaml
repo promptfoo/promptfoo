@@ -7,58 +7,49 @@ prompts:
 
 providers:
   # Update with your Azure OpenAI deployment details
-  - id: azure:chat:gpt-4o # Replace with your deployment name
+  - id: azure:chat:gpt-4o
     config:
-      apiHost: 'your-resource.openai.azure.com' # Replace with your resource
-      # apiKey is omitted - loaded from AZURE_API_KEY environment variable
-      apiVersion: '2025-01-01-preview'
+      apiHost: your-deployment.openai.azure.com
+      apiVersion: 2024-02-15-preview
       temperature: 0.1
       max_tokens: 500
 
 tests:
-  # Test 1: Wildlife recognition
+  # Example 1: Wildlife recognition with URL
   - vars:
-      question: 'What animal do you see? Be specific about the species if possible.'
-      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg'
+      question: What animal is in this image? Identify the species if possible.
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Red_Panda_%2824986761703%29.jpg/640px-Red_Panda_%2824986761703%29.jpg
     assert:
-      - type: icontains
-        value: cat
+      - type: contains
+        value: red panda
       - type: javascript
-        value: output.toLowerCase().includes('orange') || output.toLowerCase().includes('tabby')
+        value: output.toLowerCase().includes('ailurus fulgens') || output.toLowerCase().includes('lesser panda')
 
-  # Test 2: OCR capabilities with a street sign
+  # Example 2: OCR with local file
   - vars:
-      question: 'What text can you read in this image? List all visible text.'
-      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Stop_sign_MUTCD.svg/200px-Stop_sign_MUTCD.svg.png'
+      question: What text can you read in this sign?
+      image_url: file://assets/street-sign.jpg
     assert:
-      - type: icontains
+      - type: contains
         value: STOP
-      - type: javascript
-        value: output.length > 10
+      - type: llm-rubric
+        value: The model correctly identifies this as a stop sign
 
-  # Test 3: Complex scene understanding
+  # Example 3: Complex scene understanding with base64
   - vars:
-      question: "Describe this scene. What time of day does it appear to be? What's the weather like?"
-      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/320px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+      question: Describe the scene in detail. What''s the weather like? What time of day might it be?
+      image_url: file://assets/landscape.jpg
     assert:
       - type: llm-rubric
-        value: The description mentions a boardwalk or wooden path through nature
-      - type: javascript
-        value: |
-          // Check if the model identifies environmental details
-          const lower = output.toLowerCase();
-          return lower.includes('boardwalk') || lower.includes('wooden') || lower.includes('path');
+        value: The model provides a detailed description including weather conditions, time of day, and environmental details
 
-  # Test 4: Art interpretation (fun example)
+  # Example 4: Art analysis with base64 (fun example)
   - vars:
-      question: 'You are an overly enthusiastic art critic. Describe this "masterpiece" with excessive praise.'
-      image_url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+      question: You are an art critic. Analyze this artwork and describe its artistic merit.
+      image_url: file://assets/abstract-art.png
     assert:
-      - type: javascript
-        value: |
-          // Should generate a humorous over-the-top response about a single green pixel
-          return output.length > 100 && (output.includes('!') || output.toLowerCase().includes('masterpiece'));
-
+      - type: llm-rubric
+        value: The response provides thoughtful artistic analysis with appropriate art terminology
 # Note: If you see 401 errors, ensure:
 # 1. Your AZURE_API_KEY environment variable is set correctly
 # 2. The apiHost matches your Azure OpenAI resource name
