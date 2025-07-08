@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import z from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -22,42 +23,48 @@ import type { TransformContext } from '../util/transform';
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Options for configuring SageMaker provider
+ * Zod schema for validating SageMaker options
  */
-interface SageMakerOptions {
-  // AWS credentials options
-  accessKeyId?: string;
-  profile?: string;
-  region?: string;
-  secretAccessKey?: string;
-  sessionToken?: string;
+export const SageMakerOptionsSchema = z
+  .object({
+    // AWS credentials options
+    accessKeyId: z.string().optional(),
+    profile: z.string().optional(),
+    region: z.string().optional(),
+    secretAccessKey: z.string().optional(),
+    sessionToken: z.string().optional(),
 
-  // SageMaker specific options
-  endpoint?: string;
-  contentType?: string;
-  acceptType?: string;
+    // SageMaker specific options
+    endpoint: z.string().optional(),
+    contentType: z.string().optional(),
+    acceptType: z.string().optional(),
 
-  // Model parameters
-  maxTokens?: number;
-  temperature?: number;
-  topP?: number;
-  stopSequences?: string[];
+    // Model parameters
+    maxTokens: z.number().optional(),
+    temperature: z.number().optional(),
+    topP: z.number().optional(),
+    stopSequences: z.array(z.string()).optional(),
 
-  // Provider behavior options
-  delay?: number; // Delay between API calls in milliseconds
-  transform?: string; // Transform function or file path to transform prompts
+    // Provider behavior options
+    delay: z.number().optional(),
+    transform: z.string().optional(),
 
-  // Model type for request/response handling
-  // TODO(Will): What is custom? User uploaded model?
-  // - Jumpstart is a model service, not a model type.
-  modelType?: 'openai' | 'llama' | 'huggingface' | 'jumpstart' | 'custom';
+    // Model type for request/response handling
+    modelType: z.enum(['openai', 'llama', 'huggingface', 'jumpstart', 'custom']).optional(),
 
-  // Response format options
-  responseFormat?: {
-    type?: string;
-    path?: string; // JavaScript expression to extract content (formerly JSONPath)
-  };
-}
+    // Response format options
+    responseFormat: z
+      .object({
+        type: z.string().optional(),
+        path: z.string().optional(),
+      })
+      .optional(),
+
+    basePath: z.string().optional(),
+  })
+  .strict();
+
+type SageMakerOptions = z.infer<typeof SageMakerOptionsSchema>;
 
 /**
  * Base class for SageMaker providers with common functionality
@@ -86,7 +93,18 @@ export abstract class SageMakerGenericProvider {
     const { config, id, env, delay, transform } = options;
     this.env = env;
     this.endpointName = endpointName;
-    this.config = config || {};
+
+    // Validate the config
+    try {
+      this.config = config ? SageMakerOptionsSchema.parse(config) : {};
+    } catch (error) {
+      const zodError = error as z.ZodError;
+      logger.error(
+        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\nIssues: ${JSON.stringify(zodError.issues)}`,
+      );
+      throw new Error('Invalid SageMaker config');
+    }
+
     this.delay = delay || this.config.delay;
     this.transform = transform || this.config.transform;
     this.providerId = id; // Store custom ID if provided
