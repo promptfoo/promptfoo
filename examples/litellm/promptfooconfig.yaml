@@ -1,49 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: LiteLLM chat and embedding evaluation with latest models
+description: LiteLLM chat and embedding evaluation
 
 prompts:
   - 'Translate the following text to {{language}}: "{{text}}"'
-  - |
-    You are a professional translator. Translate this text to {{language}}, maintaining the tone and style:
-
-    "{{text}}"
-
-    Provide only the translation, no explanations.
 
 providers:
-  # Latest OpenAI models via LiteLLM
-  - id: litellm:chat:gpt-4.1
-    label: GPT-4.1
+  # Chat models via LiteLLM
+  - id: litellm:gpt-4o-mini
+    label: GPT-4o Mini
     config:
       apiBaseUrl: http://localhost:4000
-      temperature: 0.3
-
-  - id: litellm:o3-mini
-    label: O3 Mini
+      
+  - id: litellm:claude-3-5-sonnet-20241022
+    label: Claude 3.5 Sonnet
     config:
       apiBaseUrl: http://localhost:4000
-      temperature: 0.3
-
-  # Claude 4 series
-  - id: litellm:claude-4-sonnet-20250514
-    label: Claude 4 Sonnet
-    config:
-      apiBaseUrl: http://localhost:4000
-      temperature: 0.3
-
-  # DeepSeek R1 reasoning model
-  - id: litellm:deepseek-r1
-    label: DeepSeek R1
-    config:
-      apiBaseUrl: http://localhost:4000
-      temperature: 0.6 # Recommended for DeepSeek R1
-
-  # Gemini 2.5 series
-  - id: litellm:gemini-2.5-flash
-    label: Gemini 2.5 Flash
-    config:
-      apiBaseUrl: http://localhost:4000
-      temperature: 0.3
 
 # Configure embedding provider for similarity checks
 defaultTest:
@@ -57,64 +28,19 @@ defaultTest:
 tests:
   - vars:
       language: French
-      text: 'Hello, world! How are you today?'
+      text: "Hello, how are you today?"
     assert:
       - type: contains-any
-        value: ['Bonjour', 'Salut']
-      - type: contains-any
-        value: ['monde', 'tout le monde']
+        value: ["Bonjour", "Salut"]
       - type: similar
-        value: "Bonjour le monde! Comment allez-vous aujourd'hui?"
         threshold: 0.8
-      - type: icontains
-        value: 'comment'
-
+        value: "Bonjour, comment allez-vous aujourd'hui?"
+      
   - vars:
       language: Spanish
-      text: 'The weather is beautiful today.'
+      text: "The weather is beautiful"
     assert:
       - type: contains-any
-        value: ['clima', 'tiempo']
-      - type: contains-any
-        value: ['hermoso', 'bonito', 'bello']
-      - type: similar
-        value: 'El clima está hermoso hoy.'
-        threshold: 0.8
-
-  - vars:
-      language: German
-      text: 'I love programming with artificial intelligence.'
-    assert:
-      - type: contains-any
-        value: ['liebe', 'mag']
-      - type: contains-any
-        value: ['Programmierung', 'Programmieren']
-      - type: contains
-        value: 'künstlich'
-      - type: similar
-        value: 'Ich liebe das Programmieren mit künstlicher Intelligenz.'
-        threshold: 0.8
-
-  - vars:
-      language: Japanese
-      text: 'Good morning! Have a nice day!'
-    assert:
-      - type: contains-any
-        value: ['おはよう', 'おはようございます']
-      - type: contains-any
-        value: ['良い一日', '素敵な一日', 'いい一日']
-      - type: similar
-        value: 'おはようございます！良い一日を！'
-        threshold: 0.7
-
-  # Optional: Configure specific assertions for reasoning models
-  - vars:
-      language: French
-      text: 'Can you explain quantum computing in simple terms?'
-    assert:
-      - type: contains-any
-        value: ['quantique', 'informatique quantique']
-      - type: contains-any
-        value: ['qubits', 'superposition', 'intrication']
+        value: ["hermoso", "bonito", "bello"]
       - type: llm-rubric
-        value: 'The translation should maintain technical accuracy while being in French'
+        value: "The translation should be grammatically correct Spanish and preserve the meaning"
