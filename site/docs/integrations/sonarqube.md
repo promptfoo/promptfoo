@@ -1,8 +1,8 @@
 ---
+title: Integrate Promptfoo with SonarQube
+description: Import Promptfoo eval security findings into SonarQube and gate your CI pipelines.
 sidebar_label: SonarQube
 ---
-
-# Setting up Promptfoo with SonarQube
 
 This guide demonstrates how to integrate Promptfoo's scanning results into SonarQube, allowing red team findings to appear in your normal "Issues" view, participate in Quality Gates, and block pipelines when they breach security policies.
 
