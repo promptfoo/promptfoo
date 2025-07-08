@@ -11,6 +11,43 @@ type LiteLLMProviderOptions = ProviderOptions & {
   config?: LiteLLMCompletionOptions;
 };
 
+// Legacy provider class for backward compatibility
+export class LiteLLMProvider extends OpenAiChatCompletionProvider {
+  constructor(modelName: string, providerOptions: LiteLLMProviderOptions) {
+    super(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiKeyEnvar: 'LITELLM_API_KEY',
+        apiKeyRequired: false,
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'http://0.0.0.0:4000',
+      },
+    });
+  }
+
+  id(): string {
+    return `litellm:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[LiteLLM Provider ${this.modelName}]`;
+  }
+
+  toJSON() {
+    return {
+      provider: 'litellm',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.getApiKey() && { apiKey: undefined }),
+      },
+    };
+  }
+}
+
+// Alias for backward compatibility
+export class LiteLLMChatProvider extends LiteLLMProvider {}
+
 /**
  * Creates a LiteLLM provider using OpenAI-compatible endpoints
  *
@@ -53,40 +90,3 @@ export function createLiteLLMProvider(
     return new LiteLLMChatProvider(modelName, litellmConfig);
   }
 }
-
-// Legacy provider class for backward compatibility
-export class LiteLLMProvider extends OpenAiChatCompletionProvider {
-  constructor(modelName: string, providerOptions: LiteLLMProviderOptions) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'LITELLM_API_KEY',
-        apiKeyRequired: false,
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'http://0.0.0.0:4000',
-      },
-    });
-  }
-
-  id(): string {
-    return `litellm:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[LiteLLM Provider ${this.modelName}]`;
-  }
-
-  toJSON() {
-    return {
-      provider: 'litellm',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.getApiKey() && { apiKey: undefined }),
-      },
-    };
-  }
-}
-
-// Alias for backward compatibility
-export class LiteLLMChatProvider extends LiteLLMProvider {}
