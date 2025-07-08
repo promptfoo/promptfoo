@@ -465,7 +465,7 @@ Common issues and solutions:
 
 ### Example
 
-See the [azure-openai-vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-vision) for a complete working example with image analysis.
+See the [azure-openai example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) for a complete working example with image analysis. Use `promptfooconfig.vision.yaml` for vision-specific features.
 
 ## Using DeepSeek Models
 
@@ -614,4 +614,4 @@ See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-opena
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
 - [Azure OpenAI Assistant Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant) - Complete working examples with various tool configurations
-- [Azure OpenAI Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-vision) - Example of analyzing images with Azure OpenAI
+- [Azure OpenAI Example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) - Example configurations including vision model support

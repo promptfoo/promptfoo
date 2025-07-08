@@ -3,7 +3,7 @@ description: Azure OpenAI vision model evaluation
 
 prompts:
   # Vision models require a specific message format with content arrays
-  - file://prompt.json
+  - file://prompt.vision.json
 
 providers:
   # Update with your Azure OpenAI deployment details
