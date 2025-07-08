@@ -1,4 +1,5 @@
 import fs from 'fs';
+import * as yaml from 'js-yaml';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
@@ -10,6 +11,7 @@ import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
 import * as configModule from '../../../src/util/config/load';
+import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
 
 jest.mock('fs');
@@ -18,6 +20,7 @@ jest.mock('../../../src/telemetry');
 jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
+  readConfig: jest.fn(),
 }));
 
 jest.mock('../../../src/redteam/extraction/mcpTools', () => ({
@@ -1041,5 +1044,169 @@ describe('doGenerateRedteam', () => {
         true,
       );
     });
+  });
+});
+
+describe('doGenerateRedteam with external defaultTest', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+    jest.mocked(fs.readFileSync).mockReturnValue('');
+  });
+
+  it('should handle string defaultTest when updating config', async () => {
+    const options = {
+      write: true,
+      config: 'test-config.yaml',
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      cache: false,
+      defaultConfig: {},
+    };
+
+    const existingConfig = {
+      prompts: ['Test prompt'],
+      providers: ['openai:gpt-4'],
+      defaultTest: 'file://external/defaultTest.yaml', // String defaultTest
+    };
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
+    jest.mocked(readConfig).mockResolvedValue(existingConfig);
+
+    // Mock synthesize to return test cases
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      injectVar: 'input',
+    });
+
+    await doGenerateRedteam(options);
+
+    // Check that writePromptfooConfig was called with the correct defaultTest
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          metadata: expect.objectContaining({
+            purpose: 'Test purpose',
+            entities: ['entity1', 'entity2'],
+          }),
+        }),
+      }),
+      'test-config.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should merge with existing object defaultTest', async () => {
+    const options = {
+      write: true,
+      config: 'test-config.yaml',
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      cache: false,
+      defaultConfig: {},
+    };
+
+    const existingConfig = {
+      prompts: ['Test prompt'],
+      providers: ['openai:gpt-4'],
+      defaultTest: {
+        assert: [{ type: 'equals' as const, value: 'test' }],
+        vars: { foo: 'bar' },
+      },
+    };
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
+    jest.mocked(readConfig).mockResolvedValue(existingConfig);
+
+    // Mock synthesize to return test cases
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      injectVar: 'input',
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          assert: [{ type: 'equals', value: 'test' }],
+          vars: { foo: 'bar' },
+          metadata: expect.objectContaining({
+            purpose: 'Test purpose',
+            entities: ['entity1', 'entity2'],
+          }),
+        }),
+      }),
+      'test-config.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should handle undefined defaultTest', async () => {
+    const options = {
+      write: true,
+      config: 'test-config.yaml',
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      cache: false,
+      defaultConfig: {},
+    };
+
+    const existingConfig = {
+      prompts: ['Test prompt'],
+      providers: ['openai:gpt-4'],
+      // No defaultTest
+    };
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
+    jest.mocked(readConfig).mockResolvedValue(existingConfig);
+
+    // Mock synthesize to return test cases
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['entity1', 'entity2'],
+      injectVar: 'input',
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          metadata: expect.objectContaining({
+            purpose: 'Test purpose',
+            entities: ['entity1', 'entity2'],
+          }),
+        }),
+      }),
+      'test-config.yaml',
+      expect.any(Array),
+    );
   });
 });
