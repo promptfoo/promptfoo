@@ -397,7 +397,7 @@ providers:
   - id: azure:chat:gpt-4.1-deployment
     config:
       apiHost: 'your-resource-name.openai.azure.com'
-      apiKey: ${AZURE_API_KEY}
+      # apiKey is omitted - loaded from AZURE_API_KEY environment variable
       apiVersion: '2025-01-01-preview' # Minimum: 2024-10-21 for vision support
 ```
 
