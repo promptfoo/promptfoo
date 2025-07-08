@@ -1072,8 +1072,8 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath === 'promptfoo:redteam:playbook' ||
-      providerPath.startsWith('promptfoo:redteam:playbook:'),
+      providerPath === 'promptfoo:redteam:custom' ||
+      providerPath.startsWith('promptfoo:redteam:custom:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

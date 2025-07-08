@@ -294,24 +294,24 @@ describe('redteam validators', () => {
       });
     });
 
-    describe('playbook strategy validation', () => {
-      it('should accept simple playbook strategy', () => {
-        expect(() => strategyIdSchema.parse('playbook')).not.toThrow();
+    describe('custom strategy validation', () => {
+      it('should accept simple custom strategy', () => {
+        expect(() => strategyIdSchema.parse('custom')).not.toThrow();
       });
 
-      it('should accept playbook strategy variants with compound IDs', () => {
-        const playbookVariants = [
-          'playbook:aggressive',
-          'playbook:greeting-strategy',
-          'playbook:multi-word-variant',
-          'playbook:snake_case_variant',
-          'playbook:variant123',
-          'playbook:CamelCaseVariant',
-          'playbook:variant.with.dots',
-          'playbook:very-long-complex-variant-name-with-many-hyphens',
+      it('should accept custom strategy variants with compound IDs', () => {
+        const customVariants = [
+          'custom:aggressive',
+          'custom:greeting-strategy',
+          'custom:multi-word-variant',
+          'custom:snake_case_variant',
+          'custom:variant123',
+          'custom:CamelCaseVariant',
+          'custom:variant.with.dots',
+          'custom:very-long-complex-variant-name-with-many-hyphens',
         ];
 
-        playbookVariants.forEach((variant) => {
+        customVariants.forEach((variant) => {
           expect(() => strategyIdSchema.parse(variant)).not.toThrow();
         });
       });
@@ -371,8 +371,8 @@ describe('redteam validators', () => {
       it('should accept valid strategy strings', () => {
         const validStrategies = [
           'basic',
-          'playbook',
-          'playbook:variant',
+          'custom',
+          'custom:variant',
           'jailbreak',
           'crescendo',
           'file://strategy.js',
@@ -388,12 +388,12 @@ describe('redteam validators', () => {
       it('should accept strategy objects with valid IDs', () => {
         const validStrategyObjects = [
           { id: 'basic' },
-          { id: 'playbook' },
-          { id: 'playbook:aggressive' },
+          { id: 'custom' },
+          { id: 'custom:aggressive' },
           { id: 'jailbreak', config: { enabled: true } },
-          { id: 'playbook:greeting', config: { strategyText: 'Be polite', stateful: true } },
+          { id: 'custom:greeting', config: { strategyText: 'Be polite', stateful: true } },
           { id: 'multilingual', config: { languages: ['es', 'fr'] } },
-          { id: 'file://playbook.js', config: { param: 'value' } },
+          { id: 'file://custom.js', config: { param: 'value' } },
         ];
 
         validStrategyObjects.forEach((strategy) => {
@@ -401,9 +401,9 @@ describe('redteam validators', () => {
         });
       });
 
-      it('should accept playbook strategy objects with complex configurations', () => {
-        const playbookStrategyWithConfig = {
-          id: 'playbook:complex-variant',
+      it('should accept custom strategy objects with complex configurations', () => {
+        const customStrategyWithConfig = {
+          id: 'custom:complex-variant',
           config: {
             strategyText:
               'If current round is 0, generatedQuestion should be just "hi" by itself...',
@@ -418,14 +418,13 @@ describe('redteam validators', () => {
           },
         };
 
-        expect(() => RedteamStrategySchema.parse(playbookStrategyWithConfig)).not.toThrow();
+        expect(() => RedteamStrategySchema.parse(customStrategyWithConfig)).not.toThrow();
       });
 
       it('should reject strategy objects with invalid IDs', () => {
         const invalidStrategyObjects = [
-          { id: 'invalid-strategy' },
-          { id: 'playbook-invalid' }, // Should be playbook:invalid
-          { id: 'notplaybook:variant' },
+          { id: 'custom-invalid' }, // Should be custom:invalid
+          { id: 'notcustom:variant' },
           { id: 'file://invalid.txt' },
           { id: '' },
           {}, // Missing id
@@ -439,17 +438,17 @@ describe('redteam validators', () => {
 
     describe('edge cases', () => {
       it('should handle strategy objects with empty config', () => {
-        const strategyWithEmptyConfig = { id: 'playbook:variant', config: {} };
+        const strategyWithEmptyConfig = { id: 'custom:variant', config: {} };
         expect(() => RedteamStrategySchema.parse(strategyWithEmptyConfig)).not.toThrow();
       });
 
       it('should handle strategy objects with undefined config', () => {
-        const strategyWithUndefinedConfig = { id: 'playbook:variant', config: undefined };
+        const strategyWithUndefinedConfig = { id: 'custom:variant', config: undefined };
         expect(() => RedteamStrategySchema.parse(strategyWithUndefinedConfig)).not.toThrow();
       });
 
       it('should handle strategy objects without config property', () => {
-        const strategyWithoutConfig = { id: 'playbook:variant' };
+        const strategyWithoutConfig = { id: 'custom:variant' };
         expect(() => RedteamStrategySchema.parse(strategyWithoutConfig)).not.toThrow();
       });
     });
@@ -477,12 +476,12 @@ describe('redteam validators', () => {
   });
 
   describe('integration with actual use cases', () => {
-    it('should validate realistic playbook strategy configurations', () => {
+    it('should validate realistic custom strategy configurations', () => {
       const realisticConfigurations = [
-        'playbook:greeting-strategy',
-        'playbook:default-strategy',
+        'custom:greeting-strategy',
+        'custom:default-strategy',
         {
-          id: 'playbook:greeting-strategy',
+          id: 'custom:greeting-strategy',
           config: {
             stateful: true,
             strategyText:
@@ -490,7 +489,7 @@ describe('redteam validators', () => {
           },
         },
         {
-          id: 'playbook:default-strategy',
+          id: 'custom:default-strategy',
           config: {
             stateful: true,
             strategyText:
@@ -508,16 +507,16 @@ describe('redteam validators', () => {
       const mixedStrategies = [
         'basic',
         { id: 'jailbreak', config: { enabled: true } },
-        'playbook:aggressive-variant',
+        'custom:aggressive-variant',
         {
-          id: 'playbook:polite-variant',
+          id: 'custom:polite-variant',
           config: {
             strategyText: 'Be very polite and formal',
             stateful: false,
           },
         },
         'crescendo',
-        'file://./my-playbook-strategy.js',
+        'file://./my-custom-strategy.js',
       ];
 
       mixedStrategies.forEach((strategy) => {
