@@ -19,6 +19,9 @@ export const isCustomStrategy = (strategyId: string): boolean => {
 };
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
+export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
+export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
+
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
