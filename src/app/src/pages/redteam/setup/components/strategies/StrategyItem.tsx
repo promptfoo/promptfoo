@@ -3,9 +3,11 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { Box, Checkbox, Chip, IconButton, Paper, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
-  AGENTIC_STRATEGIES,
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
+  SINGLE_TURN_AGENTIC_STRATEGIES,
+  MULTI_TURN_AGENTIC_STRATEGIES,
+  ENCODING_STRATEGIES,
 } from '@promptfoo/redteam/constants';
 import type { StrategyCardData } from './types';
 
@@ -115,7 +117,8 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
             {DEFAULT_STRATEGIES.includes(strategy.id as any) && (
               <Chip label="Recommended" size="small" color="default" />
             )}
-            {AGENTIC_STRATEGIES.includes(strategy.id as any) && (
+            {(SINGLE_TURN_AGENTIC_STRATEGIES.includes(strategy.id as any) ||
+              MULTI_TURN_AGENTIC_STRATEGIES.includes(strategy.id as any)) && (
               <Chip
                 label="Agent"
                 size="small"
@@ -135,6 +138,18 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
                   backgroundColor: (theme) => alpha(theme.palette.info.main, 0.1),
                   color: 'info.main',
                   borderColor: 'info.main',
+                  border: 1,
+                }}
+              />
+            )}
+            {ENCODING_STRATEGIES.includes(strategy.id as any) && (
+              <Chip
+                label="Encoding"
+                size="small"
+                sx={{
+                  backgroundColor: (theme) => alpha(theme.palette.success.main, 0.1),
+                  color: 'success.main',
+                  borderColor: 'success.main',
                   border: 1,
                 }}
               />

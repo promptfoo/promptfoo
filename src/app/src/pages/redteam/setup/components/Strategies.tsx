@@ -7,11 +7,16 @@ import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Box, Button, Link, Tooltip, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
-  AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
   DEFAULT_STRATEGIES,
+  ENCODING_STRATEGIES,
+  INJECTION_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
+  SINGLE_TURN_AGENTIC_STRATEGIES,
+  MULTI_TURN_AGENTIC_STRATEGIES,
+  UTILITY_STRATEGIES,
+  STRATEGY_GROUP_METADATA,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -86,38 +91,33 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       RECOMMENDED_STRATEGIES.includes(s.id as any),
     );
 
-    const allAgentic = availableStrategies.filter((s) => AGENTIC_STRATEGIES.includes(s.id as any));
-
-    // Split agentic into single-turn and multi-turn
-    const agenticSingleTurn = allAgentic.filter(
-      (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
-    );
-
-    // Preserve the order from MULTI_TURN_STRATEGIES for agentic multi-turn strategies
-    const agenticMultiTurn = MULTI_TURN_STRATEGIES.map((strategyId) =>
-      availableStrategies.find(
-        (s) => s.id === strategyId && AGENTIC_STRATEGIES.includes(s.id as any),
-      ),
-    ).filter(Boolean) as StrategyCardData[];
+    // Use new strategy groupings
+    const encoding = availableStrategies.filter((s) => ENCODING_STRATEGIES.includes(s.id as any));
 
     const multiModal = availableStrategies.filter((s) =>
       MULTI_MODAL_STRATEGIES.includes(s.id as any),
     );
 
-    // Get other strategies that aren't in the above categories
-    const other = availableStrategies.filter(
-      (s) =>
-        !RECOMMENDED_STRATEGIES.includes(s.id as any) &&
-        !AGENTIC_STRATEGIES.includes(s.id as any) &&
-        !MULTI_MODAL_STRATEGIES.includes(s.id as any),
+    const singleTurnAgentic = availableStrategies.filter((s) =>
+      SINGLE_TURN_AGENTIC_STRATEGIES.includes(s.id as any),
     );
+
+    const multiTurnAgentic = availableStrategies.filter((s) =>
+      MULTI_TURN_AGENTIC_STRATEGIES.includes(s.id as any),
+    );
+
+    const injection = availableStrategies.filter((s) => INJECTION_STRATEGIES.includes(s.id as any));
+
+    const utility = availableStrategies.filter((s) => UTILITY_STRATEGIES.includes(s.id as any));
 
     return {
       recommended,
-      agenticSingleTurn,
-      agenticMultiTurn,
+      encoding,
       multiModal,
-      other,
+      singleTurnAgentic,
+      multiTurnAgentic,
+      injection,
+      utility,
     };
   }, []);
 
@@ -447,11 +447,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       )}
 
       {/* Agentic strategies */}
-      {categorizedStrategies.agenticSingleTurn.length > 0 && (
+      {categorizedStrategies.singleTurnAgentic.length > 0 && (
         <StrategySection
-          title="Agentic Strategies (Single-turn)"
-          description="Advanced AI-powered strategies that dynamically adapt their attack patterns"
-          strategies={categorizedStrategies.agenticSingleTurn}
+          title={STRATEGY_GROUP_METADATA.singleTurnAgentic.name}
+          description={STRATEGY_GROUP_METADATA.singleTurnAgentic.description}
+          strategies={categorizedStrategies.singleTurnAgentic}
           selectedIds={selectedStrategyIds}
           onToggle={handleStrategyToggle}
           onConfigClick={handleConfigClick}
@@ -460,11 +460,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       )}
 
       {/* Multi-turn agentic strategies */}
-      {categorizedStrategies.agenticMultiTurn.length > 0 && (
+      {categorizedStrategies.multiTurnAgentic.length > 0 && (
         <StrategySection
-          title="Agentic Strategies (Multi-turn)"
-          description="AI-powered strategies that evolve across multiple conversation turns"
-          strategies={categorizedStrategies.agenticMultiTurn}
+          title={STRATEGY_GROUP_METADATA.multiTurnAgentic.name}
+          description={STRATEGY_GROUP_METADATA.multiTurnAgentic.description}
+          strategies={categorizedStrategies.multiTurnAgentic}
           selectedIds={selectedStrategyIds}
           onToggle={handleStrategyToggle}
           onConfigClick={handleConfigClick}
@@ -475,8 +475,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {/* Multi-modal strategies */}
       {categorizedStrategies.multiModal.length > 0 && (
         <StrategySection
-          title="Multi-modal Strategies"
-          description="Test handling of non-text content including audio, video, and images"
+          title={STRATEGY_GROUP_METADATA.multiModal.name}
+          description={STRATEGY_GROUP_METADATA.multiModal.description}
           strategies={categorizedStrategies.multiModal}
           selectedIds={selectedStrategyIds}
           onToggle={handleStrategyToggle}
@@ -485,12 +485,38 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         />
       )}
 
-      {/* Other strategies */}
-      {categorizedStrategies.other.length > 0 && (
+      {/* Encoding strategies */}
+      {categorizedStrategies.encoding.length > 0 && (
         <StrategySection
-          title="Other Strategies"
-          description="Additional specialized strategies for specific attack vectors and edge cases"
-          strategies={categorizedStrategies.other}
+          title={STRATEGY_GROUP_METADATA.encoding.name}
+          description={STRATEGY_GROUP_METADATA.encoding.description}
+          strategies={categorizedStrategies.encoding}
+          selectedIds={selectedStrategyIds}
+          onToggle={handleStrategyToggle}
+          onConfigClick={handleConfigClick}
+          onSelectNone={handleSelectNoneInSection}
+        />
+      )}
+
+      {/* Injection strategies */}
+      {categorizedStrategies.injection.length > 0 && (
+        <StrategySection
+          title={STRATEGY_GROUP_METADATA.injection.name}
+          description={STRATEGY_GROUP_METADATA.injection.description}
+          strategies={categorizedStrategies.injection}
+          selectedIds={selectedStrategyIds}
+          onToggle={handleStrategyToggle}
+          onConfigClick={handleConfigClick}
+          onSelectNone={handleSelectNoneInSection}
+        />
+      )}
+
+      {/* Utility strategies */}
+      {categorizedStrategies.utility.length > 0 && (
+        <StrategySection
+          title={STRATEGY_GROUP_METADATA.utility.name}
+          description={STRATEGY_GROUP_METADATA.utility.description}
+          strategies={categorizedStrategies.utility}
           selectedIds={selectedStrategyIds}
           onToggle={handleStrategyToggle}
           onConfigClick={handleConfigClick}

@@ -26,28 +26,29 @@ Strategies are applied during redteam generation and can significantly increase 
 
 ## Strategy Categories
 
-### Static Strategies
+### Utility Strategies
 
-Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `prompt-injection` wraps the payload in a prompt injection such as `ignore previous instructions and {{original_adversarial_input}}`.
+Meta-strategies that provide control and testing enhancement capabilities. These strategies help manage the testing process itself rather than directly attacking the model. For example, `basic` controls whether original test cases are included, `multilingual` expands tests across languages, and `retry` implements regression testing.
 
-### Dynamic Strategies
+### Encoding Strategies
 
-Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, promptfoo recommends two dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/) and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams.
+Transform inputs using various encoding techniques to bypass text-based security controls. These are deterministic transformations that don't require an LLM attacker. Examples include `base64`, `hex`, `rot13`, `homoglyph`, and `leetspeak`. While low-cost, they're often easily detected by modern models.
 
-By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
+### Multi-Modal Strategies
 
-- Make multiple attempts to bypass the target's security controls
-- Stop after exhausting the configured token budget
-- Stop early if they successfully generate a harmful output
-- Track token usage to prevent runaway costs
+Test handling of non-text content by converting adversarial inputs into different media formats. These strategies (`audio`, `image`, `video`) encode text into base64-encoded media files to potentially bypass text-only content filters.
 
-### Multi-turn Strategies
+### Single-Turn Agentic Strategies
 
-Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against its purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+AI-powered strategies that use an attacker LLM to dynamically adapt attack patterns within a single interaction. These include various jailbreak techniques (`jailbreak`, `jailbreak:composite`, `jailbreak:tree`), academic framing attacks (`citation`, `jailbreak:likert`), and optimization-based methods (`gcg`, `best-of-n`). They offer high success rates but require more computational resources.
 
-### Regression Strategies
+### Multi-Turn Agentic Strategies
 
-Regression strategies help maintain security over time by learning from past failures. For example, the `retry` strategy automatically incorporates previously failed test cases into your test suite, creating a form of regression testing for LLM behaviors.
+Advanced AI-powered strategies that evolve attacks across multiple conversation turns. Strategies like `crescendo` gradually escalate harm, while `goat` uses a Generative Offensive Agent Tester. These are most effective against stateful applications and have the highest success rates but also the highest resource requirements.
+
+### Injection Strategies
+
+Direct manipulation techniques that attempt to override system instructions or inject malicious prompts. The `prompt-injection` strategy tests common injection patterns like "ignore previous instructions" to evaluate prompt injection vulnerabilities.
 
 :::note
 All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.

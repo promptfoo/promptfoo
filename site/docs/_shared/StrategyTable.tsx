@@ -1,14 +1,16 @@
 import React from 'react';
 import { strategies } from './data/strategies';
+import type { Strategy } from './data/strategies';
 
 type GroupedStrategies = Record<string, typeof strategies>;
 
 const categoryOrder: (typeof strategies)[number]['category'][] = [
-  'Static (Single-Turn)',
-  'Dynamic (Single-Turn)',
-  'Multi-turn',
-  'Regression',
-  'Custom',
+  'Utility',
+  'Encoding',
+  'Multi-Modal',
+  'Single-Turn Agentic',
+  'Multi-Turn Agentic',
+  'Injection',
 ];
 
 const groupedStrategies = strategies.reduce((acc, strategy) => {
