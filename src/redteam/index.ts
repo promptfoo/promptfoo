@@ -35,6 +35,8 @@ import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
 
+export { getStrategyId, STRATEGY_PROBE_MULTIPLIER, getEstimatedProbes } from './strategyUtils';
+
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
  * @param pluginId - The ID of the plugin.
