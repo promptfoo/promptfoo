@@ -29,10 +29,6 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
     return PROVIDER_ID;
   }
 
-  get taskId() {
-    return 'mischievous-user-redteam';
-  }
-
   serializeOutput(
     messages: Message[],
     tokenUsage: TokenUsage,

@@ -47,18 +47,11 @@ export class SimulatedUser implements ApiProvider {
     return this.identifier;
   }
 
-  /**
-   * Non-Redteam SimulatedUserProvider uses the 'tau' task.
-   */
-  get taskId() {
-    return 'tau';
-  }
-
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
   ): Promise<Message[]> {
-    logger.debug('[SimulatedUser] Sending message to simulated user (tau) provider');
+    logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
       return {
@@ -108,7 +101,7 @@ export class SimulatedUser implements ApiProvider {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
-    const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
+    const userProvider = new PromptfooSimulatedUserProvider({ instructions });
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
     const messages: Message[] = [];

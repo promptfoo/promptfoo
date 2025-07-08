@@ -192,11 +192,9 @@ interface PromptfooAgentOptions {
 
 export class PromptfooSimulatedUserProvider implements ApiProvider {
   private options: PromptfooAgentOptions;
-  private taskId: string;
 
-  constructor(options: PromptfooAgentOptions = {}, taskId: string) {
+  constructor(options: PromptfooAgentOptions = {}) {
     this.options = options;
-    this.taskId = taskId;
   }
 
   id(): string {
@@ -214,7 +212,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const messages = JSON.parse(prompt);
     const body = {
-      task: this.taskId,
+      task: 'agent',
       instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),
