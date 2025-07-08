@@ -14,7 +14,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   camelcase: 1,
   citation: 1,
   crescendo: 10,
-  playbook: 10,
+  custom: 10,
   default: 1,
   gcg: 1,
   goat: 5,

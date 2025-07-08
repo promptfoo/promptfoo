@@ -1,7 +1,7 @@
-import { addPlaybook } from '../../../src/redteam/strategies/custom';
+import { addCustom } from '../../../src/redteam/strategies/custom';
 import type { TestCase } from '../../../src/types';
 
-describe('addPlaybook', () => {
+describe('addCustom', () => {
   const mockTestCases: TestCase[] = [
     {
       vars: { query: 'Tell me a joke' },
@@ -23,9 +23,9 @@ describe('addPlaybook', () => {
     stateful: true,
   };
 
-  describe('with simple playbook strategy ID', () => {
-    it('should process test cases with basic playbook strategy', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook');
+  describe('with simple custom strategy ID', () => {
+    it('should process test cases with basic custom strategy', () => {
+      const result = addCustom(mockTestCases, injectVar, config, 'custom');
 
       expect(result).toHaveLength(2);
 
@@ -33,7 +33,7 @@ describe('addPlaybook', () => {
       expect(result[0]).toEqual({
         vars: { query: 'Tell me a joke' },
         provider: {
-          id: 'promptfoo:redteam:playbook',
+          id: 'promptfoo:redteam:custom',
           config: {
             injectVar: 'query',
             variant: '',
@@ -45,13 +45,13 @@ describe('addPlaybook', () => {
           {
             type: 'llm-rubric',
             value: 'Does not contain harmful content',
-            metric: 'Harmless/Playbook',
+            metric: 'Harmless/Custom',
           },
         ],
         metadata: {
           pluginId: 'harmful:hate',
           originalText: 'Tell me a joke',
-          strategyId: 'playbook',
+          strategyId: 'custom',
         },
       });
 
@@ -59,7 +59,7 @@ describe('addPlaybook', () => {
       expect(result[1]).toEqual({
         vars: { query: 'What is the weather?' },
         provider: {
-          id: 'promptfoo:redteam:playbook',
+          id: 'promptfoo:redteam:custom',
           config: {
             injectVar: 'query',
             variant: '',
@@ -68,20 +68,20 @@ describe('addPlaybook', () => {
           },
         },
         assert: [
-          { type: 'llm-rubric', value: 'Provides helpful response', metric: 'Helpful/Playbook' },
+          { type: 'llm-rubric', value: 'Provides helpful response', metric: 'Helpful/Custom' },
         ],
         metadata: {
           pluginId: 'pii:direct',
           originalText: 'What is the weather?',
-          strategyId: 'playbook',
+          strategyId: 'custom',
         },
       });
     });
   });
 
-  describe('with compound playbook strategy ID', () => {
-    it('should process test cases with playbook:aggressive strategy', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook:aggressive');
+  describe('with compound custom strategy ID', () => {
+    it('should process test cases with custom:aggressive strategy', () => {
+      const result = addCustom(mockTestCases, injectVar, config, 'custom:aggressive');
 
       expect(result).toHaveLength(2);
 
@@ -89,7 +89,7 @@ describe('addPlaybook', () => {
       expect(result[0]).toEqual({
         vars: { query: 'Tell me a joke' },
         provider: {
-          id: 'promptfoo:redteam:playbook:aggressive',
+          id: 'promptfoo:redteam:custom:aggressive',
           config: {
             injectVar: 'query',
             variant: 'aggressive',
@@ -101,25 +101,25 @@ describe('addPlaybook', () => {
           {
             type: 'llm-rubric',
             value: 'Does not contain harmful content',
-            metric: 'Harmless/Playbook:aggressive',
+            metric: 'Harmless/Custom:aggressive',
           },
         ],
         metadata: {
           pluginId: 'harmful:hate',
           originalText: 'Tell me a joke',
-          strategyId: 'playbook:aggressive',
+          strategyId: 'custom:aggressive',
         },
       });
     });
 
-    it('should process test cases with playbook:greeting-strategy', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook:greeting-strategy');
+    it('should process test cases with custom:greeting-strategy', () => {
+      const result = addCustom(mockTestCases, injectVar, config, 'custom:greeting-strategy');
 
       expect(result).toHaveLength(2);
 
       // Check provider ID and variant extraction
       expect(result[0].provider).toEqual({
-        id: 'promptfoo:redteam:playbook:greeting-strategy',
+        id: 'promptfoo:redteam:custom:greeting-strategy',
         config: {
           injectVar: 'query',
           variant: 'greeting-strategy',
@@ -129,71 +129,71 @@ describe('addPlaybook', () => {
       });
 
       // Check metric display name
-      expect(result[0].assert?.[0].metric).toBe('Harmless/Playbook:greeting-strategy');
+      expect(result[0].assert?.[0].metric).toBe('Harmless/Custom:greeting-strategy');
     });
   });
 
   describe('variant extraction', () => {
     it('should extract simple variant correctly', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook:simple');
+      const result = addCustom(mockTestCases, injectVar, config, 'custom:simple');
 
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('simple');
-      expect(result[0].assert?.[0].metric).toBe('Harmless/Playbook:simple');
+      expect(result[0].assert?.[0].metric).toBe('Harmless/Custom:simple');
     });
 
     it('should extract complex variant with hyphens', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook:multi-word-variant');
+      const result = addCustom(mockTestCases, injectVar, config, 'custom:multi-word-variant');
 
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('multi-word-variant');
-      expect(result[0].assert?.[0].metric).toBe('Harmless/Playbook:multi-word-variant');
+      expect(result[0].assert?.[0].metric).toBe('Harmless/Custom:multi-word-variant');
     });
 
     it('should handle variant with underscores', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook:snake_case_variant');
+      const result = addCustom(mockTestCases, injectVar, config, 'custom:snake_case_variant');
 
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('snake_case_variant');
-      expect(result[0].assert?.[0].metric).toBe('Harmless/Playbook:snake_case_variant');
+      expect(result[0].assert?.[0].metric).toBe('Harmless/Custom:snake_case_variant');
     });
 
-    it('should handle empty variant for basic playbook', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook');
+    it('should handle empty variant for basic custom', () => {
+      const result = addCustom(mockTestCases, injectVar, config, 'custom');
 
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config.variant).toBe('');
-      expect(result[0].assert?.[0].metric).toBe('Harmless/Playbook');
+      expect(result[0].assert?.[0].metric).toBe('Harmless/Custom');
     });
   });
 
   describe('config merging', () => {
     it('should merge provided config with strategy defaults', () => {
-      const playbookConfig = {
-        strategyText: 'Playbook text',
+      const customConfig = {
+        strategyText: 'Custom text',
         temperature: 0.8,
         customParam: true,
       };
 
-      const result = addPlaybook(mockTestCases, injectVar, playbookConfig, 'playbook:test');
+      const result = addCustom(mockTestCases, injectVar, customConfig, 'custom:test');
 
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
       expect(provider.config).toEqual({
         injectVar: 'query',
         variant: 'test',
-        strategyText: 'Playbook text',
+        strategyText: 'Custom text',
         temperature: 0.8,
         customParam: true,
       });
     });
 
     it('should handle empty config', () => {
-      const result = addPlaybook(mockTestCases, injectVar, {}, 'playbook:minimal');
+      const result = addCustom(mockTestCases, injectVar, {}, 'custom:minimal');
 
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
@@ -213,13 +213,13 @@ describe('addPlaybook', () => {
         },
       ];
 
-      const result = addPlaybook(testCasesWithoutAssertions, injectVar, config, 'playbook:test');
+      const result = addCustom(testCasesWithoutAssertions, injectVar, config, 'custom:test');
 
       expect(result).toHaveLength(1);
       expect(result[0].assert).toBeUndefined();
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
-      expect(provider.id).toBe('promptfoo:redteam:playbook:test');
+      expect(provider.id).toBe('promptfoo:redteam:custom:test');
     });
 
     it('should handle test cases with multiple assertions', () => {
@@ -234,16 +234,11 @@ describe('addPlaybook', () => {
         },
       ];
 
-      const result = addPlaybook(
-        testCasesWithMultipleAssertions,
-        injectVar,
-        config,
-        'playbook:multi',
-      );
+      const result = addCustom(testCasesWithMultipleAssertions, injectVar, config, 'custom:multi');
 
       expect(result[0].assert).toHaveLength(2);
-      expect(result[0].assert?.[0].metric).toBe('Metric1/Playbook:multi');
-      expect(result[0].assert?.[1].metric).toBe('Metric2/Playbook:multi');
+      expect(result[0].assert?.[0].metric).toBe('Metric1/Custom:multi');
+      expect(result[0].assert?.[1].metric).toBe('Metric2/Custom:multi');
     });
 
     it('should preserve most metadata, add strategy metadata, and set originalText from inject variable', () => {
@@ -260,37 +255,37 @@ describe('addPlaybook', () => {
         },
       ];
 
-      const result = addPlaybook(testCasesWithMetadata, injectVar, config, 'playbook:preserve');
+      const result = addCustom(testCasesWithMetadata, injectVar, config, 'custom:preserve');
 
       expect(result[0].metadata).toEqual({
         pluginId: 'test:plugin',
         customField: 'custom value',
-        strategyId: 'playbook:preserve',
+        strategyId: 'custom:preserve',
         originalText: 'Test query',
       });
     });
   });
 
   describe('provider ID generation', () => {
-    it('should generate correct provider ID for simple playbook', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook');
+    it('should generate correct provider ID for simple custom', () => {
+      const result = addCustom(mockTestCases, injectVar, config, 'custom');
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
-      expect(provider.id).toBe('promptfoo:redteam:playbook');
+      expect(provider.id).toBe('promptfoo:redteam:custom');
     });
 
-    it('should generate correct provider ID for compound playbook', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook:variant');
+    it('should generate correct provider ID for compound custom', () => {
+      const result = addCustom(mockTestCases, injectVar, config, 'custom:variant');
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
-      expect(provider.id).toBe('promptfoo:redteam:playbook:variant');
+      expect(provider.id).toBe('promptfoo:redteam:custom:variant');
     });
 
     it('should handle complex variant names in provider ID', () => {
-      const result = addPlaybook(mockTestCases, injectVar, config, 'playbook:complex-variant-name');
+      const result = addCustom(mockTestCases, injectVar, config, 'custom:complex-variant-name');
       expect(typeof result[0].provider).toBe('object');
       const provider = result[0].provider as { id: string; config: any };
-      expect(provider.id).toBe('promptfoo:redteam:playbook:complex-variant-name');
+      expect(provider.id).toBe('promptfoo:redteam:custom:complex-variant-name');
     });
   });
 });

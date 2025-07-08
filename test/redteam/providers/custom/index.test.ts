@@ -1,5 +1,5 @@
 import { getGraderById } from '../../../../src/redteam/graders';
-import { MemorySystem, PlaybookProvider } from '../../../../src/redteam/providers/custom';
+import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
@@ -72,8 +72,8 @@ describe('MemorySystem', () => {
   });
 });
 
-describe('PlaybookProvider', () => {
-  let playbookProvider: PlaybookProvider;
+describe('CustomProvider', () => {
+  let customProvider: CustomProvider;
   let mockRedTeamProvider: any;
   let mockScoringProvider: any;
   let mockTargetProvider: any;
@@ -97,7 +97,7 @@ describe('PlaybookProvider', () => {
       callApi: jest.fn(),
     };
 
-    playbookProvider = new PlaybookProvider({
+    customProvider = new CustomProvider({
       injectVar: 'objective',
       strategyText: 'If current round is 0, generatedQuestion should be just "hi" by itself',
       maxTurns: 10,
@@ -139,9 +139,9 @@ describe('PlaybookProvider', () => {
   });
 
   it('should initialize with default config values', () => {
-    const provider = new PlaybookProvider({
+    const provider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'Playbook strategy text',
+      strategyText: 'Custom strategy text',
       maxTurns: 10,
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
@@ -149,7 +149,7 @@ describe('PlaybookProvider', () => {
     });
 
     expect(provider.config.injectVar).toBe('objective');
-    expect(provider.config.strategyText).toBe('Playbook strategy text');
+    expect(provider.config.strategyText).toBe('Custom strategy text');
     expect(provider.config.redteamProvider).toBe(mockRedTeamProvider);
     expect(provider.config.maxTurns).toBe(10);
     expect(provider.config.maxBacktracks).toBe(10);
@@ -159,22 +159,22 @@ describe('PlaybookProvider', () => {
 
   it('should require strategyText in config', () => {
     expect(() => {
-      new PlaybookProvider({
+      new CustomProvider({
         injectVar: 'objective',
         strategyText: '', // Empty strategy text should fail
         redteamProvider: mockRedTeamProvider,
       });
-    }).toThrow('PlaybookProvider requires strategyText in config');
+    }).toThrow('CustomProvider requires strategyText in config');
   });
 
   it('should return correct provider id', () => {
-    expect(playbookProvider.id()).toBe('promptfoo:redteam:playbook');
+    expect(customProvider.id()).toBe('promptfoo:redteam:custom');
   });
 
   it('should use default values when optional config not provided', () => {
-    const provider = new PlaybookProvider({
+    const provider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'Playbook strategy',
+      strategyText: 'Custom strategy',
       redteamProvider: mockRedTeamProvider,
     });
 
@@ -228,7 +228,7 @@ describe('PlaybookProvider', () => {
         }),
       });
 
-      const result = await playbookProvider.callApi(prompt, context);
+      const result = await customProvider.callApi(prompt, context);
 
       expect(tryUnblocking).toHaveBeenCalledWith({
         messages: expect.any(Array),
@@ -274,7 +274,7 @@ describe('PlaybookProvider', () => {
         }),
       });
 
-      const result = await playbookProvider.callApi(prompt, context);
+      const result = await customProvider.callApi(prompt, context);
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1); // Only original call
       expect(result.metadata?.stopReason).toBe('Internal evaluator success');
@@ -292,9 +292,9 @@ describe('PlaybookProvider', () => {
     } as any);
 
     // Create a new provider with smaller max turns for this test
-    const testProvider = new PlaybookProvider({
+    const testProvider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'Playbook strategy for testing',
+      strategyText: 'Custom strategy for testing',
       maxTurns: 2, // Use smaller max turns
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
@@ -343,8 +343,8 @@ describe('PlaybookProvider', () => {
 
     expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(2);
     expect(result.metadata?.stopReason).toBe('Internal evaluator success');
-    expect(result.metadata?.playbookResult).toBe(true);
-    expect(result.metadata?.playbookConfidence).toBe(100);
+    expect(result.metadata?.customResult).toBe(true);
+    expect(result.metadata?.customConfidence).toBe(100);
   });
 
   it('should succeed via external grader when grader fails', async () => {
@@ -391,7 +391,7 @@ describe('PlaybookProvider', () => {
         }),
       });
 
-    const result = await playbookProvider.callApi(prompt, context);
+    const result = await customProvider.callApi(prompt, context);
     expect(result.metadata?.stopReason).toBe('Grader failed');
   });
 
@@ -405,9 +405,9 @@ describe('PlaybookProvider', () => {
       })),
     } as any);
 
-    const testProvider = new PlaybookProvider({
+    const testProvider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'Playbook strategy for backtrack test',
+      strategyText: 'Custom strategy for backtrack test',
       maxTurns: 10,
       maxBacktracks: 2,
       redteamProvider: mockRedTeamProvider,
@@ -446,13 +446,13 @@ describe('PlaybookProvider', () => {
     const result = await testProvider.callApi(prompt, context);
 
     expect(result.metadata?.stopReason).toBe('Max backtracks reached');
-    expect(result.metadata?.playbookBacktrackCount).toBe(2);
+    expect(result.metadata?.customBacktrackCount).toBe(2);
   });
 
   it('should record successful attacks when continueAfterSuccess is true', async () => {
-    const testProvider = new PlaybookProvider({
+    const testProvider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'Playbook strategy for multiple success test',
+      strategyText: 'Custom strategy for multiple success test',
       maxTurns: 5,
       continueAfterSuccess: true,
       redteamProvider: mockRedTeamProvider,
@@ -537,7 +537,7 @@ describe('PlaybookProvider', () => {
       If current round >= 2, start generating questions to achieve the objective.
     `;
 
-    const testProvider = new PlaybookProvider({
+    const testProvider = new CustomProvider({
       injectVar: 'objective',
       strategyText: roundSpecificStrategy,
       maxTurns: 3,
@@ -592,12 +592,12 @@ describe('PlaybookProvider', () => {
     const result = await testProvider.callApi(prompt, context);
 
     expect(mockRedTeamProvider.callApi).toHaveBeenCalledTimes(3);
-    expect(result.metadata?.playbookRoundsCompleted).toBe(3);
+    expect(result.metadata?.customRoundsCompleted).toBe(3);
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
   });
 
   it('should handle stateful mode with sessionId', async () => {
-    const testProvider = new PlaybookProvider({
+    const testProvider = new CustomProvider({
       injectVar: 'objective',
       strategyText: 'Stateful strategy test',
       maxTurns: 2,
