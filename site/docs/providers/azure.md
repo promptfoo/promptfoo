@@ -392,8 +392,10 @@ providers:
     config:
       apiHost: 'your-resource-name.openai.azure.com'
       apiKey: ${AZURE_API_KEY}
-      apiVersion: '2025-04-01-preview' # Latest API version for best feature support
+      apiVersion: '2025-01-01-preview' # Minimum: 2024-10-21 for vision support
 ```
+
+Note: Vision support in Azure OpenAI requires specific model deployments. Not all GPT-4 deployments support vision - ensure your deployment uses a model variant with vision capabilities.
 
 ### Image Input Format
 
