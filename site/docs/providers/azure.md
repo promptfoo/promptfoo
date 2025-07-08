@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Azure OpenAI Provider
-description: Configure and use Azure OpenAI models with promptfoo for evaluations, including GPT-4, reasoning models, and vision capabilities
+description: Configure and use Azure OpenAI models with promptfoo for evals, including GPT-4, reasoning models, and vision capabilities
 keywords: [azure, openai, gpt-4, vision, reasoning models, evaluation]
 ---
 
@@ -504,7 +504,7 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 ## Assistants
 
-To evaluate an OpenAI assistant on Azure, first create a deployment for the assistant and create an assistant in the Azure web UI.
+To eval an OpenAI assistant on Azure, first create a deployment for the assistant and create an assistant in the Azure web UI.
 
 Then install the peer dependency locally:
 
@@ -589,7 +589,7 @@ Make sure to:
 
 ### Simple Example
 
-Here's an example of a simple full assistant evaluation:
+Here's an example of a simple full assistant eval:
 
 ```yaml
 prompts:
