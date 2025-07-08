@@ -68,7 +68,7 @@ providers:
 - `azure:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
 - `azure:completion:<deployment name>` - uses the given deployment (for completion endpoints such as gpt-35-turbo-instruct)
 
-Vision-capable models (GPT-4o, GPT-4 Turbo with Vision, GPT-4.1) use the standard `azure:chat:` provider type.
+Vision-capable models (GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
 
 ## Environment Variables
 
@@ -382,13 +382,13 @@ This means you're using a reasoning model without setting the `isReasoningModel`
 
 ## Using Vision Models
 
-Azure OpenAI supports vision-capable models like GPT-4o, GPT-4 Turbo with Vision, and GPT-4.1. These models can analyze images and provide textual responses about them.
+Azure OpenAI supports vision-capable models like GPT-4o, GPT-4.1. These models can analyze images and provide textual responses about them.
 
 ### Configuration
 
 Vision models require:
 
-1. A deployment with a vision-capable model (GPT-4o, GPT-4 Turbo with Vision, GPT-4.1, or GPT-image-1)
+1. A deployment with a vision-capable model (GPT-4o, GPT-4.1)
 2. API version `2024-10-21` or newer
 3. Proper message formatting with image inputs
 
