@@ -313,4 +313,4 @@ project/
 - [Configuration Reference](./reference.md) - Complete configuration options
 - [Test Cases](./test-cases.md) - Organizing test cases
 - [Prompts](./prompts.md) - Managing prompts and templates
-- [Providers](../providers/) - Configuring LLM providers
+- [Providers](/docs/providers/) - Configuring LLM providers
