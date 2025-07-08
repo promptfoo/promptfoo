@@ -11,18 +11,18 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'playbook'] as const;
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom'] as const;
 
-// Helper function to check if a strategy is a playbook variant
-export const isPlaybookStrategy = (strategyId: string): boolean => {
-  return strategyId === 'playbook' || strategyId.startsWith('playbook:');
+// Helper function to check if a strategy is a custom variant
+export const isCustomStrategy = (strategyId: string): boolean => {
+  return strategyId === 'custom' || strategyId.startsWith('custom:');
 };
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
-  'playbook',
+  'custom',
   'jailbreak',
   'jailbreak:tree',
   'pandamonium',
@@ -49,7 +49,7 @@ export const ADDITIONAL_STRATEGIES = [
   'camelcase',
   'citation',
   'crescendo',
-  'playbook',
+  'custom',
   'gcg',
   'goat',
   'hex',

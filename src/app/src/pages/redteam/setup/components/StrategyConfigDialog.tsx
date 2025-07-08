@@ -67,8 +67,8 @@ export default function StrategyConfigDialog({
     setNumTests(value);
   };
 
-  const isPlaybookStrategyValid = () => {
-    if (strategy === 'playbook') {
+  const isCustomStrategyValid = () => {
+    if (strategy === 'custom') {
       return localConfig.strategyText && localConfig.strategyText.trim().length > 0;
     }
     return true;
@@ -90,11 +90,14 @@ export default function StrategyConfigDialog({
       strategy === 'best-of-n' ||
       strategy === 'goat' ||
       strategy === 'crescendo' ||
-      strategy === 'playbook' ||
+      strategy === 'custom' ||
       strategy === 'pandamonium' ||
       strategy === 'gcg' ||
       strategy === 'citation'
     ) {
+      if (!isCustomStrategyValid()) {
+        return;
+      }
       onSave(strategy, localConfig);
     } else if (strategy === 'multilingual') {
       onSave(strategy, {
@@ -326,11 +329,11 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'playbook') {
+    } else if (strategy === 'custom') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Define your playbook multi-turn strategy with specific instructions for the AI agent.
+            Define your custom multi-turn strategy with specific instructions for the AI agent.
           </Typography>
 
           <TextField
@@ -345,7 +348,7 @@ export default function StrategyConfigDialog({
             placeholder="Describe how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc."
             helperText={
               !localConfig.strategyText || localConfig.strategyText.trim().length === 0
-                ? 'Strategy text is required for playbook strategy'
+                ? 'Strategy text is required for custom strategy'
                 : 'Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc.'
             }
             error={!localConfig.strategyText || localConfig.strategyText.trim().length === 0}
@@ -618,7 +621,7 @@ export default function StrategyConfigDialog({
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={(strategy === 'retry' && (!!error || !numTests)) || !isPlaybookStrategyValid()}
+          disabled={(strategy === 'retry' && (!!error || !numTests)) || !isCustomStrategyValid()}
         >
           Save
         </Button>
