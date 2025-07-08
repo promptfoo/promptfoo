@@ -1,5 +1,5 @@
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -13,7 +13,7 @@ type LiteLLMProviderOptions = ProviderOptions & {
 
 /**
  * Creates a LiteLLM provider using OpenAI-compatible endpoints
- * 
+ *
  * LiteLLM supports chat, completion, and embedding models through its proxy server.
  * All parameters are automatically passed through to the LiteLLM API.
  */
@@ -26,7 +26,7 @@ export function createLiteLLMProvider(
   } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  
+
   const config = options.config?.config || {};
   const litellmConfig = {
     ...options,

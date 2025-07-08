@@ -35,37 +35,37 @@ This example demonstrates how to use LiteLLM with promptfoo for both chat comple
        litellm_params:
          model: openai/gpt-4.1
          api_key: os.environ/OPENAI_API_KEY
-     
+
      - model_name: o3-mini
        litellm_params:
          model: openai/o3-mini
          api_key: os.environ/OPENAI_API_KEY
-     
+
      - model_name: claude-4-sonnet-20250514
        litellm_params:
          model: anthropic/claude-4-sonnet-20250514
          api_key: os.environ/ANTHROPIC_API_KEY
-     
+
      - model_name: deepseek-r1
        litellm_params:
          model: deepseek/deepseek-r1
          api_key: os.environ/DEEPSEEK_API_KEY
-     
+
      - model_name: gemini-2.5-flash
        litellm_params:
          model: gemini/gemini-2.5-flash
          api_key: os.environ/GEMINI_API_KEY
-     
+
      - model_name: text-embedding-3-small
        litellm_params:
          model: openai/text-embedding-3-small
          api_key: os.environ/OPENAI_API_KEY
-   
+
    litellm_settings:
      drop_params: true
      set_verbose: false
    EOF
-   
+
    # Run with config
    docker run -p 4000:4000 \
      -v $(pwd)/litellm_config.yaml:/app/config.yaml \
@@ -131,27 +131,32 @@ The example uses three different ways to specify LiteLLM models:
 Some of the latest models available through LiteLLM:
 
 ### OpenAI
+
 - GPT-4.1, GPT-4.1-mini, GPT-4.1-nano
 - O3, O3-mini, O3-pro, O4-mini
 - Codex-mini-latest
 - GPT-4o-audio-preview
 
 ### Anthropic
+
 - Claude-4-opus-20250514
 - Claude-4-sonnet-20250514
 - Claude-3.7 series
 
 ### DeepSeek
+
 - DeepSeek-R1 (reasoning model)
 - DeepSeek-R1-distill series (1.5B to 70B)
 - DeepSeek-V3
 
 ### Google
+
 - Gemini-2.5-pro, Gemini-2.5-flash
 - Gemini-2.5-flash-lite
 - Gemini-2.0-flash-preview-image-generation
 
 ### Others
+
 - xAI: Grok-2-latest, Grok-3
 - Mistral: Magistral-medium-latest
 - Meta: Llama 4 models
@@ -164,4 +169,4 @@ Some of the latest models available through LiteLLM:
 3. **API Key Errors**: Ensure all required API keys are set in your environment
 4. **Rate Limits**: If you hit rate limits, LiteLLM will automatically retry with exponential backoff
 
-For more information, see the [LiteLLM documentation](https://docs.litellm.ai/docs/). 
+For more information, see the [LiteLLM documentation](https://docs.litellm.ai/docs/).

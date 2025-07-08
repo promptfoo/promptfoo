@@ -55,6 +55,7 @@ providers:
 LiteLLM now supports the latest models from various providers:
 
 ### OpenAI Models
+
 - **GPT-4.1 series**: `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **O-series**: `o3`, `o3-mini`, `o3-pro`, `o4-mini`
 - **Codex**: `codex-mini-latest`
@@ -62,10 +63,12 @@ LiteLLM now supports the latest models from various providers:
 - **Audio models**: `gpt-4o-audio-preview`, `gpt-4o-mini-audio-preview`
 
 ### Anthropic Models
+
 - **Claude 4 series**: `claude-4-opus-20250514`, `claude-4-sonnet-20250514`
 - **Claude 3.7**: Latest Claude models with enhanced capabilities
 
 ### DeepSeek Models
+
 - **DeepSeek R1**: The reasoning model series
   - `deepseek-r1` (671B parameters, 37B activated)
   - `deepseek-r1-zero`
@@ -74,13 +77,15 @@ LiteLLM now supports the latest models from various providers:
 - **DeepSeek V3**: `deepseek-v3`
 
 ### Google Models
-- **Gemini 2.5 series**: 
+
+- **Gemini 2.5 series**:
   - `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
   - `gemini-2.5-pro-preview-05-06`
   - `gemini-2.5-flash-preview-tts` (Text-to-Speech)
   - `gemini-2.0-flash-preview-image-generation`
 
 ### Other Notable Models
+
 - **xAI**: `grok-2-latest`, `grok-3`
 - **Mistral**: `mistral-medium-latest`, `magistral-medium-latest`, `magistral-small-latest`
 - **Meta Llama**: Support for Llama 4 models
@@ -142,6 +147,7 @@ providers:
 ## Supported Parameters
 
 All standard LiteLLM parameters are passed through:
+
 - `temperature`
 - `max_tokens`
 - `top_p`
@@ -156,6 +162,7 @@ All standard LiteLLM parameters are passed through:
 ## Environment Variables
 
 The LiteLLM provider respects standard environment variables:
+
 - `LITELLM_API_KEY`
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
@@ -172,35 +179,35 @@ providers:
   # Latest OpenAI models
   - id: litellm:gpt-4.1
   - id: litellm:o3-mini
-  
+
   # Claude 4
   - id: litellm:claude-4-sonnet-20250514
     config:
       apiKey: ${ANTHROPIC_API_KEY}
-  
+
   # DeepSeek R1 (reasoning model)
   - id: litellm:deepseek-r1
     config:
-      temperature: 0.6  # Recommended for DeepSeek R1
-  
+      temperature: 0.6 # Recommended for DeepSeek R1
+
   # Gemini 2.5
   - id: litellm:gemini-2.5-pro
-  
+
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-small
 
 prompts:
-  - "Translate this to {{language}}: {{text}}"
+  - 'Translate this to {{language}}: {{text}}'
 
 tests:
   - vars:
       language: French
-      text: "Hello, world!"
+      text: 'Hello, world!'
     assert:
       - type: contains
-        value: "Bonjour"
+        value: 'Bonjour'
       - type: similar
-        value: "Bonjour, le monde!"
+        value: 'Bonjour, le monde!'
         threshold: 0.8
         provider: litellm:embedding:text-embedding-3-small
 ```

@@ -87,4 +87,4 @@ describe('LiteLLM Provider', () => {
       expect(provider.config.temperature).toBe(0.7);
     });
   });
-}); 
+});

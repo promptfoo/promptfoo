@@ -5,9 +5,9 @@ prompts:
   - 'Translate the following text to {{language}}: "{{text}}"'
   - |
     You are a professional translator. Translate this text to {{language}}, maintaining the tone and style:
-    
+
     "{{text}}"
-    
+
     Provide only the translation, no explanations.
 
 providers:
@@ -17,27 +17,27 @@ providers:
     config:
       apiBaseUrl: http://localhost:4000
       temperature: 0.3
-      
+
   - id: litellm:o3-mini
     label: O3 Mini
     config:
       apiBaseUrl: http://localhost:4000
       temperature: 0.3
-  
+
   # Claude 4 series
   - id: litellm:claude-4-sonnet-20250514
     label: Claude 4 Sonnet
     config:
       apiBaseUrl: http://localhost:4000
       temperature: 0.3
-  
+
   # DeepSeek R1 reasoning model
   - id: litellm:deepseek-r1
     label: DeepSeek R1
     config:
       apiBaseUrl: http://localhost:4000
-      temperature: 0.6  # Recommended for DeepSeek R1
-  
+      temperature: 0.6 # Recommended for DeepSeek R1
+
   # Gemini 2.5 series
   - id: litellm:gemini-2.5-flash
     label: Gemini 2.5 Flash
@@ -57,64 +57,64 @@ defaultTest:
 tests:
   - vars:
       language: French
-      text: "Hello, world! How are you today?"
+      text: 'Hello, world! How are you today?'
     assert:
       - type: contains-any
-        value: ["Bonjour", "Salut"]
+        value: ['Bonjour', 'Salut']
       - type: contains-any
-        value: ["monde", "tout le monde"]
+        value: ['monde', 'tout le monde']
       - type: similar
         value: "Bonjour le monde! Comment allez-vous aujourd'hui?"
         threshold: 0.8
       - type: icontains
-        value: "comment"
-        
+        value: 'comment'
+
   - vars:
       language: Spanish
-      text: "The weather is beautiful today."
+      text: 'The weather is beautiful today.'
     assert:
       - type: contains-any
-        value: ["clima", "tiempo"]
+        value: ['clima', 'tiempo']
       - type: contains-any
-        value: ["hermoso", "bonito", "bello"]
+        value: ['hermoso', 'bonito', 'bello']
       - type: similar
-        value: "El clima está hermoso hoy."
+        value: 'El clima está hermoso hoy.'
         threshold: 0.8
-        
+
   - vars:
       language: German
-      text: "I love programming with artificial intelligence."
+      text: 'I love programming with artificial intelligence.'
     assert:
       - type: contains-any
-        value: ["liebe", "mag"]
+        value: ['liebe', 'mag']
       - type: contains-any
-        value: ["Programmierung", "Programmieren"]
+        value: ['Programmierung', 'Programmieren']
       - type: contains
-        value: "künstlich"
+        value: 'künstlich'
       - type: similar
-        value: "Ich liebe das Programmieren mit künstlicher Intelligenz."
+        value: 'Ich liebe das Programmieren mit künstlicher Intelligenz.'
         threshold: 0.8
-        
+
   - vars:
       language: Japanese
-      text: "Good morning! Have a nice day!"
+      text: 'Good morning! Have a nice day!'
     assert:
       - type: contains-any
-        value: ["おはよう", "おはようございます"]
+        value: ['おはよう', 'おはようございます']
       - type: contains-any
-        value: ["良い一日", "素敵な一日", "いい一日"]
+        value: ['良い一日', '素敵な一日', 'いい一日']
       - type: similar
-        value: "おはようございます！良い一日を！"
+        value: 'おはようございます！良い一日を！'
         threshold: 0.7
 
-# Optional: Configure specific assertions for reasoning models
+  # Optional: Configure specific assertions for reasoning models
   - vars:
       language: French
-      text: "Can you explain quantum computing in simple terms?"
+      text: 'Can you explain quantum computing in simple terms?'
     assert:
       - type: contains-any
-        value: ["quantique", "informatique quantique"]
+        value: ['quantique', 'informatique quantique']
       - type: contains-any
-        value: ["qubits", "superposition", "intrication"]
+        value: ['qubits', 'superposition', 'intrication']
       - type: llm-rubric
-        value: "The translation should maintain technical accuracy while being in French" 
+        value: 'The translation should maintain technical accuracy while being in French'

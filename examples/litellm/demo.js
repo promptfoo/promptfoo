@@ -40,7 +40,7 @@ providers.forEach(({ path, description }) => {
         },
       },
     });
-    
+
     console.log(`✓ ${description}`);
     console.log(`  Path: ${path}`);
     console.log(`  ID: ${provider.id()}`);
@@ -65,4 +65,4 @@ providers:
   - id: litellm:embedding:text-embedding-3-small
     config:
       apiBaseUrl: http://localhost:4000
-`); 
+`);
