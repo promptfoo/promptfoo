@@ -51,6 +51,7 @@ npx promptfoo@latest eval
 ## Expected Output
 
 The evaluation will show:
+
 - Translation quality comparisons between models
 - Similarity scores for translations
 - Pass/fail results for each assertion
@@ -58,6 +59,7 @@ The evaluation will show:
 ## Troubleshooting
 
 If you encounter connection errors:
+
 1. Verify the LiteLLM server is running: `curl http://localhost:4000/health`
 2. Check that the required models are configured in your LiteLLM server
 3. Ensure your API keys are properly set if using cloud providers

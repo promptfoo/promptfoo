@@ -129,7 +129,7 @@ providers:
   - id: litellm:claude-3-5-sonnet-20241022
     config:
       apiKey: ${ANTHROPIC_API_KEY}
-      
+
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-small
 
