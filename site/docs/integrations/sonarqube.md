@@ -7,7 +7,9 @@ sidebar_label: SonarQube
 This guide demonstrates how to integrate Promptfoo's scanning results into SonarQube, allowing red team findings to appear in your normal "Issues" view, participate in Quality Gates, and block pipelines when they breach security policies.
 
 :::info
+
 This feature is available in [Promptfoo Enterprise](/docs/enterprise/).
+
 :::
 
 ## Overview
