@@ -38,7 +38,7 @@ tests:
 
   # Test 3: Complex scene understanding
   - vars:
-      question: 'Describe this scene. What time of day does it appear to be? What's the weather like?'
+      question: "Describe this scene. What time of day does it appear to be? What's the weather like?"
       image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/320px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
     assert:
       - type: llm-rubric
