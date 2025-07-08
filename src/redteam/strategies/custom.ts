@@ -1,14 +1,14 @@
 import type { TestCase } from '../../types';
 
-export function addPlaybook(
+export function addCustom(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
-  strategyId: string = 'playbook',
+  strategyId: string = 'custom',
 ): TestCase[] {
-  // Extract variant from strategy ID (e.g., 'playbook:aggressive' -> 'aggressive')
+  // Extract variant from strategy ID (e.g., 'custom:aggressive' -> 'aggressive')
   const variant = strategyId.includes(':') ? strategyId.split(':')[1] : '';
-  const displayName = variant ? `Playbook:${variant}` : 'Playbook';
+  const displayName = variant ? `Custom:${variant}` : 'Custom';
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
@@ -16,9 +16,7 @@ export function addPlaybook(
       ...testCase,
       provider: {
         id:
-          strategyId === 'playbook'
-            ? 'promptfoo:redteam:playbook'
-            : `promptfoo:redteam:${strategyId}`,
+          strategyId === 'custom' ? 'promptfoo:redteam:custom' : `promptfoo:redteam:${strategyId}`,
         config: {
           injectVar,
           variant,

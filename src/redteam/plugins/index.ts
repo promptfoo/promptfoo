@@ -20,7 +20,6 @@ import {
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -295,7 +294,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
-  MEMORY_POISONING_PLUGIN_ID,
+  'agentic:memory-poisoning',
   'ascii-smuggling',
   'bfla',
   'bola',
