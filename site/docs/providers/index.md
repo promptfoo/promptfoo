@@ -54,7 +54,7 @@ providers:
 | [IBM BAM](./ibm-bam.md)                             | IBM's foundation models                                   | `bam:chat:ibm/granite-13b-chat-v2`                               |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                 | `jfrog:llama_3_8b_instruct`                                      |
 | [Lambda Labs](./lambdalabs.md)                      | Access Lambda Labs models via their Inference API         | `lambdalabs:model-name`                                          |
-| [LiteLLM](./litellm.md)                             | Unified interface for multiple providers                  | Compatible with OpenAI syntax                                    |
+| [LiteLLM](./litellm.md)                             | Unified interface for 100+ LLMs with embedding support    | `litellm:gpt-4`, `litellm:embedding:text-embedding-3-small`      |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                 | `mistral:open-mistral-nemo`                                      |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                         | Compatible with OpenAI syntax                                    |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                        | `openrouter:mistral/7b-instruct`                                 |
