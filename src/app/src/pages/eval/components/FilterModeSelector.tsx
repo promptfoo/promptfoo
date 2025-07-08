@@ -17,6 +17,9 @@ const BASE_OPTIONS = [
   { value: 'errors', label: 'Show errors only' },
   { value: 'different', label: 'Show different outputs' },
   { value: 'highlights', label: 'Show highlights only' },
+  { value: 'thumbs-up', label: 'Show thumbs up only' },
+  { value: 'thumbs-down', label: 'Show thumbs down only' },
+  { value: 'human', label: 'Show human-rated only' },
 ];
 
 export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
@@ -24,9 +27,11 @@ export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
   onChange,
   showDifferentOption = true,
 }) => {
-  const options = showDifferentOption
-    ? BASE_OPTIONS
-    : BASE_OPTIONS.filter((o) => o.value !== 'different');
+  const options = React.useMemo(
+    () =>
+      showDifferentOption ? BASE_OPTIONS : BASE_OPTIONS.filter((o) => o.value !== 'different'),
+    [showDifferentOption],
+  );
   return (
     <FormControl sx={{ minWidth: 180 }} size="small">
       <InputLabel id="filter-mode-label">Display</InputLabel>
