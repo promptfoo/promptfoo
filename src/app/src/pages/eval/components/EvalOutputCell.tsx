@@ -620,7 +620,7 @@ function EvalOutputCell({
   );
 
   return (
-    <div className="cell" style={cellStyle}>
+    <div id="eval-output-cell" className="cell" style={cellStyle}>
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">
