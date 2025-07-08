@@ -49,3 +49,7 @@ If you get a 401 error, check:
 
 - [Azure OpenAI Vision Docs](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/gpt-with-vision)
 - [Promptfoo Azure Provider](https://www.promptfoo.dev/docs/providers/azure/)
+
+## Image Attribution
+
+- Cat image: [Cat03.jpg](https://commons.wikimedia.org/wiki/File:Cat03.jpg) by Kgbo, CC BY-SA 4.0
