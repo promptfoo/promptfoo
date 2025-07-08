@@ -1,7 +1,7 @@
+import { PromptfooSimulatedUserProvider } from '../../providers/promptfoo';
 import { SimulatedUser, type Message } from '../../providers/simulatedUser';
 import type { ProviderResponse, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
-import { PromptfooSimulatedUserProvider } from '../../providers/promptfoo';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
 const PROVIDER_ID = 'promptfoo:redteam:persona';
@@ -40,7 +40,7 @@ export default class RedteamPersonaProvider extends SimulatedUser {
 
   // Override to use 'persona-redteam' task
   protected createUserProvider(instructions: string): PromptfooSimulatedUserProvider {
-    return new PromptfooSimulatedUserProvider({ 
+    return new PromptfooSimulatedUserProvider({
       instructions,
       task: 'persona-redteam',
       persona: this.persona,
@@ -64,4 +64,4 @@ export default class RedteamPersonaProvider extends SimulatedUser {
       guardrails: finalTargetResponse.guardrails,
     };
   }
-} 
+}

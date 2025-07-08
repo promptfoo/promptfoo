@@ -39,7 +39,9 @@ describe('addPersona', () => {
     };
     const result = addPersona(mockTestCases, 'query', config);
 
-    expect(result[0].provider?.config).toEqual({
+    expect(result[0].provider).toBeDefined();
+    expect(typeof result[0].provider).toBe('object');
+    expect((result[0].provider as any).config).toEqual({
       injectVar: 'query',
       persona: 'You are a skeptical user',
       maxTurns: 10,
@@ -60,4 +62,4 @@ describe('addPersona', () => {
     expect(result[0].metadata?.strategyId).toBe('persona');
     expect(result[1].metadata?.strategyId).toBe('persona');
   });
-}); 
+});

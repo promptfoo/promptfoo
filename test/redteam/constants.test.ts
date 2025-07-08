@@ -130,13 +130,13 @@ describe('constants', () => {
 
   it('DATASET_PLUGINS should contain expected plugins', () => {
     const expectedPlugins = [
+      'aegis',
       'beavertails',
       'cyberseceval',
       'donotanswer',
       'harmbench',
-      'toxic-chat',
-      'aegis',
       'pliny',
+      'toxic-chat',
       'unsafebench',
       'xstest',
     ];
@@ -245,9 +245,9 @@ describe('constants', () => {
   it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
     expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual([
       'camelcase',
+      'emoji',
       'morse',
       'piglatin',
-      'emoji',
     ]);
   });
 

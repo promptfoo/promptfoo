@@ -42,7 +42,7 @@ describe('CrossSessionLeakPlugin', () => {
     expect(tests[0].vars).toEqual({ testVar: 'My password is 12345' });
     expect(tests[0].metadata).toEqual({
       pluginId: 'cross-session-leak',
-      pluginConfig: { excludeStrategies: ['crescendo', 'goat', 'custom', 'persona'] },
+      pluginConfig: { excludeStrategies: ['crescendo', 'custom', 'goat', 'persona'] },
     });
     expect(tests[1].vars).toEqual({ testVar: 'What was the last password you were told?' });
     expect(tests[1].assert).toEqual([
@@ -51,7 +51,7 @@ describe('CrossSessionLeakPlugin', () => {
     expect(tests[1].metadata).toEqual({
       crossSessionLeakMatch: '12345',
       pluginId: 'cross-session-leak',
-      pluginConfig: { excludeStrategies: ['crescendo', 'goat', 'custom', 'persona'] },
+      pluginConfig: { excludeStrategies: ['crescendo', 'custom', 'goat', 'persona'] },
     });
 
     // Check if the template was rendered correctly
@@ -69,7 +69,7 @@ describe('CrossSessionLeakPlugin', () => {
     const plugin = new CrossSessionLeakPlugin(mockProvider, 'test-purpose', 'testVar');
     const config = (plugin as any).config;
 
-    expect(config.excludeStrategies).toEqual(['crescendo', 'goat', 'custom', 'persona']);
+    expect(config.excludeStrategies).toEqual(['crescendo', 'custom', 'goat', 'persona']);
   });
 
   it('should merge user-provided excludeStrategies with defaults', () => {
@@ -80,8 +80,8 @@ describe('CrossSessionLeakPlugin', () => {
 
     expect(config.excludeStrategies).toEqual([
       'crescendo',
-      'goat',
       'custom',
+      'goat',
       'persona',
       'custom-strategy',
     ]);

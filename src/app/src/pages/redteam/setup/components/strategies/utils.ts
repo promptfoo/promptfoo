@@ -16,6 +16,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   crescendo: 10,
   custom: 10,
   default: 1,
+  emoji: 1,
   gcg: 1,
   goat: 5,
   hex: 1,
@@ -30,7 +31,6 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   morse: 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
   'other-encodings': 1,
-  emoji: 1,
   pandamonium: 5,
   persona: 5,
   piglatin: 1,

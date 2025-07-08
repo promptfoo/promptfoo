@@ -298,7 +298,8 @@ export default function StrategyConfigDialog({
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Configure the persona strategy parameters. This simulates conversations with users of different personas.
+            Configure the persona strategy parameters. This simulates conversations with users of
+            different personas.
           </Typography>
 
           <TextField

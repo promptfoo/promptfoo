@@ -1,17 +1,17 @@
 // These are exposed on the frontend under the framework compliance section
 export const FRAMEWORK_COMPLIANCE_IDS = [
+  'eu:ai-act',
   'mitre:atlas',
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
-  'eu:ai-act',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom', 'persona'] as const;
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'custom', 'goat', 'persona'] as const;
 
 // Helper function to check if a strategy is a custom variant
 export const isCustomStrategy = (strategyId: string): boolean => {
@@ -24,23 +24,23 @@ export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
-  'goat',
   'custom',
+  'goat',
   'jailbreak',
   'jailbreak:tree',
-  'persona',
   'pandamonium',
+  'persona',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const DATASET_PLUGINS = [
+  'aegis',
   'beavertails',
   'cyberseceval',
   'donotanswer',
   'harmbench',
-  'toxic-chat',
-  'aegis',
   'pliny',
+  'toxic-chat',
   'unsafebench',
   'xstest',
 ] as const;
@@ -54,12 +54,12 @@ export const ADDITIONAL_STRATEGIES = [
   'citation',
   'crescendo',
   'custom',
+  'emoji',
   'gcg',
   'goat',
   'hex',
   'homoglyph',
   'image',
-  'emoji',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
@@ -80,7 +80,7 @@ export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
-  'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
+  'other-encodings': ['camelcase', 'emoji', 'morse', 'piglatin'],
 };
 
 const _ALL_STRATEGIES = [
@@ -93,16 +93,16 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
-  'multilingual',
   'best-of-n',
-  'goat',
+  'citation',
   'crescendo',
-  'pandamonium',
+  'custom',
+  'gcg',
+  'goat',
   'jailbreak',
   'jailbreak:tree',
-  'gcg',
-  'citation',
-  'custom',
+  'multilingual',
+  'pandamonium',
   'persona',
 ] as const;
 

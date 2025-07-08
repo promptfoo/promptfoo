@@ -14,11 +14,11 @@ import {
 describe('strategies constants', () => {
   it('should have correct framework compliance IDs', () => {
     expect(FRAMEWORK_COMPLIANCE_IDS).toEqual([
+      'eu:ai-act',
       'mitre:atlas',
       'nist:ai:measure',
       'owasp:api',
       'owasp:llm',
-      'eu:ai-act',
     ]);
   });
 
@@ -27,30 +27,30 @@ describe('strategies constants', () => {
   });
 
   it('should have correct multi-turn strategies', () => {
-    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'custom', 'persona']);
+    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'custom', 'goat', 'persona']);
   });
 
   it('should have correct agentic strategies', () => {
     expect(AGENTIC_STRATEGIES).toEqual([
       'crescendo',
-      'goat',
       'custom',
+      'goat',
       'jailbreak',
       'jailbreak:tree',
-      'persona',
       'pandamonium',
+      'persona',
     ]);
   });
 
   it('should have correct dataset plugins', () => {
     expect(DATASET_PLUGINS).toEqual([
+      'aegis',
       'beavertails',
       'cyberseceval',
       'donotanswer',
       'harmbench',
-      'toxic-chat',
-      'aegis',
       'pliny',
+      'toxic-chat',
       'unsafebench',
       'xstest',
     ]);
@@ -65,12 +65,12 @@ describe('strategies constants', () => {
       'citation',
       'crescendo',
       'custom',
+      'emoji',
       'gcg',
       'goat',
       'hex',
       'homoglyph',
       'image',
-      'emoji',
       'jailbreak:likert',
       'jailbreak:tree',
       'leetspeak',
@@ -93,7 +93,7 @@ describe('strategies constants', () => {
 
   it('should have correct strategy collection mappings', () => {
     expect(STRATEGY_COLLECTION_MAPPINGS).toEqual({
-      'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
+      'other-encodings': ['camelcase', 'emoji', 'morse', 'piglatin'],
     });
   });
 

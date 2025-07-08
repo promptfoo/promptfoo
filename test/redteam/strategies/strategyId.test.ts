@@ -77,8 +77,11 @@ describe('Strategy IDs', () => {
     // Simple mapping for strategy ID to expected file name
     const expectedFileNameMap: Record<string, string> = {
       base64: 'base64.ts',
+      camelcase: 'otherEncodings.ts',
       citation: 'citation.ts',
       crescendo: 'crescendo.ts',
+      custom: 'custom.ts',
+      emoji: 'otherEncodings.ts',
       gcg: 'gcg.ts',
       goat: 'goat.ts',
       hex: 'hex.ts',
@@ -91,6 +94,7 @@ describe('Strategy IDs', () => {
       morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
       pandamonium: 'pandamonium.ts',
+      persona: 'persona.ts',
       piglatin: 'otherEncodings.ts',
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',

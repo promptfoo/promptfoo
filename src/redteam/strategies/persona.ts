@@ -23,4 +23,4 @@ export function addPersona(
       strategyId: 'persona',
     },
   }));
-} 
+}

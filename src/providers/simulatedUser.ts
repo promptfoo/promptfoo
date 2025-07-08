@@ -49,7 +49,7 @@ export class SimulatedUser implements ApiProvider {
 
   // Protected method that can be overridden by subclasses to customize the user provider
   protected createUserProvider(instructions: string): PromptfooSimulatedUserProvider {
-    return new PromptfooSimulatedUserProvider({ 
+    return new PromptfooSimulatedUserProvider({
       instructions,
       // Default SimulatedUser uses 'tau' task
     });
