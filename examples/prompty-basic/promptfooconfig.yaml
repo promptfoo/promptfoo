@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Example of using Microsoft Prompty files with promptfoo
+description: Microsoft Prompty files demo
 
 prompts:
   - customer_service.prompty
@@ -9,6 +9,10 @@ prompts:
 
 providers:
   - echo
+  # Uncomment to test with real providers:
+  # - openai:o3-mini
+  # - openai:gpt-4o-mini
+  # - anthropic:claude-3-7-sonnet-20250219
 
 tests:
   - vars:

@@ -1,10 +1,16 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced Prompty features demo
+
 prompts:
   - azure_chatbot.prompty
   - image_analysis.prompty
 
 providers:
   - echo
+  # Uncomment to test with real providers:
+  # - openai:o3-mini
+  # - openai:gpt-4o-mini
+  # - anthropic:claude-3-7-sonnet-20250219
 
 tests:
   # Test for azure_chatbot.prompty

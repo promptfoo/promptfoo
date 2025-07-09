@@ -13,7 +13,7 @@ model:
   configuration:
     type: azure_openai
     azure_endpoint: ${env:AZURE_OPENAI_ENDPOINT}
-    azure_deployment: gpt-4
+    azure_deployment: gpt-4o-mini
     api_version: 2025-04-01-preview
     api_key: ${env:AZURE_OPENAI_API_KEY}
   parameters:

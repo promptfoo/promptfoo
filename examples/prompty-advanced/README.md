@@ -94,7 +94,7 @@ npx promptfoo@latest init --example prompty-advanced
 
 3. Or run with actual providers:
    ```bash
-   npx promptfoo eval --providers openai:gpt-4
+   npx promptfoo eval --providers openai:o3-mini
    ```
 
 ## Key Concepts

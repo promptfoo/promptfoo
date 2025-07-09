@@ -5,7 +5,7 @@ model:
   api: chat
   configuration:
     type: openai
-    name: gpt-4-turbo
+    name: gpt-4o-mini
   parameters:
     max_tokens: 1000
 sample:

@@ -5,6 +5,9 @@ authors:
   - Promptfoo Team
 model:
   api: chat
+  configuration:
+    type: openai
+    name: o3-mini
   parameters:
     temperature: 0.3
     max_tokens: 800
