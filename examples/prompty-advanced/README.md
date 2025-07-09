@@ -28,7 +28,7 @@ Prompty files use Nunjucks templating (Jinja2-compatible), which includes:
 
 #### Conditionals
 
-```
+```jinja
 {% if topic == "quantum computing" %}
 Quantum computing explanation...
 {% else %}
@@ -38,7 +38,7 @@ General explanation...
 
 #### Loops
 
-```
+```jinja
 {% for item in items %}
 - {{item.name}}: {{item.description}}
 {% endfor %}
@@ -46,7 +46,7 @@ General explanation...
 
 #### Variables and Filters
 
-```
+```jinja
 Hello {{name | upper}}!
 The date is {{date | date("YYYY-MM-DD")}}.
 ```
@@ -67,6 +67,14 @@ model:
     type: azure_openai
     api_key: ${env:AZURE_OPENAI_API_KEY}
     azure_endpoint: ${env:AZURE_OPENAI_ENDPOINT}
+```
+
+## Quick Start
+
+To get started with this example:
+
+```bash
+npx promptfoo@latest init --example prompty-advanced
 ```
 
 ## Running the examples

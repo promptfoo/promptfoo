@@ -343,8 +343,8 @@ Test prompt
     });
 
     // Clean up
-    delete process.env.TEST_API_KEY;
-    delete process.env.TEST_ENDPOINT;
+    process.env.TEST_API_KEY = undefined as unknown as string;
+    process.env.TEST_ENDPOINT = undefined as unknown as string;
   });
 
   it('should handle missing environment variables', async () => {

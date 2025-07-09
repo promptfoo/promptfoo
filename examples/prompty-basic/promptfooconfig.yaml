@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Example of using Microsoft Prompty files with promptfoo
 
 prompts:
@@ -24,7 +25,7 @@ tests:
       beginning: 'In the year 2150, humanity discovered'
 
   - vars:
-      task: 'Create a motivational quote about learning'
+      beginning: 'In the year 2150, humanity discovered'
     assert:
       - type: llm-rubric
         value: The completion should be creative and continue the sci-fi theme

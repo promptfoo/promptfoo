@@ -15,6 +15,16 @@ Prompty files (`.prompty`) are a standardized format for defining LLM prompts wi
 - **Sample data**: Default values for variables that can be overridden in tests
 - **Environment variables**: Secure API key management using `${env:VAR_NAME}` syntax
 
+## Required Environment Variables
+
+This example supports the following environment variables:
+
+- `OPENAI_API_KEY` - Your OpenAI API key (required for OpenAI provider examples)
+- `AZURE_OPENAI_API_KEY` - Your Azure OpenAI API key (required for Azure examples)
+- `AZURE_OPENAI_ENDPOINT` - Your Azure OpenAI endpoint URL (required for Azure examples)
+
+Set these variables in your environment or create a `.env` file in the project root.
+
 ## Template Engine
 
 Prompty files use **Nunjucks** templating (Jinja2-compatible) for variable substitution. This is the standard templating engine specified by Microsoft for the Prompty format.
@@ -26,6 +36,16 @@ Prompty files use **Nunjucks** templating (Jinja2-compatible) for variable subst
 - `completion_example.prompty` - Simple completion API example
 - `env_example.prompty` - Demonstrates environment variable usage
 - `promptfooconfig.yaml` - Configuration file that loads and tests the prompty files
+
+## Quick Start
+
+To create a new project based on this example:
+
+```bash
+npx promptfoo@latest init --example prompty-basic
+cd prompty-basic
+npx promptfoo eval
+```
 
 ## Running the example
 

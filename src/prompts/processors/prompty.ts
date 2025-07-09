@@ -115,7 +115,8 @@ function parseChatContent(content: string): ParsedMessage[] {
 
     if ((roles.includes(role) || role === 'assistant') && messageContent) {
       // Check for images in content
-      const imageRegex = /!\[(.*?)\]\((.*?)\)/g;
+      // Handle URLs with parentheses or other special characters
+      const imageRegex = /!\[(.*?)\]\((<[^>]+>|[^\s)]+(?:\([^\s)]+\)[^\s)]*)?)\)/g;
       const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
       let lastIndex = 0;
       let match;
