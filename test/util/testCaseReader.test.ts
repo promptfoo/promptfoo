@@ -560,11 +560,9 @@ describe('readStandaloneTestsFile', () => {
     const config = { dataset: 'demo' };
     const result = await readStandaloneTestsFile('test.py', '', config);
 
-    expect(runPython).toHaveBeenCalledWith(
-      expect.stringContaining('test.py'),
-      'generate_tests',
-      [config],
-    );
+    expect(runPython).toHaveBeenCalledWith(expect.stringContaining('test.py'), 'generate_tests', [
+      config,
+    ]);
     expect(result).toEqual(pythonResult);
   });
 
@@ -596,11 +594,9 @@ describe('readStandaloneTestsFile', () => {
     const config = { data: 'file://config.json' };
     const result = await readStandaloneTestsFile('test.py', '', config);
 
-    expect(runPython).toHaveBeenCalledWith(
-      expect.stringContaining('test.py'),
-      'generate_tests',
-      [{ data: { foo: 'bar' } }],
-    );
+    expect(runPython).toHaveBeenCalledWith(expect.stringContaining('test.py'), 'generate_tests', [
+      { data: { foo: 'bar' } },
+    ]);
     expect(result).toEqual(pythonResult);
   });
 
@@ -1051,9 +1047,7 @@ describe('readTests', () => {
 
     const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
-    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(
-      'huggingface://datasets/example/dataset',
-    );
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
     expect(result).toEqual(mockDataset);
   });
 
@@ -1156,11 +1150,9 @@ describe('readTests', () => {
     const config = { foo: 'bar' };
     const result = await readTests([{ path: 'test.py', config }]);
 
-    expect(runPython).toHaveBeenCalledWith(
-      expect.stringContaining('test.py'),
-      'generate_tests',
-      [config],
-    );
+    expect(runPython).toHaveBeenCalledWith(expect.stringContaining('test.py'), 'generate_tests', [
+      config,
+    ]);
     expect(result).toEqual(pythonTests);
   });
 
@@ -1383,9 +1375,7 @@ describe('loadTestsFromGlob', () => {
 
     const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
-    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(
-      'huggingface://datasets/example/dataset',
-    );
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
     expect(result).toEqual(mockDataset);
   });
 });
