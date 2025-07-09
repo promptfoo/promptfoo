@@ -1,26 +1,13 @@
-import React from 'react';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { Box, Checkbox, Chip, IconButton, Paper, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
   AGENTIC_STRATEGIES,
+  CONFIGURABLE_STRATEGIES,
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
 } from '@promptfoo/redteam/constants';
 import type { StrategyCardData } from './types';
-
-const CONFIGURABLE_STRATEGIES = [
-  'multilingual',
-  'best-of-n',
-  'goat',
-  'crescendo',
-  'custom',
-  'pandamonium',
-  'jailbreak',
-  'jailbreak:tree',
-  'gcg',
-  'citation',
-] as const;
 
 interface StrategyItemProps {
   strategy: StrategyCardData;

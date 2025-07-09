@@ -20,6 +20,7 @@ import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
+import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
@@ -119,6 +120,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'mischievous-user',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
+      const newTestCases = addMischievousUser(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} mischievous user test cases`);
       return newTestCases;
     },
   },
