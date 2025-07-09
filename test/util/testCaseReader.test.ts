@@ -439,27 +439,37 @@ describe('readStandaloneTestsFile', () => {
     jest.dontMock('xlsx');
   });
 
-  it.skip('should throw helpful error when xlsx module is not installed', async () => {
-    // Create a mock that throws an error when trying to import xlsx
-    jest.doMock('../../src/util/xlsx', () => ({
-      parseXlsxFile: jest.fn().mockImplementation(async () => {
-        const error = new Error("Cannot find module 'xlsx'");
-        error.message = "Cannot find module 'xlsx'";
-        throw error;
-      }),
-    }));
-
-    // Import the module with the mocked xlsx
-    const { readStandaloneTestsFile: readStandaloneTestsFileWithoutXlsx } = await import(
-      '../../src/util/testCaseReader'
-    );
-
-    await expect(readStandaloneTestsFileWithoutXlsx('test.xlsx')).rejects.toThrow(
-      /xlsx is not installed.*npm install xlsx/s
-    );
-
-    // Clean up the mock
-    jest.dontMock('../../src/util/xlsx');
+  it('should throw helpful error when xlsx module is not installed', async () => {
+    // Create a test that validates the error message is properly formatted
+    // when the xlsx module cannot be found
+    const mockError = new Error("Cannot find module 'xlsx'");
+    
+    // Mock fs.readFileSync to avoid actual file read
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('mock content'));
+    
+    // Create a new instance with mocked xlsx module
+    jest.doMock('xlsx', () => {
+      throw mockError;
+    });
+    
+    // Clear module cache to ensure fresh import
+    jest.resetModules();
+    
+    try {
+      // Import the module which will attempt to import xlsx
+      const { parseXlsxFile } = await import('../../src/util/xlsx');
+      
+      // Attempt to parse a file, which should trigger the error
+      await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
+        'xlsx is not installed. Please install it with: npm install xlsx\n' +
+        'Note: xlsx is an optional peer dependency for reading Excel files.'
+      );
+    } finally {
+      // Clean up
+      jest.dontMock('xlsx');
+      jest.resetModules();
+      jest.restoreAllMocks();
+    }
   });
 
   it('should handle Python files with default function name', async () => {
