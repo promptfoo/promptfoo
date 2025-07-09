@@ -194,6 +194,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     logger.debug(`Azure API response (status ${httpStatus}): ${JSON.stringify(data)}`);
 
+    // Inputs and outputs can be flagged by content filters.
+    // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
     let flaggedInput = false;
     let flaggedOutput = false;
     let output = '';
@@ -231,7 +233,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         output = message.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
-        // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter#scenario-content-filtering-system-doesnt-run-on-the-completion.
         if (choice.content_filter_results.error) {
           const { code, message } = choice.content_filter_results.error;
           logger.warn(
