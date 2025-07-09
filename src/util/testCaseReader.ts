@@ -452,3 +452,5 @@ export async function readTests(
 
   return ret;
 }
+
+export { loadTestWithVars };
