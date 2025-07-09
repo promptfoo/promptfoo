@@ -13,7 +13,6 @@ import {
   ALIASED_PLUGINS,
   ALIASED_PLUGIN_MAPPINGS,
 } from '../../../src/redteam/constants/frameworks';
-import { MEMORY_POISONING_PLUGIN_ID } from '../../../src/redteam/plugins/agentic/constants';
 
 describe('Framework Constants', () => {
   describe('FRAMEWORK_NAMES', () => {
@@ -74,7 +73,7 @@ describe('Framework Constants', () => {
   describe('OWASP_AGENTIC_REDTEAM_MAPPING', () => {
     it('should have correct mapping for memory poisoning', () => {
       expect(OWASP_AGENTIC_REDTEAM_MAPPING['owasp:agentic:t01'].plugins).toContain(
-        MEMORY_POISONING_PLUGIN_ID,
+        'agentic:memory-poisoning',
       );
       expect(OWASP_AGENTIC_REDTEAM_MAPPING['owasp:agentic:t01'].strategies).toHaveLength(0);
     });

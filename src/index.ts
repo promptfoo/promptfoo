@@ -6,6 +6,7 @@ import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { readProviderPromptMap, processPrompts } from './prompts';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
+import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
@@ -17,6 +18,7 @@ import { Strategies } from './redteam/strategies';
 import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
 import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import { maybeLoadFromExternalFile } from './util/file';
 import { readTests } from './util/testCaseReader';
 
 export * from './types';
@@ -39,8 +41,15 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
+  // Resolve defaultTest from file reference if needed
+  let resolvedDefaultTest = testSuite.defaultTest;
+  if (typeof testSuite.defaultTest === 'string' && testSuite.defaultTest.startsWith('file://')) {
+    resolvedDefaultTest = await maybeLoadFromExternalFile(testSuite.defaultTest);
+  }
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
+    defaultTest: resolvedDefaultTest as TestSuite['defaultTest'],
     scenarios: testSuite.scenarios as Scenario[],
     providers: loadedProviders,
     tests: await readTests(testSuite.tests),
@@ -52,7 +61,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
-  if (constructedTestSuite.defaultTest?.options?.provider) {
+  if (
+    typeof constructedTestSuite.defaultTest === 'object' &&
+    constructedTestSuite.defaultTest?.options?.provider
+  ) {
     constructedTestSuite.defaultTest.options.provider = await resolveProvider(
       constructedTestSuite.defaultTest.options.provider,
       providerMap,
@@ -130,14 +142,15 @@ const redteam = {
     Plugin: RedteamPluginBase,
     Grader: RedteamGraderBase,
   },
+  generate: doGenerateRedteam,
+  run: doRedteamRun,
 };
 
-export { assertions, cache, doRedteamRun, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
 
 export default {
   assertions,
   cache,
-  doRedteamRun,
   evaluate,
   guardrails,
   loadApiProvider,

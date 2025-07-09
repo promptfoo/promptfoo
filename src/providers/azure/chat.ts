@@ -230,7 +230,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
         // Handle structured output
-        output = message.content;
+        output = message?.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
         if (choice.content_filter_results.error) {

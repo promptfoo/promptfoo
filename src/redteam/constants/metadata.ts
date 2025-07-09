@@ -1,9 +1,8 @@
-import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+  ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
@@ -22,6 +21,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
+  custom: 'User-defined multi-turn conversation strategy with custom instructions',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access': 'Tests for exposed debugging interfaces and commands',
@@ -79,6 +79,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
+  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
@@ -141,7 +142,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
+  ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
@@ -159,6 +160,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   competitors: 'Competitors',
   contracts: 'Unauthorized Commitments',
   crescendo: 'Multi-Turn Crescendo',
+  custom: 'Custom',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
   'debug-access': 'Debug Interface Exposure',
@@ -249,6 +251,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
+  'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
@@ -281,7 +284,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
-  [MEMORY_POISONING_PLUGIN_ID]: Severity.High,
+  ['agentic:memory-poisoning']: Severity.High,
   aegis: Severity.Medium,
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
@@ -401,7 +404,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii',
     'prompt-extraction',
 
-    MEMORY_POISONING_PLUGIN_ID,
+    'agentic:memory-poisoning',
   ],
 
   'Compliance & Legal': [
@@ -500,7 +503,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
+  ['agentic:memory-poisoning']: 'AgenticMemoryPoisoning',
   aegis: 'Aegis',
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
@@ -603,7 +606,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+  ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
@@ -728,6 +731,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   emoji: 'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
+  custom: 'User-defined multi-turn conversation strategy with custom instructions',
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
@@ -741,6 +745,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
+  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse:
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
@@ -765,6 +770,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   emoji: 'Emoji Smuggling',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
+  custom: 'Custom',
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
@@ -777,6 +783,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
+  'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
   'other-encodings': 'Collection of Text Encodings',

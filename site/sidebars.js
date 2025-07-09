@@ -158,6 +158,7 @@ const redTeamSidebar = [
           'red-team/strategies/multi-turn',
           'red-team/strategies/goat',
           'red-team/strategies/pandamonium',
+          'red-team/strategies/mischievous-user',
         ],
       },
       {
@@ -184,7 +185,7 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Custom',
         collapsed: true,
-        items: ['red-team/strategies/custom'],
+        items: ['red-team/strategies/custom-strategy', 'red-team/strategies/custom'],
       },
       {
         type: 'category',
