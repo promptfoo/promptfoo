@@ -30,7 +30,7 @@ export async function doRemoteGrading(
     );
 
     logger.debug(
-      `Got remote grading result: status=${status}, statusText=${statusText}, data=${JSON.stringify(data)}`,
+      `Remote grading result: status=${status}, statusText=${statusText}, data=${JSON.stringify(data)}`,
     );
 
     if (status !== 200) {
@@ -40,8 +40,8 @@ export async function doRemoteGrading(
     }
     const { result } = data as { result: GradingResult };
 
-    if (!result) {
-      throw new Error(`Remote grading failed: ${JSON.stringify(data)}`);
+    if (!result || result.pass === undefined) {
+      throw new Error(`Remote grading failed. Response data is invalid: ${JSON.stringify(data)}`);
     }
 
     return {
