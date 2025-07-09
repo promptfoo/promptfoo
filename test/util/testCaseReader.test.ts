@@ -443,26 +443,26 @@ describe('readStandaloneTestsFile', () => {
     // Create a test that validates the error message is properly formatted
     // when the xlsx module cannot be found
     const mockError = new Error("Cannot find module 'xlsx'");
-    
+
     // Mock fs.readFileSync to avoid actual file read
     jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('mock content'));
-    
+
     // Create a new instance with mocked xlsx module
     jest.doMock('xlsx', () => {
       throw mockError;
     });
-    
+
     // Clear module cache to ensure fresh import
     jest.resetModules();
-    
+
     try {
       // Import the module which will attempt to import xlsx
       const { parseXlsxFile } = await import('../../src/util/xlsx');
-      
+
       // Attempt to parse a file, which should trigger the error
       await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
         'xlsx is not installed. Please install it with: npm install xlsx\n' +
-        'Note: xlsx is an optional peer dependency for reading Excel files.'
+          'Note: xlsx is an optional peer dependency for reading Excel files.',
       );
     } finally {
       // Clean up
