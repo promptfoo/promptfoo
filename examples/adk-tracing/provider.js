@@ -43,7 +43,7 @@ class ADKProvider {
 
       return context.with(activeContext, async () => {
         const span = tracer.startSpan('adk_provider.call');
-        
+
         try {
           span.setAttributes({
             'provider.type': 'adk',
@@ -62,7 +62,7 @@ class ADKProvider {
 
           span.setStatus({ code: SpanStatusCode.OK });
           span.setAttribute('response.length', result.length);
-          
+
           return { output: result };
         } catch (error) {
           span.recordException(error);
@@ -84,10 +84,7 @@ class ADKProvider {
 
   async runPythonAgent(prompt, traceContext) {
     return new Promise((resolve, reject) => {
-      const args = [
-        this.agentPath,
-        '--prompt', prompt,
-      ];
+      const args = [this.agentPath, '--prompt', prompt];
 
       // Add trace context if available
       if (traceContext.traceparent) {
@@ -137,4 +134,4 @@ class ADKProvider {
   }
 }
 
-module.exports = ADKProvider; 
+module.exports = ADKProvider;

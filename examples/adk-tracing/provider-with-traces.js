@@ -34,12 +34,12 @@ class MockADKProvider {
     // Extract trace context from promptfoo
     if (promptfooContext.traceparent) {
       const matches = promptfooContext.traceparent.match(
-        /^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$/
+        /^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$/,
       );
 
       if (matches) {
         const [, version, traceId, parentId, traceFlags] = matches;
-        
+
         // Create parent context
         const parentCtx = trace.setSpanContext(context.active(), {
           traceId,
@@ -65,7 +65,7 @@ class MockADKProvider {
         'prompt.length': prompt.length,
         'evaluation.id': promptfooContext.evaluationId || 'unknown',
         'test_case.id': promptfooContext.testCaseId || 'unknown',
-      }
+      },
     });
 
     try {
@@ -83,7 +83,7 @@ class MockADKProvider {
         attributes: {
           'agent.type': 'research',
           'model.name': 'gemini-2.5-flash',
-        }
+        },
       });
 
       // Document retrieval
@@ -117,7 +117,7 @@ class MockADKProvider {
         parent: span,
         attributes: {
           'agent.type': 'fact_checker',
-        }
+        },
       });
 
       const verifySpan = tracer.startSpan('verify_claims', {
@@ -143,7 +143,7 @@ class MockADKProvider {
         parent: span,
         attributes: {
           'agent.type': 'summary',
-        }
+        },
       });
 
       const generateSpan = tracer.startSpan('generate_summary', {
@@ -211,13 +211,13 @@ Conclusion: AGI safety research is progressing alongside technical development, 
   async _untracedCallApi(prompt) {
     // Simple response without tracing
     return {
-      output: 'Mock response without tracing'
+      output: 'Mock response without tracing',
     };
   }
 
   async _sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
-module.exports = MockADKProvider; 
+module.exports = MockADKProvider;

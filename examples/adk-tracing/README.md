@@ -17,12 +17,14 @@ This example demonstrates how to use OpenTelemetry tracing with Google's Agent D
 ## Overview
 
 This example showcases:
+
 - A multi-agent ADK system with specialized agents
 - OpenTelemetry instrumentation for each agent's operations
 - Trace visualization in promptfoo's web UI
 - Assertions based on trace data (span counts, durations, errors)
 
 The example implements a research assistant system with:
+
 1. **Coordinator Agent** - Routes queries to specialized agents
 2. **Research Agent** - Performs document retrieval and analysis
 3. **Fact Checker Agent** - Verifies information accuracy
@@ -35,16 +37,18 @@ The example implements a research assistant system with:
 1. **Python 3.9+** with pip
 2. **Google AI Studio API Key** (for Gemini models)
 3. **Environment Variables**:
+
    ```bash
    # Required
    export GOOGLE_API_KEY=your-google-ai-studio-api-key
    ```
-   
+
    You can get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 ## Installation
 
 1. Install Python dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -85,7 +89,7 @@ class CoordinatorAgent:
     def __init__(self):
         self.client = genai.Client()  # Uses Google AI Studio
         self.model = self.client.models.get("gemini-2.5-flash")
-        
+
     async def process(self, query: str, trace_context: dict):
         # Agent logic with tracing
         ...
@@ -104,7 +108,7 @@ tracer = trace.get_tracer(__name__)
 async def process_with_tracing(self, query: str, context: dict):
     # Extract parent trace context
     parent_ctx = extract_trace_context(context)
-    
+
     with tracer.start_as_current_span(
         "research_agent.process",
         context=parent_ctx,
@@ -119,15 +123,15 @@ async def process_with_tracing(self, query: str, context: dict):
             with tracer.start_span("retrieve_documents") as retrieve_span:
                 documents = await self.retrieve_docs(query)
                 retrieve_span.set_attribute("documents.count", len(documents))
-            
+
             # Analyze content
             with tracer.start_span("analyze_content") as analyze_span:
                 analysis = await self.analyze(documents)
                 analyze_span.set_attribute("analysis.score", analysis.score)
-            
+
             span.set_status(Status(StatusCode.OK))
             return analysis
-            
+
         except Exception as e:
             span.record_exception(e)
             span.set_status(Status(StatusCode.ERROR, str(e)))
@@ -148,9 +152,9 @@ class ADKProvider {
     const result = await this.runPythonAgent(prompt, {
       traceparent: context.traceparent,
       evaluationId: context.evaluationId,
-      testCaseId: context.testCaseId
+      testCaseId: context.testCaseId,
     });
-    
+
     return { output: result };
   }
 }
@@ -167,14 +171,14 @@ defaultTest:
     - type: trace-span-count
       value:
         pattern: '*_agent.process'
-        min: 3  # Coordinator, Research, Summary
-    
+        min: 3 # Coordinator, Research, Summary
+
     # Monitor retrieval performance
     - type: trace-span-duration
       value:
         pattern: 'retrieve_documents'
-        max: 500  # Max 500ms for document retrieval
-    
+        max: 500 # Max 500ms for document retrieval
+
     # No errors allowed
     - type: trace-error-spans
       value:
@@ -186,21 +190,24 @@ defaultTest:
 There are two configurations available:
 
 1. **Simple configuration** (recommended for testing):
+
    ```bash
    npm run local -- eval -c examples/adk-tracing/promptfooconfig-simple.yaml
    ```
 
 2. **Full configuration** with advanced trace assertions:
+
    ```bash
    npm run local -- eval -c examples/adk-tracing/promptfooconfig.yaml
    ```
 
 3. **View results and traces**:
+
    ```bash
    npm run local -- view
    ```
 
-3. **In the web UI**:
+4. **In the web UI**:
    - Click on any test result
    - Look for the magnifying glass (🔎) icon
    - Scroll to "Trace Timeline" to see the multi-agent execution flow
@@ -298,4 +305,4 @@ assert:
 - [ADK Documentation](https://cloud.google.com/agent-builder/docs/adk)
 - [promptfoo Tracing Guide](https://promptfoo.dev/docs/configuration/tracing)
 - [OpenTelemetry Python](https://opentelemetry.io/docs/languages/python/)
-- [Google AI Studio](https://aistudio.google.com/) 
+- [Google AI Studio](https://aistudio.google.com/)

@@ -37,28 +37,28 @@ tests:
                              output.toLowerCase().includes('development') ||
                              output.toLowerCase().includes('application');
           return hasFindings ? 'pass' : 'Response lacks research content';
-      
+
       # Trace assertions
       - type: trace-span-count
         value:
           pattern: 'coordinator_agent.process'
           min: 1
           max: 1
-      
+
       - type: trace-span-count
         value:
           pattern: 'research_agent.process'
           min: 1
-      
+
       - type: trace-span-count
         value:
           pattern: 'retrieve_documents'
           min: 1
-      
+
       - type: trace-span-duration
         value:
           pattern: 'coordinator_agent.process'
-          max: 5000  # 5 seconds max for entire workflow
+          max: 5000 # 5 seconds max for entire workflow
 
   - vars:
       topic: 'renewable energy storage technologies'
@@ -76,12 +76,12 @@ tests:
           2. Recent developments or breakthroughs
           3. Fact-checked information
           Score 1 if all criteria are met, 0 otherwise.
-      
+
       # Same trace assertions as above
       - type: trace-span-count
         value:
           pattern: '*_agent.process'
-          min: 3  # At least coordinator, research, and one other agent
+          min: 3 # At least coordinator, research, and one other agent
 
   - vars:
       topic: 'artificial general intelligence safety'
@@ -92,13 +92,13 @@ tests:
       # Content validation
       - type: contains-any
         value: ['AGI', 'artificial general intelligence', 'AI safety']
-      
+
       # Ensure fact checking occurred
       - type: trace-span-count
         value:
           pattern: 'fact_checker_agent.process'
           min: 1
-      
+
       - type: trace-span-count
         value:
           pattern: 'verify_claims'
@@ -111,23 +111,23 @@ defaultTest:
     - type: trace-span-duration
       value:
         pattern: 'retrieve_documents'
-        max: 1000  # Document retrieval should be fast
-    
+        max: 1000 # Document retrieval should be fast
+
     - type: trace-span-duration
       value:
         pattern: '*'
         percentile: 95
         max: 2000
-      weight: 0  # Metric only, won't fail tests
+      weight: 0 # Metric only, won't fail tests
       metric: p95_span_duration
-    
+
     # Error monitoring
     - type: trace-error-spans
       value:
-        max_count: 0  # No errors allowed
-    
+        max_count: 0 # No errors allowed
+
     # Ensure summary is always generated
     - type: trace-span-count
       value:
         pattern: 'summary_agent.process'
-        min: 1 
+        min: 1

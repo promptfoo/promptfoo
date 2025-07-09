@@ -32,7 +32,7 @@ tests:
         value: quantum
       - type: contains
         value: Executive Summary
-      
+
       # Basic trace assertion - just check that we have some spans
       - type: javascript
         value: |
@@ -40,7 +40,7 @@ tests:
           if (!context.trace || !context.trace.spans) {
             return 'No trace data available';
           }
-          
+
           const spanCount = context.trace.spans.length;
           if (spanCount > 0) {
             return { pass: true, score: 1, reason: `Found ${spanCount} spans in trace` };
@@ -54,10 +54,10 @@ defaultTest:
     # Content validation
     - type: contains
       value: 'Verification: All claims have been fact-checked'
-    
+
     # Check response format
     - type: javascript
       value: |
         const hasMainPoints = output.includes('Main Points:');
         const hasConclusion = output.includes('Conclusion:');
-        return hasMainPoints && hasConclusion; 
+        return hasMainPoints && hasConclusion;
