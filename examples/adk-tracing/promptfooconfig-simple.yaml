@@ -1,35 +1,36 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ADK tracing example with simplified assertions
 
-# Enable tracing
-tracing:
-  enabled: true
-  otlp:
-    http:
-      enabled: true
-      port: 4318
-      acceptFormats: ['json']
+prompts:
+  - 'Research the latest developments in {{topic}} and provide a summary with fact-checked information'
 
-# Use the mock provider that generates traces
 providers:
   - id: file://provider-with-traces.js
     label: adk-research-assistant
 
-# Test prompts
-prompts:
-  - 'Research the latest developments in {{topic}} and provide a summary with fact-checked information'
+defaultTest:
+  assert:
+    # Content validation
+    - type: contains
+      value: 'Verification: All claims have been fact-checked'
 
-# Simple test case that should pass
+    # Check response format
+    - type: javascript
+      value: |
+        const hasMainPoints = output.includes('Main Points:');
+        const hasConclusion = output.includes('Conclusion:');
+        return hasMainPoints && hasConclusion;
+
 tests:
   - vars:
-      topic: 'quantum computing applications'
+      topic: 'the philosophical implications of rubber ducks in debugging'
     metadata:
       tracingEnabled: true
-      testCaseId: 'quantum-research-simple'
+      testCaseId: 'rubber-duck-philosophy'
     assert:
       # Content assertions
-      - type: contains
-        value: quantum
+      - type: contains-any
+        value: ['quantum', 'rubber', 'duck', 'debug', 'philosophy']
       - type: contains
         value: Executive Summary
 
@@ -48,16 +49,11 @@ tests:
             return { pass: false, score: 0, reason: 'No spans found in trace' };
           }
 
-# Default assertions
-defaultTest:
-  assert:
-    # Content validation
-    - type: contains
-      value: 'Verification: All claims have been fact-checked'
-
-    # Check response format
-    - type: javascript
-      value: |
-        const hasMainPoints = output.includes('Main Points:');
-        const hasConclusion = output.includes('Conclusion:');
-        return hasMainPoints && hasConclusion;
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json']

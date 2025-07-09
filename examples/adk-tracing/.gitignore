@@ -1,25 +1,29 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
+# Environment files
 .env
+.env.local
 
-# Node.js
+# Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+venv/
+__pycache__/
+*.pyc
 
-# IDE
+# promptfoo outputs
+output/
+.promptfoo/
+promptfoo-*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db 
+# Build artifacts
+dist/
+build/
+*.egg-info/ 

@@ -1,25 +1,40 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ADK multi-agent system with OpenTelemetry tracing
 
-# Enable tracing
-tracing:
-  enabled: true
-  otlp:
-    http:
-      enabled: true
-      port: 4318
-      acceptFormats: ['json']
+prompts:
+  - 'Research the latest developments in {{topic}} and provide a summary with fact-checked information'
 
-# Use our custom ADK provider with mock traces
 providers:
   - id: file://provider-with-traces.js
     label: adk-research-assistant
 
-# Test prompts for the research assistant
-prompts:
-  - 'Research the latest developments in {{topic}} and provide a summary with fact-checked information'
+defaultTest:
+  assert:
+    # Performance monitoring
+    - type: trace-span-duration
+      value:
+        pattern: 'retrieve_documents'
+        max: 1000 # Document retrieval should be fast
 
-# Test cases with tracing enabled
+    - type: trace-span-duration
+      value:
+        pattern: '*'
+        percentile: 95
+        max: 2000
+      weight: 0 # Metric only, won't fail tests
+      metric: p95_span_duration
+
+    # Error monitoring
+    - type: trace-error-spans
+      value:
+        max_count: 0 # No errors allowed
+
+    # Ensure summary is always generated
+    - type: trace-span-count
+      value:
+        pattern: 'summary_agent.process'
+        min: 1
+
 tests:
   - vars:
       topic: 'quantum computing applications'
@@ -104,30 +119,11 @@ tests:
           pattern: 'verify_claims'
           min: 1
 
-# Default assertions for all tests
-defaultTest:
-  assert:
-    # Performance monitoring
-    - type: trace-span-duration
-      value:
-        pattern: 'retrieve_documents'
-        max: 1000 # Document retrieval should be fast
-
-    - type: trace-span-duration
-      value:
-        pattern: '*'
-        percentile: 95
-        max: 2000
-      weight: 0 # Metric only, won't fail tests
-      metric: p95_span_duration
-
-    # Error monitoring
-    - type: trace-error-spans
-      value:
-        max_count: 0 # No errors allowed
-
-    # Ensure summary is always generated
-    - type: trace-span-count
-      value:
-        pattern: 'summary_agent.process'
-        min: 1
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json']
