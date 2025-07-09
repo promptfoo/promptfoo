@@ -49,7 +49,6 @@ import {
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
 import { createLambdaLabsProvider } from './lambdalabs';
-import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
   LocalAiChatProvider,
@@ -603,8 +602,11 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
-      return new LiteLLMProvider(modelName, providerOptions);
+      const { createLiteLLMProvider } = await import('./litellm');
+      return createLiteLLMProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
