@@ -847,6 +847,10 @@ export function evalCommand(
         return;
       }
       if (command.args.length > 0) {
+        if (command.args[0] === 'help') {
+          evalCmd.help();
+          return;
+        }
         logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
 

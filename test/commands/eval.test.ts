@@ -81,6 +81,16 @@ describe('evalCommand', () => {
     expect(cmd.description()).toBe('Evaluate prompts');
   });
 
+  it('should open help when called with help argument', async () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpSpy = jest.spyOn(cmd, 'help').mockImplementation(() => {});
+
+    await program.parseAsync(['node', 'test', 'eval', 'help']);
+
+    expect(helpSpy).toHaveBeenCalledWith();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it('should handle --no-cache option', async () => {
     const cmdObj = { cache: false };
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
