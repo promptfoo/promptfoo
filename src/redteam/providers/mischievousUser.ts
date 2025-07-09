@@ -12,6 +12,9 @@ type Config = {
 };
 
 export default class RedteamMischievousUserProvider extends SimulatedUser {
+  // Cloud task:
+  readonly taskId: string = 'mischievous-user-redteam';
+
   constructor(config: Config) {
     invariant(config.injectVar, 'Expected injectVar to be set');
 
@@ -27,10 +30,6 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
 
   id() {
     return PROVIDER_ID;
-  }
-
-  get taskId() {
-    return 'mischievous-user-redteam';
   }
 
   serializeOutput(

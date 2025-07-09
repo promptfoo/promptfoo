@@ -36,6 +36,12 @@ export class SimulatedUser implements ApiProvider {
   private readonly rawInstructions: string;
   private readonly stateful: boolean;
 
+  /**
+   * Because the SimulatedUser is inherited by the RedteamMischievousUserProvider, and different
+   * Cloud tasks are used for each, the taskId needs to be explicitly defined/scoped.
+   */
+  readonly taskId: string = 'tau';
+
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
@@ -47,18 +53,11 @@ export class SimulatedUser implements ApiProvider {
     return this.identifier;
   }
 
-  /**
-   * Non-Redteam SimulatedUserProvider uses the 'tau' task.
-   */
-  get taskId() {
-    return 'tau';
-  }
-
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
   ): Promise<Message[]> {
-    logger.debug('[SimulatedUser] Sending message to simulated user (tau) provider');
+    logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
       return {
@@ -108,6 +107,7 @@ export class SimulatedUser implements ApiProvider {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
+
     const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
