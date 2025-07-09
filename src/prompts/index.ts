@@ -19,6 +19,7 @@ import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
 import { processMarkdownFile } from './processors/markdown';
+import { processPromptyFile } from './processors/prompty';
 import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
@@ -163,6 +164,9 @@ export async function processPrompt(
   }
   if (extension === '.md') {
     return processMarkdownFile(filePath, prompt);
+  }
+  if (extension === '.prompty') {
+    return processPromptyFile(filePath, prompt);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);

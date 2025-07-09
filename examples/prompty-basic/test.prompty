@@ -1,0 +1,13 @@
+---
+name: Test Prompty
+description: A simple test prompty
+model:
+  api: chat
+sample:
+  name: World
+---
+system:
+You are a helpful assistant.
+
+user:
+Hello {{name}}! 

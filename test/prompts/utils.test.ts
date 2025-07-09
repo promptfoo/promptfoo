@@ -118,6 +118,13 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('{{ variable | filter }}')).toBe(false);
     expect(maybeFilePath('Text with {{ variable.attribute }} in it.')).toBe(false);
   });
+
+  it('identifies .prompty files', () => {
+    expect(maybeFilePath('prompt.prompty')).toBe(true);
+    expect(maybeFilePath('file://prompt.prompty')).toBe(true);
+    expect(maybeFilePath('/path/to/prompt.prompty')).toBe(true);
+    expect(maybeFilePath('prompt.prompty:functionName')).toBe(true);
+  });
 });
 
 describe('normalizeInput', () => {

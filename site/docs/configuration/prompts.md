@@ -267,6 +267,161 @@ prompt,label
 "Translate to German: {{text}}","German Translation"
 ```
 
+## Prompty Files (Microsoft Format)
+
+Promptfoo supports Microsoft's Prompty format (`.prompty` files), which combines metadata, model configuration, and prompt content in a single file:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://customer_service.prompty
+  - file://technical_support.prompty
+```
+
+### Basic Prompty Example
+
+```prompty title="customer_service.prompty"
+---
+name: Customer Service Assistant
+description: Handles customer inquiries
+authors:
+  - John Doe
+model:
+  api: chat
+  configuration:
+    type: openai
+    name: gpt-4
+  parameters:
+    temperature: 0.7
+    max_tokens: 1000
+sample:
+  customerName: Alice
+  product: Widget Pro
+---
+system:
+You are a friendly customer service representative for {{company}}.
+Always be helpful and professional.
+
+user:
+Hello {{customerName}}, how can I help you with your {{product}} today?
+```
+
+### Chat vs Completion API
+
+Prompty files support different API types:
+
+#### Chat API (default)
+
+Uses role-based sections (system, user, assistant, function):
+
+```prompty
+---
+model:
+  api: chat
+---
+system:
+You are an AI assistant.
+
+user:
+{{question}}
+```
+
+#### Completion API
+
+Uses plain text without roles:
+
+```prompty
+---
+model:
+  api: completion
+---
+Complete the following text: {{prompt}}
+```
+
+### Model Configuration
+
+Prompty supports various model providers:
+
+#### Azure OpenAI
+
+```prompty
+---
+model:
+  configuration:
+    type: azure_openai
+    azure_endpoint: ${env:AZURE_OPENAI_ENDPOINT}
+    azure_deployment: gpt-4
+    api_version: 2024-02-01
+---
+```
+
+#### OpenAI
+
+```prompty
+---
+model:
+  configuration:
+    type: openai
+    name: gpt-4
+    organization: my-org
+---
+```
+
+### Sample Data
+
+Prompty files can include sample data that serves as default values for variables:
+
+```prompty
+---
+sample:
+  topic: artificial intelligence
+  audience: beginners
+---
+user:
+Explain {{topic}} to {{audience}}.
+```
+
+When running tests, the sample data is used unless overridden by test case variables.
+
+### Multi-turn Conversations
+
+Create conversations with multiple turns:
+
+```prompty
+---
+name: Math Tutor
+---
+system:
+You are a patient math tutor.
+
+user:
+What is calculus?
+
+assistant:
+Calculus is a branch of mathematics that deals with rates of change and accumulation.
+
+user:
+Can you give me an example?
+```
+
+### Images in Prompts
+
+Prompty supports inline images using markdown syntax:
+
+```prompty
+---
+name: Image Analysis
+---
+user:
+Please analyze this image: ![Product](product.jpg)
+What do you see?
+```
+
+### Advanced Features
+
+- **Template Processing**: Uses Nunjucks templating (same as other promptfoo formats)
+- **Configuration Merging**: Model parameters are merged with provider configurations
+- **Multiple Prompts**: Use glob patterns to load multiple prompty files: `file://prompts/*.prompty`
+
 ## Advanced Features
 
 ### Custom Nunjucks Filters

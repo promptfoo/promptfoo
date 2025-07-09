@@ -13,4 +13,8 @@ describe('VALID_FILE_EXTENSIONS', () => {
     expect(VALID_FILE_EXTENSIONS).toContain('.yaml');
     expect(VALID_FILE_EXTENSIONS).toContain('.yml');
   });
+
+  it('should include .prompty in valid file extensions', () => {
+    expect(VALID_FILE_EXTENSIONS).toContain('.prompty');
+  });
 });

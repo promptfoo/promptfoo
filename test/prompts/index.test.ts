@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
 import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
+import { processPromptyFile } from '../../src/prompts/processors/prompty';
 import { maybeFilePath } from '../../src/prompts/utils';
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
 
@@ -46,6 +47,7 @@ jest.mock('../../src/prompts/utils', () => {
     maybeFilePath: jest.fn(actual.maybeFilePath),
   };
 });
+jest.mock('../../src/prompts/processors/prompty');
 
 describe('readPrompts', () => {
   beforeEach(() => {
@@ -620,6 +622,48 @@ describe('readPrompts', () => {
   });
 });
 
+describe('readPrompts with .prompty files', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should read and process a .prompty file', async () => {
+    (maybeFilePath as jest.Mock).mockReturnValue(true);
+    (processPromptyFile as jest.Mock).mockResolvedValue([
+      {
+        raw: JSON.stringify([
+          { role: 'system', content: 'You are helpful.' },
+          { role: 'user', content: '{{question}}' },
+        ]),
+        label: 'Test Prompty',
+      },
+    ]);
+
+    const result = await readPrompts('file://test.prompty');
+
+    expect(processPromptyFile).toHaveBeenCalledWith(
+      expect.stringContaining('test.prompty'),
+      expect.objectContaining({ raw: 'file://test.prompty' }),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].label).toBe('Test Prompty');
+  });
+
+  it('should handle glob patterns for .prompty files', async () => {
+    (maybeFilePath as jest.Mock).mockReturnValue(true);
+    (globSync as jest.Mock).mockReturnValue(['prompt1.prompty', 'prompt2.prompty']);
+    (processPromptyFile as jest.Mock)
+      .mockResolvedValueOnce([{ raw: 'prompt1', label: 'Prompt 1' }])
+      .mockResolvedValueOnce([{ raw: 'prompt2', label: 'Prompt 2' }]);
+
+    const result = await readPrompts('*.prompty');
+
+    expect(globSync).toHaveBeenCalled();
+    expect(processPromptyFile).toHaveBeenCalledTimes(2);
+    expect(result).toHaveLength(2);
+  });
+});
+
 describe('readProviderPromptMap', () => {
   let config: Partial<UnifiedConfig>;
   let parsedPrompts: Prompt[];
@@ -933,5 +977,31 @@ Explain {{topic}} in simple terms,Simple Explanation`;
     ]);
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(2);
+  });
+});
+
+describe('processPrompts with .prompty files', () => {
+  it('should process prompty file paths', async () => {
+    // Mock the file system to return a prompty file
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(`---
+name: Test Prompty
+---
+system:
+You are helpful.
+
+user:
+{{question}}`);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+
+    const result = await processPrompts(['test.prompty']);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].label).toBe('Test Prompty');
+    const messages = JSON.parse(result[0].raw);
+    expect(messages).toEqual([
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: '{{question}}' },
+    ]);
   });
 });
