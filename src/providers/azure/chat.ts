@@ -4,7 +4,7 @@ import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { normalizeFinishReason } from '../../util/finishReason';
+import { normalizeFinishReason, FINISH_REASON_MAP } from '../../util/finishReason';
 import invariant from '../../util/invariant';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -141,6 +141,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     let data;
     let cached = false;
+    let httpStatus: number;
     try {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
@@ -171,6 +172,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
+      httpStatus = status;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -190,97 +192,74 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response (status ${httpStatus}): ${JSON.stringify(data)}`);
+
+    let flaggedInput = false;
+    let flaggedOutput = false;
+    let output = '';
+    let logProbs: any;
+    let finishReason: string;
+
     try {
-      // Handle content filter errors (HTTP 400 with content_filter code)
       if (data.error) {
-        if (data.error.code === 'content_filter' && data.error.status === 400) {
+        // Was the input prompt deemed inappropriate?
+        if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
+          flaggedInput = true;
+          output = data.error.message;
+          finishReason = FINISH_REASON_MAP.content_filter;
+        } else {
           return {
-            output: data.error.message,
-            guardrails: {
-              flagged: true,
-              flaggedInput: true,
-              flaggedOutput: false,
-            },
+            error: `API response error: ${data.error.code} ${data.error.message}`,
           };
         }
-        return {
-          error: `API response error: ${data.error.code} ${data.error.message}`,
-        };
-      }
+      } else {
+        const hasDataSources = !!config.dataSources;
+        const choice = hasDataSources
+          ? data.choices.find(
+              (choice: { message: { role: string; content: string } }) =>
+                choice.message.role === 'assistant',
+            )
+          : data.choices[0];
 
-      const hasDataSources = !!config.dataSources;
-      const choice = hasDataSources
-        ? data.choices.find(
-            (choice: { message: { role: string; content: string } }) =>
-              choice.message.role === 'assistant',
-          )
-        : data.choices[0];
+        const message = choice?.message;
 
-      const message = choice?.message;
-      const finishReason = normalizeFinishReason(choice?.finish_reason);
+        // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
+        // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
+        finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
-      // Handle structured output
-      let output = message.content;
+        // Handle structured output
+        output = message.content;
 
-      // Check if content was filtered based on finish_reason
-      const contentFilterTriggered = finishReason === 'content_filter';
-
-      if (output == null) {
-        if (contentFilterTriggered) {
-          output =
-            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
+        // Check for errors indicating that the content filters did not run on the completion.
+        // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter#scenario-content-filtering-system-doesnt-run-on-the-completion.
+        if (choice.content_filter_results.error) {
+          const { code, message } = choice.content_filter_results.error;
+          logger.warn(
+            `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
+          );
         } else {
+          // Was the completion filtered?
+          flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
+        }
+
+        if (output == null) {
           // Restore tool_calls and function_call handling
           output = message.tool_calls ?? message.function_call;
+        } else if (
+          config.response_format?.type === 'json_schema' ||
+          config.response_format?.type === 'json_object'
+        ) {
+          try {
+            output = JSON.parse(output);
+          } catch (err) {
+            logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+          }
         }
-      } else if (
-        config.response_format?.type === 'json_schema' ||
-        config.response_format?.type === 'json_object'
-      ) {
-        try {
-          output = JSON.parse(output);
-        } catch (err) {
-          logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
-        }
-      }
 
-      const logProbs = data.choices[0].logprobs?.content?.map(
-        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-      );
-
-      // Check for content filter results in the response
-      const contentFilterResults = data.choices[0]?.content_filter_results;
-      const promptFilterResults = data.prompt_filter_results;
-
-      // Determine if input was flagged
-      const flaggedInput =
-        promptFilterResults?.some((result: any) =>
-          Object.values(result.content_filter_results || {}).some((filter: any) => filter.filtered),
-        ) ?? false;
-
-      // Determine if output was flagged
-      const flaggedOutput =
-        contentFilterTriggered ||
-        Object.values(contentFilterResults || {}).some((filter: any) => filter.filtered);
-
-      if (flaggedOutput) {
-        logger.warn(
-          `Azure model ${this.deploymentName} output was flagged by content filter: ${JSON.stringify(
-            contentFilterResults,
-          )}`,
+        logProbs = data.choices[0].logprobs?.content?.map(
+          (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
         );
       }
-
-      if (flaggedInput) {
-        logger.warn(
-          `Azure model ${this.deploymentName} input was flagged by content filter: ${JSON.stringify(
-            promptFilterResults,
-          )}`,
-        );
-      }
-
-      const guardrailsTriggered = flaggedInput || flaggedOutput;
 
       return {
         output,
@@ -304,22 +283,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             },
         cached,
         logProbs,
-        ...(finishReason && { finishReason }),
+        finishReason,
         cost: calculateAzureCost(
           this.deploymentName,
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
-        ...(guardrailsTriggered
-          ? {
-              guardrails: {
-                flagged: true,
-                flaggedInput,
-                flaggedOutput,
-              },
-            }
-          : {}),
+        guardrails: {
+          flagged: flaggedInput || flaggedOutput,
+          flaggedInput,
+          flaggedOutput,
+        },
       };
     } catch (err) {
       return {
