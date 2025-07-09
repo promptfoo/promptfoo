@@ -87,5 +87,3 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   // otherwise use the default
   return 'https://api.promptfoo.app/api/v1/task/harmful';
 }
-
-export { buildRemoteUrl };
