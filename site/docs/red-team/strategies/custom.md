@@ -1,12 +1,16 @@
 ---
-sidebar_label: Custom Strategies
-title: Custom Strategies
-description: Create your own red team testing approaches by programmatically transforming test cases
+sidebar_label: Custom Strategy Scripts
+title: Custom Strategy Scripts
+description: Create your own red team testing approaches by writing JavaScript files that programmatically transform test cases
 ---
 
-# Custom Strategies
+# Custom Strategy Scripts
 
-Custom strategies give you full control over how your prompts are modified for adversarial testing. This allows you to create your own red team testing approaches by transforming pre-existing test cases programmatically. Strategies can range from simple jailbreaks to calling external APIs or models.
+Custom strategy scripts give you full control over how your prompts are modified for adversarial testing by writing your own JavaScript files. This allows you to create completely custom red team testing approaches by transforming pre-existing test cases programmatically. Scripts can range from simple text transformations to calling external APIs or models.
+
+:::info
+This page covers **custom strategy scripts**. For the built-in **custom strategy** that uses text-based instructions, see [Custom Strategy](custom-strategy.md).
+:::
 
 ## Implementation
 
@@ -21,16 +25,16 @@ strategies:
 
 ## How It Works
 
-Custom strategies work by:
+Custom strategy scripts work by:
 
 1. Defining a JavaScript module with an `action` function
 2. Processing an array of test cases with your custom logic
 3. Returning transformed test cases with new content
 4. Tracking the transformation with metadata
 
-## Example Strategy
+## Example Strategy Script
 
-Here's a simple strategy that ignores previous instructions:
+Here's a simple strategy script that ignores previous instructions:
 
 ```javascript title="custom-strategy.js"
 module.exports = {
@@ -66,8 +70,8 @@ The strategy action function receives:
 
 ## Related Concepts
 
-- [Prompt Injection](prompt-injection.md) - Built-in strategy that can be replicated with custom strategies
-- [Iterative Jailbreaks](iterative.md) - Complex strategy that could be extended with custom logic
-- [Tree-based Jailbreaks](tree.md) - Advanced approach that can be customized
+- [Custom Strategy](custom-strategy.md) - Built-in customizable strategy using text-based instructions
+- **Strategy Development** - Build custom approaches using JavaScript for maximum flexibility
+- **Test Case Transformation** - Programmatically modify test cases to create unique attack vectors
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

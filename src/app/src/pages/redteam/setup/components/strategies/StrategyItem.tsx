@@ -1,9 +1,12 @@
 import React from 'react';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { Paper, Box, Typography, Chip, Checkbox, IconButton } from '@mui/material';
+import { Box, Checkbox, Chip, IconButton, Paper, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { DEFAULT_STRATEGIES, AGENTIC_STRATEGIES } from '@promptfoo/redteam/constants';
-import { MULTI_MODAL_STRATEGIES } from './constants';
+import {
+  AGENTIC_STRATEGIES,
+  DEFAULT_STRATEGIES,
+  MULTI_MODAL_STRATEGIES,
+} from '@promptfoo/redteam/constants';
 import type { StrategyCardData } from './types';
 
 const CONFIGURABLE_STRATEGIES = [
@@ -11,6 +14,7 @@ const CONFIGURABLE_STRATEGIES = [
   'best-of-n',
   'goat',
   'crescendo',
+  'custom',
   'pandamonium',
   'jailbreak',
   'jailbreak:tree',
