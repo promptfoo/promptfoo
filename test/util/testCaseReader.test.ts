@@ -468,7 +468,30 @@ describe('readStandaloneTestsFile', () => {
       // Clean up
       jest.dontMock('xlsx');
       jest.resetModules();
-      jest.restoreAllMocks();
+    }
+  });
+
+  it('should throw error when Excel file has no sheets', async () => {
+    const mockXlsx = {
+      readFile: jest.fn().mockReturnValue({
+        SheetNames: [],
+        Sheets: {},
+      }),
+      utils: { sheet_to_json: jest.fn() },
+    };
+
+    jest.doMock('xlsx', () => mockXlsx);
+    jest.resetModules();
+
+    try {
+      const { parseXlsxFile } = await import('../../src/util/xlsx');
+
+      await expect(parseXlsxFile('empty.xlsx')).rejects.toThrow(
+        'Failed to parse Excel file empty.xlsx: Excel file has no sheets',
+      );
+    } finally {
+      jest.dontMock('xlsx');
+      jest.resetModules();
     }
   });
 

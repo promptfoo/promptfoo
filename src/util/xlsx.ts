@@ -4,6 +4,12 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
   try {
     const xlsx = await import('xlsx');
     const workbook = xlsx.readFile(filePath);
+
+    // Validate that the workbook has at least one sheet
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      throw new Error('Excel file has no sheets');
+    }
+
     const firstSheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[firstSheetName];
     return xlsx.utils.sheet_to_json<CsvRow>(sheet, { defval: '' });
