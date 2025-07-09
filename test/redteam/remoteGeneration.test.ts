@@ -24,13 +24,6 @@ describe('shouldGenerateRemote', () => {
     jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
   });
 
-  it('should return true when logged into cloud regardless of other conditions', () => {
-    jest.mocked(isLoggedIntoCloud).mockReturnValue(true);
-    jest.mocked(getEnvBool).mockReturnValue(true);
-    jest.mocked(getEnvString).mockReturnValue('sk-123');
-    expect(shouldGenerateRemote()).toBe(true);
-  });
-
   it('should return false when remote generation is explicitly disabled, even for cloud users', () => {
     jest.mocked(isLoggedIntoCloud).mockReturnValue(true);
     jest.mocked(getEnvBool).mockReturnValue(true); // neverGenerateRemote = true
