@@ -356,6 +356,7 @@ Complete this story: {{beginning}}
 ### Model Configuration
 
 #### Azure OpenAI
+
 ```prompty
 model:
   configuration:
@@ -367,6 +368,7 @@ model:
 ```
 
 #### OpenAI
+
 ```prompty
 model:
   configuration:

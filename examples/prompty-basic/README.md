@@ -30,11 +30,13 @@ Prompty files use **Nunjucks** templating (Jinja2-compatible) for variable subst
 ## Running the example
 
 1. Make sure you have promptfoo installed:
+
    ```bash
    npm install -g promptfoo
    ```
 
 2. Run the evaluation:
+
    ```bash
    npx promptfoo eval
    ```
@@ -57,6 +59,7 @@ The `sample` section in the frontmatter provides default values for variables. T
 ### Model configuration
 
 The `model` section allows you to configure:
+
 - API type (chat or completion)
 - Provider configuration (OpenAI, Azure OpenAI, etc.)
 - Parameters (temperature, max_tokens, etc.)
@@ -74,4 +77,4 @@ model:
 ## Learn more
 
 - [Promptfoo Prompty documentation](https://promptfoo.dev/docs/configuration/prompts#prompty-files-microsoft-format)
-- [Microsoft Prompty specification](https://github.com/microsoft/prompty) 
+- [Microsoft Prompty specification](https://github.com/microsoft/prompty)

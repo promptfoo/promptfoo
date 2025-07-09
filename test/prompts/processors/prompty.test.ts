@@ -29,16 +29,16 @@ user:
 
     expect(result).toHaveLength(1);
     expect(result[0].label).toBe('Basic Chat Prompt');
-    
+
     const messages = JSON.parse(result[0].raw);
     expect(messages).toHaveLength(2);
     expect(messages[0]).toEqual({
       role: 'system',
-      content: 'You are a helpful assistant.'
+      content: 'You are a helpful assistant.',
     });
     expect(messages[1]).toEqual({
       role: 'user',
-      content: '{{question}}'
+      content: '{{question}}',
     });
   });
 
@@ -72,7 +72,7 @@ User message`;
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
     const messages = JSON.parse(result[0].raw);
-    
+
     expect(messages).toHaveLength(2);
     expect(messages[0].role).toBe('system');
     expect(messages[1].role).toBe('user');
@@ -91,10 +91,10 @@ This is the user message.`;
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
     const messages = JSON.parse(result[0].raw);
-    
+
     expect(messages[0]).toEqual({
       role: 'system',
-      content: 'This is the system message.'
+      content: 'This is the system message.',
     });
   });
 
@@ -110,20 +110,20 @@ What do you see?`;
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
     const messages = JSON.parse(result[0].raw);
-    
+
     expect(messages[0].content).toBeInstanceOf(Array);
     expect(messages[0].content).toHaveLength(3);
     expect(messages[0].content[0]).toEqual({
       type: 'text',
-      text: 'Look at this image:'
+      text: 'Look at this image:',
     });
     expect(messages[0].content[1]).toEqual({
       type: 'image_url',
-      image_url: { url: 'image.png' }
+      image_url: { url: 'image.png' },
     });
     expect(messages[0].content[2]).toEqual({
       type: 'text',
-      text: 'What do you see?'
+      text: 'What do you see?',
     });
   });
 
@@ -148,14 +148,14 @@ Hello`;
     mockFs.readFileSync.mockReturnValue(promptyContent);
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
-    
+
     expect(result[0].config).toEqual({
       apiKey: 'test-key',
       apiVersion: '2023-05-15',
       deployment: 'gpt-4',
       endpoint: 'https://test.openai.azure.com',
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 1000,
     });
   });
 
@@ -176,11 +176,11 @@ Hello`;
     mockFs.readFileSync.mockReturnValue(promptyContent);
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
-    
+
     expect(result[0].config).toEqual({
       model: 'gpt-4',
       organization: 'test-org',
-      temperature: 0.5
+      temperature: 0.5,
     });
   });
 
@@ -197,7 +197,7 @@ Hello {{name}}, let's talk about {{topic}}.`;
     mockFs.readFileSync.mockReturnValue(promptyContent);
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
-    
+
     expect(result[0].function).toBeDefined();
   });
 
@@ -221,7 +221,7 @@ Thanks!`;
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
     const messages = JSON.parse(result[0].raw);
-    
+
     expect(messages).toHaveLength(4);
     expect(messages[0].role).toBe('system');
     expect(messages[1].role).toBe('user');
@@ -239,7 +239,7 @@ Hello`;
     mockFs.readFileSync.mockReturnValue(promptyContent);
 
     const result = await processPromptyFile('/path/to/prompt.prompty', { label: 'Custom Label' });
-    
+
     expect(result[0].label).toBe('Custom Label');
   });
 
@@ -256,12 +256,12 @@ Hello`;
     mockFs.readFileSync.mockReturnValue(promptyContent);
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {
-      config: { max_tokens: 500 }
+      config: { max_tokens: 500 },
     });
-    
+
     expect(result[0].config).toEqual({
       temperature: 0.7,
-      max_tokens: 500
+      max_tokens: 500,
     });
   });
 
@@ -270,8 +270,9 @@ Hello`;
       throw new Error('File not found');
     });
 
-    await expect(processPromptyFile('/path/to/missing.prompty', {}))
-      .rejects.toThrow('Failed to process prompty file /path/to/missing.prompty: Error: File not found');
+    await expect(processPromptyFile('/path/to/missing.prompty', {})).rejects.toThrow(
+      'Failed to process prompty file /path/to/missing.prompty: Error: File not found',
+    );
   });
 
   it('should handle empty content', async () => {
@@ -286,7 +287,7 @@ model:
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
     const messages = JSON.parse(result[0].raw);
-    
+
     expect(messages).toHaveLength(0);
   });
 
@@ -307,7 +308,7 @@ get_weather(location: string)
 
     const result = await processPromptyFile('/path/to/prompt.prompty', {});
     const messages = JSON.parse(result[0].raw);
-    
+
     expect(messages).toHaveLength(2);
     expect(messages[1].role).toBe('function');
   });
@@ -409,4 +410,4 @@ Hello, my name is {{name}} and I am {{age}} years old.
     expect(messages[1].content).toContain('{{name}}');
     expect(messages[1].content).toContain('{{age}}');
   });
-}); 
+});

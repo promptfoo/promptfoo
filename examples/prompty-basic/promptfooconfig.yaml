@@ -11,20 +11,20 @@ providers:
 
 tests:
   - vars:
-      customer: "Sarah"
-      issue: "My subscription expired but I was still charged"
-      company: "Tech Inc"
-  
+      customer: 'Sarah'
+      issue: 'My subscription expired but I was still charged'
+      company: 'Tech Inc'
+
   - vars:
-      error: "Connection refused: Unable to reach server"
-      platform: "Ubuntu 22.04"
-      product: "DataSync Enterprise"
-  
+      error: 'Connection refused: Unable to reach server'
+      platform: 'Ubuntu 22.04'
+      product: 'DataSync Enterprise'
+
   - vars:
-      beginning: "In the year 2150, humanity discovered"
-  
+      beginning: 'In the year 2150, humanity discovered'
+
   - vars:
-      task: "Create a motivational quote about learning"
+      task: 'Create a motivational quote about learning'
     assert:
       - type: llm-rubric
-        value: The completion should be creative and continue the sci-fi theme 
+        value: The completion should be creative and continue the sci-fi theme

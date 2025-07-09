@@ -64,11 +64,11 @@ function resolveEnvVariables(value: any): any {
       return envValue;
     });
   }
-  
+
   if (Array.isArray(value)) {
-    return value.map(item => resolveEnvVariables(item));
+    return value.map((item) => resolveEnvVariables(item));
   }
-  
+
   if (typeof value === 'object' && value !== null) {
     const resolved: Record<string, any> = {};
     for (const [key, val] of Object.entries(value)) {
@@ -76,7 +76,7 @@ function resolveEnvVariables(value: any): any {
     }
     return resolved;
   }
-  
+
   return value;
 }
 
@@ -88,15 +88,22 @@ function parseChatContent(content: string): ParsedMessage[] {
   const roles = ['system', 'user', 'assistant', 'function'];
   // Updated regex to also match 'A:' as assistant role
   const roleRegex = new RegExp(`\\s*#?\\s*(${roles.join('|')}|A)\\s*:\\s*\\n`, 'gim');
-  
+
   // Split content by role markers
-  const parts = content.split(roleRegex).map(part => part.trim()).filter(Boolean);
-  
+  const parts = content
+    .split(roleRegex)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
   // If the first part is not a role, assume it's system content
-  if (parts.length > 0 && !roles.includes(parts[0].toLowerCase()) && parts[0].toLowerCase() !== 'a') {
+  if (
+    parts.length > 0 &&
+    !roles.includes(parts[0].toLowerCase()) &&
+    parts[0].toLowerCase() !== 'a'
+  ) {
     parts.unshift('system');
   }
-  
+
   // Process role-content pairs
   for (let i = 0; i < parts.length - 1; i += 2) {
     let role = parts[i].toLowerCase();
@@ -105,34 +112,34 @@ function parseChatContent(content: string): ParsedMessage[] {
       role = 'assistant';
     }
     const messageContent = parts[i + 1];
-    
+
     if ((roles.includes(role) || role === 'assistant') && messageContent) {
       // Check for images in content
       const imageRegex = /!\[(.*?)\]\((.*?)\)/g;
       const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
       let lastIndex = 0;
       let match;
-      
+
       while ((match = imageRegex.exec(messageContent)) !== null) {
         // Add text before image
         const textBefore = messageContent.slice(lastIndex, match.index).trim();
         if (textBefore) {
           contentParts.push({ type: 'text', text: textBefore });
         }
-        
+
         // Add image
         const imageUrl = match[2].trim();
         contentParts.push({ type: 'image_url', image_url: { url: imageUrl } });
-        
+
         lastIndex = match.index + match[0].length;
       }
-      
+
       // Add remaining text
       const remainingText = messageContent.slice(lastIndex).trim();
       if (remainingText) {
         contentParts.push({ type: 'text', text: remainingText });
       }
-      
+
       // If no images were found, use simple string content
       if (contentParts.length === 0) {
         messages.push({ role: role as ParsedMessage['role'], content: messageContent });
@@ -143,7 +150,7 @@ function parseChatContent(content: string): ParsedMessage[] {
       }
     }
   }
-  
+
   return messages;
 }
 
@@ -152,18 +159,18 @@ function parseChatContent(content: string): ParsedMessage[] {
  */
 function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | undefined {
   const params = frontmatter.model?.parameters || {};
-  
+
   // If there's no configuration, just return the parameters
   if (!frontmatter.model?.configuration) {
     return Object.keys(params).length > 0 ? params : undefined;
   }
-  
+
   // Resolve environment variables in configuration
   const config = resolveEnvVariables(frontmatter.model.configuration);
-  
+
   // Build provider config based on type
   let providerConfig: Record<string, any> = {};
-  
+
   switch (config.type) {
     case 'azure_openai':
       providerConfig = {
@@ -182,7 +189,7 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
         providerConfig.endpoint = config.azure_endpoint;
       }
       break;
-      
+
     case 'openai':
       providerConfig = {
         ...params,
@@ -197,7 +204,7 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
         providerConfig.apiKey = config.api_key;
       }
       break;
-      
+
     case 'azure_serverless':
       providerConfig = {
         ...params,
@@ -209,7 +216,7 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
         providerConfig.apiKey = config.api_key;
       }
       break;
-      
+
     default:
       // Pass through unknown configurations
       providerConfig = {
@@ -217,7 +224,7 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
         ...params,
       };
   }
-  
+
   return providerConfig;
 }
 
@@ -236,14 +243,14 @@ export async function processPromptyFile(
     const parsed = matter(fileContent);
     const frontmatter = parsed.data as PromptyFrontmatter;
     const content = parsed.content.trim();
-    
+
     logger.debug(`Processing prompty file: ${filePath}`);
     logger.debug(`Prompty API type: ${frontmatter.model?.api || 'chat'}`);
-    
+
     // Determine the prompt format based on API type
     const apiType = frontmatter.model?.api || 'chat';
     let processedContent: string;
-    
+
     if (apiType === 'chat') {
       // Parse role-based content for chat API
       const messages = parseChatContent(content);
@@ -252,23 +259,23 @@ export async function processPromptyFile(
       // For completion API, use content as-is
       processedContent = content;
     }
-    
+
     // Map model configuration to promptfoo format
     const modelConfig = mapModelConfig(frontmatter);
-    
+
     // Merge configurations
     const finalConfig = {
       ...modelConfig,
       ...prompt.config,
     };
-    
+
     // Create the prompt object
     const processedPrompt: Prompt = {
       raw: processedContent,
       label: prompt.label || frontmatter.name || `${filePath}`,
       config: Object.keys(finalConfig).length > 0 ? finalConfig : undefined,
     };
-    
+
     // If sample data is provided, create a function that pre-fills variables
     if (frontmatter.sample && Object.keys(frontmatter.sample).length > 0) {
       const originalRaw = processedPrompt.raw;
@@ -278,7 +285,7 @@ export async function processPromptyFile(
           ...frontmatter.sample,
           ...context.vars,
         };
-        
+
         // Render the template with merged variables
         let rendered: string;
         if (apiType === 'chat') {
@@ -312,14 +319,14 @@ export async function processPromptyFile(
           // For completion API, render the content directly
           rendered = renderVarsInObject(originalRaw, mergedVars);
         }
-        
+
         return rendered;
       };
     }
-    
+
     return [processedPrompt];
   } catch (error) {
     logger.error(`Error processing prompty file ${filePath}: ${error}`);
     throw new Error(`Failed to process prompty file ${filePath}: ${error}`);
   }
-} 
+}

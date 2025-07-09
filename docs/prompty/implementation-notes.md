@@ -7,6 +7,7 @@ Promptfoo supports Microsoft's Prompty file format (`.prompty` files), allowing 
 ## Supported Features
 
 ### ✅ Core Features
+
 - **YAML Frontmatter**: Full support for metadata parsing
 - **Chat API**: Role-based conversations (system, user, assistant, function)
 - **Completion API**: Plain text prompts
@@ -18,6 +19,7 @@ Promptfoo supports Microsoft's Prompty file format (`.prompty` files), allowing 
 - **Environment Variables**: Support for `${env:VAR_NAME}` syntax in configuration
 
 ### ✅ Template Engine
+
 - **Nunjucks (Jinja2-compatible)**: Following Microsoft's specification
 - Variable interpolation: `{{variable}}`
 - Conditionals: `{% if condition %}...{% endif %}`
@@ -25,11 +27,13 @@ Promptfoo supports Microsoft's Prompty file format (`.prompty` files), allowing 
 - Filters and other Nunjucks features
 
 ### ✅ Model Configurations
+
 - **Azure OpenAI**: Full configuration support with environment variables
 - **OpenAI**: Standard configuration with API key support
 - **Azure Serverless/MaaS**: Basic configuration support
 
 ### ❌ Unsupported Features
+
 - **Embedding API**: Not yet implemented
 - **Image Generation API**: Not yet implemented
 - **Response Mode**: `first`/`all` selection not implemented
@@ -40,6 +44,7 @@ Promptfoo supports Microsoft's Prompty file format (`.prompty` files), allowing 
 ## Configuration Examples
 
 ### Basic Chat Prompt
+
 ```prompty
 ---
 name: Customer Service
@@ -61,6 +66,7 @@ Hello, I'm {{customer}}.
 ```
 
 ### Environment Variables
+
 ```prompty
 ---
 model:
@@ -73,6 +79,7 @@ model:
 ```
 
 ### Multi-turn Conversation
+
 ```prompty
 ---
 model:
@@ -117,4 +124,4 @@ Can you show an example?
 2. Implement input/output type specifications with JSON schema validation
 3. Add connection reference support for managed connections
 4. Support response mode selection (first/all)
-5. Add template inheritance capabilities 
+5. Add template inheritance capabilities

@@ -7,6 +7,7 @@ This example demonstrates advanced features of Microsoft Prompty files in prompt
 ### 1. Azure OpenAI Configuration
 
 The `azure_chatbot.prompty` example shows:
+
 - Azure-specific configuration (endpoint, deployment, API version)
 - Environment variable usage with `${env:VAR_NAME}` syntax
 - Multi-turn conversation setup
@@ -15,6 +16,7 @@ The `azure_chatbot.prompty` example shows:
 ### 2. Vision/Image Support
 
 The `image_analysis.prompty` example demonstrates:
+
 - Image references in prompts using markdown syntax: `![alt](url)`
 - Structured output formatting
 - Complex system instructions
@@ -25,6 +27,7 @@ The `image_analysis.prompty` example demonstrates:
 Prompty files use Nunjucks templating (Jinja2-compatible), which includes:
 
 #### Conditionals
+
 ```
 {% if topic == "quantum computing" %}
 Quantum computing explanation...
@@ -34,6 +37,7 @@ General explanation...
 ```
 
 #### Loops
+
 ```
 {% for item in items %}
 - {{item.name}}: {{item.description}}
@@ -41,6 +45,7 @@ General explanation...
 ```
 
 #### Variables and Filters
+
 ```
 Hello {{name | upper}}!
 The date is {{date | date("YYYY-MM-DD")}}.
@@ -67,12 +72,14 @@ model:
 ## Running the examples
 
 1. Set up environment variables (if using Azure OpenAI):
+
    ```bash
    export AZURE_OPENAI_ENDPOINT=your-endpoint
    export AZURE_OPENAI_API_KEY=your-key
    ```
 
 2. Run with the echo provider (no API key needed):
+
    ```bash
    npx promptfoo eval
    ```
@@ -109,4 +116,4 @@ sample:
 
 - [Promptfoo Prompty documentation](https://promptfoo.dev/docs/configuration/prompts#prompty-files-microsoft-format)
 - [Microsoft Prompty specification](https://github.com/microsoft/prompty)
-- [Nunjucks templating](https://mozilla.github.io/nunjucks/) 
+- [Nunjucks templating](https://mozilla.github.io/nunjucks/)
