@@ -173,7 +173,10 @@ tracing:
 
 ### JavaScript/TypeScript
 
-For complete provider implementation details, see the [JavaScript Provider documentation](/docs/providers/custom-api/). For tracing-specific examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing).
+For complete provider implementation details, see the [JavaScript Provider documentation](/docs/providers/custom-api/). For tracing-specific examples:
+
+- [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing) - Basic tracing setup
+- [ADK tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/adk-tracing) - Multi-agent system with hierarchical traces
 
 Key points:
 
@@ -378,6 +381,8 @@ OTEL_LOG_LEVEL=debug promptfoo eval
 
 ## Integration Examples
 
+For more complex integration patterns, see the [ADK tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/adk-tracing) which demonstrates multi-agent coordination with hierarchical traces.
+
 ### RAG Pipeline Tracing
 
 ```javascript
@@ -442,7 +447,8 @@ async function compareModels(prompt, context) {
 
 ## Next Steps
 
-- Explore the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Explore the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing) for basic setup
+- Check out the [ADK tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/adk-tracing) for multi-agent tracing patterns
 - Set up forwarding to your observability platform
 - Add custom instrumentation for your use case
 - Use traces to optimize provider performance
