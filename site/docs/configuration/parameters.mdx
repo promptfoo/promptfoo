@@ -14,9 +14,16 @@ keywords:
   ]
 pagination_prev: configuration/reference
 pagination_next: configuration/prompts
+unlisted: true
 ---
 
 # Prompts, tests, and outputs
+
+<head>
+  <meta name="robots" content="noindex, nofollow" />
+</head>
+
+import DocCardList from '@theme/DocCardList';
 
 Configure how promptfoo evaluates your LLM applications.
 
@@ -40,6 +47,27 @@ tests:
 ```
 
 ## Core Concepts
+
+<DocCardList items={[
+  {
+    type: 'link',
+    label: '📝 Prompts',
+    href: '/docs/configuration/prompts',
+    description: 'Define what you send to your LLMs - from simple strings to complex conversations.'
+  },
+  {
+    type: 'link', 
+    label: '🧪 Test Cases',
+    href: '/docs/configuration/test-cases',
+    description: 'Configure evaluation scenarios with variables and assertions.'
+  },
+  {
+    type: 'link',
+    label: '📊 Output Formats', 
+    href: '/docs/configuration/outputs',
+    description: 'Save and analyze your evaluation results.'
+  }
+]} />
 
 ### 📝 [Prompts](/docs/configuration/prompts)
 
@@ -182,15 +210,15 @@ outputPath: evaluations/customer_service_results.html
 
 | Format               | Prompts | Tests | Use Case                            |
 | -------------------- | ------- | ----- | ----------------------------------- |
-| `.txt`               | ✅      | ❌    | Simple text prompts                 |
-| `.json`              | ✅      | ✅    | Chat conversations, structured data |
-| `.yaml`              | ✅      | ✅    | Complex configurations              |
-| `.csv`               | ✅      | ✅    | Bulk data, multiple variants        |
-| `.js`/`.ts`          | ✅      | ✅    | Dynamic generation with logic       |
-| `.py`                | ✅      | ✅    | Python-based generation             |
-| `.md`                | ✅      | ❌    | Markdown-formatted prompts          |
-| `.j2`                | ✅      | ❌    | Jinja2 templates                    |
-| HuggingFace datasets | ❌      | ✅    | Import from existing datasets       |
+| `.txt`               | ✅       | ❌     | Simple text prompts                 |
+| `.json`              | ✅       | ✅     | Chat conversations, structured data |
+| `.yaml`              | ✅       | ✅     | Complex configurations              |
+| `.csv`               | ✅       | ✅     | Bulk data, multiple variants        |
+| `.js`/`.ts`          | ✅       | ✅     | Dynamic generation with logic       |
+| `.py`                | ✅       | ✅     | Python-based generation             |
+| `.md`                | ✅       | ❌     | Markdown-formatted prompts          |
+| `.j2`                | ✅       | ❌     | Jinja2 templates                    |
+| HuggingFace datasets | ❌       | ✅     | Import from existing datasets       |
 
 ### Variable Syntax
 
