@@ -146,7 +146,7 @@ def call_api(prompt, options, context):
 
 #### The `options` Parameter
 
-Contains your provider configuration:
+Contains your provider configuration and metadata:
 
 ```python
 {
@@ -155,10 +155,16 @@ Contains your provider configuration:
         # Your custom configuration from promptfooconfig.yaml
         "model_name": "gpt-3.5-turbo",
         "temperature": 0.7,
-        "max_tokens": 100
+        "max_tokens": 100,
+
+        # Automatically added by promptfoo:
+        "basePath": "/absolute/path/to/config"  # Directory containing your config (promptfooconfig.yaml)
     }
 }
 ```
+
+:::tip
+The `basePath` is automatically provided by promptfoo and contains the absolute path to the directory containing your `promptfooconfig.yaml`. Use it to load files relative to your configuration:
 
 #### The `context` Parameter
 
