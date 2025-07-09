@@ -1246,7 +1246,7 @@ describe('SageMakerCompletionProvider - Parameter Validation', () => {
           id: 'sagemaker:test-endpoint',
         });
       }).toThrow(
-        'Model type must be provided either in config.modelType or as part of the provider ID format "sagemaker:<model_type>:<endpoint>"',
+        'Model type must be set either in `config.modelType` or as part of the Provider ID, for example: "sagemaker:<model_type>:<endpoint>"',
       );
     });
   });
