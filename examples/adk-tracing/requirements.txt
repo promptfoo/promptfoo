@@ -1,0 +1,18 @@
+# Google ADK and dependencies
+google-adk>=1.1.1
+google-genai>=1.5.0
+google-cloud-aiplatform>=1.38.0
+
+# OpenTelemetry instrumentation
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+opentelemetry-instrumentation>=0.41b0
+opentelemetry-semantic-conventions>=0.41b0
+
+# Async support
+aiohttp>=3.9.0
+asyncio>=3.4.3
+
+# Utilities
+python-dotenv>=1.0.0 

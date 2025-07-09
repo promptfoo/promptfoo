@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ADK tracing example with simplified assertions
+
+# Enable tracing
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json']
+
+# Use the mock provider that generates traces
+providers:
+  - id: file://provider-with-traces.js
+    label: adk-research-assistant
+
+# Test prompts
+prompts:
+  - 'Research the latest developments in {{topic}} and provide a summary with fact-checked information'
+
+# Simple test case that should pass
+tests:
+  - vars:
+      topic: 'quantum computing applications'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'quantum-research-simple'
+    assert:
+      # Content assertions
+      - type: contains
+        value: quantum
+      - type: contains
+        value: Executive Summary
+      
+      # Basic trace assertion - just check that we have some spans
+      - type: javascript
+        value: |
+          // Check that trace data exists and has spans
+          if (!context.trace || !context.trace.spans) {
+            return 'No trace data available';
+          }
+          
+          const spanCount = context.trace.spans.length;
+          if (spanCount > 0) {
+            return { pass: true, score: 1, reason: `Found ${spanCount} spans in trace` };
+          } else {
+            return { pass: false, score: 0, reason: 'No spans found in trace' };
+          }
+
+# Default assertions
+defaultTest:
+  assert:
+    # Content validation
+    - type: contains
+      value: 'Verification: All claims have been fact-checked'
+    
+    # Check response format
+    - type: javascript
+      value: |
+        const hasMainPoints = output.includes('Main Points:');
+        const hasConclusion = output.includes('Conclusion:');
+        return hasMainPoints && hasConclusion; 
