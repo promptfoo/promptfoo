@@ -13,6 +13,7 @@ Output-based:
 - [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but that the difference doesn't matter from the perspective of factuality. It uses the prompt from OpenAI's public evals.
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - uses chain-of-thought prompting to evaluate outputs based on custom criteria, following the G-Eval framework.
 - [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - ensure that LLM output is related to original query
+- [`similar`](/docs/configuration/expected-outputs/similar) - checks that the output is semantically similar to the expected value (uses embedding model)
 - [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - an alternative scoring approach that uses a dedicated model for evaluating inputs/outputs against criteria.
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
 - [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
