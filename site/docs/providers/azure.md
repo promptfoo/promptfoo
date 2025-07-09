@@ -81,7 +81,7 @@ The Azure OpenAI provider supports the following environment variables:
 | `AZURE_API_HOST`        | `apiHost`            | API host                           | No       |
 | `AZURE_API_BASE_URL`    | `apiBaseUrl`         | API base URL                       | No       |
 | `AZURE_BASE_URL`        | `apiBaseUrl`         | Alternative API base URL           | No       |
-| `AZURE_DEPLOYMENT_NAME` | -                    | Default deployment name            | No       |
+| `AZURE_DEPLOYMENT_NAME` | -                    | Default deployment name            | Yes      |
 | `AZURE_CLIENT_ID`       | `azureClientId`      | Azure AD application client ID     | No\*     |
 | `AZURE_CLIENT_SECRET`   | `azureClientSecret`  | Azure AD application client secret | No\*     |
 | `AZURE_TENANT_ID`       | `azureTenantId`      | Azure AD tenant ID                 | No\*     |
