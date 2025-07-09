@@ -13,6 +13,7 @@ export async function getPrompt(
   vars: Record<string, any>,
   type: 'text' | 'chat' | undefined,
   version?: number,
+  label?: string,
 ): Promise<string> {
   let prompt;
 
@@ -21,10 +22,11 @@ export async function getPrompt(
     langfuse = new Langfuse(langfuseParams);
   }
 
+  const options = label ? { label } : {};
   if (type === 'text' || type === undefined) {
-    prompt = await langfuse.getPrompt(id, version, { type: 'text' });
+    prompt = await langfuse.getPrompt(id, version, { ...options, type: 'text' });
   } else {
-    prompt = await langfuse.getPrompt(id, version, { type: 'chat' });
+    prompt = await langfuse.getPrompt(id, version, { ...options, type: 'chat' });
   }
   const compiledPrompt = prompt.compile(vars);
   if (typeof compiledPrompt !== 'string') {

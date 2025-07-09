@@ -267,6 +267,48 @@ prompt,label
 "Translate to German: {{text}}","German Translation"
 ```
 
+## External Prompt Management Systems
+
+Promptfoo integrates with external prompt management platforms, allowing you to centralize and version control your prompts:
+
+### Langfuse
+
+[Langfuse](/docs/integrations/langfuse) is an open-source LLM engineering platform with collaborative prompt management:
+
+```yaml
+prompts:
+  # Reference by version
+  - langfuse://my-prompt:3:text
+  - langfuse://chat-prompt:1:chat
+
+  # Reference by label (recommended for production)
+  - langfuse://my-prompt@production
+  - langfuse://chat-prompt@staging:chat
+  - langfuse://email-template@latest:text
+```
+
+### Portkey
+
+[Portkey](/docs/integrations/portkey) provides AI observability with prompt management capabilities:
+
+```yaml
+prompts:
+  - portkey://pp-customer-support-v2
+  - portkey://pp-email-generator-prod
+```
+
+### Helicone
+
+[Helicone](/docs/integrations/helicone) offers prompt management alongside observability features:
+
+```yaml
+prompts:
+  - helicone://greeting-prompt:1.0
+  - helicone://support-chat:2.5
+```
+
+Variables from your test cases are automatically passed to these external prompts.
+
 ## Advanced Features
 
 ### Custom Nunjucks Filters

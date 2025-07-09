@@ -1,0 +1,51 @@
+# Example: Using Langfuse prompts with labels
+#
+# This example demonstrates how to reference Langfuse prompts using labels
+# instead of version numbers. This allows you to update prompts in Langfuse
+# without changing your promptfoo configuration.
+#
+# Prerequisites:
+# 1. Set up Langfuse environment variables:
+#    - LANGFUSE_PUBLIC_KEY
+#    - LANGFUSE_SECRET_KEY
+#    - LANGFUSE_HOST
+# 2. Create prompts in Langfuse with the names used below
+# 3. Assign labels to your prompt versions (e.g., "production", "staging")
+
+prompts:
+  # Reference prompts by label
+  - langfuse://customer-support@production:chat
+  - langfuse://customer-support@staging:chat
+
+  # You can also use version numbers if needed
+  - langfuse://customer-support:1:chat
+
+  # Text prompts (default type if not specified)
+  - langfuse://email-writer@production
+  - langfuse://email-writer@latest:text
+
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-3.5-turbo
+
+tests:
+  - vars:
+      customer_name: 'Alice Johnson'
+      issue: "I can't log into my account"
+      company: 'Acme Corp'
+      tone: 'friendly and professional'
+
+  - vars:
+      customer_name: 'Bob Smith'
+      issue: "My order hasn't arrived yet"
+      company: 'Acme Corp'
+      tone: 'empathetic and helpful'
+
+# You can define assertions to ensure quality
+assertions:
+  - type: contains
+    value: '{{customer_name}}'
+  - type: not-contains
+    value: 'error'
+  - type: llm-rubric
+    value: "The response should be {{tone}} and address the customer's issue: {{issue}}"

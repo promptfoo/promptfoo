@@ -276,8 +276,27 @@ export async function renderPrompt(
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
-    // we default to "text" type.
-    const [helper, version, promptType = 'text'] = langfusePrompt.split(':');
+    let helper: string;
+    let version: string | undefined;
+    let label: string | undefined;
+    let promptType: 'text' | 'chat' | undefined = 'text';
+
+    if (langfusePrompt.includes('@')) {
+      const [idPart, rest] = langfusePrompt.split('@');
+      helper = idPart;
+      const [labelPart, typePart] = rest.split(':');
+      label = labelPart;
+      if (typePart) {
+        promptType = typePart as 'text' | 'chat';
+      }
+    } else {
+      [helper, version, promptType] = langfusePrompt.split(':') as [
+        string,
+        string | undefined,
+        'text' | 'chat' | undefined,
+      ];
+    }
+
     if (promptType !== 'text' && promptType !== 'chat') {
       throw new Error('Unknown promptfoo prompt type');
     }
@@ -286,7 +305,8 @@ export async function renderPrompt(
       helper,
       vars,
       promptType,
-      version === 'latest' ? undefined : Number(version),
+      version === undefined || version === 'latest' ? undefined : Number(version),
+      label,
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
