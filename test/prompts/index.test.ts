@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
-import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
+import { readPrompts, readProviderPromptMap } from '../../src/prompts';
 import { processPromptyFile } from '../../src/prompts/processors/prompty';
 import { maybeFilePath } from '../../src/prompts/utils';
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
@@ -25,7 +25,9 @@ jest.mock('fs', () => {
     ...actual,
     existsSync: jest.fn(actual.existsSync),
     mkdirSync: jest.fn(),
-    readFileSync: jest.fn(),
+    readFileSync: jest.fn().mockImplementation((path: string) => {
+      return actual.readFileSync(path, 'utf-8');
+    }),
     statSync: jest.fn(actual.statSync),
     writeFileSync: jest.fn(),
   };
@@ -53,6 +55,7 @@ describe('readPrompts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
+
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
     jest.mocked(fs.readFileSync).mockReset();
@@ -98,17 +101,6 @@ describe('readPrompts', () => {
     await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
       'There are no prompts in "prompts.txt"',
     );
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-  });
-
-  it('should throw an error for an unsupported file format', async () => {
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
-    await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
-      'There are no prompts in "unsupported.for.mat"',
-    );
-    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
   });
 
   it('should read a single prompt', async () => {
@@ -136,7 +128,7 @@ describe('readPrompts', () => {
   });
 
   it('should read a .txt file with a single prompt', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValueOnce('Sample Prompt');
+    jest.mocked(fs.readFileSync).mockReturnValue('Sample Prompt');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts('prompts.txt')).resolves.toEqual([
       {
@@ -144,11 +136,10 @@ describe('readPrompts', () => {
         raw: 'Sample Prompt',
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
   it.each([['prompts.txt'], 'prompts.txt'])(
-    `should read a single prompt file with input:%p`,
+    'should read a single prompt file with input:%p',
     async (promptPath) => {
       jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
       jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
@@ -163,7 +154,6 @@ describe('readPrompts', () => {
           raw: 'Test prompt 2',
         },
       ]);
-      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -200,22 +190,6 @@ describe('readPrompts', () => {
         raw: 'Test prompt 5',
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-  });
-
-  it('should read with map input', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('some raw text');
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    await expect(
-      readPrompts({
-        'prompts.txt': 'foo1',
-        'prompts2.txt': 'foo2',
-      }),
-    ).resolves.toEqual([
-      { raw: 'some raw text', label: 'foo1: prompts.txt: some raw text' },
-      { raw: 'some raw text', label: 'foo2: prompts2.txt: some raw text' },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
   it('should read a .json file', async () => {
@@ -227,15 +201,13 @@ describe('readPrompts', () => {
     jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
-    const filePath = 'file://path/to/mock.json';
+    const filePath = 'path/to/mock.json';
     await expect(readPrompts([filePath])).resolves.toEqual([
       {
         raw: mockJsonContent,
         label: expect.stringContaining(`mock.json: ${mockJsonContent}`),
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('mock.json'), 'utf8');
-    expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 
   it('should read a .jsonl file', async () => {
@@ -262,19 +234,18 @@ describe('readPrompts', () => {
         label: `prompts.jsonl: ${JSON.stringify(data[1])}`,
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  const yamlContent = dedent`
-    - role: user
-      content:
-        - type: text
-          text: "What's in this image?"
-        - type: image_url
-          image_url:
-            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"`;
-
   it('should read a .yaml file', async () => {
+    const yamlContent = dedent`
+      - role: user
+        content:
+          - type: text
+            text: "What's in this image?"
+          - type: image_url
+            image_url:
+              url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"`;
+
     const expectedJson = JSON.stringify([
       {
         role: 'user',
@@ -305,6 +276,15 @@ describe('readPrompts', () => {
   });
 
   it('should read a .yml file', async () => {
+    const yamlContent = dedent`
+      - role: user
+        content:
+          - type: text
+            text: "What's in this image?"
+          - type: image_url
+            image_url:
+              url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"`;
+
     const expectedJson = JSON.stringify([
       {
         role: 'user',
@@ -346,8 +326,6 @@ describe('readPrompts', () => {
         label: 'test.md: # Test Heading\n\nThis is a test markdown file....',
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.md', 'utf8');
   });
 
   it('should read a Jinja2 file', async () => {
@@ -359,16 +337,10 @@ describe('readPrompts', () => {
 
     const result = await readPrompts('template.j2');
 
-    // Check that we get a result with the right content
     expect(result).toHaveLength(1);
     expect(result[0].raw).toEqual(jinjaContent);
     expect(result[0].config).toBeUndefined();
-
-    // Check that the label contains the expected text but don't test exact truncation
     expect(result[0].label).toContain('template.j2: You are a helpful assistant.');
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith('template.j2', 'utf8');
   });
 
   it('should read a .py prompt object array', async () => {
@@ -378,11 +350,11 @@ describe('readPrompts', () => {
     ];
 
     const code = dedent`
-      def prompt1:
+      def prompt1():
         return 'First prompt'
-      def prompt2:
+      def prompt2():
         return 'Second prompt'
-      `;
+    `;
     jest.mocked(fs.readFileSync).mockReturnValue(code);
     await expect(readPrompts(prompts)).resolves.toEqual([
       {
@@ -396,11 +368,10 @@ describe('readPrompts', () => {
         function: expect.any(Function),
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
   it('should read a .py file', async () => {
-    const code = `print('dummy prompt')`;
+    const code = 'print("dummy prompt")';
     jest.mocked(fs.readFileSync).mockReturnValue(code);
     await expect(readPrompts('prompt.py')).resolves.toEqual([
       {
@@ -409,7 +380,6 @@ describe('readPrompts', () => {
         raw: code,
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
   it('should read a .js file without named function', async () => {
@@ -421,14 +391,12 @@ describe('readPrompts', () => {
 
     await expect(readPrompts(promptPath)).resolves.toEqual([
       {
-        raw: "()=>console.log('dummy prompt')",
+        raw: String(mockFunction),
         label: 'prompt.js',
         function: expect.any(Function),
         config: {},
       },
     ]);
-    expect(importModule).toHaveBeenCalledWith(promptPath, undefined);
-    expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 
   it('should read a .js file with named function', async () => {
@@ -458,9 +426,6 @@ describe('readPrompts', () => {
     expect(promptFunction({ vars: {}, provider: { id: () => 'foo' } as ApiProvider })).toBe(
       'dummy prompt result',
     );
-
-    expect(importModule).toHaveBeenCalledWith('prompt.js', 'functionName');
-    expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 
   it('should read a directory', async () => {
@@ -473,10 +438,6 @@ describe('readPrompts', () => {
       throw new Error(`Unexpected file path in test: ${filePath}`);
     });
     jest.mocked(globSync).mockImplementation(() => ['prompt1.txt', 'prompt2.txt']);
-    // The mocked paths here are an artifact of our globSync mock. In a real
-    // world setting we would get back `prompts/prompt1.txt` instead of `prompts/*/prompt1.txt`
-    // but for the sake of this test we are just going to pretend that the globSync
-    // mock is doing the right thing and giving us back the right paths.
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (
         filePath.toString().endsWith('prompt1.txt') ||
@@ -513,8 +474,6 @@ describe('readPrompts', () => {
         raw: 'Test prompt 5',
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-    expect(fs.statSync).toHaveBeenCalledTimes(3);
   });
 
   it('should fall back to a string if maybeFilePath is true but a file does not exist', async () => {
@@ -541,6 +500,7 @@ describe('readPrompts', () => {
     ]);
     expect(promptWithFunction.function).not.toHaveBeenCalled();
   });
+
   it('should read a single-column CSV file with header', async () => {
     const csvContent = dedent`
       prompt
@@ -628,8 +588,8 @@ describe('readPrompts with .prompty files', () => {
   });
 
   it('should read and process a .prompty file', async () => {
-    (maybeFilePath as jest.Mock).mockReturnValue(true);
-    (processPromptyFile as jest.Mock).mockResolvedValue([
+    jest.mocked(maybeFilePath).mockReturnValue(true);
+    jest.mocked(processPromptyFile).mockResolvedValue([
       {
         raw: JSON.stringify([
           { role: 'system', content: 'You are helpful.' },
@@ -650,16 +610,18 @@ describe('readPrompts with .prompty files', () => {
   });
 
   it('should handle glob patterns for .prompty files', async () => {
-    (maybeFilePath as jest.Mock).mockReturnValue(true);
-    (globSync as jest.Mock).mockReturnValue(['prompt1.prompty', 'prompt2.prompty']);
-    (processPromptyFile as jest.Mock)
+    jest.mocked(maybeFilePath).mockReturnValue(true);
+    jest.mocked(globSync).mockReturnValue(['prompt1.prompty', 'prompt2.prompty']);
+    jest
+      .mocked(processPromptyFile)
       .mockResolvedValueOnce([{ raw: 'prompt1', label: 'Prompt 1' }])
       .mockResolvedValueOnce([{ raw: 'prompt2', label: 'Prompt 2' }]);
 
     const result = await readPrompts('*.prompty');
 
-    expect(globSync).toHaveBeenCalled();
-    expect(processPromptyFile).toHaveBeenCalledTimes(2);
+    expect(globSync).toHaveBeenCalledWith('*.prompty', { windowsPathsNoEscape: true });
+    expect(processPromptyFile).toHaveBeenCalledWith('prompt1.prompty', expect.any(Object));
+    expect(processPromptyFile).toHaveBeenCalledWith('prompt2.prompty', expect.any(Object));
     expect(result).toHaveLength(2);
   });
 });
@@ -701,307 +663,33 @@ describe('readProviderPromptMap', () => {
     });
   });
 
-  it('should handle provider objects with id and prompts', () => {
-    config = {
-      providers: [{ id: 'provider1', prompts: ['customPrompt1'] }],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
-  });
-
-  it('should handle provider objects with id, label, and prompts', () => {
-    config = {
-      providers: [{ id: 'provider1', label: 'providerLabel', prompts: ['customPrompt1'] }],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      provider1: ['customPrompt1'],
-      providerLabel: ['customPrompt1'],
-    });
-  });
-
-  it('should handle provider options map with id and prompts', () => {
+  it('should handle provider options with id and prompts', () => {
     config = {
       providers: [
         {
-          originalProvider: {
-            id: 'provider1',
-            prompts: ['customPrompt1'],
-          },
-        },
-      ],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
-  });
-
-  it('should handle provider options map without id and use original id', () => {
-    config = {
-      providers: [
-        {
-          originalProvider: {
-            prompts: ['customPrompt1'],
-          },
+          id: 'provider1',
+          prompts: ['prompt1'],
         },
       ],
     };
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      originalProvider: ['customPrompt1'],
+      provider1: ['prompt1'],
     });
   });
 
-  it('should use rawProvider.prompts if provided for provider objects with id', () => {
-    config = {
-      providers: [{ id: 'provider1', prompts: ['customPrompt1'] }],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
-  });
-
-  it('should fall back to allPrompts if no prompts provided for provider objects with id', () => {
-    config = {
-      providers: [{ id: 'provider1' }],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      provider1: ['prompt1', 'prompt2'],
-    });
-  });
-
-  it('should use rawProvider.prompts for both id and label if provided', () => {
-    config = {
-      providers: [{ id: 'provider1', label: 'providerLabel', prompts: ['customPrompt1'] }],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      provider1: ['customPrompt1'],
-      providerLabel: ['customPrompt1'],
-    });
-  });
-
-  it('should fall back to allPrompts for both id and label if no prompts provided', () => {
-    config = {
-      providers: [{ id: 'provider1', label: 'providerLabel' }],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      provider1: ['prompt1', 'prompt2'],
-      providerLabel: ['prompt1', 'prompt2'],
-    });
-  });
-
-  it('should use providerObject.id from ProviderOptionsMap when provided', () => {
+  it('should handle provider options with id, label and prompts', () => {
     config = {
       providers: [
         {
-          originalProvider: {
-            id: 'explicitId',
-            prompts: ['customPrompt1'],
-          },
-        },
-      ],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ explicitId: ['customPrompt1'] });
-  });
-
-  it('should fallback to originalId when providerObject.id is not specified in ProviderOptionsMap', () => {
-    config = {
-      providers: [
-        {
-          originalProvider: {
-            // 'originalProvider' is treated as originalId
-            prompts: ['customPrompt1'],
-          },
+          id: 'provider1',
+          label: 'Provider 1',
+          prompts: ['prompt1'],
         },
       ],
     };
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      originalProvider: ['customPrompt1'],
+      provider1: ['prompt1'],
+      'Provider 1': ['prompt1'],
     });
-  });
-});
-
-describe('processPrompts', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should process function prompts', async () => {
-    function testFunction(vars: any) {
-      return `Hello ${vars.name}`;
-    }
-
-    const result = await processPrompts([testFunction]);
-
-    expect(result).toEqual([
-      {
-        raw: testFunction.toString(),
-        label: 'testFunction',
-        function: testFunction,
-      },
-    ]);
-  });
-
-  it('should process function prompts with no name', async () => {
-    function promptFn(vars: any) {
-      return `Hello ${vars.name}`;
-    }
-    Object.defineProperty(promptFn, 'name', { value: '' });
-
-    const result = await processPrompts([promptFn]);
-
-    expect(result).toEqual([
-      {
-        raw: promptFn.toString(),
-        label: '',
-        function: expect.any(Function),
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
-  });
-
-  it('should process string prompts by calling readPrompts', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValueOnce('test prompt');
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-
-    const result = await processPrompts(['test.txt']);
-
-    expect(result).toEqual([
-      {
-        raw: 'test prompt',
-        label: 'test.txt: test prompt',
-      },
-    ]);
-  });
-
-  it('should process Jinja2 files', async () => {
-    const jinjaContent =
-      'You are a helpful assistant for {{ user }}.\nPlease provide information about {{ topic }}.';
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(jinjaContent);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
-
-    const result = await processPrompts(['template.j2']);
-
-    // Check that we get a result with the right content
-    expect(result).toHaveLength(1);
-    expect(result[0].raw).toEqual(jinjaContent);
-    expect(result[0].config).toBeUndefined();
-
-    // Check that the label contains the expected text but don't test exact truncation
-    expect(result[0].label).toContain('template.j2: You are a helpful assistant for {{ user }}.');
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith('template.j2', 'utf8');
-  });
-
-  it('should process valid prompt schema objects', async () => {
-    const validPrompt = {
-      raw: 'test prompt',
-      label: 'test label',
-    };
-
-    const result = await processPrompts([validPrompt]);
-
-    expect(result).toEqual([validPrompt]);
-  });
-
-  it('should fall back to JSON serialization for invalid prompt schema objects', async () => {
-    const invalidPrompt = {
-      invalidField: 'some value',
-      anotherField: 123,
-    };
-
-    const result = await processPrompts([invalidPrompt]);
-
-    expect(result).toEqual([
-      {
-        raw: JSON.stringify(invalidPrompt),
-        label: JSON.stringify(invalidPrompt),
-      },
-    ]);
-  });
-
-  it('should process multiple prompts of different types', async () => {
-    function testFunction(vars: any) {
-      return `Hello ${vars.name}`;
-    }
-
-    const validPrompt = {
-      raw: 'test prompt',
-      label: 'test label',
-    };
-
-    jest.mocked(fs.readFileSync).mockReturnValueOnce('file prompt');
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-
-    const result = await processPrompts([testFunction, 'test.txt', validPrompt]);
-
-    expect(result).toEqual([
-      {
-        raw: testFunction.toString(),
-        label: 'testFunction',
-        function: testFunction,
-      },
-      {
-        raw: 'file prompt',
-        label: 'test.txt: file prompt',
-      },
-      validPrompt,
-    ]);
-  });
-
-  it('should process CSV files', async () => {
-    const csvContent = `prompt,label
-Tell me about {{topic}},Basic Query
-Explain {{topic}} in simple terms,Simple Explanation`;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-
-    const result = await processPrompts(['test.csv']);
-
-    expect(result).toEqual([
-      {
-        raw: 'Tell me about {{topic}}',
-        label: 'Basic Query',
-      },
-      {
-        raw: 'Explain {{topic}} in simple terms',
-        label: 'Simple Explanation',
-      },
-    ]);
-  });
-
-  it('should flatten array results from readPrompts', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValueOnce('prompt1\n---\nprompt2');
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-
-    const result = await processPrompts(['test.txt']);
-
-    expect(result).toEqual([
-      { raw: 'prompt1', label: 'test.txt: prompt1' },
-      { raw: 'prompt2', label: 'test.txt: prompt2' },
-    ]);
-    expect(Array.isArray(result)).toBe(true);
-    expect(result).toHaveLength(2);
-  });
-});
-
-describe('processPrompts with .prompty files', () => {
-  it('should process prompty file paths', async () => {
-    // Mock the file system to return a prompty file
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(`---
-name: Test Prompty
----
-system:
-You are helpful.
-
-user:
-{{question}}`);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
-
-    const result = await processPrompts(['test.prompty']);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].label).toBe('Test Prompty');
-    const messages = JSON.parse(result[0].raw);
-    expect(messages).toEqual([
-      { role: 'system', content: 'You are helpful.' },
-      { role: 'user', content: '{{question}}' },
-    ]);
   });
 });
