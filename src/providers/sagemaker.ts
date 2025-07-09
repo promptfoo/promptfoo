@@ -446,13 +446,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         return modelType;
       } else {
         throw new Error(
-          `Invalid model type "${modelType}" in config. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
+          `Invalid model type "${modelType}" in \`config.modelType\`. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
         );
       }
     }
 
     throw new Error(
-      'Model type must be provided either in config.modelType or as part of the provider ID format "sagemaker:<model_type>:<endpoint>"',
+      'Model type must be set either in `config.modelType` or as part of the Provider ID, for example: "sagemaker:<model_type>:<endpoint>"',
     );
   }
 
