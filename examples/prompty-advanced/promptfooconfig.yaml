@@ -1,6 +1,5 @@
 prompts:
   - azure_chatbot.prompty
-  - azure_chatbot_handlebars.prompty
   - image_analysis.prompty
 
 providers:

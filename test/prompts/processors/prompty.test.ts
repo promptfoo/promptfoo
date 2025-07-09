@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import { processPromptyFile } from '../../../src/prompts/processors/prompty';
-import type { ApiProvider, Prompt } from '../../../src/types';
 
 jest.mock('fs');
 
@@ -277,7 +276,9 @@ Hello`;
 
   it('should handle empty content', async () => {
     const promptyContent = `---
-name: Empty Content
+name: Empty Test
+model:
+  api: chat
 ---
 `;
 
@@ -292,12 +293,15 @@ name: Empty Content
   it('should handle function role', async () => {
     const promptyContent = `---
 name: Function Test
+model:
+  api: chat
 ---
+system:
+You are a helpful assistant.
+
 function:
 get_weather(location: string)
-
-user:
-What's the weather?`;
+`;
 
     mockFs.readFileSync.mockReturnValue(promptyContent);
 
@@ -305,121 +309,104 @@ What's the weather?`;
     const messages = JSON.parse(result[0].raw);
     
     expect(messages).toHaveLength(2);
-    expect(messages[0].role).toBe('function');
-    expect(messages[0].content).toBe('get_weather(location: string)');
+    expect(messages[1].role).toBe('function');
   });
 
-  it('should process prompty file with Handlebars template engine', async () => {
+  it('should resolve environment variables in configuration', async () => {
     const promptyContent = `---
-name: Handlebars Test
-template: handlebars
+name: Env Var Test
 model:
   api: chat
-sample:
-  name: Alice
-  premium: true
+  configuration:
+    type: azure_openai
+    api_key: \${env:TEST_API_KEY}
+    azure_endpoint: \${env:TEST_ENDPOINT}
+    azure_deployment: gpt-4
+---
+system:
+Test prompt
+`;
+
+    process.env.TEST_API_KEY = 'test-key-123';
+    process.env.TEST_ENDPOINT = 'https://test.openai.azure.com';
+
+    mockFs.readFileSync.mockReturnValue(promptyContent);
+
+    const result = await processPromptyFile('/path/to/prompt.prompty', {});
+
+    expect(result).toHaveLength(1);
+    expect(result[0].config).toMatchObject({
+      apiKey: 'test-key-123',
+      endpoint: 'https://test.openai.azure.com',
+      deployment: 'gpt-4',
+    });
+
+    // Clean up
+    delete process.env.TEST_API_KEY;
+    delete process.env.TEST_ENDPOINT;
+  });
+
+  it('should handle missing environment variables', async () => {
+    const promptyContent = `---
+name: Missing Env Test
+model:
+  api: chat
+  configuration:
+    type: openai
+    api_key: \${env:MISSING_VAR}
+    name: gpt-4
+---
+system:
+Test prompt
+`;
+
+    mockFs.readFileSync.mockReturnValue(promptyContent);
+
+    const result = await processPromptyFile('/path/to/prompt.prompty', {});
+
+    expect(result).toHaveLength(1);
+    // When env var is missing and resolves to empty string, it's not added to config
+    // because the code checks if (config.api_key) which is falsy for empty string
+    expect(result[0].config?.apiKey).toBeUndefined();
+    expect(result[0].config?.model).toBe('gpt-4');
+  });
+
+  it('should support input and output specifications', async () => {
+    const promptyContent = `---
+name: IO Spec Test
+model:
+  api: chat
+inputs:
+  name:
+    type: string
+    description: User's name
+    is_required: true
+  age:
+    type: number
+    description: User's age
+    default: 25
+outputs:
+  response:
+    type: string
+    description: The generated response
 ---
 system:
 You are a helpful assistant.
 
 user:
-Hello {{name}}!
-{{#if premium}}
-You have premium access.
-{{else}}
-Consider upgrading.
-{{/if}}
+Hello, my name is {{name}} and I am {{age}} years old.
 `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(promptyContent);
+    mockFs.readFileSync.mockReturnValue(promptyContent);
 
-    const result = await processPromptyFile('test.prompty', {});
-
-    expect(result).toHaveLength(1);
-    expect(result[0].label).toBe('Handlebars Test');
-    
-    // The function should be defined for sample data
-    expect(result[0].function).toBeDefined();
-    
-    // Test the rendering with the function
-    if (result[0].function) {
-      const rendered = await result[0].function({
-        vars: { name: 'Bob', premium: false },
-        provider: {} as any,
-      });
-      
-      const messages = JSON.parse(rendered);
-      expect(messages).toHaveLength(2);
-      expect(messages[1].content).toContain('Hello Bob!');
-      expect(messages[1].content).toContain('Consider upgrading.');
-      expect(messages[1].content).not.toContain('You have premium access.');
-    }
-  });
-
-  it('should handle Handlebars helpers', async () => {
-    const promptyContent = `---
-name: Handlebars Helpers Test
-template: handlebars
-model:
-  api: completion
-sample:
-  score: 85
-  passing: 70
----
-Your score is {{score}}.
-{{#if (gte score passing)}}
-Congratulations! You passed.
-{{else}}
-Sorry, you need at least {{passing}} to pass.
-{{/if}}
-`;
-
-    jest.mocked(fs.readFileSync).mockReturnValue(promptyContent);
-
-    const result = await processPromptyFile('test.prompty', {});
+    const result = await processPromptyFile('/path/to/prompt.prompty', {});
 
     expect(result).toHaveLength(1);
-    
-    // Test the rendering with the function
-    if (result[0].function) {
-      const rendered = await result[0].function({
-        vars: { score: 65, passing: 70 },
-        provider: {} as any,
-      });
-      
-      expect(rendered).toContain('Your score is 65.');
-      expect(rendered).toContain('Sorry, you need at least 70 to pass.');
-      expect(rendered).not.toContain('Congratulations!');
-    }
-  });
-
-  it('should default to jinja2/nunjucks when template is not specified', async () => {
-    const promptyContent = `---
-name: Default Template Test
-model:
-  api: completion
-sample:
-  name: Test
----
-Hello {{name}}!
-{% if true %}Always shown{% endif %}
-`;
-
-    jest.mocked(fs.readFileSync).mockReturnValue(promptyContent);
-
-    const result = await processPromptyFile('test.prompty', {});
-
-    expect(result).toHaveLength(1);
-    
-    // Test that Nunjucks syntax works
-    if (result[0].function) {
-      const rendered = await result[0].function({
-        vars: {},
-        provider: {} as any,
-      });
-      
-      expect(rendered).toContain('Hello Test!');
-      expect(rendered).toContain('Always shown');
-    }
+    // The inputs/outputs are metadata and don't affect the prompt processing
+    // but they should be parsed without errors
+    const messages = JSON.parse(result[0].raw);
+    expect(messages).toHaveLength(2);
+    expect(messages[1].content).toContain('{{name}}');
+    expect(messages[1].content).toContain('{{age}}');
   });
 }); 

@@ -4,44 +4,27 @@ This example demonstrates advanced features of Microsoft Prompty files in prompt
 
 ## Advanced Features
 
-### 1. Template Engine Selection
-
-Prompty files support multiple template engines:
-
-- **Jinja2/Nunjucks** (default): Microsoft's standard, using `{% if %}` syntax
-- **Handlebars**: Alternative syntax using `{{#if}}` blocks
-
-### 2. Azure OpenAI Configuration
+### 1. Azure OpenAI Configuration
 
 The `azure_chatbot.prompty` example shows:
 - Azure-specific configuration (endpoint, deployment, API version)
 - Environment variable usage with `${env:VAR_NAME}` syntax
 - Multi-turn conversation setup
+- Conditional logic using Nunjucks (Jinja2-compatible) templating
 
-### 3. Vision/Image Support
+### 2. Vision/Image Support
 
 The `image_analysis.prompty` example demonstrates:
 - Image references in prompts using markdown syntax: `![alt](url)`
 - Structured output formatting
 - Complex system instructions
+- Multiple image handling
 
-### 4. Conditional Logic
+### 3. Template Features
 
-Both Nunjucks and Handlebars examples show:
-- Conditional content based on variables
-- Dynamic prompt generation
-- Template-specific syntax differences
+Prompty files use Nunjucks templating (Jinja2-compatible), which includes:
 
-## Files in this example
-
-- `azure_chatbot.prompty` - Azure OpenAI configuration with Nunjucks templating
-- `azure_chatbot_handlebars.prompty` - Same prompt using Handlebars syntax
-- `image_analysis.prompty` - Vision model example with image support
-- `promptfooconfig.yaml` - Configuration for testing all examples
-
-## Template Engine Comparison
-
-### Nunjucks (Default)
+#### Conditionals
 ```
 {% if topic == "quantum computing" %}
 Quantum computing explanation...
@@ -50,13 +33,35 @@ General explanation...
 {% endif %}
 ```
 
-### Handlebars
+#### Loops
 ```
-{{#if (eq topic "quantum computing")}}
-Quantum computing explanation...
-{{else}}
-General explanation...
-{{/if}}
+{% for item in items %}
+- {{item.name}}: {{item.description}}
+{% endfor %}
+```
+
+#### Variables and Filters
+```
+Hello {{name | upper}}!
+The date is {{date | date("YYYY-MM-DD")}}.
+```
+
+## Files in this example
+
+- `azure_chatbot.prompty` - Azure OpenAI configuration with Nunjucks templating
+- `image_analysis.prompty` - Vision model example with image support
+- `promptfooconfig.yaml` - Configuration for testing all examples
+
+## Environment Variables
+
+Prompty files support environment variable substitution in configuration:
+
+```yaml
+model:
+  configuration:
+    type: azure_openai
+    api_key: ${env:AZURE_OPENAI_API_KEY}
+    azure_endpoint: ${env:AZURE_OPENAI_ENDPOINT}
 ```
 
 ## Running the examples
@@ -79,33 +84,29 @@ General explanation...
 
 ## Key Concepts
 
-### Template Field
+### Nunjucks Templating
 
-Add `template: handlebars` to the frontmatter to use Handlebars instead of the default Nunjucks:
+Prompty files use Nunjucks, which is largely compatible with Jinja2. Common features include:
+
+- Variable interpolation: `{{variable}}`
+- Conditionals: `{% if condition %}...{% endif %}`
+- Loops: `{% for item in items %}...{% endfor %}`
+- Filters: `{{value | filter}}`
+- Macros and includes (for advanced use cases)
+
+### Sample Data
+
+The `sample` section provides default values that can be overridden by test variables:
 
 ```yaml
----
-name: My Prompt
-template: handlebars
----
+sample:
+  userName: Alice
+  topic: quantum computing
+  difficulty: beginner
 ```
-
-### Handlebars Helpers
-
-When using Handlebars, these comparison helpers are available:
-- `eq` (equals)
-- `ne` (not equals)
-- `lt` (less than)
-- `gt` (greater than)
-- `lte` (less than or equal)
-- `gte` (greater than or equal)
-
-### Environment Variables
-
-Use `${env:VAR_NAME}` syntax in configuration values to reference environment variables.
 
 ## Learn more
 
 - [Promptfoo Prompty documentation](https://promptfoo.dev/docs/configuration/prompts#prompty-files-microsoft-format)
-- [Nunjucks templating](https://mozilla.github.io/nunjucks/)
-- [Handlebars templating](https://handlebarsjs.com/) 
+- [Microsoft Prompty specification](https://github.com/microsoft/prompty)
+- [Nunjucks templating](https://mozilla.github.io/nunjucks/) 

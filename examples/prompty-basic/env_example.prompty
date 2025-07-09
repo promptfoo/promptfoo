@@ -1,0 +1,21 @@
+---
+name: Environment Variable Example
+description: Shows how to use environment variables in prompty configuration
+version: 1.0.0
+model:
+  api: chat
+  configuration:
+    type: openai
+    api_key: ${env:OPENAI_API_KEY}
+    model: gpt-3.5-turbo
+  parameters:
+    temperature: 0.7
+    max_tokens: 150
+sample:
+  task: "Write a haiku about coding"
+---
+system:
+You are a creative assistant that helps with various writing tasks.
+
+user:
+{{task}} 

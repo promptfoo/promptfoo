@@ -1,10 +1,8 @@
 import * as fs from 'fs';
 import matter from 'gray-matter';
-import Handlebars from 'handlebars';
 import logger from '../../logger';
 import type { Prompt } from '../../types';
 import { renderVarsInObject } from '../../util';
-import { getNunjucksEngine } from '../../util/templates';
 
 interface PromptyFrontmatter {
   name?: string;
@@ -22,20 +20,64 @@ interface PromptyFrontmatter {
       azure_endpoint?: string;
       name?: string;
       organization?: string;
+      connection?: string;
       [key: string]: any;
     };
     parameters?: Record<string, any>;
     response?: 'first' | 'all';
   };
   sample?: Record<string, any>;
-  inputs?: Record<string, any>;
-  outputs?: Record<string, any>;
-  template?: string | { type: string; parser?: string };
+  inputs?: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      default?: any;
+      is_required?: boolean;
+      json_schema?: any;
+    };
+  };
+  outputs?: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      json_schema?: any;
+    };
+  };
 }
 
 interface ParsedMessage {
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+}
+
+/**
+ * Resolves environment variables in a value using ${env:VAR_NAME} syntax
+ */
+function resolveEnvVariables(value: any): any {
+  if (typeof value === 'string') {
+    return value.replace(/\$\{env:(\w+)\}/g, (_, envVar) => {
+      const envValue = process.env[envVar];
+      if (envValue === undefined) {
+        logger.warn(`Environment variable ${envVar} is not defined`);
+        return '';
+      }
+      return envValue;
+    });
+  }
+  
+  if (Array.isArray(value)) {
+    return value.map(item => resolveEnvVariables(item));
+  }
+  
+  if (typeof value === 'object' && value !== null) {
+    const resolved: Record<string, any> = {};
+    for (const [key, val] of Object.entries(value)) {
+      resolved[key] = resolveEnvVariables(val);
+    }
+    return resolved;
+  }
+  
+  return value;
 }
 
 /**
@@ -116,7 +158,8 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
     return Object.keys(params).length > 0 ? params : undefined;
   }
   
-  const config = frontmatter.model.configuration;
+  // Resolve environment variables in configuration
+  const config = resolveEnvVariables(frontmatter.model.configuration);
   
   // Build provider config based on type
   let providerConfig: Record<string, any> = {};
@@ -150,6 +193,9 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
       if (config.organization) {
         providerConfig.organization = config.organization;
       }
+      if (config.api_key) {
+        providerConfig.apiKey = config.api_key;
+      }
       break;
       
     case 'azure_serverless':
@@ -158,6 +204,9 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
       };
       if (config.azure_endpoint) {
         providerConfig.endpoint = config.azure_endpoint;
+      }
+      if (config.api_key) {
+        providerConfig.apiKey = config.api_key;
       }
       break;
       
@@ -170,39 +219,6 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
   }
   
   return providerConfig;
-}
-
-/**
- * Renders content using the specified template engine
- */
-function renderTemplate(
-  content: string,
-  vars: Record<string, any>,
-  templateEngine?: string
-): string {
-  const engine = templateEngine?.toLowerCase() || 'jinja2';
-  
-  switch (engine) {
-    case 'handlebars':
-    case 'mustache':
-      // Register common helpers
-      Handlebars.registerHelper('eq', (a: any, b: any) => a === b);
-      Handlebars.registerHelper('ne', (a: any, b: any) => a !== b);
-      Handlebars.registerHelper('lt', (a: any, b: any) => a < b);
-      Handlebars.registerHelper('gt', (a: any, b: any) => a > b);
-      Handlebars.registerHelper('lte', (a: any, b: any) => a <= b);
-      Handlebars.registerHelper('gte', (a: any, b: any) => a >= b);
-      
-      const template = Handlebars.compile(content);
-      return template(vars);
-    
-    case 'jinja2':
-    case 'jinja':
-    case 'nunjucks':
-    default:
-      // Use Nunjucks (Jinja2-compatible) as default
-      return renderVarsInObject(content, vars);
-  }
 }
 
 /**
@@ -223,13 +239,6 @@ export async function processPromptyFile(
     
     logger.debug(`Processing prompty file: ${filePath}`);
     logger.debug(`Prompty API type: ${frontmatter.model?.api || 'chat'}`);
-    
-    // Determine template engine
-    const templateEngine = typeof frontmatter.template === 'string' 
-      ? frontmatter.template 
-      : frontmatter.template?.type || 'jinja2';
-    
-    logger.debug(`Using template engine: ${templateEngine}`);
     
     // Determine the prompt format based on API type
     const apiType = frontmatter.model?.api || 'chat';
@@ -279,7 +288,7 @@ export async function processPromptyFile(
             if (typeof msg.content === 'string') {
               return {
                 ...msg,
-                content: renderTemplate(msg.content, mergedVars, templateEngine),
+                content: renderVarsInObject(msg.content, mergedVars),
               };
             } else if (Array.isArray(msg.content)) {
               // Handle multi-part content
@@ -289,7 +298,7 @@ export async function processPromptyFile(
                   if (part.type === 'text' && part.text) {
                     return {
                       ...part,
-                      text: renderTemplate(part.text, mergedVars, templateEngine),
+                      text: renderVarsInObject(part.text, mergedVars),
                     };
                   }
                   return part;
@@ -301,7 +310,7 @@ export async function processPromptyFile(
           rendered = JSON.stringify(renderedMessages);
         } else {
           // For completion API, render the content directly
-          rendered = renderTemplate(originalRaw, mergedVars, templateEngine);
+          rendered = renderVarsInObject(originalRaw, mergedVars);
         }
         
         return rendered;

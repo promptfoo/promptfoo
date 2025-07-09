@@ -269,49 +269,128 @@ prompt,label
 
 ## Prompty Files (Microsoft Format)
 
-Promptfoo supports Microsoft's Prompty format (`.prompty` files), which combines metadata, model configuration, and prompt content in a single file:
+Prompty is a file format developed by Microsoft for defining LLM prompts with metadata. Promptfoo supports `.prompty` files, allowing you to:
 
-```yaml title="promptfooconfig.yaml"
-prompts:
-  - file://customer_service.prompty
-  - file://technical_support.prompty
-```
+- Define prompts with YAML frontmatter containing metadata and model configuration
+- Use role-based content sections (system, user, assistant, function)
+- Include sample data that serves as default variable values
+- Configure model-specific settings
 
-### Basic Prompty Example
+### Basic Example
 
 ```prompty title="customer_service.prompty"
 ---
 name: Customer Service Assistant
-description: Handles customer inquiries
-authors:
-  - John Doe
+description: A helpful customer service agent
 model:
   api: chat
   configuration:
     type: openai
-    name: gpt-4
+    model: gpt-3.5-turbo
   parameters:
     temperature: 0.7
-    max_tokens: 1000
+    max_tokens: 500
 sample:
-  customerName: Alice
-  product: Widget Pro
+  customer_name: "John"
+  issue: "billing question"
 ---
 system:
 You are a friendly customer service representative for {{company}}.
-Always be helpful and professional.
+Help customers with their inquiries professionally and empathetically.
 
 user:
-Hello {{customerName}}, how can I help you with your {{product}} today?
+Hi, I'm {{customer_name}} and I have a {{issue}}.
+```
+
+### Template Engine
+
+Prompty files use **Nunjucks** templating (Jinja2-compatible) for variable substitution. This includes:
+
+- Variable interpolation: `{{variable}}`
+- Conditionals: `{% if condition %}...{% endif %}`
+- Loops: `{% for item in items %}...{% endfor %}`
+
+Note: While Nunjucks is largely compatible with Jinja2, there may be minor differences in some advanced features.
+
+### Environment Variables
+
+You can reference environment variables in the configuration using `${env:VAR_NAME}` syntax:
+
+```prompty
+---
+name: Secure API Example
+model:
+  api: chat
+  configuration:
+    type: azure_openai
+    api_key: ${env:AZURE_OPENAI_API_KEY}
+    azure_endpoint: ${env:AZURE_OPENAI_ENDPOINT}
+    azure_deployment: gpt-4
+---
 ```
 
 ### Chat vs Completion API
 
-Prompty files support different API types:
+Prompty supports both chat and completion APIs:
 
-#### Chat API (default)
+```prompty title="chat_example.prompty"
+---
+model:
+  api: chat
+---
+system:
+System message here
 
-Uses role-based sections (system, user, assistant, function):
+user:
+User message here
+```
+
+```prompty title="completion_example.prompty"
+---
+model:
+  api: completion
+---
+Complete this story: {{beginning}}
+```
+
+### Model Configuration
+
+#### Azure OpenAI
+```prompty
+model:
+  configuration:
+    type: azure_openai
+    azure_endpoint: https://myresource.openai.azure.com
+    azure_deployment: gpt-4
+    api_version: 2024-02-01
+    api_key: ${env:AZURE_OPENAI_API_KEY}
+```
+
+#### OpenAI
+```prompty
+model:
+  configuration:
+    type: openai
+    model: gpt-4
+    organization: org-123
+    api_key: ${env:OPENAI_API_KEY}
+```
+
+### Sample Data
+
+The `sample` section provides default values for variables:
+
+```prompty
+---
+sample:
+  name: "Alice"
+  topic: "machine learning"
+---
+user:
+Hi {{name}}, can you explain {{topic}}?
+```
+
+### Multi-turn Conversations
 
 ```prompty
 ---
@@ -319,147 +398,33 @@ model:
   api: chat
 ---
 system:
-You are an AI assistant.
+You are a helpful tutor.
 
 user:
-{{question}}
-```
-
-#### Completion API
-
-Uses plain text without roles:
-
-```prompty
----
-model:
-  api: completion
----
-Complete the following text: {{prompt}}
-```
-
-### Model Configuration
-
-Prompty supports various model providers:
-
-#### Azure OpenAI
-
-```prompty
----
-model:
-  configuration:
-    type: azure_openai
-    azure_endpoint: ${env:AZURE_OPENAI_ENDPOINT}
-    azure_deployment: gpt-4
-    api_version: 2024-02-01
----
-```
-
-#### OpenAI
-
-```prompty
----
-model:
-  configuration:
-    type: openai
-    name: gpt-4
-    organization: my-org
----
-```
-
-### Sample Data
-
-Prompty files can include sample data that serves as default values for variables:
-
-```prompty
----
-sample:
-  topic: artificial intelligence
-  audience: beginners
----
-user:
-Explain {{topic}} to {{audience}}.
-```
-
-When running tests, the sample data is used unless overridden by test case variables.
-
-### Multi-turn Conversations
-
-Create conversations with multiple turns:
-
-```prompty
----
-name: Math Tutor
----
-system:
-You are a patient math tutor.
-
-user:
-What is calculus?
+What is recursion?
 
 assistant:
-Calculus is a branch of mathematics that deals with rates of change and accumulation.
+Recursion is a programming technique where a function calls itself.
 
 user:
 Can you give me an example?
 ```
 
-### Images in Prompts
+### Image Support
 
-Prompty supports inline images using markdown syntax:
+Include images using markdown syntax:
 
 ```prompty
----
-name: Image Analysis
----
 user:
-Please analyze this image: ![Product](product.jpg)
-What do you see?
+What's in this image?
+![Image description](https://example.com/image.jpg)
 ```
 
 ### Advanced Features
 
-- **Template Processing**: Uses Nunjucks templating by default (Jinja2-compatible)
-- **Alternative Template Engines**: Specify `template: handlebars` in frontmatter to use Handlebars/Mustache syntax
+- **Template Processing**: Uses Nunjucks templating (Jinja2-compatible)
 - **Configuration Merging**: Model parameters are merged with provider configurations
 - **Multiple Prompts**: Use glob patterns to load multiple prompty files: `file://prompts/*.prompty`
-
-#### Template Engine Support
-
-Prompty files support multiple template engines:
-
-```prompty title="nunjucks_example.prompty"
----
-name: Nunjucks Example
-# template: jinja2 (default, can be omitted)
----
-user:
-Hello {{name}}! 
-{% if premium %}
-You have premium access.
-{% else %}
-Consider upgrading to premium.
-{% endif %}
-```
-
-```prompty title="handlebars_example.prompty"
----
-name: Handlebars Example
-template: handlebars
----
-user:
-Hello {{name}}!
-{{#if premium}}
-You have premium access.
-{{else}}
-Consider upgrading to premium.
-{{/if}}
-```
-
-Supported template engines:
-- `jinja2` (default) - Nunjucks/Jinja2 compatible
-- `nunjucks` - Same as jinja2
-- `handlebars` - Handlebars/Mustache syntax
-- `mustache` - Same as handlebars
 
 ## Advanced Features
 

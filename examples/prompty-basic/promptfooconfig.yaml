@@ -4,6 +4,7 @@ prompts:
   - customer_service.prompty
   - technical_support.prompty
   - completion_example.prompty
+  - env_example.prompty
 
 providers:
   - echo
@@ -21,6 +22,9 @@ tests:
   
   - vars:
       beginning: "In the year 2150, humanity discovered"
+  
+  - vars:
+      task: "Create a motivational quote about learning"
     assert:
       - type: llm-rubric
         value: The completion should be creative and continue the sci-fi theme 

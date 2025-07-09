@@ -13,19 +13,18 @@ Prompty files (`.prompty`) are a standardized format for defining LLM prompts wi
 - **Variable substitution**: Using template variables in prompts
 - **Model configuration**: Setting temperature, max_tokens, and other parameters
 - **Sample data**: Default values for variables that can be overridden in tests
+- **Environment variables**: Secure API key management using `${env:VAR_NAME}` syntax
 
-## Template Engine Support
+## Template Engine
 
-Prompty files in promptfoo support multiple template engines:
-
-- **Jinja2/Nunjucks** (default): Compatible with Microsoft's specification
-- **Handlebars**: Optional via `template: handlebars` in frontmatter
+Prompty files use **Nunjucks** templating (Jinja2-compatible) for variable substitution. This is the standard templating engine specified by Microsoft for the Prompty format.
 
 ## Files in this example
 
 - `customer_service.prompty` - A chat-based customer service assistant
 - `technical_support.prompty` - Technical support agent with specific product knowledge
 - `completion_example.prompty` - Simple completion API example
+- `env_example.prompty` - Demonstrates environment variable usage
 - `promptfooconfig.yaml` - Configuration file that loads and tests the prompty files
 
 ## Running the example
@@ -61,6 +60,16 @@ The `model` section allows you to configure:
 - API type (chat or completion)
 - Provider configuration (OpenAI, Azure OpenAI, etc.)
 - Parameters (temperature, max_tokens, etc.)
+
+### Environment variables
+
+Use `${env:VAR_NAME}` syntax to reference environment variables in configuration:
+
+```yaml
+model:
+  configuration:
+    api_key: ${env:OPENAI_API_KEY}
+```
 
 ## Learn more
 
