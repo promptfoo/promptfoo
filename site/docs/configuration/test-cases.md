@@ -107,6 +107,7 @@ Variables are automatically mapped from column headers.
 Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
 
 1. Install the `xlsx` package as a peer dependency:
+
    ```bash
    npm install xlsx
    # or

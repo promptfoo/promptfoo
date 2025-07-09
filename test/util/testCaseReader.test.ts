@@ -409,7 +409,7 @@ describe('readStandaloneTestsFile', () => {
       { var1: 'value1', var2: 'value2', __expected: 'expected1' },
       { var1: 'value3', var2: 'value4', __expected: 'expected2' },
     ];
-    
+
     // Mock the dynamic import
     jest.doMock('xlsx', () => ({
       readFile: jest.fn().mockReturnValue({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }),
@@ -434,7 +434,7 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
-    
+
     // Clean up the mock
     jest.dontMock('xlsx');
   });
@@ -447,9 +447,9 @@ describe('readStandaloneTestsFile', () => {
 
     await expect(readStandaloneTestsFile('test.xlsx')).rejects.toThrow(
       'xlsx is not installed. Please install it with: npm install xlsx\n' +
-      'Note: xlsx is an optional peer dependency for reading Excel files.',
+        'Note: xlsx is an optional peer dependency for reading Excel files.',
     );
-    
+
     // Clean up the mock
     jest.dontMock('xlsx');
   });

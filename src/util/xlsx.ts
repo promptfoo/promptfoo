@@ -11,7 +11,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     if (error instanceof Error && error.message.includes("Cannot find module 'xlsx'")) {
       throw new Error(
         'xlsx is not installed. Please install it with: npm install xlsx\n' +
-        'Note: xlsx is an optional peer dependency for reading Excel files.',
+          'Note: xlsx is an optional peer dependency for reading Excel files.',
       );
     }
     throw new Error(
