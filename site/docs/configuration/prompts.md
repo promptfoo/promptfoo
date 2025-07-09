@@ -418,9 +418,48 @@ What do you see?
 
 ### Advanced Features
 
-- **Template Processing**: Uses Nunjucks templating (same as other promptfoo formats)
+- **Template Processing**: Uses Nunjucks templating by default (Jinja2-compatible)
+- **Alternative Template Engines**: Specify `template: handlebars` in frontmatter to use Handlebars/Mustache syntax
 - **Configuration Merging**: Model parameters are merged with provider configurations
 - **Multiple Prompts**: Use glob patterns to load multiple prompty files: `file://prompts/*.prompty`
+
+#### Template Engine Support
+
+Prompty files support multiple template engines:
+
+```prompty title="nunjucks_example.prompty"
+---
+name: Nunjucks Example
+# template: jinja2 (default, can be omitted)
+---
+user:
+Hello {{name}}! 
+{% if premium %}
+You have premium access.
+{% else %}
+Consider upgrading to premium.
+{% endif %}
+```
+
+```prompty title="handlebars_example.prompty"
+---
+name: Handlebars Example
+template: handlebars
+---
+user:
+Hello {{name}}!
+{{#if premium}}
+You have premium access.
+{{else}}
+Consider upgrading to premium.
+{{/if}}
+```
+
+Supported template engines:
+- `jinja2` (default) - Nunjucks/Jinja2 compatible
+- `nunjucks` - Same as jinja2
+- `handlebars` - Handlebars/Mustache syntax
+- `mustache` - Same as handlebars
 
 ## Advanced Features
 

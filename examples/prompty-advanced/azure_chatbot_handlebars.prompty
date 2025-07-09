@@ -1,6 +1,6 @@
 ---
-name: Azure AI Assistant
-description: Multi-turn conversation assistant using Azure OpenAI
+name: Azure AI Assistant with Handlebars
+description: Multi-turn conversation assistant using Handlebars templating
 version: 1.0.0
 authors:
   - AI Team
@@ -8,6 +8,7 @@ tags:
   - azure
   - chatbot
   - multi-turn
+  - handlebars
 model:
   api: chat
   configuration:
@@ -23,6 +24,7 @@ model:
     frequency_penalty: 0.5
     presence_penalty: 0.5
   response: first
+template: handlebars
 sample:
   userName: Alice
   topic: quantum computing
@@ -40,11 +42,11 @@ Hello {{userName}}! I'm excited to help you learn about {{topic}}.
 
 Since you're at a {{difficulty}} level, I'll make sure to explain things clearly without too much jargon. Let's start with the basics.
 
-{% if topic == "quantum computing" %}
+{{#if (eq topic "quantum computing")}}
 Quantum computing is like having a super-powered computer that can solve certain problems much faster than regular computers. Instead of using bits (0s and 1s), quantum computers use "qubits" that can be both 0 and 1 at the same time!
-{% else %}
+{{else}}
 Let me break down {{topic}} into simple, understandable concepts for you.
-{% endif %}
+{{/if}}
 
 What specific aspect would you like to explore first?
 

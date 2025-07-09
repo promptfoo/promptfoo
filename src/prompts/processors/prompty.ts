@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import matter from 'gray-matter';
+import Handlebars from 'handlebars';
 import logger from '../../logger';
 import type { Prompt } from '../../types';
 import { renderVarsInObject } from '../../util';
+import { getNunjucksEngine } from '../../util/templates';
 
 interface PromptyFrontmatter {
   name?: string;
@@ -171,6 +173,39 @@ function mapModelConfig(frontmatter: PromptyFrontmatter): Record<string, any> | 
 }
 
 /**
+ * Renders content using the specified template engine
+ */
+function renderTemplate(
+  content: string,
+  vars: Record<string, any>,
+  templateEngine?: string
+): string {
+  const engine = templateEngine?.toLowerCase() || 'jinja2';
+  
+  switch (engine) {
+    case 'handlebars':
+    case 'mustache':
+      // Register common helpers
+      Handlebars.registerHelper('eq', (a: any, b: any) => a === b);
+      Handlebars.registerHelper('ne', (a: any, b: any) => a !== b);
+      Handlebars.registerHelper('lt', (a: any, b: any) => a < b);
+      Handlebars.registerHelper('gt', (a: any, b: any) => a > b);
+      Handlebars.registerHelper('lte', (a: any, b: any) => a <= b);
+      Handlebars.registerHelper('gte', (a: any, b: any) => a >= b);
+      
+      const template = Handlebars.compile(content);
+      return template(vars);
+    
+    case 'jinja2':
+    case 'jinja':
+    case 'nunjucks':
+    default:
+      // Use Nunjucks (Jinja2-compatible) as default
+      return renderVarsInObject(content, vars);
+  }
+}
+
+/**
  * Processes a Prompty file to extract prompts
  * @param filePath - Path to the .prompty file
  * @param prompt - Base prompt configuration
@@ -188,6 +223,13 @@ export async function processPromptyFile(
     
     logger.debug(`Processing prompty file: ${filePath}`);
     logger.debug(`Prompty API type: ${frontmatter.model?.api || 'chat'}`);
+    
+    // Determine template engine
+    const templateEngine = typeof frontmatter.template === 'string' 
+      ? frontmatter.template 
+      : frontmatter.template?.type || 'jinja2';
+    
+    logger.debug(`Using template engine: ${templateEngine}`);
     
     // Determine the prompt format based on API type
     const apiType = frontmatter.model?.api || 'chat';
@@ -237,7 +279,7 @@ export async function processPromptyFile(
             if (typeof msg.content === 'string') {
               return {
                 ...msg,
-                content: renderVarsInObject(msg.content, mergedVars),
+                content: renderTemplate(msg.content, mergedVars, templateEngine),
               };
             } else if (Array.isArray(msg.content)) {
               // Handle multi-part content
@@ -247,7 +289,7 @@ export async function processPromptyFile(
                   if (part.type === 'text' && part.text) {
                     return {
                       ...part,
-                      text: renderVarsInObject(part.text, mergedVars),
+                      text: renderTemplate(part.text, mergedVars, templateEngine),
                     };
                   }
                   return part;
@@ -259,7 +301,7 @@ export async function processPromptyFile(
           rendered = JSON.stringify(renderedMessages);
         } else {
           // For completion API, render the content directly
-          rendered = renderVarsInObject(originalRaw, mergedVars);
+          rendered = renderTemplate(originalRaw, mergedVars, templateEngine);
         }
         
         return rendered;

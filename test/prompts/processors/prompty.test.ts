@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import { processPromptyFile } from '../../../src/prompts/processors/prompty';
-import type { Prompt } from '../../../src/types';
+import type { ApiProvider, Prompt } from '../../../src/types';
 
 jest.mock('fs');
 
@@ -307,5 +307,119 @@ What's the weather?`;
     expect(messages).toHaveLength(2);
     expect(messages[0].role).toBe('function');
     expect(messages[0].content).toBe('get_weather(location: string)');
+  });
+
+  it('should process prompty file with Handlebars template engine', async () => {
+    const promptyContent = `---
+name: Handlebars Test
+template: handlebars
+model:
+  api: chat
+sample:
+  name: Alice
+  premium: true
+---
+system:
+You are a helpful assistant.
+
+user:
+Hello {{name}}!
+{{#if premium}}
+You have premium access.
+{{else}}
+Consider upgrading.
+{{/if}}
+`;
+
+    jest.mocked(fs.readFileSync).mockReturnValue(promptyContent);
+
+    const result = await processPromptyFile('test.prompty', {});
+
+    expect(result).toHaveLength(1);
+    expect(result[0].label).toBe('Handlebars Test');
+    
+    // The function should be defined for sample data
+    expect(result[0].function).toBeDefined();
+    
+    // Test the rendering with the function
+    if (result[0].function) {
+      const rendered = await result[0].function({
+        vars: { name: 'Bob', premium: false },
+        provider: {} as any,
+      });
+      
+      const messages = JSON.parse(rendered);
+      expect(messages).toHaveLength(2);
+      expect(messages[1].content).toContain('Hello Bob!');
+      expect(messages[1].content).toContain('Consider upgrading.');
+      expect(messages[1].content).not.toContain('You have premium access.');
+    }
+  });
+
+  it('should handle Handlebars helpers', async () => {
+    const promptyContent = `---
+name: Handlebars Helpers Test
+template: handlebars
+model:
+  api: completion
+sample:
+  score: 85
+  passing: 70
+---
+Your score is {{score}}.
+{{#if (gte score passing)}}
+Congratulations! You passed.
+{{else}}
+Sorry, you need at least {{passing}} to pass.
+{{/if}}
+`;
+
+    jest.mocked(fs.readFileSync).mockReturnValue(promptyContent);
+
+    const result = await processPromptyFile('test.prompty', {});
+
+    expect(result).toHaveLength(1);
+    
+    // Test the rendering with the function
+    if (result[0].function) {
+      const rendered = await result[0].function({
+        vars: { score: 65, passing: 70 },
+        provider: {} as any,
+      });
+      
+      expect(rendered).toContain('Your score is 65.');
+      expect(rendered).toContain('Sorry, you need at least 70 to pass.');
+      expect(rendered).not.toContain('Congratulations!');
+    }
+  });
+
+  it('should default to jinja2/nunjucks when template is not specified', async () => {
+    const promptyContent = `---
+name: Default Template Test
+model:
+  api: completion
+sample:
+  name: Test
+---
+Hello {{name}}!
+{% if true %}Always shown{% endif %}
+`;
+
+    jest.mocked(fs.readFileSync).mockReturnValue(promptyContent);
+
+    const result = await processPromptyFile('test.prompty', {});
+
+    expect(result).toHaveLength(1);
+    
+    // Test that Nunjucks syntax works
+    if (result[0].function) {
+      const rendered = await result[0].function({
+        vars: {},
+        provider: {} as any,
+      });
+      
+      expect(rendered).toContain('Hello Test!');
+      expect(rendered).toContain('Always shown');
+    }
   });
 }); 

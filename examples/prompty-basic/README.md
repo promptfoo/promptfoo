@@ -1,71 +1,68 @@
-# Prompty File Examples
+# prompty-basic
 
-This directory demonstrates how to use Microsoft Prompty (`.prompty`) files with promptfoo.
+This example demonstrates how to use Microsoft Prompty files with promptfoo for LLM evaluation.
 
-## What are Prompty Files?
+## What are Prompty files?
 
-Prompty is a file format that combines:
-- Metadata (name, description, authors)
-- Model configuration (API type, parameters)
-- Sample data for testing
-- The actual prompt content with role-based sections
+Prompty files (`.prompty`) are a standardized format for defining LLM prompts with metadata, model configuration, and content in a single file. They were created by Microsoft and are supported by various tools in the AI ecosystem.
 
-## Files in this Example
+## Features demonstrated
+
+- **Chat API prompts**: Role-based conversations (system, user, assistant)
+- **Completion API prompts**: Simple text completion
+- **Variable substitution**: Using template variables in prompts
+- **Model configuration**: Setting temperature, max_tokens, and other parameters
+- **Sample data**: Default values for variables that can be overridden in tests
+
+## Template Engine Support
+
+Prompty files in promptfoo support multiple template engines:
+
+- **Jinja2/Nunjucks** (default): Compatible with Microsoft's specification
+- **Handlebars**: Optional via `template: handlebars` in frontmatter
+
+## Files in this example
 
 - `customer_service.prompty` - A chat-based customer service assistant
-- `technical_support.prompty` - Technical support agent with lower temperature for accuracy
-- `completion_example.prompty` - Shows completion API usage (non-chat format)
-- `promptfooconfig.yaml` - Configuration showing how to use prompty files
+- `technical_support.prompty` - Technical support agent with specific product knowledge
+- `completion_example.prompty` - Simple completion API example
+- `promptfooconfig.yaml` - Configuration file that loads and tests the prompty files
 
-## Running the Example
+## Running the example
 
-```bash
-# Install promptfoo if you haven't already
-npm install -g promptfoo
+1. Make sure you have promptfoo installed:
+   ```bash
+   npm install -g promptfoo
+   ```
 
-# Run the evaluation
-promptfoo eval
+2. Run the evaluation:
+   ```bash
+   npx promptfoo eval
+   ```
 
-# View results in the web UI
-promptfoo view
-```
+3. View the results:
+   ```bash
+   npx promptfoo view
+   ```
 
-## Key Features Demonstrated
+## Key concepts
 
-1. **Chat vs Completion API**: See how `customer_service.prompty` uses chat format with roles, while `completion_example.prompty` uses plain text completion.
+### Variable substitution
 
-2. **Sample Data**: Each prompty file includes sample data that serves as default values for variables.
+Variables in prompty files use double curly braces: `{{variable_name}}`. These are replaced with values from your test cases.
 
-3. **Model Configuration**: Shows how to configure model parameters directly in the prompty file.
+### Sample data
 
-4. **Variable Substitution**: Uses Nunjucks templating (e.g., `{{customerName}}`) just like other promptfoo formats.
+The `sample` section in the frontmatter provides default values for variables. These are used unless overridden by test case variables.
 
-## Prompty Format Structure
+### Model configuration
 
-```yaml
----
-# Metadata section (YAML frontmatter)
-name: Prompt Name
-description: What this prompt does
-model:
-  api: chat  # or completion
-  configuration:
-    type: openai
-    name: gpt-3.5-turbo
-  parameters:
-    temperature: 0.7
-sample:
-  var1: default value
----
-# Content section (role-based for chat API)
-system:
-System message here
+The `model` section allows you to configure:
+- API type (chat or completion)
+- Provider configuration (OpenAI, Azure OpenAI, etc.)
+- Parameters (temperature, max_tokens, etc.)
 
-user:
-User message with {{variables}}
-```
+## Learn more
 
-## Learn More
-
-- [Prompty Specification](https://github.com/microsoft/prompty)
-- [Promptfoo Documentation](https://promptfoo.dev/docs/configuration/prompts) 
+- [Promptfoo Prompty documentation](https://promptfoo.dev/docs/configuration/prompts#prompty-files-microsoft-format)
+- [Microsoft Prompty specification](https://github.com/microsoft/prompty) 

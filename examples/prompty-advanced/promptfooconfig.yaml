@@ -1,0 +1,20 @@
+prompts:
+  - azure_chatbot.prompty
+  - azure_chatbot_handlebars.prompty
+  - image_analysis.prompty
+
+providers:
+  - echo
+
+tests:
+  # Test for azure_chatbot.prompty
+  - vars:
+      user_name: "Alice"
+      current_time: "2024-01-15 10:30 AM"
+      weather: "sunny"
+      temperature: "72°F"
+  
+  # Test for image_analysis.prompty
+  - vars:
+      image_url: "https://example.com/test-image.jpg"
+      analysis_type: "detailed" 
