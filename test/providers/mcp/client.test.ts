@@ -91,6 +91,7 @@ describe('MCPClient', () => {
       expect(StdioClientTransport).toHaveBeenCalledWith({
         command: 'npm',
         args: ['start'],
+        env: process.env as Record<string, string>,
       });
       expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
       await mcpClient.cleanup();
