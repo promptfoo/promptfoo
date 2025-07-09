@@ -179,6 +179,17 @@ Main Points:
 Verification: All claims have been fact-checked and verified.
 
 Conclusion: Renewable energy storage technologies are rapidly evolving, making sustainable energy more viable.`;
+      } else if (prompt.includes('rubber duck') || prompt.includes('debugging')) {
+        result = `Executive Summary:
+
+Main Points:
+• Rubber duck debugging leverages psychological principles of articulation
+• Philosophy of externalization helps developers identify logical flaws
+• Debug methodology transforms internal monologue into structured analysis
+
+Verification: All claims have been fact-checked and verified.
+
+Conclusion: The philosophical implications of rubber duck debugging reveal deep insights into human cognition and problem-solving.`;
       } else {
         result = `Executive Summary:
 
