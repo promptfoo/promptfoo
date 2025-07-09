@@ -34,183 +34,183 @@ The integration uses SonarQube's Generic Issue Import feature to import Promptfo
 
 Here's an example GitHub Actions workflow that runs Promptfoo and imports results into SonarQube:
 
-```yaml:.github/workflows/sonarqube.yml
+```yaml
 name: SonarQube Analysis with Promptfoo
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   analysis:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Shallow clones should be disabled for better analysis
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for better analysis
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-    - name: Install Promptfoo
-      run: npm install -g promptfoo
+      - name: Install Promptfoo
+        run: npm install -g promptfoo
 
-    - name: Run Promptfoo scan
-      run: |
-        promptfoo eval \
-          --config promptfooconfig.yaml \
-          --output pf-sonar.json \
-          --output-format sonarqube
+      - name: Run Promptfoo scan
+        run: |
+          promptfoo eval \
+            --config promptfooconfig.yaml \
+            --output pf-sonar.json \
+            --output-format sonarqube
 
-    - name: SonarQube Scan
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      run: |
-        sonar-scanner \
-          -Dsonar.projectKey=${{ github.event.repository.name }} \
-          -Dsonar.sources=. \
-          -Dsonar.externalIssuesReportPaths=pf-sonar.json
+      - name: SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=${{ github.event.repository.name }} \
+            -Dsonar.sources=. \
+            -Dsonar.externalIssuesReportPaths=pf-sonar.json
 ```
 
 ### 2. Advanced Pipeline Configuration
 
 For enterprise environments, here's a more comprehensive setup with caching, conditional execution, and detailed reporting:
 
-```yaml:.github/workflows/sonarqube-advanced.yml
+```yaml
 name: Advanced SonarQube Integration
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   schedule:
-    - cron: '0 2 * * *'  # Daily security scan
+    - cron: '0 2 * * *' # Daily security scan
 
 jobs:
   promptfoo-security-scan:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-    - name: Cache promptfoo
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/promptfoo
-        key: ${{ runner.os }}-promptfoo-${{ hashFiles('**/promptfooconfig.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-promptfoo-
+      - name: Cache promptfoo
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/promptfoo
+          key: ${{ runner.os }}-promptfoo-${{ hashFiles('**/promptfooconfig.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-promptfoo-
 
-    - name: Install dependencies
-      run: |
-        npm install -g promptfoo
-        npm install -g jsonschema
+      - name: Install dependencies
+        run: |
+          npm install -g promptfoo
+          npm install -g jsonschema
 
-    - name: Validate promptfoo config
-      run: |
-        # Validate configuration before running
-        promptfoo validate --config promptfooconfig.yaml
+      - name: Validate promptfoo config
+        run: |
+          # Validate configuration before running
+          promptfoo validate --config promptfooconfig.yaml
 
-    - name: Run red team evaluation
-      id: redteam
-      env:
-        PROMPTFOO_CACHE_PATH: ~/.cache/promptfoo
-      run: |
-        # Run with failure threshold
-        promptfoo eval \
-          --config promptfooconfig.yaml \
-          --output pf-results.json \
-          --output-format json \
-          --max-concurrency 5 \
-          --share || echo "EVAL_FAILED=true" >> $GITHUB_OUTPUT
+      - name: Run red team evaluation
+        id: redteam
+        env:
+          PROMPTFOO_CACHE_PATH: ~/.cache/promptfoo
+        run: |
+          # Run with failure threshold
+          promptfoo eval \
+            --config promptfooconfig.yaml \
+            --output pf-results.json \
+            --output-format json \
+            --max-concurrency 5 \
+            --share || echo "EVAL_FAILED=true" >> $GITHUB_OUTPUT
 
-    - name: Generate multiple report formats
-      if: always()
-      run: |
-        # Generate SonarQube format
-        promptfoo eval \
-          --config promptfooconfig.yaml \
-          --output pf-sonar.json \
-          --output-format sonarqube \
-          --no-cache
+      - name: Generate multiple report formats
+        if: always()
+        run: |
+          # Generate SonarQube format
+          promptfoo eval \
+            --config promptfooconfig.yaml \
+            --output pf-sonar.json \
+            --output-format sonarqube \
+            --no-cache
 
-        # Also generate HTML report for artifacts
-        promptfoo eval \
-          --config promptfooconfig.yaml \
-          --output pf-results.html \
-          --output-format html \
-          --no-cache
+          # Also generate HTML report for artifacts
+          promptfoo eval \
+            --config promptfooconfig.yaml \
+            --output pf-results.html \
+            --output-format html \
+            --no-cache
 
-    - name: SonarQube Scan
-      if: always()
-      uses: SonarSource/sonarqube-scan-action@master
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      with:
-        args: >
-          -Dsonar.projectKey=${{ github.event.repository.name }}
-          -Dsonar.externalIssuesReportPaths=pf-sonar.json
-          -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
-          -Dsonar.pullrequest.branch=${{ github.head_ref }}
-          -Dsonar.pullrequest.base=${{ github.base_ref }}
+      - name: SonarQube Scan
+        if: always()
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ github.event.repository.name }}
+            -Dsonar.externalIssuesReportPaths=pf-sonar.json
+            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
+            -Dsonar.pullrequest.branch=${{ github.head_ref }}
+            -Dsonar.pullrequest.base=${{ github.base_ref }}
 
-    - name: Check Quality Gate
-      uses: SonarSource/sonarqube-quality-gate-action@master
-      timeout-minutes: 5
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Check Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-    - name: Upload artifacts
-      if: always()
-      uses: actions/upload-artifact@v3
-      with:
-        name: promptfoo-reports
-        path: |
-          pf-results.json
-          pf-results.html
-          pf-sonar.json
-        retention-days: 30
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: promptfoo-reports
+          path: |
+            pf-results.json
+            pf-results.html
+            pf-sonar.json
+          retention-days: 30
 
-    - name: Comment PR with results
-      if: github.event_name == 'pull_request' && always()
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          const results = JSON.parse(fs.readFileSync('pf-results.json', 'utf8'));
-          const stats = results.results.stats;
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('pf-results.json', 'utf8'));
+            const stats = results.results.stats;
 
-          const comment = `## 🔒 Promptfoo Security Scan Results
+            const comment = `## 🔒 Promptfoo Security Scan Results
 
-          - **Total Tests**: ${stats.successes + stats.failures}
-          - **Passed**: ${stats.successes} ✅
-          - **Failed**: ${stats.failures} ❌
+            - **Total Tests**: ${stats.successes + stats.failures}
+            - **Passed**: ${stats.successes} ✅
+            - **Failed**: ${stats.failures} ❌
 
-          ${results.shareableUrl ? `[View detailed results](${results.shareableUrl})` : ''}
+            ${results.shareableUrl ? `[View detailed results](${results.shareableUrl})` : ''}
 
-          Issues have been imported to SonarQube for tracking.`;
+            Issues have been imported to SonarQube for tracking.`;
 
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
 ```
 
 ### 3. Configure SonarQube

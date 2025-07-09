@@ -4,15 +4,15 @@ sidebar_label: Looper
 
 # Setting up Promptfoo with Looper
 
-This guide shows you how to integrate **Promptfoo** evaluations into a Looper CI/CD workflow so that every pull‑request (and optional nightly job) automatically runs your prompt tests.
+This guide shows you how to integrate **Promptfoo** evaluations into a Looper CI/CD workflow so that every pull‑request (and optional nightly job) automatically runs your prompt tests.
 
 ## Prerequisites
 
 - A working Looperinstallation with workflow execution enabled
-- A build image (or declared tools) that provides **Node 22+** and **jq 1.6+**
+- A build image (or declared tools) that provides **Node 22+** and **jq 1.6+**
 - `promptfooconfig.yaml` and your prompt fixtures (`prompts/**/*.json`) committed to the repository
 
-## 1. Create `.looper.yml`
+## Create `.looper.yml`
 
 Add the following file to the root of your repo:
 
@@ -67,18 +67,14 @@ flows:
 | `triggers`              | Determines when the workflow runs (`pr`, `manual`, `cron`, etc.).   |
 | `flows`                 | Ordered shell commands; execution stops on the first non‑zero exit. |
 
-> **Note** Looper does **not** understand nested `stages`/`steps` or `jobs`. Keep the flow flat.
-
----
-
-## 2. Caching Promptfoo results
+## Caching Promptfoo results
 
 Looper lacks a first‑class cache API. Two common approaches:
 
 1. **Persistent volume** – mount `${HOME}/.promptfoo/cache` on a reusable volume.
 2. **Persistence tasks** – pull/push the cache at the start and end of the flow:
 
-## 3. Setting quality thresholds
+## Setting quality thresholds
 
 ```yaml
     - (name Pass‑rate gate) |
@@ -86,10 +82,10 @@ Looper lacks a first‑class cache API. Two common approaches:
         PASS=$(jq '.results.stats.successes' output.json)
         RATE=$(echo "scale=2; 100*$PASS/$TOTAL" | bc)
         echo "Pass rate: $RATE%"
-        test $(echo "$RATE >= 95" | bc) -eq 1   # fail if <95 %
+        test $(echo "$RATE >= 95" | bc) -eq 1   # fail if <95 %
 ```
 
-## 4. Multi‑environment evaluations
+## Multi‑environment evaluations
 
 Evaluate both staging and production configs and compare failures:
 
@@ -116,22 +112,20 @@ flows:
       fi
 ```
 
-## 5. Posting evaluation results to GitHub/GitLab
+## Posting evaluation results to GitHub/GitLab
 
-Looper doesn’t have a built‑in `comment-pr` action. Use:
+In order to send evaluation results elsewhere, use:
 
 - **GitHub task**
   ```yaml
   - github --add-comment \
     --repository "$CI_REPOSITORY" \
     --issue "$PR_NUMBER" \
-    --body "$(cat comment.md)"
+    --body "$(cat comment.md)" # set comment as appropriate
   ```
 - **cURL** with a Personal Access Token (PAT) against the REST API.
 
-Generate `comment.md` using the same jq parsing you used in the flow.
-
-## 6. Troubleshooting
+## Troubleshooting
 
 | Problem                  | Remedy                                                                                  |
 | ------------------------ | --------------------------------------------------------------------------------------- |
@@ -140,7 +134,7 @@ Generate `comment.md` using the same jq parsing you used in the flow.
 | Long‑running jobs        | Split prompt sets into separate flows or raise `timeoutMillis` in the build definition. |
 | API rate limits          | Enable Promptfoo cache and/or rotate API keys.                                          |
 
-## 7. Best practices
+## Best practices
 
 1. **Incremental testing** – feed `looper diff --name-only prompts/` into `promptfoo eval` to test only changed prompts.
 2. **Semantic version tags** – tag prompt sets/configs so you can roll back easily.
