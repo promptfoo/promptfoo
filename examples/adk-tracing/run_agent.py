@@ -3,27 +3,29 @@ import argparse
 import asyncio
 import json
 import sys
+
 from agents.tracing_utils import setup_tracing, shutdown_tracing
 
+
 async def main():
-    parser = argparse.ArgumentParser(description='Run ADK Research Assistant')
-    parser.add_argument('--prompt', required=True, help='Research query')
-    parser.add_argument('--traceparent', help='W3C trace context')
-    parser.add_argument('--evaluation-id', help='Evaluation ID')
-    parser.add_argument('--test-case-id', help='Test case ID')
-    
+    parser = argparse.ArgumentParser(description="Run ADK Research Assistant")
+    parser.add_argument("--prompt", required=True, help="Research query")
+    parser.add_argument("--traceparent", help="W3C trace context")
+    parser.add_argument("--evaluation-id", help="Evaluation ID")
+    parser.add_argument("--test-case-id", help="Test case ID")
+
     args = parser.parse_args()
-    
+
     # Setup OpenTelemetry tracing
     setup_tracing()
-    
+
     try:
         # For demo purposes, skip the actual ADK agent and return mock data
         # This demonstrates the tracing without requiring Google AI Studio setup
-        
+
         # Simulate some processing time
         await asyncio.sleep(0.1)
-        
+
         # Mock result based on the prompt
         if "quantum computing" in args.prompt.lower():
             result = """Executive Summary:
@@ -55,20 +57,13 @@ Main Points:
 Verification: All claims have been fact-checked and verified.
 
 Conclusion: AGI safety research is progressing alongside technical development, emphasizing responsible advancement."""
-        
+
         # Output result as JSON
-        output = {
-            'output': result,
-            'success': True
-        }
+        output = {"output": result, "success": True}
         print(json.dumps(output))
-        
+
     except Exception as e:
-        output = {
-            'output': f'Error: {str(e)}',
-            'success': False,
-            'error': str(e)
-        }
+        output = {"output": f"Error: {str(e)}", "success": False, "error": str(e)}
         print(json.dumps(output))
         sys.exit(1)
     finally:
@@ -76,5 +71,6 @@ Conclusion: AGI safety research is progressing alongside technical development, 
         await asyncio.sleep(0.5)
         shutdown_tracing()
 
-if __name__ == '__main__':
-    asyncio.run(main()) 
+
+if __name__ == "__main__":
+    asyncio.run(main())
