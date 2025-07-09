@@ -233,7 +233,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         output = message?.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
-        if (choice.content_filter_results.error) {
+        if (choice.content_filter_results && choice.content_filter_results.error) {
           const { code, message } = choice.content_filter_results.error;
           logger.warn(
             `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,

@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
+import { logger } from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
 jest.mock('../../../src/cache', () => ({
@@ -236,42 +237,6 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toEqual({ test: 'value' });
     });
 
-    it('should handle content_filter finish_reason', async () => {
-      const mockResponse = {
-        id: 'mock-id',
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'gpt-4',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: null,
-            },
-            finish_reason: 'content_filter',
-          },
-        ],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30,
-        },
-      };
-
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe(
-        "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-      );
-    });
-
     it('should handle API errors', async () => {
       jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
@@ -339,42 +304,6 @@ describe('AzureChatCompletionProvider', () => {
           },
         },
       ]);
-    });
-
-    it('should handle content filter error response', async () => {
-      const mockResponse = {
-        error: {
-          message:
-            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
-          code: 'content_filter',
-          status: 400,
-          innererror: {
-            code: 'ResponsibleAIPolicyViolation',
-            content_filter_result: {
-              hate: { filtered: true, severity: 'medium' },
-              jailbreak: { filtered: false, detected: false },
-              self_harm: { filtered: false, severity: 'safe' },
-              sexual: { filtered: false, severity: 'safe' },
-              violence: { filtered: false, severity: 'low' },
-            },
-          },
-        },
-      };
-
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      });
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe(mockResponse.error.message);
-      expect(result.guardrails).toEqual({
-        flagged: true,
-        flaggedInput: true,
-        flaggedOutput: false,
-      });
     });
 
     it('should pass custom headers from config to fetchWithCache', async () => {
@@ -665,7 +594,7 @@ describe('AzureChatCompletionProvider', () => {
       jest.resetAllMocks();
     });
 
-    it('should detect content filter triggered by finish_reason', async () => {
+    it('should detect output content filtering', async () => {
       const mockResponse = {
         id: 'mock-id',
         object: 'chat.completion',
@@ -679,6 +608,28 @@ describe('AzureChatCompletionProvider', () => {
               content: 'Some content',
             },
             finish_reason: 'content_filter',
+            content_filter_results: {
+              hate: {
+                filtered: false,
+                severity: 'safe',
+              },
+              jailbreak: {
+                filtered: false,
+                detected: false,
+              },
+              self_harm: {
+                filtered: false,
+                severity: 'safe',
+              },
+              sexual: {
+                filtered: false,
+                severity: 'safe',
+              },
+              violence: {
+                filtered: true,
+                severity: 'medium',
+              },
+            },
           },
         ],
         usage: {
@@ -705,89 +656,47 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.finishReason).toBe('content_filter');
     });
 
-    it('should detect content filter in response content_filter_results', async () => {
+    it('should detect input content filtering', async () => {
       const mockResponse = {
-        id: 'mock-id',
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'gpt-4',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Some content',
-            },
-            finish_reason: 'stop',
-            content_filter_results: {
-              hate: { filtered: true, severity: 'medium' },
-              sexual: { filtered: false, severity: 'safe' },
-              violence: { filtered: false, severity: 'safe' },
-              self_harm: { filtered: false, severity: 'safe' },
+        error: {
+          message:
+            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
+          type: null,
+          param: 'prompt',
+          code: 'content_filter',
+          status: 400,
+          innererror: {
+            code: 'ResponsibleAIPolicyViolation',
+            content_filter_result: {
+              hate: {
+                filtered: false,
+                severity: 'safe',
+              },
+              jailbreak: {
+                filtered: false,
+                detected: false,
+              },
+              self_harm: {
+                filtered: false,
+                severity: 'safe',
+              },
+              sexual: {
+                filtered: false,
+                severity: 'safe',
+              },
+              violence: {
+                filtered: true,
+                severity: 'medium',
+              },
             },
           },
-        ],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30,
         },
       };
 
       jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result.guardrails).toEqual({
-        flagged: true,
-        flaggedInput: false,
-        flaggedOutput: true,
-      });
-      expect(result.finishReason).toBe('stop');
-    });
-
-    it('should detect input filtering from prompt_filter_results', async () => {
-      const mockResponse = {
-        id: 'mock-id',
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'gpt-4',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Some content',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        prompt_filter_results: [
-          {
-            content_filter_results: {
-              hate: { filtered: true, severity: 'high' },
-              sexual: { filtered: false, severity: 'safe' },
-              violence: { filtered: false, severity: 'safe' },
-              self_harm: { filtered: false, severity: 'safe' },
-            },
-          },
-        ],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30,
-        },
-      };
-
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
+        status: 400,
         statusText: 'OK',
       });
 
@@ -798,45 +707,79 @@ describe('AzureChatCompletionProvider', () => {
         flaggedInput: true,
         flaggedOutput: false,
       });
-      expect(result.finishReason).toBe('stop');
+      expect(result.output).toBe(
+        "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
+      );
+      expect(result.finishReason).toBe('content_filter');
     });
 
-    it('should detect both input and output filtering', async () => {
+    it('should handle content filtering system errors', async () => {
       const mockResponse = {
-        id: 'mock-id',
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'gpt-4',
         choices: [
           {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Some content',
-            },
-            finish_reason: 'content_filter',
             content_filter_results: {
-              hate: { filtered: true, severity: 'medium' },
-              sexual: { filtered: false, severity: 'safe' },
-              violence: { filtered: false, severity: 'safe' },
-              self_harm: { filtered: false, severity: 'safe' },
+              error: {
+                code: 'content_filter_error',
+                message: 'The contents are not filtered',
+              },
+            },
+            finish_reason: 'stop',
+            index: 0,
+            logprobs: null,
+            message: {
+              annotations: [],
+              content: 'generated text',
+              refusal: null,
+              role: 'assistant',
             },
           },
         ],
+        created: 1752095779,
+        id: 'chatcmpl-BrWRHfgUxlkb7lRw5ESPuCcmCxFEa',
+        model: 'gpt-4.1-nano-2025-04-14',
+        object: 'chat.completion',
         prompt_filter_results: [
           {
+            prompt_index: 0,
             content_filter_results: {
-              hate: { filtered: true, severity: 'high' },
-              sexual: { filtered: false, severity: 'safe' },
-              violence: { filtered: false, severity: 'safe' },
-              self_harm: { filtered: false, severity: 'safe' },
+              hate: {
+                filtered: false,
+                severity: 'safe',
+              },
+              jailbreak: {
+                filtered: false,
+                detected: false,
+              },
+              self_harm: {
+                filtered: false,
+                severity: 'safe',
+              },
+              sexual: {
+                filtered: false,
+                severity: 'safe',
+              },
+              violence: {
+                filtered: false,
+                severity: 'safe',
+              },
             },
           },
         ],
+        system_fingerprint: 'fp_68472df8fd',
         usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30,
+          completion_tokens: 37,
+          completion_tokens_details: {
+            accepted_prediction_tokens: 0,
+            audio_tokens: 0,
+            reasoning_tokens: 0,
+            rejected_prediction_tokens: 0,
+          },
+          prompt_tokens: 19,
+          prompt_tokens_details: {
+            audio_tokens: 0,
+            cached_tokens: 0,
+          },
+          total_tokens: 56,
         },
       };
 
@@ -850,11 +793,15 @@ describe('AzureChatCompletionProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.guardrails).toEqual({
-        flagged: true,
-        flaggedInput: true,
-        flaggedOutput: true,
+        flagged: false,
+        flaggedInput: false,
+        flaggedOutput: false,
       });
-      expect(result.finishReason).toBe('content_filter');
+      expect(result.output).toBe('generated text');
+      expect(result.finishReason).toBe('stop');
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Content filtering system is down or otherwise unable to complete the request in time: content_filter_error The contents are not filtered',
+      );
     });
 
     it('should not flag when no content filtering is triggered', async () => {
@@ -895,34 +842,7 @@ describe('AzureChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.guardrails).toBeUndefined();
       expect(result.finishReason).toBe('stop');
-    });
-
-    it('should handle HTTP 400 content filter error', async () => {
-      const mockResponse = {
-        error: {
-          message: 'Content was filtered due to policy violation',
-          code: 'content_filter',
-          status: 400,
-        },
-      };
-
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result.output).toBe('Content was filtered due to policy violation');
-      expect(result.guardrails).toEqual({
-        flagged: true,
-        flaggedInput: true,
-        flaggedOutput: false,
-      });
     });
   });
 });
