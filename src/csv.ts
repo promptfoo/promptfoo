@@ -156,6 +156,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const sanitizedRows = Object.entries(row).map(([key, value]) => [key.trim(), value]);
 
   for (const [key, value] of sanitizedRows) {
+    if (key === '__metadata' && !uniqueErrorMessages.has(key)) {
+      uniqueErrorMessages.add(key);
+      logger.warn(
+        'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
+      );
+      continue;
+    }
     // Check for single underscore usage with reserved keys
     if (
       !key.startsWith('__') &&
