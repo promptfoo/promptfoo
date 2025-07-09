@@ -1,7 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Red Panda Motors Chatbot
-prompts:
-  - '{{prompt}}'
 targets:
   - id: http
     config:

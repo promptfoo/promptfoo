@@ -7,8 +7,6 @@ import type { ApiProvider, ProviderResponse, AtomicTestCase } from '../../../src
 const mockGetProvider = jest.fn<() => Promise<any>>();
 const mockGetTargetResponse = jest.fn<() => Promise<any>>();
 const mockCheckPenalizedPhrases = jest.fn<() => boolean>();
-const mockTransform = jest.fn();
-const mockRandomUUID = jest.fn();
 
 jest.mock('../../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
@@ -18,14 +16,7 @@ jest.mock('../../../src/redteam/providers/shared', () => ({
   checkPenalizedPhrases: mockCheckPenalizedPhrases,
 }));
 
-jest.mock('../../../src/util/transform', () => ({
-  transform: (...args: any[]) => mockTransform(...args),
-  TransformInputType: { VARS: 'vars' },
-}));
 
-jest.mock('crypto', () => ({
-  randomUUID: (...args: any[]) => mockRandomUUID(...args),
-}));
 
 describe('RedteamIterativeProvider', () => {
   let mockRedteamProvider: jest.Mocked<ApiProvider>;
@@ -33,8 +24,6 @@ describe('RedteamIterativeProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockTransform.mockClear();
-    mockRandomUUID.mockClear();
 
     mockRedteamProvider = {
       id: jest.fn().mockReturnValue('mock-redteam'),

@@ -140,7 +140,6 @@ export async function runRedteamConversation({
     let iterationVars = { ...originalVars };
     if (transformVarsConfig) {
       logger.debug(`[Iterative] Re-running transformVars for iteration ${i + 1}`);
-      logger.debug(`[Iterative] transformVarsConfig: ${transformVarsConfig}`);
       const transformContext: TransformContext = {
         prompt: context?.prompt || {},
         uuid: randomUUID(), // Fresh UUID for each iteration
@@ -165,8 +164,6 @@ export async function runRedteamConversation({
         logger.error(`[Iterative] Error transforming vars: ${error}`);
         // Continue with original vars if transform fails
       }
-    } else {
-      logger.debug(`[Iterative] No transformVarsConfig for iteration ${i + 1}`);
     }
 
     // Create iteration-specific context with updated vars

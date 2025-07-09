@@ -553,10 +553,12 @@ export async function runRedteamConversation({
         }
 
         // Create iteration-specific context with updated vars
-        const iterationContext = {
-          ...context,
-          vars: iterationVars,
-        };
+        const iterationContext = context
+          ? {
+              ...context,
+              vars: iterationVars,
+            }
+          : undefined;
 
         const {
           improvement,
