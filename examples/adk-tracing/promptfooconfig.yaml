@@ -1,125 +1,33 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: ADK multi-agent system with OpenTelemetry tracing
+description: Python OpenTelemetry tracing example
 
 prompts:
-  - 'Research the latest developments in {{topic}} and provide a summary with fact-checked information'
+  - 'Research the topic: {{topic}}'
 
 providers:
-  - id: file://provider-with-traces.js
-    label: adk-research-assistant
-
-defaultTest:
-  assert:
-    # Performance monitoring
-    - type: trace-span-duration
-      value:
-        pattern: 'retrieve_documents'
-        max: 1000 # Document retrieval should be fast
-
-    - type: trace-span-duration
-      value:
-        pattern: '*'
-        percentile: 95
-        max: 2000
-      weight: 0 # Metric only, won't fail tests
-      metric: p95_span_duration
-
-    # Error monitoring
-    - type: trace-error-spans
-      value:
-        max_count: 0 # No errors allowed
-
-    # Ensure summary is always generated
-    - type: trace-span-count
-      value:
-        pattern: 'summary_agent.process'
-        min: 1
+  - id: python:provider.py
 
 tests:
   - vars:
-      topic: 'quantum computing applications'
-    metadata:
-      tracingEnabled: true
-      testCaseId: 'quantum-research-1'
+      topic: quantum computing advances
     assert:
-      # Content assertions
       - type: contains
-        value: quantum
-      - type: javascript
-        value: |
-          // Check that response includes research findings
-          const hasFindings = output.toLowerCase().includes('research') || 
-                             output.toLowerCase().includes('development') ||
-                             output.toLowerCase().includes('application');
-          return hasFindings ? 'pass' : 'Response lacks research content';
-
-      # Trace assertions
-      - type: trace-span-count
-        value:
-          pattern: 'coordinator_agent.process'
-          min: 1
-          max: 1
-
-      - type: trace-span-count
-        value:
-          pattern: 'research_agent.process'
-          min: 1
-
-      - type: trace-span-count
-        value:
-          pattern: 'retrieve_documents'
-          min: 1
-
-      - type: trace-span-duration
-        value:
-          pattern: 'coordinator_agent.process'
-          max: 5000 # 5 seconds max for entire workflow
+        value: 'Executive Summary'
 
   - vars:
-      topic: 'renewable energy storage technologies'
-    metadata:
-      tracingEnabled: true
-      testCaseId: 'energy-research-2'
+      topic: renewable energy breakthroughs
     assert:
-      # Content assertions
       - type: contains
-        value: energy
-      - type: llm-rubric
-        value: |
-          The response should cover renewable energy storage technologies with:
-          1. Current state of technology
-          2. Recent developments or breakthroughs
-          3. Fact-checked information
-          Score 1 if all criteria are met, 0 otherwise.
-
-      # Same trace assertions as above
-      - type: trace-span-count
-        value:
-          pattern: '*_agent.process'
-          min: 3 # At least coordinator, research, and one other agent
+        value: 'Main Points'
 
   - vars:
-      topic: 'artificial general intelligence safety'
-    metadata:
-      tracingEnabled: true
-      testCaseId: 'agi-safety-3'
+      topic: artificial intelligence safety
     assert:
-      # Content validation
-      - type: contains-any
-        value: ['AGI', 'artificial general intelligence', 'AI safety']
+      - type: contains
+        value: 'Conclusion'
 
-      # Ensure fact checking occurred
-      - type: trace-span-count
-        value:
-          pattern: 'fact_checker_agent.process'
-          min: 1
-
-      - type: trace-span-count
-        value:
-          pattern: 'verify_claims'
-          min: 1
-
-# Enable tracing
+# Enable tracing to see the multi-agent workflow
+# Note: Python OTLP exporter sends protobuf format which may not display properly
 tracing:
   enabled: true
   otlp:

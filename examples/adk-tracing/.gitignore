@@ -1,29 +1,12 @@
-# Environment files
-.env
-.env.local
-
-# Dependencies
-node_modules/
-venv/
+# Python
 __pycache__/
 *.pyc
+venv/
+.env
 
-# promptfoo outputs
+# promptfoo
 output/
 .promptfoo/
-promptfoo-*.json
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Build artifacts
-dist/
-build/
-*.egg-info/ 
+# OS
+.DS_Store 
