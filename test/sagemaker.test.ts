@@ -172,14 +172,21 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   it('should initialize with correct endpoint name', () => {
-    const provider = new SageMakerCompletionProvider('test-endpoint', {});
+    const provider = new SageMakerCompletionProvider('test-endpoint', {
+      id: 'sagemaker:test-endpoint',
+      config: {
+        modelType: 'custom',
+      },
+    });
     expect(provider.endpointName).toBe('test-endpoint');
     expect(provider.id()).toBe('sagemaker:test-endpoint');
   });
 
   it('should initialize with correct region from config', () => {
     const provider = new SageMakerCompletionProvider('test-endpoint', {
+      id: 'sagemaker:test-endpoint',
       config: {
+        modelType: 'custom',
         region: 'us-west-2',
       },
     });
@@ -188,14 +195,21 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should initialize with correct region from environment', () => {
     process.env.AWS_REGION = 'us-east-2';
-    const provider = new SageMakerCompletionProvider('test-endpoint', {});
+    const provider = new SageMakerCompletionProvider('test-endpoint', {
+      id: 'sagemaker:test-endpoint',
+      config: {
+        modelType: 'custom',
+      },
+    });
     expect(provider.getRegion()).toBe('us-east-2');
     delete process.env.AWS_REGION;
   });
 
   it('should use credential options from config', async () => {
     const provider = new SageMakerCompletionProvider('test-endpoint', {
+      id: 'sagemaker:test-endpoint',
       config: {
+        modelType: 'custom',
         accessKeyId: 'test-key',
         secretAccessKey: 'test-secret',
         sessionToken: 'test-token',
@@ -211,7 +225,12 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   it('should handle errors from SageMaker endpoint', async () => {
-    const provider = new SageMakerCompletionProvider('fail-endpoint', {});
+    const provider = new SageMakerCompletionProvider('fail-endpoint', {
+      id: 'sagemaker:fail-endpoint',
+      config: {
+        modelType: 'custom',
+      },
+    });
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBeDefined();
@@ -220,6 +239,7 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should call SageMaker endpoint with proper request for OpenAI format', async () => {
     const provider = new SageMakerCompletionProvider('openai-endpoint', {
+      id: 'sagemaker:openai-endpoint',
       config: {
         modelType: 'openai',
       },
@@ -233,6 +253,7 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should call SageMaker endpoint with proper request for Llama format', async () => {
     const provider = new SageMakerCompletionProvider('llama-endpoint', {
+      id: 'sagemaker:llama-endpoint',
       config: {
         modelType: 'llama',
       },
@@ -245,6 +266,7 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should call SageMaker endpoint with proper request for HuggingFace format', async () => {
     const provider = new SageMakerCompletionProvider('huggingface-endpoint', {
+      id: 'sagemaker:huggingface-endpoint',
       config: {
         modelType: 'huggingface',
       },
@@ -257,6 +279,7 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should call SageMaker endpoint with proper request for custom format', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
         modelType: 'custom',
       },
@@ -269,6 +292,7 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should handle JSON formatted prompts', async () => {
     const provider = new SageMakerCompletionProvider('openai-endpoint', {
+      id: 'sagemaker:openai-endpoint',
       config: {
         modelType: 'openai',
       },
@@ -286,7 +310,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should use custom content type if provided', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         contentType: 'application/text',
         acceptType: 'application/text',
       },
@@ -298,7 +324,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should use JavaScript expression for response extraction when configured', async () => {
     const provider = new SageMakerCompletionProvider('js-extract-endpoint', {
+      id: 'sagemaker:js-extract-endpoint',
       config: {
+        modelType: 'custom',
         responseFormat: {
           path: 'json.custom.result',
         },
@@ -312,7 +340,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should apply inline arrow function transform to prompts', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'prompt => { return "Transformed: " + prompt; }',
       },
     });
@@ -328,7 +358,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should apply inline regular function transform to prompts', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'function(prompt) { return "Transformed: " + prompt; }',
       },
     });
@@ -341,7 +373,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should handle transform functions that return objects', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'prompt => ({ prompt, systemPrompt: "You are a helpful assistant" })',
       },
     });
@@ -354,7 +388,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should handle transform functions that return non-string primitives', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'prompt => 42',
       },
     });
@@ -367,7 +403,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should use original prompt when transform returns null or undefined', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'prompt => null',
       },
     });
@@ -381,7 +419,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should handle errors in transform functions', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'prompt => { throw new Error("Transform error"); }',
       },
     });
@@ -398,7 +438,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should use file-based transforms when specified', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'file://test-transform.js',
       },
     });
@@ -411,7 +453,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should handle errors in file-based transforms', async () => {
     const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
       config: {
+        modelType: 'custom',
         transform: 'file://error-transform.js',
       },
     });
@@ -425,7 +469,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should configure response format path correctly', () => {
     const provider = new SageMakerCompletionProvider('test-endpoint', {
+      id: 'sagemaker:test-endpoint',
       config: {
+        modelType: 'custom',
         responseFormat: {
           path: 'json.data.nested.value',
         },
@@ -438,7 +484,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should extract array data using JavaScript expression paths', async () => {
     const provider = new SageMakerCompletionProvider('nested-data-endpoint', {
+      id: 'sagemaker:nested-data-endpoint',
       config: {
+        modelType: 'custom',
         responseFormat: {
           path: 'json.data.array[1]',
         },
@@ -472,7 +520,9 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should handle missing paths gracefully', async () => {
     const provider = new SageMakerCompletionProvider('nested-data-endpoint', {
+      id: 'sagemaker:nested-data-endpoint',
       config: {
+        modelType: 'custom',
         responseFormat: {
           path: 'json.data.missing.path',
         },
@@ -486,7 +536,12 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   it('should use response caching when enabled', async () => {
-    const provider = new SageMakerCompletionProvider('custom-endpoint', {});
+    const provider = new SageMakerCompletionProvider('custom-endpoint', {
+      id: 'sagemaker:custom-endpoint',
+      config: {
+        modelType: 'custom',
+      },
+    });
     const result = await provider.callApi('test prompt');
 
     expect(result.output).toBe('This is a response from custom endpoint');
@@ -494,6 +549,7 @@ describe('SageMakerCompletionProvider', () => {
 
   it('should include model type in the response metadata', async () => {
     const provider = new SageMakerCompletionProvider('openai-endpoint', {
+      id: 'sagemaker:openai-endpoint',
       config: {
         modelType: 'openai',
       },
@@ -507,13 +563,17 @@ describe('SageMakerCompletionProvider', () => {
 
 describe('SageMakerEmbeddingProvider', () => {
   it('should initialize with correct endpoint name', () => {
-    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {});
+    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
+    });
     expect(provider.endpointName).toBe('embedding-endpoint');
     expect(provider.id()).toBe('sagemaker:embedding-endpoint');
   });
 
   it('should call SageMaker endpoint for embeddings', async () => {
-    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {});
+    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
+    });
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
@@ -521,7 +581,9 @@ describe('SageMakerEmbeddingProvider', () => {
   });
 
   it('should handle errors from embedding endpoint', async () => {
-    const provider = new SageMakerEmbeddingProvider('fail-endpoint', {});
+    const provider = new SageMakerEmbeddingProvider('fail-endpoint', {
+      id: 'sagemaker:fail-endpoint',
+    });
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result.error).toBeDefined();
@@ -529,7 +591,9 @@ describe('SageMakerEmbeddingProvider', () => {
   });
 
   it('should throw error when calling callApi directly', async () => {
-    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {});
+    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
+    });
 
     await expect(provider.callApi()).rejects.toThrow(
       'callApi is not implemented for embedding provider. Use callEmbeddingApi instead.',
@@ -538,12 +602,14 @@ describe('SageMakerEmbeddingProvider', () => {
 
   it('should format embedding request according to model type', async () => {
     const openaiProvider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
       config: {
         modelType: 'openai',
       },
     });
 
     const huggingfaceProvider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
       config: {
         modelType: 'huggingface',
       },
@@ -558,6 +624,7 @@ describe('SageMakerEmbeddingProvider', () => {
 
   it('should extract embeddings using path expressions', async () => {
     const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
       config: {
         responseFormat: {
           path: 'json.embedding',
@@ -571,7 +638,9 @@ describe('SageMakerEmbeddingProvider', () => {
   });
 
   it('should cache embedding results', async () => {
-    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {});
+    const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
+    });
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
@@ -581,6 +650,7 @@ describe('SageMakerEmbeddingProvider', () => {
     // This test is skipped due to mocking complexity
     // Instead, we'll just verify that the provider can be created with a delay
     const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {
+      id: 'sagemaker:embedding-endpoint',
       config: {
         delay: 1000, // 1 second delay
       },
@@ -593,7 +663,14 @@ describe('SageMakerEmbeddingProvider', () => {
 
 describe('SageMaker Provider Registry', () => {
   it('should load SageMaker completion provider', async () => {
-    const provider = await loadApiProvider('sagemaker:my-endpoint');
+    const provider = await loadApiProvider('sagemaker:my-endpoint', {
+      options: {
+        id: 'sagemaker:my-endpoint',
+        config: {
+          modelType: 'custom',
+        },
+      },
+    });
 
     expect(provider).toBeDefined();
     expect(provider.id()).toBe('sagemaker:my-endpoint');
@@ -607,7 +684,14 @@ describe('SageMaker Provider Registry', () => {
   });
 
   it('should load SageMaker provider with model type', async () => {
-    const provider = await loadApiProvider('sagemaker:openai:my-openai-endpoint');
+    const provider = await loadApiProvider('sagemaker:openai:my-openai-endpoint', {
+      options: {
+        id: 'sagemaker:my-openai-endpoint',
+        config: {
+          modelType: 'openai',
+        },
+      },
+    });
 
     expect(provider).toBeDefined();
     expect(provider.id()).toBe('sagemaker:my-openai-endpoint');
@@ -617,7 +701,9 @@ describe('SageMaker Provider Registry', () => {
   it('should load provider with custom configuration options', async () => {
     const context: LoadApiProviderContext = {
       options: {
+        id: 'sagemaker:my-custom-endpoint',
         config: {
+          modelType: 'custom',
           temperature: 0.8,
           maxTokens: 2000,
           contentType: 'application/custom-format',
@@ -643,6 +729,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
   describe('formatPayload method', () => {
     it('should format Llama payload correctly with JSON messages (updated format)', () => {
       const provider = new SageMakerCompletionProvider('llama-endpoint', {
+        id: 'sagemaker:llama-endpoint',
         config: {
           modelType: 'llama',
           maxTokens: 512,
@@ -676,6 +763,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should format Llama payload correctly with plain text (updated format)', () => {
       const provider = new SageMakerCompletionProvider('llama-endpoint', {
+        id: 'sagemaker:llama-endpoint',
         config: {
           modelType: 'llama',
           maxTokens: 256,
@@ -701,6 +789,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should format OpenAI payload correctly with JSON messages', () => {
       const provider = new SageMakerCompletionProvider('openai-endpoint', {
+        id: 'sagemaker:openai-endpoint',
         config: {
           modelType: 'openai',
           maxTokens: 1000,
@@ -727,6 +816,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should format OpenAI payload correctly with plain text fallback', () => {
       const provider = new SageMakerCompletionProvider('openai-endpoint', {
+        id: 'sagemaker:openai-endpoint',
         config: {
           modelType: 'openai',
           maxTokens: 800,
@@ -749,6 +839,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should format JumpStart payload correctly', () => {
       const provider = new SageMakerCompletionProvider('jumpstart-endpoint', {
+        id: 'sagemaker:jumpstart-endpoint',
         config: {
           modelType: 'jumpstart',
           maxTokens: 400,
@@ -778,6 +869,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
       delete process.env.AWS_SAGEMAKER_TEMPERATURE;
 
       const provider = new SageMakerCompletionProvider('jumpstart-endpoint', {
+        id: 'sagemaker:jumpstart-endpoint',
         config: {
           modelType: 'jumpstart',
           maxTokens: 200,
@@ -801,6 +893,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should format HuggingFace payload correctly', () => {
       const provider = new SageMakerCompletionProvider('huggingface-endpoint', {
+        id: 'sagemaker:huggingface-endpoint',
         config: {
           modelType: 'huggingface',
           maxTokens: 300,
@@ -827,6 +920,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should format custom payload with valid JSON input', () => {
       const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        id: 'sagemaker:custom-endpoint',
         config: {
           modelType: 'custom',
         },
@@ -850,6 +944,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should format custom payload with plain text input', () => {
       const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        id: 'sagemaker:custom-endpoint',
         config: {
           modelType: 'custom',
         },
@@ -871,6 +966,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
       process.env.AWS_SAGEMAKER_TOP_P = '0.95';
 
       const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
         config: {
           modelType: 'openai',
         },
@@ -891,6 +987,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should handle malformed JSON gracefully for message-based formats', () => {
       const provider = new SageMakerCompletionProvider('openai-endpoint', {
+        id: 'sagemaker:openai-endpoint',
         config: {
           modelType: 'openai',
         },
@@ -915,6 +1012,7 @@ describe('SageMakerCompletionProvider - Response Parsing', () => {
   describe('parseResponse method', () => {
     it('should parse JumpStart model response with generated_text field', async () => {
       const provider = new SageMakerCompletionProvider('jumpstart-endpoint', {
+        id: 'sagemaker:jumpstart-endpoint',
         config: {
           modelType: 'jumpstart',
         },
@@ -931,6 +1029,7 @@ describe('SageMakerCompletionProvider - Response Parsing', () => {
 
     it('should prioritize generated_text over model-specific parsing', async () => {
       const provider = new SageMakerCompletionProvider('openai-endpoint', {
+        id: 'sagemaker:openai-endpoint',
         config: {
           modelType: 'openai',
         },
@@ -954,6 +1053,7 @@ describe('SageMakerCompletionProvider - Response Parsing', () => {
 
     it('should handle non-JSON response bodies', async () => {
       const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        id: 'sagemaker:custom-endpoint',
         config: {
           modelType: 'custom',
         },
@@ -966,6 +1066,7 @@ describe('SageMakerCompletionProvider - Response Parsing', () => {
 
     it('should extract from multiple fallback fields for custom model type', async () => {
       const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        id: 'sagemaker:custom-endpoint',
         config: {
           modelType: 'custom',
         },
@@ -998,7 +1099,12 @@ describe('SageMakerCompletionProvider - Parameter Validation', () => {
   });
 
   it('should handle provider initialization with minimal config', () => {
-    const provider = new SageMakerCompletionProvider('minimal-endpoint', {});
+    const provider = new SageMakerCompletionProvider('minimal-endpoint', {
+      id: 'sagemaker:minimal-endpoint',
+      config: {
+        modelType: 'custom',
+      },
+    });
 
     expect(provider.endpointName).toBe('minimal-endpoint');
     expect(provider.getRegion()).toBe('us-east-1'); // Default region
@@ -1008,7 +1114,9 @@ describe('SageMakerCompletionProvider - Parameter Validation', () => {
 
   it('should override endpoint name from config', () => {
     const provider = new SageMakerCompletionProvider('original-endpoint', {
+      id: 'sagemaker:openai:original-endpoint',
       config: {
+        modelType: 'custom',
         endpoint: 'override-endpoint',
       },
     });
@@ -1019,24 +1127,135 @@ describe('SageMakerCompletionProvider - Parameter Validation', () => {
   it('should handle custom provider ID correctly', () => {
     const provider = new SageMakerCompletionProvider('test-endpoint', {
       id: 'custom-provider-id',
+      config: {
+        modelType: 'custom',
+      },
     });
 
     expect(provider.id()).toBe('custom-provider-id');
   });
 
-  it('should validate supported model types', () => {
-    const supportedTypes = SageMakerCompletionProvider.SAGEMAKER_MODEL_TYPES;
+  describe('should validate supported model types', () => {
+    it('Should extract OpenAI model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:openai:test-endpoint',
+      });
 
-    expect(supportedTypes).toContain('openai');
-    expect(supportedTypes).toContain('llama');
-    expect(supportedTypes).toContain('huggingface');
-    expect(supportedTypes).toContain('jumpstart');
-    expect(supportedTypes).toContain('custom');
+      expect(provider.modelType).toBe('openai');
+    });
+
+    it('Should extract OpenAI model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'openai',
+        },
+      });
+
+      expect(provider.modelType).toBe('openai');
+    });
+
+    it('Should extract Llama model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:llama:test-endpoint',
+      });
+      expect(provider.modelType).toBe('llama');
+    });
+
+    it('Should extract Llama model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'llama',
+        },
+      });
+
+      expect(provider.modelType).toBe('llama');
+    });
+
+    it('Should extract HuggingFace model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:huggingface:test-endpoint',
+      });
+
+      expect(provider.modelType).toBe('huggingface');
+    });
+
+    it('Should extract HuggingFace model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'huggingface',
+        },
+      });
+
+      expect(provider.modelType).toBe('huggingface');
+    });
+
+    it('Should extract JumpStart model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:jumpstart:test-endpoint',
+      });
+
+      expect(provider.modelType).toBe('jumpstart');
+    });
+
+    it('Should extract JumpStart model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'jumpstart',
+        },
+      });
+
+      expect(provider.modelType).toBe('jumpstart');
+    });
+
+    it('Should extract custom model type from config', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:test-endpoint',
+        config: {
+          modelType: 'custom',
+        },
+      });
+
+      expect(provider.modelType).toBe('custom');
+    });
+
+    it('Should extract custom model type from provider ID', () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        id: 'sagemaker:custom:test-endpoint',
+      });
+
+      expect(provider.modelType).toBe('custom');
+    });
+
+    it('Should throw an error if the model type within the provider ID is not supported', () => {
+      expect(() => {
+        new SageMakerCompletionProvider('test-endpoint', {
+          id: 'sagemaker:invalid:test-endpoint',
+        });
+      }).toThrow(
+        'Invalid model type "invalid" in provider ID. Valid types are: openai, llama, huggingface, jumpstart, custom',
+      );
+    });
+
+    it('Should throw an error if no model type is provided', () => {
+      expect(() => {
+        new SageMakerCompletionProvider('test-endpoint', {
+          id: 'sagemaker:test-endpoint',
+        });
+      }).toThrow(
+        'Model type must be set either in `config.modelType` or as part of the Provider ID, for example: "sagemaker:<model_type>:<endpoint>"',
+      );
+    });
   });
 
   it('should handle delay configuration from context', async () => {
     const provider = new SageMakerCompletionProvider('delay-endpoint', {
+      id: 'sagemaker:delay-endpoint',
       config: {
+        modelType: 'custom',
         delay: 100,
       },
     });
@@ -1052,6 +1271,7 @@ describe('SageMakerEmbeddingProvider - Extended Tests', () => {
 
   it('should format embedding payload for custom model type with multiple input formats', async () => {
     const provider = new SageMakerEmbeddingProvider('custom-embedding-endpoint', {
+      id: 'sagemaker:custom:custom-embedding-endpoint',
       config: {
         modelType: 'custom',
       },
@@ -1068,6 +1288,7 @@ describe('SageMakerEmbeddingProvider - Extended Tests', () => {
 
   it('should handle embedding response with embeddings field structure', async () => {
     const provider = new SageMakerEmbeddingProvider('custom-embedding-endpoint', {
+      id: 'sagemaker:custom:custom-embedding-endpoint',
       config: {
         responseFormat: {
           path: 'json.embeddings',
@@ -1092,6 +1313,7 @@ describe('SageMakerEmbeddingProvider - Extended Tests', () => {
 
   it('should handle provider initialization with custom response format', async () => {
     const provider = new SageMakerEmbeddingProvider('custom-embedding-endpoint', {
+      id: 'sagemaker:custom:custom-embedding-endpoint',
       config: {
         responseFormat: {
           path: 'json.custom.embeddings',
@@ -1109,6 +1331,7 @@ describe('SageMakerEmbeddingProvider - Extended Tests', () => {
 
   it('should apply transformation to embedding text before processing', async () => {
     const provider = new SageMakerEmbeddingProvider('transform-embedding-endpoint', {
+      id: 'sagemaker:custom:transform-embedding-endpoint',
       config: {
         transform: 'text => `Embedding: ${text}`',
       },

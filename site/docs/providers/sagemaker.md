@@ -95,10 +95,14 @@ The SageMaker provider supports several syntax patterns:
 2. Model type specification (for common model formats):
 
    ```yaml
-   sagemaker:huggingface:my-endpoint-name
+   sagemaker:model-type:my-endpoint-name
    ```
 
    This specifies a format handler to properly structure requests and parse responses for the model container type deployed on your endpoint.
+
+   :::tip
+   For non-embedding models, the type of model must be specified using the `sagemaker:model-type:endpoint-name` format or provided in the `config.modelType` field.
+   :::
 
 3. Embedding endpoint specification:
 
