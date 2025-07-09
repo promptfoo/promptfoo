@@ -24,6 +24,7 @@ import type {
 } from '../types';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseXlsxFile } from './xlsx';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -175,6 +176,11 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
+  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    rows = await parseXlsxFile(resolvedVarsPath);
   } else if (fileExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file',

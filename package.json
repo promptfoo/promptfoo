@@ -113,7 +113,112 @@
     "playwright": "^1.52.0",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.34.2"
+    "sharp": "^0.34.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "peerDependenciesMeta": {
+    "@adaline/anthropic": {
+      "optional": true
+    },
+    "@adaline/azure": {
+      "optional": true
+    },
+    "@adaline/gateway": {
+      "optional": true
+    },
+    "@adaline/google": {
+      "optional": true
+    },
+    "@adaline/groq": {
+      "optional": true
+    },
+    "@adaline/open-router": {
+      "optional": true
+    },
+    "@adaline/openai": {
+      "optional": true
+    },
+    "@adaline/provider": {
+      "optional": true
+    },
+    "@adaline/together-ai": {
+      "optional": true
+    },
+    "@adaline/types": {
+      "optional": true
+    },
+    "@adaline/vertex": {
+      "optional": true
+    },
+    "@aws-sdk/client-bedrock-agent-runtime": {
+      "optional": true
+    },
+    "@aws-sdk/client-bedrock-runtime": {
+      "optional": true
+    },
+    "@aws-sdk/client-sagemaker-runtime": {
+      "optional": true
+    },
+    "@aws-sdk/credential-provider-sso": {
+      "optional": true
+    },
+    "@azure/identity": {
+      "optional": true
+    },
+    "@azure/openai-assistants": {
+      "optional": true
+    },
+    "@fal-ai/client": {
+      "optional": true
+    },
+    "@ibm-cloud/watsonx-ai": {
+      "optional": true
+    },
+    "@ibm-generative-ai/node-sdk": {
+      "optional": true
+    },
+    "@playwright/browser-chromium": {
+      "optional": true
+    },
+    "@smithy/node-http-handler": {
+      "optional": true
+    },
+    "fluent-ffmpeg": {
+      "optional": true
+    },
+    "google-auth-library": {
+      "optional": true
+    },
+    "ibm-cloud-sdk-core": {
+      "optional": true
+    },
+    "langfuse": {
+      "optional": true
+    },
+    "natural": {
+      "optional": true
+    },
+    "node-sql-parser": {
+      "optional": true
+    },
+    "pdf-parse": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    },
+    "playwright-extra": {
+      "optional": true
+    },
+    "puppeteer-extra-plugin-stealth": {
+      "optional": true
+    },
+    "sharp": {
+      "optional": true
+    },
+    "xlsx": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@adaline/anthropic": "1.3.0",
@@ -194,6 +299,7 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.35.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod-to-json-schema": "^3.24.6"
   },
   "dependencies": {

@@ -110,6 +110,11 @@ jest.mock('../../src/util/file', () => ({
   }),
 }));
 
+jest.mock('xlsx', () => ({
+  readFile: jest.fn(),
+  utils: { sheet_to_json: jest.fn() },
+}));
+
 // Helper to clear all mocks
 const clearAllMocks = () => {
   jest.clearAllMocks();
@@ -397,6 +402,56 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it('should read XLSX file and return test cases', async () => {
+    const sheetData = [
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+    ];
+    
+    // Mock the dynamic import
+    jest.doMock('xlsx', () => ({
+      readFile: jest.fn().mockReturnValue({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }),
+      utils: { sheet_to_json: jest.fn().mockReturnValue(sheetData) },
+    }));
+
+    const result = await readStandaloneTestsFile('test.xlsx');
+
+    const xlsx = await import('xlsx');
+    expect(xlsx.readFile).toHaveBeenCalledWith(expect.stringContaining('test.xlsx'));
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+    
+    // Clean up the mock
+    jest.dontMock('xlsx');
+  });
+
+  it('should throw helpful error when xlsx module is not installed', async () => {
+    // Mock the dynamic import to throw module not found error
+    jest.doMock('xlsx', () => {
+      throw new Error("Cannot find module 'xlsx'");
+    });
+
+    await expect(readStandaloneTestsFile('test.xlsx')).rejects.toThrow(
+      'xlsx is not installed. Please install it with: npm install xlsx\n' +
+      'Note: xlsx is an optional peer dependency for reading Excel files.',
+    );
+    
+    // Clean up the mock
+    jest.dontMock('xlsx');
   });
 
   it('should handle Python files with default function name', async () => {

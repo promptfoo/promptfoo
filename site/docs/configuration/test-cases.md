@@ -81,10 +81,14 @@ tests:
 
 ## CSV Format
 
-CSV is ideal for bulk test data:
+CSV or Excel (XLSX) files are ideal for bulk test data:
 
 ```yaml title="promptfooconfig.yaml"
 tests: file://test_cases.csv
+```
+
+```yaml title="promptfooconfig.yaml"
+tests: file://test_cases.xlsx
 ```
 
 ### Basic CSV
@@ -97,6 +101,30 @@ question,expectedAnswer
 ```
 
 Variables are automatically mapped from column headers.
+
+### Excel (XLSX/XLS) Support
+
+Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
+
+1. Install the `xlsx` package as a peer dependency:
+   ```bash
+   npm install xlsx
+   # or
+   npm install https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+   ```
+
+2. Use Excel files just like CSV files:
+   ```yaml title="promptfooconfig.yaml"
+   tests: file://test_cases.xlsx
+   ```
+
+### XLSX Example
+
+```text title="test_cases.xlsx"
+question | expectedAnswer
+What is 2+2? | 4
+What is the capital of France? | Paris
+```
 
 ### CSV with Assertions
 
