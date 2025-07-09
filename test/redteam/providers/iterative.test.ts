@@ -16,8 +16,6 @@ jest.mock('../../../src/redteam/providers/shared', () => ({
   checkPenalizedPhrases: mockCheckPenalizedPhrases,
 }));
 
-
-
 describe('RedteamIterativeProvider', () => {
   let mockRedteamProvider: jest.Mocked<ApiProvider>;
   let mockTargetProvider: jest.Mocked<ApiProvider>;

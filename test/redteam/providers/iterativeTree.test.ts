@@ -19,7 +19,7 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../../src/types';
+import type { ApiProvider, CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
@@ -857,7 +857,7 @@ describe('runRedteamConversation with transformVars', () => {
     const mockRedteamProvider = {
       id: jest.fn().mockReturnValue('mock-redteam'),
       callApi: jest
-        .fn()
+        .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({
           output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
         })
