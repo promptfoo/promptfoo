@@ -147,26 +147,26 @@ export function createLiteLLMProvider(
 
   // Prepare LiteLLM-specific configuration
   const config = options.config?.config || {};
-  
+
   // Build the config object with proper defaults
   const litellmConfigDefaults: LiteLLMCompletionOptions = {
     apiKeyEnvar: 'LITELLM_API_KEY',
     apiKeyRequired: false,
     apiBaseUrl: 'http://0.0.0.0:4000',
   };
-  
+
   // Merge configs, with explicit config values taking precedence
   const mergedConfig: LiteLLMCompletionOptions = {
     ...litellmConfigDefaults,
   };
-  
+
   // Only override properties that are actually defined and not null in config
   Object.keys(config).forEach((key) => {
     if (config[key] !== undefined && config[key] !== null) {
       (mergedConfig as any)[key] = config[key];
     }
   });
-  
+
   // Construct the provider options
   const litellmConfig: ProviderOptions = {
     id: options.config?.id,
