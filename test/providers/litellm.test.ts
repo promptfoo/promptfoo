@@ -1,7 +1,4 @@
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
-import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 describe('LiteLLM Provider', () => {
   describe('createLiteLLMProvider', () => {
@@ -87,7 +84,8 @@ describe('LiteLLM Provider', () => {
         const provider = createLiteLLMProvider('litellm:gpt-4', {});
         expect(provider.id()).toBe('litellm:gpt-4');
         expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
-        expect(provider.toJSON()).toEqual({
+        expect(provider.toJSON).toBeDefined();
+        expect(provider.toJSON!()).toEqual({
           provider: 'litellm',
           model: 'gpt-4',
           type: 'chat',
@@ -105,7 +103,8 @@ describe('LiteLLM Provider', () => {
         const provider = createLiteLLMProvider('litellm:completion:gpt-3.5-turbo-instruct', {});
         expect(provider.id()).toBe('litellm:completion:gpt-3.5-turbo-instruct');
         expect(provider.toString()).toBe('[LiteLLM Provider completion gpt-3.5-turbo-instruct]');
-        expect(provider.toJSON()).toEqual({
+        expect(provider.toJSON).toBeDefined();
+        expect(provider.toJSON!()).toEqual({
           provider: 'litellm',
           model: 'gpt-3.5-turbo-instruct',
           type: 'completion',
@@ -117,7 +116,8 @@ describe('LiteLLM Provider', () => {
         const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {});
         expect(provider.id()).toBe('litellm:embedding:text-embedding-3-small');
         expect(provider.toString()).toBe('[LiteLLM Provider embedding text-embedding-3-small]');
-        expect(provider.toJSON()).toEqual({
+        expect(provider.toJSON).toBeDefined();
+        expect(provider.toJSON!()).toEqual({
           provider: 'litellm',
           model: 'text-embedding-3-small',
           type: 'embedding',
