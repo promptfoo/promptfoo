@@ -28,6 +28,7 @@ redteam:
   strategies:
     - id: crescendo
     - id: goat
+    - id: mischievous-user
     - id: jailbreak
     - id: jailbreak:composite
     - id: jailbreak:tree
