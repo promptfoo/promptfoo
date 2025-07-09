@@ -17,7 +17,7 @@ export async function doRemoteGrading(
     payload.email = getUserEmail();
     const body = JSON.stringify(payload);
     logger.debug(`Performing remote grading: ${body}`);
-    const { data } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -29,8 +29,21 @@ export async function doRemoteGrading(
       REQUEST_TIMEOUT_MS,
     );
 
+    logger.debug(
+      `Got remote grading result: status=${status}, statusText=${statusText}, data=${JSON.stringify(data)}`,
+    );
+
+    if (status !== 200) {
+      throw new Error(
+        `Remote grading failed with status ${status}: ${statusText} ${JSON.stringify(data)}`,
+      );
+    }
     const { result } = data as { result: GradingResult };
-    logger.debug(`Got remote grading result: ${JSON.stringify(result)}`);
+
+    if (!result) {
+      throw new Error(`Remote grading failed: ${JSON.stringify(data)}`);
+    }
+
     return {
       pass: result.pass,
       score: result.score,
