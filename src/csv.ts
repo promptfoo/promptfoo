@@ -206,7 +206,6 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       logger.warn(
         'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
       );
-      continue;
     } else {
       vars[key] = value;
     }
