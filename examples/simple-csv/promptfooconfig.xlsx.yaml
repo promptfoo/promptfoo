@@ -4,4 +4,4 @@ prompts:
   - file://prompts.txt
 providers:
   - openai:gpt-4.1-mini
-tests: file://tests.xlsx 
+tests: file://tests.xlsx

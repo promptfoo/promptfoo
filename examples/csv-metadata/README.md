@@ -30,6 +30,7 @@ promptfoo eval
 ```
 
 To use Excel file instead of CSV:
+
 ```bash
 # First install the xlsx package
 npm install xlsx

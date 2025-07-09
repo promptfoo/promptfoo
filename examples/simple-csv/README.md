@@ -37,6 +37,7 @@ promptfoo init --example simple-csv
 To use Excel files instead of CSV:
 
 1. Install the xlsx package (optional peer dependency):
+
    ```bash
    npm install xlsx
    ```
