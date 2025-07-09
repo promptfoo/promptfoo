@@ -240,11 +240,17 @@ export async function doEval(
     };
 
     if (cmdObj.grader) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
     }
     if (cmdObj.var) {
+      if (typeof testSuite.defaultTest === 'string') {
+        testSuite.defaultTest = {};
+      }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
@@ -254,6 +260,8 @@ export async function doEval(
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
       testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
+      // Flatten the scenarios array in case glob patterns were used
+      testSuite.scenarios = testSuite.scenarios.flat();
     }
     for (const scenario of testSuite.scenarios || []) {
       if (scenario.tests) {
@@ -651,11 +659,8 @@ export async function doEval(
             ),
           );
         }
-        logger.info('\nDone.');
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
-      } else {
-        logger.info('\nDone.');
       }
     }
     if (testSuite.redteam) {
@@ -721,12 +726,16 @@ export function evalCommand(
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      defaultConfig.defaultTest?.options?.prefix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.prefix
+        : undefined,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is appended to every prompt.',
-      defaultConfig.defaultTest?.options?.suffix,
+      typeof defaultConfig.defaultTest === 'object'
+        ? defaultConfig.defaultTest?.options?.suffix
+        : undefined,
     )
     .option(
       '--var <key=value>',

@@ -217,7 +217,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       const message = choice?.message;
 
       // Handle structured output
-      let output = message.content;
+      let output = message?.content;
 
       if (output == null) {
         if (choice.finish_reason === 'content_filter') {
@@ -252,7 +252,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       const flaggedInput =
         promptFilterResults?.some((result: any) =>
-          Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
+          Object.values(result.content_filter_results || result.content_filter_result || {}).some(
+            (filter: any) => filter.filtered,
+          ),
         ) ?? false;
 
       const flaggedOutput = Object.values(contentFilterResults || {}).some(
