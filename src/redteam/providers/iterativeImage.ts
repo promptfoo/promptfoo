@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
@@ -10,11 +11,13 @@ import type {
   NunjucksFilterMap,
   RedteamFileConfig,
   ProviderResponse,
+  AtomicTestCase,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
 
 interface ImageGenerationOutput {
@@ -206,6 +209,7 @@ async function runRedteamConversation({
   injectVar,
   context,
   options,
+  test,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
@@ -215,11 +219,16 @@ async function runRedteamConversation({
   injectVar: string;
   context?: CallApiContextParams;
   options?: CallApiOptionsParams;
+  test?: AtomicTestCase;
 }) {
   // Assume redteam provider is also a vision model
   const visionProvider = redteamProvider;
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
+
+  // Store the original vars and transformVars config
+  const originalVars = { ...vars };
+  const transformVarsConfig = test?.options?.transformVars;
 
   const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
@@ -251,6 +260,44 @@ async function runRedteamConversation({
 
   for (let i = 0; i < numIterations; i++) {
     try {
+      // Re-run transformVars for each iteration to generate fresh values (e.g., new sessionId)
+      let iterationVars = { ...originalVars };
+      if (transformVarsConfig) {
+        logger.debug(`[IterativeImage] Re-running transformVars for iteration ${i + 1}`);
+        const transformContext: TransformContext = {
+          prompt: context?.prompt || {},
+          uuid: randomUUID(), // Fresh UUID for each iteration
+        };
+        try {
+          const transformedVars = await transform(
+            transformVarsConfig,
+            originalVars,
+            transformContext,
+            true,
+            TransformInputType.VARS,
+          );
+          invariant(
+            typeof transformedVars === 'object',
+            'Transform function did not return a valid object',
+          );
+          iterationVars = { ...originalVars, ...transformedVars };
+          logger.debug(
+            `[IterativeImage] Transformed vars for iteration ${i + 1}: ${JSON.stringify(transformedVars)}`,
+          );
+        } catch (error) {
+          logger.error(`[IterativeImage] Error transforming vars: ${error}`);
+          // Continue with original vars if transform fails
+        }
+      }
+
+      // Create iteration-specific context with updated vars
+      const iterationContext = context
+        ? {
+            ...context,
+            vars: iterationVars,
+          }
+        : undefined;
+
       const redteamBody = JSON.stringify(redteamHistory);
 
       // Get new prompt
@@ -294,7 +341,7 @@ async function runRedteamConversation({
       targetPrompt = await renderPrompt(
         prompt,
         {
-          ...vars,
+          ...iterationVars,
           [injectVar]: newInjectVar,
         },
         filters,
@@ -341,7 +388,7 @@ async function runRedteamConversation({
       const targetResponse = await getTargetResponse(
         targetProvider,
         targetPrompt,
-        context,
+        iterationContext,
         options,
       );
       if (targetResponse.error) {
@@ -585,6 +632,7 @@ class RedteamIterativeProvider implements ApiProvider {
       injectVar,
       context,
       options,
+      test: context.test,
     });
   }
 }

@@ -851,3 +851,108 @@ describe('Tree Structure and Metadata', () => {
     expect(treeOutputs[1].graderPassed).toBe(false);
   });
 });
+
+describe('runRedteamConversation with transformVars', () => {
+  it('should re-run transformVars for each attempt', async () => {
+    const mockRedteamProvider = {
+      id: jest.fn().mockReturnValue('mock-redteam'),
+      callApi: jest
+        .fn()
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ onTopic: true }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 3, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test2', prompt: 'prompt2' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ onTopic: true }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 3, explanation: 'test' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test3', prompt: 'prompt3' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ onTopic: true }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 10, explanation: 'test' },
+            previousBestResponse: { rating: 5, explanation: 'test' },
+          }),
+        }),
+    } as jest.Mocked<ApiProvider>;
+
+    const mockTargetProvider = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn(),
+    } as jest.Mocked<ApiProvider>;
+
+    // Track prompts sent to target provider
+    const targetPrompts: string[] = [];
+    mockTargetProvider.callApi.mockImplementation(async (prompt: string) => {
+      targetPrompts.push(prompt);
+      return { output: 'mock response' };
+    });
+
+    const { runRedteamConversation } = await import('../../../src/redteam/providers/iterativeTree');
+
+    const result = await runRedteamConversation({
+      context: {
+        prompt: { raw: 'Session {{sessionId}} - {{test}}', label: 'test' },
+        vars: { originalVar: 'value' },
+      } as CallApiContextParams,
+      filters: undefined,
+      injectVar: 'test',
+      options: {},
+      prompt: { raw: 'Session {{sessionId}} - {{test}}', label: 'test' },
+      redteamProvider: mockRedteamProvider,
+      gradingProvider: mockRedteamProvider,
+      targetProvider: mockTargetProvider,
+      test: {
+        vars: { originalVar: 'value' },
+        options: {
+          transformVars: '{ ...vars, sessionId: context.uuid }',
+        },
+      },
+      vars: { test: 'goal', originalVar: 'value' },
+      excludeTargetOutputFromAgenticAttackGeneration: false,
+    });
+
+    // Should have stopped at score 10 (TARGET_SCORE)
+    expect(result.metadata.stopReason).toBe('TARGET_SCORE');
+
+    // Verify target provider was called multiple times
+    expect(mockTargetProvider.callApi.mock.calls.length).toBeGreaterThan(0);
+    expect(targetPrompts.length).toBeGreaterThan(0);
+
+    // Extract sessionIds from the prompts
+    const sessionIdRegex = /Session ([a-f0-9-]+) - prompt[123]/;
+    const sessionIds = targetPrompts
+      .map((prompt) => {
+        const match = prompt.match(sessionIdRegex);
+        return match ? match[1] : null;
+      })
+      .filter(Boolean);
+
+    // Verify that we got multiple different sessionIds
+    expect(sessionIds.length).toBeGreaterThan(1);
+
+    // All sessionIds should be different
+    const uniqueSessionIds = new Set(sessionIds);
+    expect(uniqueSessionIds.size).toBe(sessionIds.length);
+  });
+});

@@ -13,6 +13,7 @@
  *
  * @module RedteamIterative
  */
+import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
@@ -34,6 +35,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import {
@@ -456,6 +458,10 @@ export async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
 
+  // Store the original vars and transformVars config
+  const originalVars = { ...vars };
+  const transformVarsConfig = test?.options?.transformVars;
+
   let maxScore = 0;
 
   logger.debug(
@@ -516,6 +522,42 @@ export async function runRedteamConversation({
       );
 
       for (let i = 0; i < BRANCHING_FACTOR; i++) {
+        // Re-run transformVars for each attempt to generate fresh values (e.g., new sessionId)
+        let iterationVars = { ...originalVars };
+        if (transformVarsConfig) {
+          logger.debug(
+            `[IterativeTree] Re-running transformVars for depth ${depth}, branch ${i + 1}`,
+          );
+          const transformContext: TransformContext = {
+            prompt: context?.prompt || {},
+            uuid: randomUUID(), // Fresh UUID for each attempt
+          };
+          try {
+            const transformedVars = await transform(
+              transformVarsConfig,
+              originalVars,
+              transformContext,
+              true,
+              TransformInputType.VARS,
+            );
+            invariant(
+              typeof transformedVars === 'object',
+              'Transform function did not return a valid object',
+            );
+            iterationVars = { ...originalVars, ...transformedVars };
+            logger.debug(`[IterativeTree] Transformed vars: ${safeJsonStringify(transformedVars)}`);
+          } catch (error) {
+            logger.error(`[IterativeTree] Error transforming vars: ${error}`);
+            // Continue with original vars if transform fails
+          }
+        }
+
+        // Create iteration-specific context with updated vars
+        const iterationContext = {
+          ...context,
+          vars: iterationVars,
+        };
+
         const {
           improvement,
           prompt: newInjectVar,
@@ -541,7 +583,7 @@ export async function runRedteamConversation({
         const targetPrompt = await renderPrompt(
           prompt,
           {
-            ...vars,
+            ...iterationVars,
             [injectVar]: newInjectVar,
           },
           filters,
@@ -564,7 +606,7 @@ export async function runRedteamConversation({
         const targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
-          context,
+          iterationContext,
           options,
         );
         if (targetResponse.error) {
@@ -623,10 +665,18 @@ export async function runRedteamConversation({
         if (assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
+            // Create test object with iteration-specific vars
+            const iterationTest = test
+              ? {
+                  ...test,
+                  vars: iterationVars,
+                }
+              : { vars: iterationVars };
+
             const { grade } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
-              test || {},
+              iterationTest,
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             );

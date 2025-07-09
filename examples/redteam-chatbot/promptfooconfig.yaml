@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Red Panda Motors Chatbot
+prompts:
+  - '{{prompt}}'
 targets:
   - id: http
     config:
@@ -11,9 +13,14 @@ targets:
       body:
         api_provider: openai
         chat_history: '{{prompt}}'
+        session_id: '{{sessionId}}'
       transformResponse: file://transforms.js:response
       transformRequest: file://transforms.js:request
     label: Red-Panda-Motors-Chatbot
+
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
 
 redteam:
   numTests: 1
