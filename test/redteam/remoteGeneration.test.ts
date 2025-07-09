@@ -1,5 +1,6 @@
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
+import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { readGlobalConfig } from '../../src/globalConfig/globalConfig';
 import {
   getRemoteGenerationUrl,
@@ -10,14 +11,23 @@ import {
 } from '../../src/redteam/remoteGeneration';
 
 jest.mock('../../src/envars');
-jest.mock('../../src/envars');
+jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/cliState', () => ({
   remote: undefined,
 }));
+
 describe('shouldGenerateRemote', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     cliState.remote = undefined;
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
+  });
+
+  it('should return true when logged into cloud regardless of other conditions', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(true);
+    jest.mocked(getEnvBool).mockReturnValue(true);
+    jest.mocked(getEnvString).mockReturnValue('sk-123');
+    expect(shouldGenerateRemote()).toBe(true);
   });
 
   it('should return true when remote generation is not disabled and no OpenAI key exists', () => {
