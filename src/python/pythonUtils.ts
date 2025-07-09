@@ -196,8 +196,6 @@ export async function runPython(
       throw new Error('The Python script `call_api` function must return a dict with an `output`');
     }
 
-
-
     return result.data;
   } catch (error) {
     logger.error(
