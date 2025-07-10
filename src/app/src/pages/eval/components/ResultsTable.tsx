@@ -124,6 +124,8 @@ interface ResultsTableProps {
   setFilterMode: (mode: FilterMode) => void;
   selectedMetric?: string | null;
   onMetricFilter?: (metric: string | null) => void;
+  selectedMetadata?: string | null;
+  onMetadataFilter?: (metadata: string | null) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -175,6 +177,8 @@ function ResultsTable({
   setFilterMode,
   selectedMetric,
   onMetricFilter,
+  selectedMetadata,
+  onMetadataFilter,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -366,7 +370,7 @@ function ResultsTable({
 
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric, selectedMetadata]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -403,6 +407,7 @@ function ResultsTable({
       filterMode,
       searchText: debouncedSearchText,
       selectedMetric,
+      selectedMetadata,
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -413,6 +418,7 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     selectedMetric,
+    selectedMetadata,
     fetchEvalData,
   ]);
 
@@ -599,6 +605,15 @@ function ResultsTable({
       }
     },
     [onMetricFilter],
+  );
+
+  const handleMetadataFilter = React.useCallback(
+    (metadata: string | null) => {
+      if (onMetadataFilter) {
+        onMetadataFilter(metadata);
+      }
+    },
+    [onMetadataFilter],
   );
 
   const promptColumns = React.useMemo(() => {
@@ -837,6 +852,8 @@ function ResultsTable({
     showStats,
     selectedMetric,
     handleMetricFilter,
+    selectedMetadata,
+    handleMetadataFilter,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -994,7 +1011,7 @@ function ResultsTable({
 
       {filteredResultsCount === 0 &&
         !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
+        (debouncedSearchText || filterMode !== 'all' || selectedMetric || selectedMetadata) && (
           <Box
             sx={{
               padding: '20px',

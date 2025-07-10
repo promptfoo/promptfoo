@@ -14,6 +14,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -41,6 +42,7 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
+import { MetadataFilterSelector } from './MetadataFilterSelector';
 import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
@@ -461,6 +463,9 @@ export default function ResultsView({
   // Add state for metric filter and available metrics
   const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
 
+  // Add state for metadata filter and available metadata keys
+  const [selectedMetadata, setSelectedMetadata] = React.useState<string | null>(null);
+
   const availableMetrics = React.useMemo(() => {
     if (table && table.head?.prompts) {
       const metrics = new Set<string>();
@@ -474,9 +479,37 @@ export default function ResultsView({
     return [];
   }, [table]);
 
+  const { availableMetadata, metadataCounts } = React.useMemo(() => {
+    if (table && table.body) {
+      const keys = new Set<string>();
+      const counts: Record<string, number> = {};
+      
+      table.body.forEach((row) => {
+        row.outputs.forEach((output) => {
+          if (output.metadata) {
+            Object.keys(output.metadata).forEach((k) => {
+              keys.add(k);
+              counts[k] = (counts[k] || 0) + 1;
+            });
+          }
+        });
+      });
+      
+      return {
+        availableMetadata: Array.from(keys).sort(),
+        metadataCounts: counts
+      };
+    }
+    return { availableMetadata: [], metadataCounts: {} };
+  }, [table]);
+
   // Make the function a callback that can be passed to CustomMetrics
   const handleMetricFilterChange = React.useCallback((metric: string | null) => {
     setSelectedMetric(metric);
+  }, []);
+
+  const handleMetadataFilterChange = React.useCallback((key: string | null) => {
+    setSelectedMetadata(key);
   }, []);
 
   return (
@@ -561,6 +594,12 @@ export default function ResultsView({
           availableMetrics={availableMetrics}
           onChange={handleMetricFilterChange}
         />
+        <MetadataFilterSelector
+          selectedMetadata={selectedMetadata}
+          availableMetadata={availableMetadata}
+          onChange={handleMetadataFilterChange}
+          metadataCounts={metadataCounts}
+        />
         <Box
           sx={{
             display: 'flex',
@@ -571,7 +610,7 @@ export default function ResultsView({
             fontSize: '0.875rem',
           }}
         >
-          {searchText || filterMode !== 'all' || selectedMetric ? (
+          {searchText || filterMode !== 'all' || selectedMetric || selectedMetadata ? (
             <>
               <strong>{filteredResultsCount}</strong>
               <span style={{ margin: '0 4px' }}>of</span>
@@ -598,6 +637,14 @@ export default function ResultsView({
                   size="small"
                   label={`Metric: ${selectedMetric}`}
                   onDelete={() => handleMetricFilterChange(null)}
+                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                />
+              )}
+              {selectedMetadata && (
+                <Chip
+                  size="small"
+                  label={`Metadata: ${selectedMetadata}`}
+                  onDelete={() => handleMetadataFilterChange(null)}
                   sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                 />
               )}
@@ -724,6 +771,12 @@ export default function ResultsView({
         columnVisibility={currentColumnState.columnVisibility}
         recentEvals={recentEvals}
       />
+      {selectedMetadata && filteredResultsCount === 0 && (
+        <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+          No results found with metadata key "{selectedMetadata}".
+          Try selecting a different metadata key or clearing the filter.
+        </Alert>
+      )}
       <ResultsTable
         maxTextLength={maxTextLength}
         columnVisibility={currentColumnState.columnVisibility}
@@ -738,6 +791,8 @@ export default function ResultsView({
         setFilterMode={setFilterMode}
         selectedMetric={selectedMetric}
         onMetricFilter={handleMetricFilterChange}
+        selectedMetadata={selectedMetadata}
+        onMetadataFilter={handleMetadataFilterChange}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

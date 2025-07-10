@@ -30,6 +30,7 @@ interface FetchEvalOptions {
   filterMode?: FilterMode;
   searchText?: string;
   selectedMetric?: string | null;
+  selectedMetadata?: string | null;
   skipSettingEvalId?: boolean;
 }
 
@@ -201,6 +202,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       filterMode = 'all',
       searchText = '',
       selectedMetric = null,
+      selectedMetadata = null,
       skipSettingEvalId = false,
     } = options;
 
@@ -217,7 +219,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           : ''
       }${searchText ? `&search=${encodeURIComponent(searchText)}` : ''}${
         selectedMetric ? `&metric=${encodeURIComponent(selectedMetric)}` : ''
-      }`;
+      }${selectedMetadata ? `&metadata=${encodeURIComponent(selectedMetadata)}` : ''}`;
 
       const resp = await callApi(url);
 

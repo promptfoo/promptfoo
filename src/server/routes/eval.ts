@@ -171,6 +171,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const filter = String(req.query.filter || 'all');
   const searchText = req.query.search ? String(req.query.search) : '';
   const metricFilter = req.query.metric ? String(req.query.metric) : '';
+  const metadataFilter = req.query.metadata ? String(req.query.metadata) : '';
 
   const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
     ? req.query.comparisonEvalIds
@@ -190,6 +191,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     filterMode: filter as any,
     searchQuery: searchText,
     metricFilter,
+    metadataFilter,
   });
 
   const indices = table.body.map((row) => row.testIdx);
@@ -220,6 +222,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           testIndices: indices,
           searchQuery: searchText,
           metricFilter,
+          metadataFilter,
         });
       }),
     );

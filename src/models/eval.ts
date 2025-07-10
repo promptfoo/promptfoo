@@ -429,6 +429,7 @@ export default class Eval {
     filterMode?: string;
     searchQuery?: string;
     metricFilter?: string;
+    metadataFilter?: string;
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
@@ -449,6 +450,12 @@ export default class Eval {
     if (opts.metricFilter && opts.metricFilter.trim() !== '') {
       const sanitizedMetric = opts.metricFilter.replace(/'/g, "''");
       conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
+    }
+
+    // Add specific metadata filter if provided
+    if (opts.metadataFilter && opts.metadataFilter.trim() !== '') {
+      const sanitizedMetadata = opts.metadataFilter.replace(/'/g, "''");
+      conditions.push(`json_extract(metadata, '$.${sanitizedMetadata}') IS NOT NULL`);
     }
 
     // Add search condition if searchQuery is provided
@@ -507,6 +514,7 @@ export default class Eval {
     testIndices?: number[];
     searchQuery?: string;
     metricFilter?: string;
+    metadataFilter?: string;
   }): Promise<{
     head: { prompts: Prompt[]; vars: string[] };
     body: EvaluateTableRow[];
@@ -533,6 +541,7 @@ export default class Eval {
         filterMode: opts.filterMode,
         searchQuery: opts.searchQuery,
         metricFilter: opts.metricFilter,
+        metadataFilter: opts.metadataFilter,
       });
 
       testIndices = queryResult.testIndices;
