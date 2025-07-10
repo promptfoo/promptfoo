@@ -255,4 +255,108 @@ describe('AzureCompletionProvider', () => {
       undefined,
     );
   });
+
+  it('should handle HTTP 400 content filter error', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        error: {
+          code: 'content_filter',
+          status: 400,
+          message: 'Content was filtered',
+        },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toBe('Content was filtered');
+    expect(result.guardrails).toEqual({
+      flagged: true,
+      flaggedInput: true,
+      flaggedOutput: false,
+    });
+  });
+
+  it('should detect flagged input from prompt filter results', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'response' }],
+        prompt_filter_results: [
+          {
+            content_filter_results: {
+              hate: { filtered: true },
+              sexual: { filtered: false },
+            },
+          },
+        ],
+        usage: { total_tokens: 10 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+
+    const result = await provider.callApi('test prompt');
+    expect(result.guardrails).toEqual({
+      flagged: true,
+      flaggedInput: true,
+      flaggedOutput: false,
+    });
+  });
+
+  it('should detect flagged output from content filter results', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            text: 'response',
+            content_filter_results: {
+              hate: { filtered: false },
+              sexual: { filtered: true },
+            },
+          },
+        ],
+        usage: { total_tokens: 10 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+
+    const result = await provider.callApi('test prompt');
+    expect(result.guardrails).toEqual({
+      flagged: true,
+      flaggedInput: false,
+      flaggedOutput: true,
+    });
+  });
+
+  it('should include normalized finish reason in response', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'response', finish_reason: 'length' }],
+        usage: { total_tokens: 10 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+
+    const result = await provider.callApi('test prompt');
+    expect(result.finishReason).toBe('length');
+  });
 });
