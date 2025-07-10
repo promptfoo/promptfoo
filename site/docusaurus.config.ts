@@ -148,7 +148,7 @@ const config: Config = {
               label: 'Blog',
             },
             {
-              href: '/releases/',
+              to: '/releases/',
               label: 'Release Notes',
             },
             {
