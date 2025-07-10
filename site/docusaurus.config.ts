@@ -148,7 +148,7 @@ const config: Config = {
               label: 'Blog',
             },
             {
-              to: '/releases/',
+              to: '/docs/releases/',
               label: 'Release Notes',
             },
             {
