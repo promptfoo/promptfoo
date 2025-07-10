@@ -278,7 +278,7 @@ tests:
 
 #### Dynamically via Context Transform
 
-Context transform allow you to define context from provider responses. This is particularly useful for RAG systems.
+Defining `contextTransform` allows you to construct context from provider responses. This is particularly useful for RAG systems.
 
 ```yaml
 assert:
@@ -290,15 +290,18 @@ assert:
 The `contextTransform` property accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
 
 ```typescript
+/**
+ * The context transform function signature.
+ */
 type ContextTransform = (output: Output, context: Context) => string;
 
 /**
- * The provider's output.
+ * The provider's response output.
  */
 type Output = string | object;
 
 /**
- * Context regarding the test case and the provider response.
+ * Metadata about the test case, prompt, and provider response.
  */
 type Context = {
   // Test case variables
@@ -309,7 +312,8 @@ type Context = {
     label: string;
   };
 
-  // Provider-specific metadata
+  // Provider-specific metadata.
+  // The documentation for each provider will describe any available metadata.
   metadata?: object;
 };
 ```
