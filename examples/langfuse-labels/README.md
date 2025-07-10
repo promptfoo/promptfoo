@@ -33,11 +33,28 @@ Labels allow you to:
    - Add prompt templates with variables like `{{customer_name}}`, `{{issue}}`, etc.
    - Assign labels to your prompt versions (e.g., `production`, `staging`, `latest`)
 
+## Initialize this example
+
+To get started with this example:
+
+```bash
+npx promptfoo@latest init --example langfuse-labels
+```
+
 ## Running the example
 
 ```bash
 npx promptfoo@latest eval
 ```
+
+## Expected outputs
+
+After running the eval, you should see:
+
+- Comparison of responses from different labeled prompts (production vs staging)
+- Performance metrics for each prompt version
+- Test results showing how different providers handle the same prompts
+- A detailed evaluation report demonstrating label-based prompt management
 
 ## Prompt format reference
 

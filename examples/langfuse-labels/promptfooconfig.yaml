@@ -1,3 +1,7 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Langfuse prompt management with labels - demonstrates version-controlled prompt deployment'
+
 # Example: Using Langfuse prompts with labels
 #
 # This example demonstrates how to reference Langfuse prompts using labels
@@ -41,11 +45,12 @@ tests:
       company: 'Acme Corp'
       tone: 'empathetic and helpful'
 
-# You can define assertions to ensure quality
-assertions:
-  - type: contains
-    value: '{{customer_name}}'
-  - type: not-contains
-    value: 'error'
-  - type: llm-rubric
-    value: "The response should be {{tone}} and address the customer's issue: {{issue}}"
+# Default assertions that apply to all tests
+defaultTest:
+  assert:
+    - type: contains
+      value: '{{customer_name}}'
+    - type: not-contains
+      value: 'error'
+    - type: llm-rubric
+      value: "The response should be {{tone}} and address the customer's issue: {{issue}}"
