@@ -1141,6 +1141,40 @@ providers:
       max_output_tokens: 1000
 ```
 
+### Deep Research Models (Responses API Only)
+
+Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specialized reasoning models designed for complex research tasks that require web search capabilities.
+
+Available models:
+
+- `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
+- `o3-deep-research-2025-06-26` - Snapshot version
+- `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
+- `o4-mini-deep-research-2025-06-26` - Snapshot version
+
+All deep research models:
+
+- Require `web_search_preview` tool to be configured
+- Support 200,000 token context window
+- Support up to 100,000 output tokens
+- May take 2-10 minutes to complete research tasks
+- Use significant tokens for reasoning before generating output
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o4-mini-deep-research
+    config:
+      max_output_tokens: 50000 # High limit recommended
+      tools:
+        - type: web_search_preview # Required
+```
+
+:::tip
+Deep research models require high `max_output_tokens` values (50,000+) and long timeouts. Set `PROMPTFOO_EVAL_TIMEOUT_MS=600000` for 10-minute timeouts.
+:::
+
 ### Sending Images in Prompts
 
 The Responses API supports structured prompts with text and image inputs. Example:
