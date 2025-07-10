@@ -299,7 +299,7 @@ const config: Config = {
             },
             {
               label: 'Release Notes',
-              to: '/releases/',
+              to: '/docs/releases/',
             },
             {
               label: 'Press',
