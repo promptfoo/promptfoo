@@ -43,7 +43,9 @@ import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 
-const COLUMN_SIZE_PX = 400;
+const VARIABLE_COLUMN_SIZE_PX = 100;
+const PROMPT_COLUMN_SIZE_PX = 300;
+const DESCRIPTION_COLUMN_SIZE_PX = 100;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -544,7 +546,7 @@ function ResultsTable({
                   </div>
                 );
               },
-              size: COLUMN_SIZE_PX,
+              size: VARIABLE_COLUMN_SIZE_PX,
             }),
           ),
         }),
@@ -815,7 +817,7 @@ function ResultsTable({
                 <div style={{ padding: '20px' }}>'Test still in progress...'</div>
               );
             },
-            size: COLUMN_SIZE_PX,
+            size: PROMPT_COLUMN_SIZE_PX,
           }),
         ),
       }),
@@ -854,7 +856,7 @@ function ResultsTable({
             <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
           </div>
         ),
-        size: COLUMN_SIZE_PX,
+        size: DESCRIPTION_COLUMN_SIZE_PX,
       };
     }
     return null;
@@ -973,7 +975,15 @@ function ResultsTable({
     }
   }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
 
-  const tableWidth = reactTable.getAllLeafColumns().length * COLUMN_SIZE_PX;
+  const tableWidth = React.useMemo(() => {
+    let width = 0;
+    if (descriptionColumn) {
+      width += DESCRIPTION_COLUMN_SIZE_PX;
+    }
+    width += head.vars.length * VARIABLE_COLUMN_SIZE_PX;
+    width += head.prompts.length * PROMPT_COLUMN_SIZE_PX;
+    return width;
+  }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
   return (
     <div>
