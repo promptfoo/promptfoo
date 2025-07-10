@@ -36,7 +36,7 @@ tests:
 
   # Example using contextTransform to extract context from Knowledge Base citations
   - vars:
-      # Context-based assertions require the `query` variable to be defined.
+      # `context-faithfulness` and `context-relevance` require the `query` variable to be defined.
       query: 'How do I set up my first promptfoo configuration file?'
     assert:
       # Basic content assertions
