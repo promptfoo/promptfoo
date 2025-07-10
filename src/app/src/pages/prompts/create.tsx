@@ -6,6 +6,7 @@ import CodeEditor from '@app/components/CodeEditor';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -14,7 +15,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
-import Alert from '@mui/material/Alert';
+import Tooltip from '@mui/material/Tooltip';
 
 // Helper function to parse CSV content
 const parseCsvContent = async (content: string): Promise<string[]> => {
@@ -265,6 +266,7 @@ export default function PromptCreatePage() {
                   ref={fileInputRef}
                   type="file"
                   accept=".txt,.md,.json,.jsonl,.yaml,.yml,.csv,.j2,.js,.mjs,.ts,.py"
+                  title="Upload a prompt file"
                   style={{ display: 'none' }}
                   onChange={handleFileUpload}
                 />
@@ -276,31 +278,37 @@ export default function PromptCreatePage() {
                 >
                   Upload File
                 </Button>
+                <Tooltip 
+                  title={
+                    <Box sx={{ p: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                        Supported formats:
+                      </Typography>
+                      <Typography variant="body2">
+                        • <strong>Text:</strong> .txt, .md
+                      </Typography>
+                      <Typography variant="body2">
+                        • <strong>Templates:</strong> .j2 (Jinja2)
+                      </Typography>
+                      <Typography variant="body2">
+                        • <strong>Structured:</strong> .json, .yaml
+                      </Typography>
+                      <Typography variant="body2">
+                        • <strong>Data:</strong> .csv, .jsonl
+                      </Typography>
+                      <Typography variant="body2">
+                        • <strong>Code:</strong> .js, .ts, .py
+                      </Typography>
+                    </Box>
+                  }
+                  placement="bottom-end"
+                >
+                  <IconButton size="small" sx={{ ml: 0.5 }}>
+                    <InfoOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </Stack>
             </Stack>
-            
-            <Alert severity="info" sx={{ mb: 2 }}>
-              <Stack spacing={0.5}>
-                <Typography variant="body2">
-                  <strong>Supported formats:</strong>
-                </Typography>
-                <Typography variant="body2">
-                  • <strong>Text/Markdown:</strong> .txt, .md - Simple text prompts
-                </Typography>
-                <Typography variant="body2">
-                  • <strong>Templates:</strong> .j2 - Jinja2 templates with advanced logic
-                </Typography>
-                <Typography variant="body2">
-                  • <strong>Structured:</strong> .json, .jsonl, .yaml, .yml - Chat formats and configurations
-                </Typography>
-                <Typography variant="body2">
-                  • <strong>CSV:</strong> .csv - Multiple prompts (single column or with labels)
-                </Typography>
-                <Typography variant="body2">
-                  • <strong>Code:</strong> .js, .ts, .py - Dynamic prompt generation functions
-                </Typography>
-              </Stack>
-            </Alert>
             
             <Box sx={{ height: '400px', border: 1, borderColor: 'divider', borderRadius: 1 }}>
               <CodeEditor
@@ -310,6 +318,9 @@ export default function PromptCreatePage() {
                 placeholder="Enter your prompt template here. Use {{variable}} for dynamic values."
               />
             </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              Tip: Use {'{{variables}}'} for dynamic values in your prompts
+            </Typography>
           </Box>
         </Stack>
       </Paper>
