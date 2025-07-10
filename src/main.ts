@@ -20,6 +20,7 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
+import { promptCommand } from './commands/prompt';
 import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
@@ -105,6 +106,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  promptCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
