@@ -322,6 +322,94 @@ For control over the `select-best` rubric prompt, you may use the variables `{{o
 
 Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much more. See [classifier documentation](/docs/configuration/expected-outputs/classifier).
 
+## Context-based
+
+Context-based assertions are a class of model-graded metrics that evaluate whether the LLM's output is supported by the context provided at inference time.
+
+- [Faithfulness](/docs/configuration/expected-outputs/model-graded/context-faithfulness) (`context-recall`) - ensure that ground truth appears in context
+- [Relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) (`context-relevance`) - ensure that context is relevant to original query
+- [Faithfulness](/docs/configuration/expected-outputs/model-graded/context-faithfulness) (`context-faithfulness`) - ensure that LLM output is supported by context
+
+### Context Transform
+
+Context transform allow you to dynamically define context for use in context-based assertions from provider responses.
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.citations.join("\n")'
+    threshold: 0.8
+```
+
+`contextTransform` accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
+
+```typescript
+type ContextTransform = (output: Output, context: Context) => string;
+
+/**
+ * The provider's output.
+ */
+type Output = string | object;
+
+/**
+ * Context regarding the test case and the provider response.
+ */
+type Context = {
+  // Test case variables
+  vars: Record<string, string | object>;
+
+  // Raw prompt sent to LLM
+  prompt: {
+    label: string;
+  };
+
+  // Provider-specific metadata
+  metadata?: object;
+};
+```
+
+For example, given the following provider response:
+
+```typescript
+/**
+ * A response from a fictional Research Knowledge Base.
+ */
+type ProviderResponse = {
+  output: {
+    content: string;
+  };
+  metadata: {
+    retrieved_docs: {
+      content: string;
+    }[];
+  };
+};
+```
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.content'
+    threshold: 0.8
+
+  - type: context-relevance
+    # Note: `ProviderResponse['metadata']` is accessible as `context.metadata`
+    contextTransform: 'context.metadata.retrieved_docs.map(d => d.content).join("\n")'
+    threshold: 0.7
+```
+
+If your expression should return `undefined` or `null`, for example because no context is available, add a fallback:
+
+```yaml
+contextTransform: 'output.context ?? "No context found"'
+```
+
+If you expected your context to be non-empty, but it's empty, you can debug your provider response by returning a stringified version of the response:
+
+```yaml
+contextTransform: 'JSON.stringify(output, null, 2)'
+```
+
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).

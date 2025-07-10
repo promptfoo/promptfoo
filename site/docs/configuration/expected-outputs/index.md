@@ -41,18 +41,18 @@ tests:
 
 ## Assertion properties
 
-| Property         | Type               | Required | Description                                                                                                                                             |
-| ---------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| type             | string             | Yes      | Type of assertion                                                                                                                                       |
-| value            | string             | No       | The expected value, if applicable                                                                                                                       |
-| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                 |
-| weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                     |
-| provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                    |
-| rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                 |
-| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                                                           |
-| transform        | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs)                                  |
-| metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                        |
-| contextTransform | string             | No       | Javascript expression to dynamically construct context for context-based assertions (`context-faithfulness`, `context-relevance`, and `context-recall`) |
+| Property         | Type               | Required | Description                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                      |
+| value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                      |
+| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                |
+| weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                    |
+| provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                   |
+| rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                |
+| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                                                                                                                                                                          |
+| transform        | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                                                                                                 |
+| metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                       |
+| contextTransform | string             | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#context-transform) for more details. |
 
 ## Grouping assertions via Assertion Sets
 
@@ -597,89 +597,3 @@ Promptfoo accepts a slightly more complex JSON structure that includes an `outpu
 ### Processing and formatting outputs
 
 If you need to do any processing/formatting of outputs, use a [Javascript provider](/docs/providers/custom-api/), [Python provider](https://promptfoo.dev/docs/providers/python/), or [custom script](/docs/providers/custom-script/).
-
-## Context-based assertions
-
-- [Faithfulness](/docs/configuration/expected-outputs/model-graded/context-faithfulness) (`context-recall`) - ensure that ground truth appears in context
-- [Relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) (`context-relevance`) - ensure that context is relevant to original query
-- [Faithfulness](/docs/configuration/expected-outputs/model-graded/context-faithfulness) (`context-faithfulness`) - ensure that LLM output is supported by context
-
-### Context Transform
-
-Context transform allow you to dynamically define context for use in context-based assertions from provider responses.
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.citations.join("\n")'
-    threshold: 0.8
-```
-
-`contextTransform` accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
-
-```typescript
-type ContextTransform = (output: Output, context: Context) => string;
-
-/**
- * The provider's output.
- */
-type Output = string | object;
-
-/**
- * Context regarding the test case and the provider response.
- */
-type Context = {
-  // Test case variables
-  vars: Record<string, string | object>;
-
-  // Raw prompt sent to LLM
-  prompt: {
-    label: string;
-  };
-
-  // Provider-specific metadata
-  metadata?: object;
-};
-```
-
-For example, given the following provider response:
-
-```typescript
-/**
- * A response from a fictional Research Knowledge Base.
- */
-type ProviderResponse = {
-  output: {
-    content: string;
-  };
-  metadata: {
-    retrieved_docs: {
-      content: string;
-    }[];
-  };
-};
-```
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.content'
-    threshold: 0.8
-
-  - type: context-relevance
-    # Note: `ProviderResponse['metadata']` is accessible as `context.metadata`
-    contextTransform: 'context.metadata.retrieved_docs.map(d => d.content).join("\n")'
-    threshold: 0.7
-```
-
-If your expression should return `undefined` or `null`, for example because no context is available, add a fallback:
-
-```yaml
-contextTransform: 'output.context ?? "No context found"'
-```
-
-If you expected your context to be non-empty, but it's empty, you can debug your provider response by returning a stringified version of the response:
-
-```yaml
-contextTransform: 'JSON.stringify(output, null, 2)'
-```
