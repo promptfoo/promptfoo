@@ -17,7 +17,7 @@ assert:
 
 :::note
 
-This assertion requires `query`, context, and the LLM's output to evaluate recall. See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
+This assertion requires context, and the LLM's output to evaluate recall. See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
 
 :::
 
