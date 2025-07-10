@@ -36,7 +36,7 @@ promptsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
       .from(managedPromptsTable)
       .orderBy(desc(managedPromptsTable.updatedAt));
 
-    res.json(prompts);
+    res.json(prompts || []);
   } catch (error) {
     logger.error(`Error listing prompts: ${error}`);
     res.status(500).json({ error: 'Failed to list prompts' });

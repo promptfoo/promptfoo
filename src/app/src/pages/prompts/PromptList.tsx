@@ -44,23 +44,38 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  useEffect(() => {
-    loadPrompts();
-  }, []);
-
   const loadPrompts = async () => {
     try {
       setLoading(true);
-      const response = await callApi('/prompts');
+      const response = await callApi('/managed-prompts');
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to load prompts');
+      }
+      
       const data = await response.json();
-      setPrompts(data);
+      
+      // Ensure data is an array
+      if (Array.isArray(data)) {
+        setPrompts(data);
+      } else {
+        console.error('Unexpected response format:', data);
+        setPrompts([]);
+        showToast('Received unexpected data format', 'error');
+      }
     } catch (error) {
       showToast('Failed to load prompts', 'error');
       console.error('Error loading prompts:', error);
+      setPrompts([]); // Ensure prompts is always an array
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadPrompts();
+  }, []);
 
   const handleDelete = async (promptId: string, promptName: string) => {
     if (!confirm(`Are you sure you want to delete prompt "${promptName}"?`)) {
@@ -68,7 +83,7 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
     }
 
     try {
-      const response = await callApi(`/prompts/${promptId}`, {
+      const response = await callApi(`/managed-prompts/${promptId}`, {
         method: 'DELETE',
       });
 

@@ -216,7 +216,7 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
-  app.use('/api/prompts', promptsRouter);
+  app.use('/api/managed-prompts', promptsRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
