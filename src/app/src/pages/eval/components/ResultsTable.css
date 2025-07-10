@@ -8,6 +8,8 @@ pre {
 
 .results-table-container {
   overflow-x: scroll;
+  margin: 0 -1rem;
+  padding: 0 1rem;
 }
 
 table.results-table,
