@@ -37,7 +37,7 @@ The new Target Discovery Agent [automatically extracts](/docs/red-team/discovery
 
 #### Custom Strategies
 
-The custom strategy allows you to [define your own](/docs/red-team/strategies/custom-strategy/) multi-turn conversation approaches using natural language instructions. Unlike custom strategy scripts, this built-in strategy doesn't require writing JavaScript code - you simply provide text instructions that guide the AI's behavior across conversation turns. This is often oused to automate previously successful manual red teaming approaches. 
+The custom strategy allows you to [define your own](/docs/red-team/strategies/custom-strategy/) multi-turn conversation approaches using natural language instructions. Unlike custom strategy scripts, this built-in strategy doesn't require writing JavaScript code - you simply provide text instructions that guide the AI's behavior across conversation turns. This is often used to automate previously successful manual red teaming approaches. 
 
 #### Grader Examples 
 
