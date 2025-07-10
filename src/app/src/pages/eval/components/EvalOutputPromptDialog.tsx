@@ -195,11 +195,18 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
               if (!result) {
                 return null;
               }
-              const value = result.assertion?.value
-                ? typeof result.assertion.value === 'object'
-                  ? JSON.stringify(result.assertion.value, null, 2)
-                  : String(result.assertion.value)
-                : '-';
+
+              const value =
+                // For context-related assertions, read the context value from metadata, if it exists
+                ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
+                  result.assertion?.type ?? '',
+                ) && result.metadata?.context
+                  ? result.metadata?.context
+                  : result.assertion?.value
+                    ? typeof result.assertion.value === 'object'
+                      ? JSON.stringify(result.assertion.value, null, 2)
+                      : String(result.assertion.value)
+                    : '-';
               const truncatedValue = ellipsize(value, 300);
               const isExpanded = expandedValues[i] || false;
               const valueKey = `value-${i}`;
