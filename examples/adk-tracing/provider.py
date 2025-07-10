@@ -8,7 +8,7 @@ import json
 import os
 import sys
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from openai import AsyncOpenAI
 from opentelemetry import trace
@@ -25,8 +25,19 @@ provider.add_span_processor(SimpleSpanProcessor(otlp_exporter))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
-# Initialize OpenAI client
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Global client variable (initialized on first use)
+_client: Optional[AsyncOpenAI] = None
+
+
+def get_openai_client() -> AsyncOpenAI:
+    """Get or create OpenAI client."""
+    global _client
+    if _client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set")
+        _client = AsyncOpenAI(api_key=api_key)
+    return _client
 
 
 async def process_request(prompt: str, traceparent: str = None) -> str:
@@ -67,6 +78,8 @@ async def research(topic: str) -> str:
         span.set_attribute("llm.model", "gpt-4o-mini")
         
         try:
+            client = get_openai_client()
+            
             # Make real LLM call for research
             response = await client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -108,6 +121,8 @@ async def summarize(topic: str, research_findings: str) -> str:
         span.set_attribute("research_length", len(research_findings))
         
         try:
+            client = get_openai_client()
+            
             # Make real LLM call for summarization
             response = await client.chat.completions.create(
                 model="gpt-4o-mini",
