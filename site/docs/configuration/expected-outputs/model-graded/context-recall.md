@@ -15,13 +15,13 @@ assert:
     threshold: 0.8 # Score from 0 to 1
 ```
 
-## Providing context
+## Defining context
 
-You can provide context in two ways:
+Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
 
-### Using context variables
+### Statically using a test case variable
 
-Include the context as a variable in your test case:
+Set `context` as a variable in your test case:
 
 ```yaml
 tests:
@@ -33,27 +33,39 @@ tests:
         threshold: 0.8
 ```
 
-### Extracting from provider responses
+### Dynamically from the provider's response
 
-If your provider returns context within the response, use `contextTransform`:
+If your provider returns context within the response, use `contextTransform` to extract it. For example:
+
+```typescript
+interface Output {
+  content: string;
+  citations: string;
+  retrieved_docs: {
+    content: string;
+  }[];
+}
+```
 
 ```yaml
 assert:
   - type: context-recall
-    contextTransform: 'output.context'
-    value: 'Expected fact'
+    contextTransform: 'output.citations'
+    value: 'Expected source'
     threshold: 0.8
 ```
 
-For complex response structures:
+Or to use the retrieved documents:
 
 ```yaml
 assert:
   - type: context-recall
     contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
-    value: 'Expected fact'
+    value: 'Expected document'
     threshold: 0.8
 ```
+
+See the [Context Transform reference](/docs/configuration/reference#context-transforms) for more details.
 
 ### How it works
 

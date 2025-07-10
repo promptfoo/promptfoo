@@ -16,13 +16,13 @@ assert:
 
 Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
 
-## Providing context
+## Defining context
 
-You can provide context in two ways:
+Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
 
-### Using context variables
+### Statically using a test case variable
 
-Include the context as a variable in your test case:
+Set `query` and `context` as variables in your test case:
 
 ```yaml
 tests:
@@ -34,18 +34,28 @@ tests:
         threshold: 0.8
 ```
 
-### Extracting from provider responses
+### Dynamically from the provider's response
 
-If your provider returns context within the response, use `contextTransform`:
+If your provider returns context within the response, use `contextTransform` to extract it. For example:
+
+```typescript
+interface Output {
+  content: string;
+  citations: string;
+  retrieved_docs: {
+    content: string;
+  }[];
+}
+```
 
 ```yaml
 assert:
   - type: context-faithfulness
-    contextTransform: 'output.context'
+    contextTransform: 'output.citations'
     threshold: 0.8
 ```
 
-For complex response structures:
+Or to use the retrieved documents:
 
 ```yaml
 assert:
@@ -53,6 +63,8 @@ assert:
     contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
     threshold: 0.8
 ```
+
+See the [Context Transform reference](/docs/configuration/reference#context-transforms) for more details.
 
 ### How it works
 
@@ -75,22 +87,6 @@ tests:
 ```
 
 The assertion will pass if the AI's response about France's capital is faithful to the provided context and doesn't include unsupported information.
-
-### Troubleshooting
-
-**Error: "contextTransform must return a string"**
-Your expression returned `undefined` or `null`. Add a fallback:
-
-```yaml
-contextTransform: 'output.context || "No context found"'
-```
-
-**Error: "Context is required for context-based assertions"**
-Your contextTransform returned an empty string. Check your provider response structure or add debugging:
-
-```yaml
-contextTransform: 'JSON.stringify(output, null, 2)' # Temporary: see full response
-```
 
 ### Overriding the Grader
 
