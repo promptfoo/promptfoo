@@ -41,9 +41,10 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import FiltersButton from './FiltersButton';
-import FiltersForm from './FiltersForm';
+import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
+import FiltersButton from './ResultsFilters/FiltersButton';
+import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import SettingsModal from './TableSettings/TableSettingsModal';
@@ -172,6 +173,9 @@ export default function ResultsView({
     filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
+    selectedMetric,
+    setSelectedMetric,
+    availableMetrics,
   } = useTableStore();
 
   const {
@@ -462,30 +466,6 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Add state for metric filter and available metrics
-  const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
-
-  const _availableMetrics = React.useMemo(() => {
-    if (table && table.head?.prompts) {
-      const metrics = new Set<string>();
-
-      console.log(table.head.prompts);
-
-      table.head.prompts.forEach((prompt) => {
-        if (prompt.metrics?.namedScores) {
-          Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
-        }
-      });
-      return Array.from(metrics).sort();
-    }
-    return [];
-  }, [table]);
-
-  // Make the function a callback that can be passed to CustomMetrics
-  const handleMetricFilterChange = React.useCallback((metric: string | null) => {
-    setSelectedMetric(metric);
-  }, []);
-
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -564,6 +544,12 @@ export default function ResultsView({
           />
         </Box>
 
+        {/* <MetricFilterSelector
+          selectedMetric={selectedMetric}
+          availableMetrics={availableMetrics}
+          onChange={setSelectedMetric}
+        /> */}
+
         <FiltersButton
           appliedFiltersCount={2}
           onClick={() => setFiltersModalOpen(true)}
@@ -611,7 +597,7 @@ export default function ResultsView({
                 <Chip
                   size="small"
                   label={`Metric: ${selectedMetric}`}
-                  onDelete={() => handleMetricFilterChange(null)}
+                  onDelete={() => setSelectedMetric(null)}
                   sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                 />
               )}
@@ -751,7 +737,7 @@ export default function ResultsView({
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
         selectedMetric={selectedMetric}
-        onMetricFilter={handleMetricFilterChange}
+        onMetricFilter={setSelectedMetric}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

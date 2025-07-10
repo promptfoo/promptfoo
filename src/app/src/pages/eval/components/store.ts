@@ -24,6 +24,21 @@ function computeHighlightCount(table: EvaluateTable | null): number {
   }, 0);
 }
 
+function computeAvailableMetrics(table: EvaluateTable | null): string[] {
+  if (!table || !table.head?.prompts) {
+    return [];
+  }
+
+  const metrics = new Set<string>();
+  table.head.prompts.forEach((prompt) => {
+    if (prompt.metrics?.namedScores) {
+      Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
+    }
+  });
+
+  return Array.from(metrics).sort();
+}
+
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
@@ -67,6 +82,11 @@ interface TableState {
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
+
+  selectedMetric: string | null;
+  setSelectedMetric: (metric: string | null) => void;
+
+  availableMetrics: string[];
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
@@ -164,6 +184,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set(() => ({
       table,
       highlightedResultsCount: computeHighlightCount(table),
+      availableMetrics: computeAvailableMetrics(table),
     })),
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
     if (resultsFile.version && resultsFile.version >= 4) {
@@ -172,6 +193,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         table,
         version: resultsFile.version,
         highlightedResultsCount: computeHighlightCount(table),
+        availableMetrics: computeAvailableMetrics(table),
       }));
     } else {
       const results = resultsFile.results as EvaluateSummaryV2;
@@ -179,6 +201,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         table: results.table,
         version: resultsFile.version,
         highlightedResultsCount: computeHighlightCount(results.table),
+        availableMetrics: computeAvailableMetrics(results.table),
       }));
     }
   },
@@ -191,6 +214,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
   highlightedResultsCount: 0,
+
+  selectedMetric: null,
+  setSelectedMetric: (metric: string | null) => set(() => ({ selectedMetric: metric })),
+
+  availableMetrics: [],
 
   isFetching: false,
 
@@ -229,6 +257,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           filteredResultsCount: data.filteredCount,
           totalResultsCount: data.totalCount,
           highlightedResultsCount: computeHighlightCount(data.table),
+          availableMetrics: computeAvailableMetrics(data.table),
           config: data.config,
           version: data.version,
           author: data.author,
