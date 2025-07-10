@@ -2,6 +2,9 @@ import express from 'express';
 import logger from '../logger';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
+// Import protobuf root - it's a CommonJS module that needs require
+const root = require('@opentelemetry/otlp-transformer/build/src/generated/root');
+
 interface OTLPAttribute {
   key: string;
   value: {
@@ -83,9 +86,44 @@ export class OTLPReceiver {
       if (contentType === 'application/json') {
         // Continue with JSON processing
       } else if (contentType === 'application/x-protobuf') {
-        logger.warn('Protobuf format not yet supported, please use JSON');
-        res.status(415).json({ error: 'Protobuf format not yet supported' });
-        return;
+        // Handle protobuf format
+        try {
+          logger.debug('[OtlpReceiver] Processing protobuf format');
+          const traces = await this.parseOTLPProtobufRequest(req.body);
+          logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from protobuf`);
+          
+          // Group spans by trace ID and store them
+          const spansByTrace = new Map<string, SpanData[]>();
+          for (const trace of traces) {
+            if (!spansByTrace.has(trace.traceId)) {
+              spansByTrace.set(trace.traceId, []);
+            }
+            spansByTrace.get(trace.traceId)!.push(trace.span);
+          }
+          
+          let storedCount = 0;
+          let skippedCount = 0;
+          
+          for (const [traceId, spans] of spansByTrace) {
+            logger.debug(`[OtlpReceiver] Attempting to store ${spans.length} spans for trace ${traceId}`);
+            try {
+              await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+              storedCount += spans.length;
+            } catch (error) {
+              // Log but don't fail - traces might not exist for this evaluation
+              logger.debug(`[OtlpReceiver] Could not store spans for trace ${traceId}: ${error}`);
+              skippedCount += spans.length;
+            }
+          }
+          
+          logger.debug(`[OtlpReceiver] Successfully stored ${storedCount} spans, skipped ${skippedCount} spans`);
+          res.status(200).json({ partialSuccess: {} });
+          return;
+        } catch (error) {
+          logger.error(`[OtlpReceiver] Failed to process protobuf: ${error}`);
+          res.status(500).json({ error: 'Failed to process protobuf' });
+          return;
+        }
       } else {
         res.status(415).json({ error: 'Unsupported content type' });
         return;
@@ -113,11 +151,22 @@ export class OTLPReceiver {
         logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
 
         // Store spans for each trace
+        let storedCount = 0;
+        let skippedCount = 0;
+        
         for (const [traceId, spans] of spansByTrace) {
-          logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-          await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+          logger.debug(`[OtlpReceiver] Attempting to store ${spans.length} spans for trace ${traceId}`);
+          try {
+            await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+            storedCount += spans.length;
+          } catch (error) {
+            // Log but don't fail - traces might not exist for this evaluation
+            logger.debug(`[OtlpReceiver] Could not store spans for trace ${traceId}: ${error}`);
+            skippedCount += spans.length;
+          }
         }
 
+        logger.debug(`[OtlpReceiver] Successfully stored ${storedCount} spans, skipped ${skippedCount} spans`);
         // OTLP success response
         res.status(200).json({ partialSuccess: {} });
         logger.debug('[OtlpReceiver] Successfully processed traces');
@@ -141,7 +190,7 @@ export class OTLPReceiver {
       res.status(200).json({
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
-        supported_formats: ['json'], // 'protobuf' will be added in phase 2
+        supported_formats: ['json', 'protobuf'],
       });
     });
 
@@ -223,6 +272,88 @@ export class OTLPReceiver {
     return traces;
   }
 
+  private async parseOTLPProtobufRequest(body: Buffer): Promise<ParsedTrace[]> {
+    const traces: ParsedTrace[] = [];
+    
+    try {
+      // Get the protobuf type for ExportTraceServiceRequest
+      const ExportTraceServiceRequest = root.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+      
+      // Decode the protobuf request
+      const request = ExportTraceServiceRequest.decode(body);
+      
+      if (!request.resourceSpans) {
+        return traces;
+      }
+      
+      for (const resourceSpan of request.resourceSpans) {
+        // Extract resource attributes
+        const resourceAttributes: Record<string, any> = {};
+        if (resourceSpan.resource?.attributes) {
+          for (const attr of resourceSpan.resource.attributes) {
+            const value = this.parseProtobufAttributeValue(attr.value);
+            if (value !== undefined && attr.key) {
+              resourceAttributes[attr.key] = value;
+            }
+          }
+        }
+        
+        if (!resourceSpan.scopeSpans) continue;
+        
+        for (const scopeSpan of resourceSpan.scopeSpans) {
+          if (!scopeSpan.spans) continue;
+          
+          for (const span of scopeSpan.spans) {
+            // Convert binary IDs to hex strings
+            const traceId = span.traceId ? Buffer.from(span.traceId).toString('hex') : '';
+            const spanId = span.spanId ? Buffer.from(span.spanId).toString('hex') : '';
+            const parentSpanId = span.parentSpanId ? Buffer.from(span.parentSpanId).toString('hex') : undefined;
+            
+            logger.debug(`[OtlpReceiver] Processing protobuf span: ${span.name} (${spanId}) in trace ${traceId}`);
+            
+            // Parse attributes
+            const attributes: Record<string, any> = { ...resourceAttributes };
+            if (span.attributes) {
+              for (const attr of span.attributes) {
+                const value = this.parseProtobufAttributeValue(attr.value);
+                if (value !== undefined && attr.key) {
+                  attributes[attr.key] = value;
+                }
+              }
+            }
+            
+            // Add scope info
+            if (scopeSpan.scope?.name) {
+              attributes['otel.scope.name'] = scopeSpan.scope.name;
+            }
+            if (scopeSpan.scope?.version) {
+              attributes['otel.scope.version'] = scopeSpan.scope.version;
+            }
+            
+            traces.push({
+              traceId,
+              span: {
+                spanId,
+                parentSpanId,
+                name: span.name || '',
+                startTime: span.startTimeUnixNano ? Number(span.startTimeUnixNano) / 1_000_000 : 0,
+                endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
+                attributes,
+                statusCode: span.status?.code,
+                statusMessage: span.status?.message,
+              },
+            });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(`[OtlpReceiver] Failed to parse protobuf: ${error}`);
+      throw error;
+    }
+    
+    return traces;
+  }
+
   private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {
     if (!attributes) {
       return {};
@@ -260,6 +391,35 @@ export class OTLPReceiver {
       const kvMap: Record<string, any> = {};
       for (const kv of value.kvlistValue.values) {
         kvMap[kv.key] = this.parseAttributeValue(kv.value);
+      }
+      return kvMap;
+    }
+    return undefined;
+  }
+
+  private parseProtobufAttributeValue(value: any): any {
+    if (!value) return undefined;
+    
+    if (value.stringValue !== undefined) {
+      return value.stringValue;
+    }
+    if (value.intValue !== undefined) {
+      // Handle Long type from protobuf
+      return typeof value.intValue === 'object' ? value.intValue.toNumber() : Number(value.intValue);
+    }
+    if (value.doubleValue !== undefined) {
+      return value.doubleValue;
+    }
+    if (value.boolValue !== undefined) {
+      return value.boolValue;
+    }
+    if (value.arrayValue?.values) {
+      return value.arrayValue.values.map((v: any) => this.parseProtobufAttributeValue(v));
+    }
+    if (value.kvlistValue?.values) {
+      const kvMap: Record<string, any> = {};
+      for (const kv of value.kvlistValue.values) {
+        kvMap[kv.key] = this.parseProtobufAttributeValue(kv.value);
       }
       return kvMap;
     }

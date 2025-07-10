@@ -67,23 +67,26 @@ export class TraceStore {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
       const db = this.getDatabase();
 
-      // Only verify trace exists if not skipping the check (for OTLP scenarios)
-      if (options?.skipTraceCheck) {
-        logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
-      } else {
-        logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
-        const trace = await db
-          .select()
-          .from(tracesTable)
-          .where(eq(tracesTable.traceId, traceId))
-          .limit(1);
+      // Always check if trace exists first
+      logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
+      const existingTrace = await db
+        .select()
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId))
+        .limit(1);
 
-        if (trace.length === 0) {
-          logger.warn(`[TraceStore] Trace ${traceId} not found, skipping spans`);
+      if (existingTrace.length === 0) {
+        // For OTLP scenarios, we might receive spans before the trace is created
+        // or for traces not associated with this evaluation
+        if (options?.skipTraceCheck) {
+          logger.warn(`[TraceStore] Trace ${traceId} not found in OTLP scenario, skipping spans`);
           return;
         }
-        logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
+        logger.warn(`[TraceStore] Trace ${traceId} not found, skipping spans`);
+        return;
       }
+
+      logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
 
       // Insert spans
       const spanRecords = spans.map((span) => {
