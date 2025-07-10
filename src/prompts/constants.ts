@@ -11,6 +11,7 @@ export const VALID_FILE_EXTENSIONS = [
   '.md',
   '.mjs',
   '.mts',
+  '.prompty',
   '.py',
   '.ts',
   '.txt',
