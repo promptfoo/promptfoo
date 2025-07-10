@@ -20,6 +20,12 @@ export XAI_API_KEY=your_api_key_here
 
 The xAI provider includes support for the following model formats:
 
+### Grok-4 Models
+
+- `xai:grok-4-0709` - Latest flagship reasoning model (256K context)
+- `xai:grok-4` - Alias for latest Grok-4 model
+- `xai:grok-4-latest` - Alias for latest Grok-4 model
+
 ### Grok-3 Models
 
 - `xai:grok-3-beta` - Latest flagship model for enterprise tasks (131K context)
@@ -67,6 +73,28 @@ Grok-3 introduces reasoning capabilities for specific models. The `grok-3-mini-b
 Reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
 
 :::
+
+### Grok-4 Specific Behavior
+
+Grok-4 introduces significant changes compared to previous Grok models:
+
+- **Always uses reasoning**: Grok-4 is a reasoning model with no non-reasoning mode
+- **No `reasoning_effort` parameter**: Unlike Grok-3 mini models, Grok-4 does not support the `reasoning_effort` parameter
+- **Unsupported parameters**: The following parameters are not supported and will cause errors:
+  - `presencePenalty` / `presence_penalty`
+  - `frequencyPenalty` / `frequency_penalty`
+  - `stop`
+- **Larger context window**: 256,000 tokens compared to 131,072 for Grok-3 models
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: xai:grok-4
+    config:
+      temperature: 0.7
+      # Note: reasoning_effort is NOT supported for Grok-4
+      # presence_penalty, frequency_penalty, and stop are also not supported
+```
 
 ### Region Support
 

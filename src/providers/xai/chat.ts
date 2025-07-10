@@ -18,6 +18,15 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 };
 
 export const XAI_CHAT_MODELS = [
+  // Grok-4 Models
+  {
+    id: 'grok-4-0709',
+    cost: {
+      input: 3.0 / 1e6,
+      output: 15.0 / 1e6,
+    },
+    aliases: ['grok-4', 'grok-4-latest'],
+  },
   // Grok-3 Models
   {
     id: 'grok-3-beta',
@@ -87,6 +96,18 @@ export const XAI_CHAT_MODELS = [
 
 export const GROK_3_MINI_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
 
+// Models that support reasoning_effort parameter (only Grok-3 mini models)
+export const GROK_REASONING_EFFORT_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
+
+// All reasoning models (including Grok-4 which doesn't support reasoning_effort)
+export const GROK_REASONING_MODELS = [
+  'grok-4-0709',
+  'grok-4',
+  'grok-4-latest',
+  'grok-3-mini-beta',
+  'grok-3-mini-fast-beta',
+];
+
 /**
  * Calculate xAI Grok cost based on model name and token usage
  */
@@ -132,7 +153,11 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return GROK_3_MINI_MODELS.includes(this.modelName);
+    return GROK_REASONING_MODELS.includes(this.modelName);
+  }
+
+  protected supportsReasoningEffort(): boolean {
+    return GROK_REASONING_EFFORT_MODELS.includes(this.modelName);
   }
 
   protected supportsTemperature(): boolean {
@@ -141,10 +166,27 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
 
   getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
     const result = super.getOpenAiBody(prompt, context, callApiOptions);
+
+    // Handle search parameters
     const searchParams = this.originalConfig?.search_parameters;
     if (searchParams) {
       result.body.search_parameters = renderVarsInObject(searchParams, context?.vars);
     }
+
+    // Filter out unsupported parameters for Grok-4
+    if (this.modelName.startsWith('grok-4')) {
+      // Grok-4 doesn't support these parameters
+      delete result.body.presence_penalty;
+      delete result.body.frequency_penalty;
+      delete result.body.stop;
+      delete result.body.reasoning_effort; // Grok-4 doesn't support reasoning_effort
+    }
+
+    // Only add reasoning_effort for models that support it
+    if (this.originalConfig?.reasoning_effort && !this.supportsReasoningEffort()) {
+      delete result.body.reasoning_effort;
+    }
+
     return result;
   }
 

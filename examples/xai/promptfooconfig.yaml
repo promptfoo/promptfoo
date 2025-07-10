@@ -5,6 +5,8 @@ prompts:
   - file://./prompt.yaml
 
 providers:
+  # Grok-4 Models (Latest)
+  - xai:grok-4
   # Grok-3 Models (New)
   - xai:grok-3-fast
   - id: xai:grok-3-mini-fast
