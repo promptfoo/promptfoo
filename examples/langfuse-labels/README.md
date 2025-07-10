@@ -58,15 +58,26 @@ After running the eval, you should see:
 
 ## Prompt format reference
 
-```yaml
-# By version number
-langfuse://prompt-name:version:type
+### Two syntax options
 
-# By label (recommended)
-langfuse://prompt-name@label:type
-```
+Promptfoo supports two ways to reference Langfuse prompts with labels:
 
-Where:
+1. **Explicit @ syntax** (recommended for clarity)
+
+   ```yaml
+   langfuse://prompt-name@label:type
+   ```
+
+2. **Auto-detection with : syntax**
+
+   ```yaml
+   langfuse://prompt-name:version-or-label:type
+   ```
+
+   - Numeric values (e.g., `1`, `2`, `3`) are treated as versions
+   - String values (e.g., `production`, `staging`) are treated as labels
+
+### Format components
 
 - `prompt-name`: The name of your prompt in Langfuse
 - `version`: Specific version number (1, 2, 3, etc.)
@@ -76,17 +87,19 @@ Where:
 ## Example prompt references
 
 ```yaml
-# Chat prompts with labels
+# Explicit @ syntax for labels (recommended)
 langfuse://customer-support@production:chat
 langfuse://customer-support@staging:chat
+langfuse://email-writer@latest
 
-# Text prompts with labels
-langfuse://email-writer@production
-langfuse://email-writer@latest:text
+# Auto-detection with : syntax
+langfuse://customer-support:production:chat  # String → label
+langfuse://customer-support:staging          # String → label
+langfuse://email-writer:latest:text          # "latest" → label
 
-# Version-based references
-langfuse://customer-support:1:chat
-langfuse://email-writer:3:text
+# Version references (numeric values)
+langfuse://customer-support:1:chat           # Numeric → version
+langfuse://email-writer:3:text               # Numeric → version
 ```
 
 ## Best practices

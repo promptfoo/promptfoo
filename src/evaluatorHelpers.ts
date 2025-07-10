@@ -284,7 +284,7 @@ export async function renderPrompt(
     // More robust parsing that handles @ in prompt IDs
     // Look for the last @ that's followed by a label pattern
     const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
-    const versionMatch = langfusePrompt.match(/^([^:]+):(\d+|latest)(?::(.+))?$/);
+    const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
 
     if (labelMatch) {
       // Label-based syntax: prompt-id@label or prompt-id@label:type
@@ -294,9 +294,23 @@ export async function renderPrompt(
         promptType = labelMatch[3] as 'text' | 'chat';
       }
     } else if (versionMatch) {
-      // Version-based syntax: prompt-id:version or prompt-id:version:type
+      // Version/label syntax: prompt-id:version-or-label or prompt-id:version-or-label:type
       helper = versionMatch[1];
-      version = versionMatch[2];
+      const versionOrLabel = versionMatch[2];
+
+      // Auto-detect if it's a version (numeric) or label (string)
+      if (/^\d+$/.test(versionOrLabel)) {
+        // It's a numeric version
+        version = versionOrLabel;
+      } else {
+        // It's a string, treat as label
+        label = versionOrLabel;
+        if (label === 'latest') {
+          // 'latest' is always treated as a label, even though it could be ambiguous
+          version = undefined;
+        }
+      }
+
       if (versionMatch[3]) {
         promptType = versionMatch[3] as 'text' | 'chat';
       }

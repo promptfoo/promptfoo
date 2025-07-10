@@ -17,16 +17,21 @@ description: 'Langfuse prompt management with labels - demonstrates version-cont
 # 3. Assign labels to your prompt versions (e.g., "production", "staging")
 
 prompts:
-  # Reference prompts by label
+  # Reference prompts by label using @ syntax (explicit)
   - langfuse://customer-support@production:chat
   - langfuse://customer-support@staging:chat
 
-  # You can also use version numbers if needed
-  - langfuse://customer-support:1:chat
+  # Reference prompts by label using : syntax (auto-detected)
+  - langfuse://customer-support:production:chat # String detected as label
+  - langfuse://customer-support:staging:chat # String detected as label
 
-  # Text prompts (default type if not specified)
-  - langfuse://email-writer@production
-  - langfuse://email-writer@latest:text
+  # You can still use version numbers (numeric values)
+  - langfuse://customer-support:1:chat # Numeric detected as version
+
+  # Text prompts with labels (both syntaxes work)
+  - langfuse://email-writer@production # @ syntax
+  - langfuse://email-writer:latest:text # : syntax (latest treated as label)
+  - langfuse://email-writer:production # : syntax (auto-detected as label)
 
 providers:
   - openai:gpt-4o-mini

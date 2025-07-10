@@ -27,15 +27,30 @@ Use the `langfuse://` prefix in your promptfoo configuration to reference prompt
 
 ### Prompt formats
 
-You can reference prompts by version or label:
+You can reference prompts by version or label using two different syntaxes:
+
+#### 1. Explicit @ syntax (recommended for clarity)
 
 ```yaml
-# By version number
-langfuse://prompt-name:version:type
-
-# By label (recommended for production use)
+# By label
 langfuse://prompt-name@label:type
+
+# Examples
+langfuse://my-prompt@production        # Text prompt with production label
+langfuse://chat-prompt@staging:chat    # Chat prompt with staging label
 ```
+
+#### 2. Auto-detection with : syntax
+
+```yaml
+# By version or label (auto-detected)
+langfuse://prompt-name:version-or-label:type
+```
+
+The parser automatically detects:
+
+- **Numeric values** → treated as versions (e.g., `1`, `2`, `3`)
+- **String values** → treated as labels (e.g., `production`, `staging`, `latest`)
 
 Where:
 
@@ -48,15 +63,19 @@ Where:
 
 ```yaml
 prompts:
-  # Text prompts
-  - 'langfuse://my-prompt:3:text' # Version 3, text prompt
-  - 'langfuse://my-prompt@production' # Production label, text prompt (default)
+  # Explicit @ syntax for labels (recommended)
+  - 'langfuse://my-prompt@production' # Production label, text prompt
+  - 'langfuse://chat-prompt@staging:chat' # Staging label, chat prompt
   - 'langfuse://my-prompt@latest:text' # Latest label, text prompt
 
-  # Chat prompts
-  - 'langfuse://chat-prompt:2:chat' # Version 2, chat prompt
-  - 'langfuse://chat-prompt@production:chat' # Production label, chat prompt
-  - 'langfuse://chat-prompt@staging:chat' # Staging label, chat prompt
+  # Auto-detection with : syntax
+  - 'langfuse://my-prompt:production' # String → treated as label
+  - 'langfuse://chat-prompt:staging:chat' # String → treated as label
+  - 'langfuse://my-prompt:latest' # "latest" → treated as label
+
+  # Version references (numeric values only)
+  - 'langfuse://my-prompt:3:text' # Numeric → version 3
+  - 'langfuse://chat-prompt:2:chat' # Numeric → version 2
 
 providers:
   - openai:gpt-4o-mini

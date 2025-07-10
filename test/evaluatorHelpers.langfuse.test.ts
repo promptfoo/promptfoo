@@ -55,7 +55,8 @@ describe('renderPrompt - Langfuse integration', () => {
       const prompt = toPrompt('langfuse://my-prompt:latest:text');
       const result = await renderPrompt(prompt, {}, {});
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('my-prompt', {}, 'text', undefined, undefined);
+      // With dual syntax support, 'latest' is now treated as a label
+      expect(mockGetPrompt).toHaveBeenCalledWith('my-prompt', {}, 'text', undefined, 'latest');
       expect(result).toBe('Latest prompt content');
     });
   });
@@ -280,6 +281,113 @@ describe('renderPrompt - Langfuse integration', () => {
         'staging',
       );
       expect(result).toBe(JSON.stringify(chatMessages));
+    });
+  });
+
+  describe('dual syntax support', () => {
+    it('should auto-detect string as label with : syntax', async () => {
+      mockGetPrompt.mockResolvedValue('Production prompt via colon');
+
+      const prompt = toPrompt('langfuse://my-prompt:production');
+      const result = await renderPrompt(prompt, { env: 'prod' }, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'my-prompt',
+        { env: 'prod' },
+        'text',
+        undefined,
+        'production',
+      );
+      expect(result).toBe('Production prompt via colon');
+    });
+
+    it('should auto-detect string as label with : syntax and type', async () => {
+      mockGetPrompt.mockResolvedValue('[{"role": "system", "content": "Staging chat"}]');
+
+      const prompt = toPrompt('langfuse://chat-prompt:staging:chat');
+      const result = await renderPrompt(prompt, { user: 'Bob' }, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'chat-prompt',
+        { user: 'Bob' },
+        'chat',
+        undefined,
+        'staging',
+      );
+      expect(result).toBe('[{"role": "system", "content": "Staging chat"}]');
+    });
+
+    it('should still treat numeric values as versions', async () => {
+      mockGetPrompt.mockResolvedValue('Version 3 prompt');
+
+      const prompt = toPrompt('langfuse://my-prompt:3:text');
+      const result = await renderPrompt(prompt, {}, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith('my-prompt', {}, 'text', 3, undefined);
+      expect(result).toBe('Version 3 prompt');
+    });
+
+    it('should treat "latest" as label with : syntax', async () => {
+      mockGetPrompt.mockResolvedValue('Latest via colon');
+
+      const prompt = toPrompt('langfuse://my-prompt:latest');
+      const result = await renderPrompt(prompt, {}, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith('my-prompt', {}, 'text', undefined, 'latest');
+      expect(result).toBe('Latest via colon');
+    });
+
+    it('should handle complex label names with : syntax', async () => {
+      mockGetPrompt.mockResolvedValue('Complex label via colon');
+
+      const prompt = toPrompt('langfuse://test:prod-v2_final:chat');
+      const result = await renderPrompt(prompt, {}, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith('test', {}, 'chat', undefined, 'prod-v2_final');
+      expect(result).toBe('Complex label via colon');
+    });
+
+    it('should prefer @ syntax when both could apply', async () => {
+      mockGetPrompt.mockResolvedValue('Explicit @ syntax wins');
+
+      // Even though "123" could be a version, @ makes it explicitly a label
+      const prompt = toPrompt('langfuse://my-prompt@123:chat');
+      const result = await renderPrompt(prompt, {}, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith('my-prompt', {}, 'chat', undefined, '123');
+      expect(result).toBe('Explicit @ syntax wins');
+    });
+
+    it('should handle tenant labels with : syntax', async () => {
+      mockGetPrompt.mockResolvedValue('Tenant A via colon');
+
+      const prompt = toPrompt('langfuse://multi-tenant:tenant-a');
+      const result = await renderPrompt(prompt, { tenant: 'A' }, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'multi-tenant',
+        { tenant: 'A' },
+        'text',
+        undefined,
+        'tenant-a',
+      );
+      expect(result).toBe('Tenant A via colon');
+    });
+
+    it('should handle experiment labels with : syntax', async () => {
+      mockGetPrompt.mockResolvedValue('Experiment B via colon');
+
+      const prompt = toPrompt('langfuse://ab-test:experiment-b:chat');
+      const result = await renderPrompt(prompt, { variant: 'B' }, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'ab-test',
+        { variant: 'B' },
+        'chat',
+        undefined,
+        'experiment-b',
+      );
+      expect(result).toBe('Experiment B via colon');
     });
   });
 });

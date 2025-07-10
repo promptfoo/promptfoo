@@ -277,14 +277,18 @@ Promptfoo integrates with external prompt management platforms, allowing you to 
 
 ```yaml
 prompts:
-  # Reference by version
+  # Reference by version (numeric values)
   - langfuse://my-prompt:3:text
   - langfuse://chat-prompt:1:chat
 
-  # Reference by label (recommended for production)
+  # Reference by label using @ syntax (recommended for clarity)
   - langfuse://my-prompt@production
   - langfuse://chat-prompt@staging:chat
   - langfuse://email-template@latest:text
+
+  # Reference by label using : syntax (auto-detected strings)
+  - langfuse://my-prompt:production # String detected as label
+  - langfuse://chat-prompt:staging:chat # String detected as label
 ```
 
 ### Portkey
