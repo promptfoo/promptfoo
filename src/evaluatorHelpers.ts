@@ -463,3 +463,5 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
 
   return updatedContext;
 }
+
+export { autoWrapRawIfPartialNunjucks };
