@@ -163,6 +163,30 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should warn when __metadata has no key', () => {
+    const row: CsvRow = {
+      __metadata: 'foo',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+
+    testCaseFromCsvRow(row);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
+    );
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
   it('should properly trim whitespace from keys', () => {
     const row: CsvRow = {
       '  var1  ': 'value1',

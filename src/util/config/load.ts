@@ -408,16 +408,31 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests,
     scenarios: configs.flatMap((config) => config.scenarios || []),
-    defaultTest: configs.reduce((prev: Partial<TestCase> | undefined, curr) => {
+    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+      // If any config has a string defaultTest (file reference), preserve it
+      if (typeof curr.defaultTest === 'string') {
+        return curr.defaultTest;
+      }
+      // If prev is already a string (file reference), keep it
+      if (typeof prev === 'string') {
+        return prev;
+      }
+      // If neither prev nor curr has defaultTest, return undefined
+      if (!prev && !curr.defaultTest) {
+        return undefined;
+      }
+      // Otherwise merge objects
+      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const prevObj = typeof prev === 'object' ? prev : {};
       return {
-        ...prev,
-        ...curr.defaultTest,
-        vars: { ...prev?.vars, ...curr.defaultTest?.vars },
-        assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
-        options: { ...prev?.options, ...curr.defaultTest?.options },
-        metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
+        ...prevObj,
+        ...currDefaultTest,
+        vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
+        assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
+        options: { ...prevObj?.options, ...currDefaultTest?.options },
+        metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
       };
-    }, {}),
+    }, undefined) as UnifiedConfig['defaultTest'],
     derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
       if (curr.derivedMetrics) {
         return [...(prev ?? []), ...curr.derivedMetrics];
@@ -511,7 +526,22 @@ export async function resolveConfigs(
 
   cliState.basePath = basePath;
 
-  const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
+  // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
+  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
+
+  // Load defaultTest from file:// reference if needed
+  let processedDefaultTest: Partial<TestCase> | undefined;
+  if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
+    // Set basePath in cliState temporarily for file resolution
+    const originalBasePath = cliState.basePath;
+    cliState.basePath = basePath;
+    const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
+    cliState.basePath = originalBasePath;
+    processedDefaultTest = loaded as Partial<TestCase>;
+  } else if (defaultTestRaw) {
+    processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+  }
+
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
@@ -523,7 +553,7 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
-    defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
+    defaultTest: processedDefaultTest ? await readTest(processedDefaultTest, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: fileConfig.extensions || defaultConfig.extensions || [],
@@ -580,8 +610,15 @@ export async function resolveConfigs(
   );
 
   // Parse testCases for each scenario
-  if (fileConfig.scenarios) {
+  if (
+    fileConfig.scenarios &&
+    (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
+  ) {
     fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+    // Flatten the scenarios array in case glob patterns were used
+    fileConfig.scenarios = fileConfig.scenarios.flat();
+    // Update config.scenarios with the flattened array
+    config.scenarios = fileConfig.scenarios;
   }
   if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
@@ -628,9 +665,9 @@ export async function resolveConfigs(
       suffix: cmdObj.promptSuffix,
       provider: cmdObj.grader,
       // rubricPrompt
-      ...(config.defaultTest?.options || {}),
+      ...(processedDefaultTest?.options || {}),
     },
-    ...config.defaultTest,
+    ...(processedDefaultTest || {}),
   };
 
   const testSuite: TestSuite = {

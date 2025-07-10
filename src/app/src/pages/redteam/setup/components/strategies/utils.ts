@@ -14,6 +14,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   camelcase: 1,
   citation: 1,
   crescendo: 10,
+  custom: 10,
   default: 1,
   gcg: 1,
   goat: 5,
@@ -26,6 +27,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:tree': 150,
   leetspeak: 1,
   'math-prompt': 1,
+  'mischievous-user': 5,
   morse: 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
   'other-encodings': 1,

@@ -11,20 +11,21 @@ Output-based:
 - [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
 - [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
 - [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but that the difference doesn't matter from the perspective of factuality. It uses the prompt from OpenAI's public evals.
-- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - uses chain-of-thought prompting to evaluate outputs based on custom criteria, following the G-Eval framework.
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - evaluates outputs using chain-of-thought prompting based on custom criteria, following the G-Eval framework.
 - [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - ensure that LLM output is related to original query
+- [`similar`](/docs/configuration/expected-outputs/similar) - checks that the output is semantically similar to the expected value (uses embedding model)
 - [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - an alternative scoring approach that uses a dedicated model for evaluating inputs/outputs against criteria.
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
 - [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
 
-RAG-based (requires `query` and context via variables or `contextTransform`):
+Context-based:
 
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
 
-For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
+Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
 ## Examples (output-based)
 
@@ -81,80 +82,6 @@ tests:
       question: What's the weather in New York?
   - vars:
       question: Who won the latest football match between the Giants and 49ers?
-```
-
-## Examples (RAG-based)
-
-RAG metrics require a `query` and context (provided via test variables or extracted using `contextTransform`). You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
-
-Here's an example config using context variables:
-
-```yaml
-prompts:
-  - |
-    You are an internal corporate chatbot.
-    Respond to this query: {{query}}
-    Here is some context that you can use to write your response: {{context}}
-providers:
-  - openai:gpt-4
-tests:
-  - vars:
-      query: What is the max purchase that doesn't require approval?
-      context: file://docs/reimbursement.md
-    assert:
-      - type: contains
-        value: '$500'
-      - type: factuality
-        value: the employee's manager is responsible for approvals
-      - type: answer-relevance
-        threshold: 0.9
-      - type: context-recall
-        threshold: 0.9
-        value: max purchase price without approval is $500. Talk to Fred before submitting anything.
-      - type: context-relevance
-        threshold: 0.9
-      - type: context-faithfulness
-        threshold: 0.9
-  - vars:
-      query: How many weeks is maternity leave?
-      context: file://docs/maternity.md
-    assert:
-      - type: factuality
-        value: maternity leave is 4 months
-      - type: answer-relevance
-        threshold: 0.9
-      - type: context-recall
-        threshold: 0.9
-        value: The company offers 4 months of maternity leave, unless you are an elephant, in which case you get 22 months of maternity leave.
-      - type: context-relevance
-        threshold: 0.9
-      - type: context-faithfulness
-        threshold: 0.9
-```
-
-Alternatively, if your RAG system returns context in the response, you can use `contextTransform`:
-
-```yaml
-prompts:
-  - |
-    You are an internal corporate chatbot.
-    Respond to this query: {{query}}
-providers:
-  - openai:gpt-4
-tests:
-  - vars:
-      query: What is the max purchase that doesn't require approval?
-    assert:
-      - type: context-recall
-        contextTransform: 'output.context'
-        threshold: 0.9
-        value: max purchase price without approval is $500
-      - type: context-relevance
-        contextTransform: 'output.context'
-        threshold: 0.9
-      - type: context-faithfulness
-        contextTransform: 'output.context'
-        threshold: 0.9
 ```
 
 ## Examples (comparison)
@@ -320,6 +247,192 @@ For control over the `select-best` rubric prompt, you may use the variables `{{o
 ## Classifiers
 
 Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much more. See [classifier documentation](/docs/configuration/expected-outputs/classifier).
+
+---
+
+## Context-based
+
+Context-based assertions are a special class of model-graded assertions that evaluate whether the LLM's output is supported by context provided at inference time. They are particularly useful for evaluating RAG systems.
+
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+
+### Defining context
+
+Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
+
+#### Statically via test variables
+
+Set `context` as a variable in your test case:
+
+```yaml
+tests:
+  - vars:
+      context: 'Paris is the capital of France. It has a population of over 2 million people.'
+    assert:
+      - type: context-recall
+        value: 'Paris is the capital of France'
+        threshold: 0.8
+```
+
+#### Dynamically via Context Transform
+
+Defining `contextTransform` allows you to construct context from provider responses. This is particularly useful for RAG systems.
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.citations.join("\n")'
+    threshold: 0.8
+```
+
+The `contextTransform` property accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
+
+```typescript
+/**
+ * The context transform function signature.
+ */
+type ContextTransform = (output: Output, context: Context) => string;
+
+/**
+ * The provider's response output.
+ */
+type Output = string | object;
+
+/**
+ * Metadata about the test case, prompt, and provider response.
+ */
+type Context = {
+  // Test case variables
+  vars: Record<string, string | object>;
+
+  // Raw prompt sent to LLM
+  prompt: {
+    label: string;
+  };
+
+  // Provider-specific metadata.
+  // The documentation for each provider will describe any available metadata.
+  metadata?: object;
+};
+```
+
+For example, given the following provider response:
+
+```typescript
+/**
+ * A response from a fictional Research Knowledge Base.
+ */
+type ProviderResponse = {
+  output: {
+    content: string;
+  };
+  metadata: {
+    retrieved_docs: {
+      content: string;
+    }[];
+  };
+};
+```
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.content'
+    threshold: 0.8
+
+  - type: context-relevance
+    # Note: `ProviderResponse['metadata']` is accessible as `context.metadata`
+    contextTransform: 'context.metadata.retrieved_docs.map(d => d.content).join("\n")'
+    threshold: 0.7
+```
+
+If your expression should return `undefined` or `null`, for example because no context is available, add a fallback:
+
+```yaml
+contextTransform: 'output.context ?? "No context found"'
+```
+
+If you expected your context to be non-empty, but it's empty, you can debug your provider response by returning a stringified version of the response:
+
+```yaml
+contextTransform: 'JSON.stringify(output, null, 2)'
+```
+
+### Examples
+
+Context-based metrics require a `query` and context. You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
+
+Here's an example config using statically-defined (`test.vars.context`) context:
+
+```yaml
+prompts:
+  - |
+    You are an internal corporate chatbot.
+    Respond to this query: {{query}}
+    Here is some context that you can use to write your response: {{context}}
+providers:
+  - openai:gpt-4
+tests:
+  - vars:
+      query: What is the max purchase that doesn't require approval?
+      context: file://docs/reimbursement.md
+    assert:
+      - type: contains
+        value: '$500'
+      - type: factuality
+        value: the employee's manager is responsible for approvals
+      - type: answer-relevance
+        threshold: 0.9
+      - type: context-recall
+        threshold: 0.9
+        value: max purchase price without approval is $500. Talk to Fred before submitting anything.
+      - type: context-relevance
+        threshold: 0.9
+      - type: context-faithfulness
+        threshold: 0.9
+  - vars:
+      query: How many weeks is maternity leave?
+      context: file://docs/maternity.md
+    assert:
+      - type: factuality
+        value: maternity leave is 4 months
+      - type: answer-relevance
+        threshold: 0.9
+      - type: context-recall
+        threshold: 0.9
+        value: The company offers 4 months of maternity leave, unless you are an elephant, in which case you get 22 months of maternity leave.
+      - type: context-relevance
+        threshold: 0.9
+      - type: context-faithfulness
+        threshold: 0.9
+```
+
+Alternatively, if your system returns context in the response, like in a RAG system, you can use `contextTransform`:
+
+```yaml
+prompts:
+  - |
+    You are an internal corporate chatbot.
+    Respond to this query: {{query}}
+providers:
+  - openai:gpt-4
+tests:
+  - vars:
+      query: What is the max purchase that doesn't require approval?
+    assert:
+      - type: context-recall
+        contextTransform: 'output.context'
+        threshold: 0.9
+        value: max purchase price without approval is $500
+      - type: context-relevance
+        contextTransform: 'output.context'
+        threshold: 0.9
+      - type: context-faithfulness
+        contextTransform: 'output.context'
+        threshold: 0.9
+```
 
 ## Other assertion types
 
