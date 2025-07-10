@@ -234,10 +234,14 @@ tests:
 
 ### Testing Prompts
 
+The prompt management system includes a powerful testing interface that properly handles variables in your prompts.
+
+#### CLI Testing
+
 Run evaluations directly on prompts:
 
 ```bash
-# Test with inline test cases
+# Test with test cases file
 promptfoo prompt test customer-support \
   --provider openai:gpt-4 \
   -t test-cases.yaml
@@ -247,6 +251,28 @@ promptfoo prompt test customer-support \
   --version 2 \
   --provider anthropic:claude-3
 ```
+
+#### Web UI Testing
+
+The web interface provides an interactive testing experience:
+
+1. **Variable Detection**: Automatically extracts all `{{variables}}` from your prompt template
+2. **Individual Inputs**: Provides separate input fields for each variable
+3. **Preview Mode**: Shows the rendered prompt with all variables replaced before testing
+4. **Rich Results**: Displays the provider response along with metadata like token usage and cost
+
+To test a prompt in the UI:
+1. Navigate to a prompt and click "Test"
+2. Select the version and provider
+3. Fill in values for each variable
+4. Click "Preview Prompt" to see the final rendered prompt
+5. Click "Run Test" to execute
+
+The test feature properly handles:
+- Multiple variables with individual inputs
+- Complex templates with conditional logic
+- Different provider configurations
+- Token usage and cost tracking
 
 ## Best Practices
 
