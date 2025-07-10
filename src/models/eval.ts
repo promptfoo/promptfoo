@@ -455,13 +455,13 @@ export default class Eval {
     // Add specific metadata filter if provided
     if (opts.metadataFilter && opts.metadataFilter.trim() !== '') {
       const filter = opts.metadataFilter.trim();
-      
+
       // Check if the filter contains a colon for key:value filtering
       if (filter.includes(':')) {
         const colonIndex = filter.indexOf(':');
         const key = filter.substring(0, colonIndex).replace(/'/g, "''");
         const value = filter.substring(colonIndex + 1).replace(/'/g, "''");
-        
+
         // Support different matching modes
         if (value.startsWith('*') && value.endsWith('*')) {
           // Contains match

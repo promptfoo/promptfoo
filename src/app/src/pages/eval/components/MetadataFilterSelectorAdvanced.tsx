@@ -47,26 +47,12 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
   isLoading = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [showValueInput, setShowValueInput] = useState(false);
-
-  // Group metadata by prefix (e.g., "model.name" -> "model" group)
-  const groupedMetadata = useMemo(() => {
-    const groups: Record<string, typeof availableMetadata> = {};
-
-    availableMetadata.forEach((item) => {
-      const prefix = item.key.includes('.') ? item.key.split('.')[0] : 'Other';
-      if (!groups[prefix]) {
-        groups[prefix] = [];
-      }
-      groups[prefix].push(item);
-    });
-
-    return groups;
-  }, [availableMetadata]);
 
   // Filter metadata based on search term
   const filteredMetadata = useMemo(() => {
-    if (!searchTerm) {return availableMetadata;}
+    if (!searchTerm) {
+      return availableMetadata;
+    }
 
     const lowerSearch = searchTerm.toLowerCase();
     return availableMetadata.filter((item) => item.key.toLowerCase().includes(lowerSearch));
@@ -75,13 +61,7 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
   const handleKeySelect = (key: string | null) => {
     if (!key) {
       onChange(null);
-      setShowValueInput(false);
       return;
-    }
-
-    const metadata = availableMetadata.find((m) => m.key === key);
-    if (metadata?.values && metadata.values.length > 0) {
-      setShowValueInput(true);
     }
 
     onChange({ key, operator: 'exists' });

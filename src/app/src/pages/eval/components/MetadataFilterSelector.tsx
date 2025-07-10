@@ -1,4 +1,5 @@
 import React from 'react';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -6,9 +7,8 @@ import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import Typography from '@mui/material/Typography';
 
 interface MetadataFilterSelectorProps {
   selectedMetadata: string | null;
@@ -23,7 +23,7 @@ interface MetadataFilterSelectorProps {
 //   value?: string;
 //   operator?: 'equals' | 'contains' | 'startsWith' | 'endsWith';
 // }
-// 
+//
 // And update the component to support:
 // - Input field for value when a key is selected
 // - Operator selector (equals, contains, etc.)
@@ -81,7 +81,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   const handleValueChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setFilterValue(value);
-    
+
     if (selectedKey) {
       if (value) {
         // Format as key:value for backend
@@ -100,19 +100,19 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   };
 
   // Group metadata keys by common prefixes (future enhancement)
-  const groupMetadataKeys = (keys: string[]): Record<string, string[]> => {
-    const groups: Record<string, string[]> = { 'All Keys': [] };
-    keys.forEach((key) => {
-      const prefix = key.includes('.') ? key.split('.')[0] : null;
-      if (prefix && keys.filter(k => k.startsWith(prefix + '.')).length > 1) {
-        if (!groups[prefix]) groups[prefix] = [];
-        groups[prefix].push(key);
-      } else {
-        groups['All Keys'].push(key);
-      }
-    });
-    return groups;
-  };
+  // const groupMetadataKeys = (keys: string[]): Record<string, string[]> => {
+  //   const groups: Record<string, string[]> = { 'All Keys': [] };
+  //   keys.forEach((key) => {
+  //     const prefix = key.includes('.') ? key.split('.')[0] : null;
+  //     if (prefix && keys.filter((k) => k.startsWith(prefix + '.')).length > 1) {
+  //       if (!groups[prefix]) {groups[prefix] = [];}
+  //       groups[prefix].push(key);
+  //     } else {
+  //       groups['All Keys'].push(key);
+  //     }
+  //   });
+  //   return groups;
+  // };
 
   const renderMenuItems = () => {
     if (metadataCounts) {
@@ -128,7 +128,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
         </MenuItem>
       ));
     }
-    
+
     // Basic version
     return availableMetadata.map((key) => (
       <MenuItem key={key} value={key}>
@@ -156,7 +156,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
           {renderMenuItems()}
         </Select>
       </FormControl>
-      
+
       {showValueInput && (
         <>
           <TextField
@@ -168,17 +168,18 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
             sx={{ minWidth: 150 }}
             aria-label="Filter by metadata value"
           />
-          <Tooltip 
+          <Tooltip
             title={
               <Box>
                 <Typography variant="body2" gutterBottom>
                   <strong>Value Filtering:</strong>
                 </Typography>
                 <Typography variant="caption" component="div">
-                  • Exact match: <code>gpt-4</code><br/>
-                  • Starts with: <code>gpt-*</code><br/>
-                  • Ends with: <code>*-4</code><br/>
-                  • Contains: <code>*gpt*</code><br/>
+                  • Exact match: <code>gpt-4</code>
+                  <br />• Starts with: <code>gpt-*</code>
+                  <br />• Ends with: <code>*-4</code>
+                  <br />• Contains: <code>*gpt*</code>
+                  <br />
                 </Typography>
               </Box>
             }
@@ -188,13 +189,14 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
           </Tooltip>
         </>
       )}
-      
+
       <Typography
         id="metadata-filter-description"
         variant="caption"
         sx={{ position: 'absolute', left: '-9999px' }}
       >
-        Select a metadata key to filter evaluation results. Optionally enter a value to filter by specific values.
+        Select a metadata key to filter evaluation results. Optionally enter a value to filter by
+        specific values.
       </Typography>
     </Box>
   );
