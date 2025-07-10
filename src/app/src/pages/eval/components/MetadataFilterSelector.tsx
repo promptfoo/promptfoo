@@ -5,7 +5,10 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 interface MetadataFilterSelectorProps {
   selectedMetadata: string | null;
@@ -32,12 +35,68 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   onChange,
   metadataCounts,
 }) => {
+  const [selectedKey, setSelectedKey] = React.useState<string>('');
+  const [filterValue, setFilterValue] = React.useState<string>('');
+  const [showValueInput, setShowValueInput] = React.useState(false);
+
+  // Parse the current filter to extract key and value
+  React.useEffect(() => {
+    if (selectedMetadata && selectedMetadata.includes(':')) {
+      const colonIndex = selectedMetadata.indexOf(':');
+      const key = selectedMetadata.substring(0, colonIndex);
+      const value = selectedMetadata.substring(colonIndex + 1);
+      setSelectedKey(key);
+      setFilterValue(value);
+      setShowValueInput(true);
+    } else if (selectedMetadata) {
+      setSelectedKey(selectedMetadata);
+      setFilterValue('');
+      setShowValueInput(false);
+    } else {
+      setSelectedKey('');
+      setFilterValue('');
+      setShowValueInput(false);
+    }
+  }, [selectedMetadata]);
+
   if (availableMetadata.length === 0) {
     return null;
   }
 
-  const handleChange = (event: SelectChangeEvent) => {
-    onChange(event.target.value === '' ? null : event.target.value);
+  const handleKeyChange = (event: SelectChangeEvent) => {
+    const key = event.target.value;
+    if (key === '') {
+      onChange(null);
+      setSelectedKey('');
+      setFilterValue('');
+      setShowValueInput(false);
+    } else {
+      setSelectedKey(key);
+      setShowValueInput(true);
+      // Initially just filter by key existence
+      onChange(key);
+    }
+  };
+
+  const handleValueChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setFilterValue(value);
+    
+    if (selectedKey) {
+      if (value) {
+        // Format as key:value for backend
+        onChange(`${selectedKey}:${value}`);
+      } else {
+        // If value is cleared, just filter by key
+        onChange(selectedKey);
+      }
+    }
+  };
+
+  const handleValueKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && selectedKey && filterValue) {
+      onChange(`${selectedKey}:${filterValue}`);
+    }
   };
 
   // Group metadata keys by common prefixes (future enhancement)
@@ -79,14 +138,14 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   };
 
   return (
-    <Box>
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
       <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
         <InputLabel id="metadata-filter-label">Filter by Metadata</InputLabel>
         <Select
           labelId="metadata-filter-label"
           id="metadata-filter-select"
-          value={selectedMetadata || ''}
-          onChange={handleChange}
+          value={selectedKey}
+          onChange={handleKeyChange}
           label="Filter by Metadata"
           aria-label="Filter results by metadata key"
           aria-describedby="metadata-filter-description"
@@ -97,12 +156,45 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
           {renderMenuItems()}
         </Select>
       </FormControl>
+      
+      {showValueInput && (
+        <>
+          <TextField
+            size="small"
+            placeholder="Enter value (optional)"
+            value={filterValue}
+            onChange={handleValueChange}
+            onKeyPress={handleValueKeyPress}
+            sx={{ minWidth: 150 }}
+            aria-label="Filter by metadata value"
+          />
+          <Tooltip 
+            title={
+              <Box>
+                <Typography variant="body2" gutterBottom>
+                  <strong>Value Filtering:</strong>
+                </Typography>
+                <Typography variant="caption" component="div">
+                  • Exact match: <code>gpt-4</code><br/>
+                  • Starts with: <code>gpt-*</code><br/>
+                  • Ends with: <code>*-4</code><br/>
+                  • Contains: <code>*gpt*</code><br/>
+                </Typography>
+              </Box>
+            }
+            arrow
+          >
+            <InfoOutlinedIcon fontSize="small" color="action" />
+          </Tooltip>
+        </>
+      )}
+      
       <Typography
         id="metadata-filter-description"
         variant="caption"
         sx={{ position: 'absolute', left: '-9999px' }}
       >
-        Select a metadata key to filter evaluation results
+        Select a metadata key to filter evaluation results. Optionally enter a value to filter by specific values.
       </Typography>
     </Box>
   );

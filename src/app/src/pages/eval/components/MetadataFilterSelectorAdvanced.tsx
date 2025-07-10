@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
+import SearchIcon from '@mui/icons-material/Search';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Divider from '@mui/material/Divider';
 import FormControl from '@mui/material/FormControl';
 import InputAdornment from '@mui/material/InputAdornment';
 import ListSubheader from '@mui/material/ListSubheader';
@@ -11,7 +11,6 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import SearchIcon from '@mui/icons-material/Search';
 
 export interface MetadataFilter {
   key: string;
@@ -37,7 +36,7 @@ interface MetadataFilterSelectorAdvancedProps {
  * - Value-based filtering
  * - Operator selection
  * - Loading state
- * 
+ *
  * This is an example of how to extend the basic MetadataFilterSelector
  * for more advanced use cases.
  */
@@ -53,7 +52,7 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
   // Group metadata by prefix (e.g., "model.name" -> "model" group)
   const groupedMetadata = useMemo(() => {
     const groups: Record<string, typeof availableMetadata> = {};
-    
+
     availableMetadata.forEach((item) => {
       const prefix = item.key.includes('.') ? item.key.split('.')[0] : 'Other';
       if (!groups[prefix]) {
@@ -67,12 +66,10 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
 
   // Filter metadata based on search term
   const filteredMetadata = useMemo(() => {
-    if (!searchTerm) return availableMetadata;
-    
+    if (!searchTerm) {return availableMetadata;}
+
     const lowerSearch = searchTerm.toLowerCase();
-    return availableMetadata.filter(item => 
-      item.key.toLowerCase().includes(lowerSearch)
-    );
+    return availableMetadata.filter((item) => item.key.toLowerCase().includes(lowerSearch));
   }, [availableMetadata, searchTerm]);
 
   const handleKeySelect = (key: string | null) => {
@@ -82,7 +79,7 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
       return;
     }
 
-    const metadata = availableMetadata.find(m => m.key === key);
+    const metadata = availableMetadata.find((m) => m.key === key);
     if (metadata?.values && metadata.values.length > 0) {
       setShowValueInput(true);
     }
@@ -92,10 +89,10 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
 
   const handleValueChange = (value: string) => {
     if (selectedFilter) {
-      onChange({ 
-        ...selectedFilter, 
-        value, 
-        operator: value ? 'equals' : 'exists' 
+      onChange({
+        ...selectedFilter,
+        value,
+        operator: value ? 'equals' : 'exists',
       });
     }
   };
@@ -125,7 +122,11 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
       <Autocomplete
         options={filteredMetadata}
         getOptionLabel={(option) => option.key}
-        value={selectedFilter ? availableMetadata.find(m => m.key === selectedFilter.key) || null : null}
+        value={
+          selectedFilter
+            ? availableMetadata.find((m) => m.key === selectedFilter.key) || null
+            : null
+        }
         onChange={(_, newValue) => handleKeySelect(newValue?.key || null)}
         sx={{ minWidth: 200 }}
         size="small"
@@ -152,11 +153,7 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
           <li {...props}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
               <Typography>{option.key}</Typography>
-              <Chip 
-                label={option.count} 
-                size="small" 
-                sx={{ ml: 1 }} 
-              />
+              <Chip label={option.count} size="small" sx={{ ml: 1 }} />
             </Box>
           </li>
         )}
@@ -166,14 +163,14 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
         }}
         renderGroup={(params) => (
           <li key={params.key}>
-            <ListSubheader 
-              component="div" 
-              sx={{ 
+            <ListSubheader
+              component="div"
+              sx={{
                 backgroundColor: 'background.paper',
                 fontWeight: 'bold',
                 fontSize: '0.75rem',
                 textTransform: 'uppercase',
-                color: 'text.secondary'
+                color: 'text.secondary',
               }}
             >
               {params.group}
@@ -214,7 +211,7 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
       {selectedFilter && (
         <Chip
           label={
-            selectedFilter.operator === 'exists' 
+            selectedFilter.operator === 'exists'
               ? `${selectedFilter.key} exists`
               : `${selectedFilter.key} ${selectedFilter.operator} "${selectedFilter.value}"`
           }
@@ -231,4 +228,4 @@ export const MetadataFilterSelectorAdvanced: React.FC<MetadataFilterSelectorAdva
 // This component can be used in place of the basic MetadataFilterSelector
 // when you need more advanced filtering capabilities. The backend would need
 // to be updated to handle the operator and value fields in addition to just
-// checking for key existence. 
+// checking for key existence.

@@ -454,8 +454,36 @@ export default class Eval {
 
     // Add specific metadata filter if provided
     if (opts.metadataFilter && opts.metadataFilter.trim() !== '') {
-      const sanitizedMetadata = opts.metadataFilter.replace(/'/g, "''");
-      conditions.push(`json_extract(metadata, '$.${sanitizedMetadata}') IS NOT NULL`);
+      const filter = opts.metadataFilter.trim();
+      
+      // Check if the filter contains a colon for key:value filtering
+      if (filter.includes(':')) {
+        const colonIndex = filter.indexOf(':');
+        const key = filter.substring(0, colonIndex).replace(/'/g, "''");
+        const value = filter.substring(colonIndex + 1).replace(/'/g, "''");
+        
+        // Support different matching modes
+        if (value.startsWith('*') && value.endsWith('*')) {
+          // Contains match
+          const searchValue = value.slice(1, -1);
+          conditions.push(`json_extract(metadata, '$.${key}') LIKE '%${searchValue}%'`);
+        } else if (value.startsWith('*')) {
+          // Ends with match
+          const searchValue = value.slice(1);
+          conditions.push(`json_extract(metadata, '$.${key}') LIKE '%${searchValue}'`);
+        } else if (value.endsWith('*')) {
+          // Starts with match
+          const searchValue = value.slice(0, -1);
+          conditions.push(`json_extract(metadata, '$.${key}') LIKE '${searchValue}%'`);
+        } else {
+          // Exact match
+          conditions.push(`json_extract(metadata, '$.${key}') = '${value}'`);
+        }
+      } else {
+        // Original behavior: just check if key exists
+        const sanitizedMetadata = filter.replace(/'/g, "''");
+        conditions.push(`json_extract(metadata, '$.${sanitizedMetadata}') IS NOT NULL`);
+      }
     }
 
     // Add search condition if searchQuery is provided

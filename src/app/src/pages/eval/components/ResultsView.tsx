@@ -29,6 +29,7 @@ import type { StackProps } from '@mui/material/Stack';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -483,7 +484,7 @@ export default function ResultsView({
     if (table && table.body) {
       const keys = new Set<string>();
       const counts: Record<string, number> = {};
-      
+
       table.body.forEach((row) => {
         row.outputs.forEach((output) => {
           if (output.metadata) {
@@ -494,10 +495,10 @@ export default function ResultsView({
           }
         });
       });
-      
+
       return {
         availableMetadata: Array.from(keys).sort(),
-        metadataCounts: counts
+        metadataCounts: counts,
       };
     }
     return { availableMetadata: [], metadataCounts: {} };
@@ -643,7 +644,11 @@ export default function ResultsView({
               {selectedMetadata && (
                 <Chip
                   size="small"
-                  label={`Metadata: ${selectedMetadata}`}
+                  label={
+                    selectedMetadata.includes(':') 
+                      ? `Metadata: ${selectedMetadata}`
+                      : `Metadata: ${selectedMetadata} (any value)`
+                  }
                   onDelete={() => handleMetadataFilterChange(null)}
                   sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                 />
@@ -664,6 +669,12 @@ export default function ResultsView({
               fontWeight: 500,
             }}
           />
+        )}
+        {(searchText || filterMode !== 'all' || selectedMetric || selectedMetadata) && 
+         filteredResultsCount < totalResultsCount && (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            (filters apply to all {totalResultsCount} results)
+          </Typography>
         )}
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
@@ -773,8 +784,8 @@ export default function ResultsView({
       />
       {selectedMetadata && filteredResultsCount === 0 && (
         <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-          No results found with metadata key "{selectedMetadata}".
-          Try selecting a different metadata key or clearing the filter.
+          No results found with metadata key "{selectedMetadata}". Try selecting a different
+          metadata key or clearing the filter.
         </Alert>
       )}
       <ResultsTable
