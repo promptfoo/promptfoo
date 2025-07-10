@@ -177,7 +177,29 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
       await expect(getPrompt('non-existent', {}, 'text', 1)).rejects.toThrow(
-        'API Error: Prompt not found',
+        'Failed to fetch Langfuse prompt "non-existent" version 1: API Error: Prompt not found',
+      );
+    });
+
+    it('should provide context in error messages for label-based fetching', async () => {
+      mockGetPrompt.mockRejectedValue(new Error('Label not found'));
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await expect(
+        getPrompt('test-prompt', {}, 'text', undefined, 'non-existent-label'),
+      ).rejects.toThrow(
+        'Failed to fetch Langfuse prompt "test-prompt" with label "non-existent-label": Label not found',
+      );
+    });
+
+    it('should provide context in error messages for prompts without version or label', async () => {
+      mockGetPrompt.mockRejectedValue(new Error('Network error'));
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await expect(getPrompt('test-prompt', {}, 'text')).rejects.toThrow(
+        'Failed to fetch Langfuse prompt "test-prompt": Network error',
       );
     });
 

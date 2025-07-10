@@ -281,24 +281,32 @@ export async function renderPrompt(
     let label: string | undefined;
     let promptType: 'text' | 'chat' | undefined = 'text';
 
-    if (langfusePrompt.includes('@')) {
-      const [idPart, rest] = langfusePrompt.split('@');
-      helper = idPart;
-      const [labelPart, typePart] = rest.split(':');
-      label = labelPart;
-      if (typePart) {
-        promptType = typePart as 'text' | 'chat';
+    // More robust parsing that handles @ in prompt IDs
+    // Look for the last @ that's followed by a label pattern
+    const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
+    const versionMatch = langfusePrompt.match(/^([^:]+):(\d+|latest)(?::(.+))?$/);
+
+    if (labelMatch) {
+      // Label-based syntax: prompt-id@label or prompt-id@label:type
+      helper = labelMatch[1];
+      label = labelMatch[2];
+      if (labelMatch[3]) {
+        promptType = labelMatch[3] as 'text' | 'chat';
+      }
+    } else if (versionMatch) {
+      // Version-based syntax: prompt-id:version or prompt-id:version:type
+      helper = versionMatch[1];
+      version = versionMatch[2];
+      if (versionMatch[3]) {
+        promptType = versionMatch[3] as 'text' | 'chat';
       }
     } else {
-      [helper, version, promptType] = langfusePrompt.split(':') as [
-        string,
-        string | undefined,
-        'text' | 'chat' | undefined,
-      ];
+      // Simple prompt-id only
+      helper = langfusePrompt;
     }
 
     if (promptType !== 'text' && promptType !== 'chat') {
-      throw new Error('Unknown promptfoo prompt type');
+      throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
     }
 
     const langfuseResult = await getLangfusePrompt(

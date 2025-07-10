@@ -97,4 +97,5 @@ Common label patterns:
 
 ### Limitations
 
-- Prompt IDs containing `@` symbols are not fully supported due to parsing limitations. If your prompt name contains `@`, consider renaming it in Langfuse.
+- While prompt IDs containing `@` symbols are supported, we recommend avoiding them for clarity. The parser looks for the last `@` followed by a label pattern to distinguish between the prompt ID and label.
+- If you need to use `@` in your label names, consider using a different naming convention.

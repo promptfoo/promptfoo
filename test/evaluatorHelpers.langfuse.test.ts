@@ -153,17 +153,41 @@ describe('renderPrompt - Langfuse integration', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle prompt ID with @ symbol - limitation of current parsing', async () => {
+    it('should handle prompt ID with @ symbol correctly with improved parsing', async () => {
       mockGetPrompt.mockResolvedValue('Prompt with @ in ID');
 
-      // Note: This is a limitation - IDs with @ are not fully supported
-      // 'email@support@production' splits into ['email', 'support', 'production']
-      // Only first two parts are used: id='email', rest='support'
+      // Now the improved parsing should handle this correctly
+      // 'email@support@production' should parse as:
+      // id='email@support', label='production'
       const prompt = toPrompt('langfuse://email@support@production');
       const result = await renderPrompt(prompt, {}, {});
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('email', {}, 'text', undefined, 'support');
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'email@support',
+        {},
+        'text',
+        undefined,
+        'production',
+      );
       expect(result).toBe('Prompt with @ in ID');
+    });
+
+    it('should handle prompt ID with multiple @ symbols', async () => {
+      mockGetPrompt.mockResolvedValue('Complex prompt ID');
+
+      // 'user@domain@example@staging' should parse as:
+      // id='user@domain@example', label='staging'
+      const prompt = toPrompt('langfuse://user@domain@example@staging:chat');
+      const result = await renderPrompt(prompt, {}, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'user@domain@example',
+        {},
+        'chat',
+        undefined,
+        'staging',
+      );
+      expect(result).toBe('Complex prompt ID');
     });
 
     it('should handle prompt ID with colon', async () => {

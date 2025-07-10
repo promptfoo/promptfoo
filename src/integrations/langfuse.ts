@@ -23,11 +23,28 @@ export async function getPrompt(
   }
 
   const options = label ? { label } : {};
-  if (type === 'text' || type === undefined) {
-    prompt = await langfuse.getPrompt(id, version, { ...options, type: 'text' });
-  } else {
-    prompt = await langfuse.getPrompt(id, version, { ...options, type: 'chat' });
+
+  try {
+    if (type === 'text' || type === undefined) {
+      prompt = await langfuse.getPrompt(id, version, { ...options, type: 'text' });
+    } else {
+      prompt = await langfuse.getPrompt(id, version, { ...options, type: 'chat' });
+    }
+  } catch (error: any) {
+    // Provide more context in error messages
+    if (label) {
+      throw new Error(
+        `Failed to fetch Langfuse prompt "${id}" with label "${label}": ${error.message || error}`,
+      );
+    } else if (version === undefined) {
+      throw new Error(`Failed to fetch Langfuse prompt "${id}": ${error.message || error}`);
+    } else {
+      throw new Error(
+        `Failed to fetch Langfuse prompt "${id}" version ${version}: ${error.message || error}`,
+      );
+    }
   }
+
   const compiledPrompt = prompt.compile(vars);
   if (typeof compiledPrompt !== 'string') {
     return JSON.stringify(compiledPrompt);
