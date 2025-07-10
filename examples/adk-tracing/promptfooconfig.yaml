@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Python OpenTelemetry tracing example
+description: ADK Tracing Example with Real LLM Calls
+
+providers:
+  - python:provider.py
 
 prompts:
   - 'Research the topic: {{topic}}'
-
-providers:
-  - id: python:provider.py
 
 tests:
   - vars:
@@ -13,25 +13,37 @@ tests:
     assert:
       - type: contains
         value: 'Executive Summary'
+      - type: contains
+        value: 'Main Points'
+      - type: contains
+        value: 'quantum'
 
   - vars:
       topic: renewable energy breakthroughs
     assert:
       - type: contains
+        value: 'Executive Summary'
+      - type: contains
         value: 'Main Points'
+      - type: contains-any
+        value: ['renewable', 'energy', 'solar', 'wind']
 
   - vars:
       topic: artificial intelligence safety
     assert:
       - type: contains
+        value: 'Executive Summary'
+      - type: contains
         value: 'Conclusion'
+      - type: contains-any
+        value: ['AI', 'artificial intelligence', 'safety', 'risk']
 
-# Enable tracing to see the multi-agent workflow
-# Note: Python OTLP exporter sends protobuf format which may not display properly
+# Enable OpenTelemetry tracing
 tracing:
   enabled: true
   otlp:
     http:
       enabled: true
       port: 4318
-      acceptFormats: ['json']
+      host: 0.0.0.0
+      acceptFormats: ['json', 'protobuf']

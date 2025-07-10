@@ -1,49 +1,40 @@
 # adk-tracing
 
-This example demonstrates how to use OpenTelemetry tracing with promptfoo providers. It shows both Python and JavaScript implementations of a multi-agent system with distributed tracing.
+This example demonstrates how to use OpenTelemetry tracing with promptfoo providers. It shows a Python implementation of a multi-agent system that makes real LLM calls with distributed tracing.
 
 ## Features
 
-- **Python Provider**: Uses OpenTelemetry to create spans with proper trace context propagation
-- **JavaScript Provider**: Alternative implementation for comparison
 - **Multi-Agent System**: Demonstrates distributed tracing across multiple agent calls (process_request → research → summarize)
-- **Trace Visualization**: View traces in promptfoo's UI to understand the execution flow
+- **Real LLM Integration**: Makes actual OpenAI API calls using `gpt-4o-mini` model
+- **OpenTelemetry Tracing**: Full trace context propagation with detailed span attributes
+- **LLM Metrics**: Captures token usage, response lengths, and model information in traces
+- **Error Handling**: Proper exception handling with trace error reporting
 
-## Setup
+## Prerequisites
 
-1. Install dependencies:
+1. **OpenAI API Key**: You need an OpenAI API key to run this example
    ```bash
-   # Install Python dependencies
+   export OPENAI_API_KEY="your-api-key-here"
+   ```
+
+2. **Python Dependencies**:
+   ```bash
    pip install -r requirements.txt
-   
-   # Install JavaScript dependencies (optional, for JS provider)
-   npm install
    ```
 
-2. Make sure promptfoo is built with tracing support:
-   ```bash
-   npm run build
-   ```
+## Running the Example
 
-## Running the Examples
-
-### Python Provider (Recommended)
-
-The Python provider demonstrates full OpenTelemetry integration with protobuf format support:
+Run the evaluation with real LLM calls:
 
 ```bash
 promptfoo eval
 ```
 
-This uses the default `promptfooconfig.yaml` which configures the Python provider.
-
-### JavaScript Provider
-
-For comparison, you can also run the JavaScript provider:
-
-```bash
-promptfoo eval -c promptfooconfig-js.yaml
-```
+This will:
+1. Start the OTLP receiver for collecting traces
+2. Run test cases through the multi-agent system
+3. Make real OpenAI API calls for research and summarization
+4. Export detailed traces with LLM metrics
 
 ## Viewing Traces
 
@@ -58,40 +49,73 @@ Then:
 2. Click on any test case output
 3. Click the "View Trace" button to see the trace timeline
 
+You'll see:
+- Overall request processing time
+- Individual agent execution times
+- LLM token usage and costs
+- Error traces if any API calls fail
+
 ## How It Works
 
-1. **Trace Context Propagation**: Promptfoo generates a W3C traceparent header for each test case
-2. **Provider Integration**: The provider extracts the trace context and creates child spans
-3. **OTLP Export**: Spans are exported to promptfoo's built-in OTLP receiver
-4. **Storage**: Traces are stored in promptfoo's database and associated with the evaluation
-5. **Visualization**: The web UI displays traces as hierarchical timelines
+### Agent Architecture
 
-## Architecture
+1. **Process Request Agent** (Coordinator)
+   - Orchestrates the multi-agent workflow
+   - Extracts trace context from promptfoo
+   - Coordinates research and summary agents
+
+2. **Research Agent**
+   - Makes OpenAI API call to gather detailed information
+   - Uses `gpt-4o-mini` with higher temperature for diverse insights
+   - Captures token usage metrics in trace
+
+3. **Summary Agent**
+   - Takes research findings and creates executive summary
+   - Uses `gpt-4o-mini` with lower temperature for consistency
+   - Formats output with clear structure
+
+### Trace Information
+
+Each trace includes:
+- **Span Hierarchy**: Shows the relationship between agents
+- **Timing Data**: Execution time for each operation
+- **LLM Metrics**: Token counts, model names, response lengths
+- **Error Information**: Exceptions and error messages if failures occur
+
+## Example Output
+
+The agents will produce real, contextual responses like:
 
 ```
-promptfoo → Provider (with traceparent)
-    ↓
-Provider creates spans
-    ↓
-OTLP Exporter → promptfoo OTLP Receiver
-    ↓
-TraceStore → Database
-    ↓
-Web UI displays traces
+Executive Summary:
+
+Main Points:
+• Quantum computing leverages quantum mechanical phenomena for computation
+• Recent breakthroughs include improved qubit stability and error correction
+• Major tech companies and startups are racing toward quantum advantage
+• Applications span cryptography, drug discovery, and optimization problems
+
+Conclusion: Quantum computing is rapidly advancing from theoretical research 
+to practical applications, with significant implications for multiple industries.
 ```
 
-## Key Files
+## Cost Considerations
 
-- `provider.py`: Python provider with OpenTelemetry instrumentation
-- `provider.js`: JavaScript provider alternative
-- `promptfooconfig.yaml`: Configuration for Python provider
-- `promptfooconfig-js.yaml`: Configuration for JavaScript provider
-- `requirements.txt`: Python dependencies
+This example makes real API calls to OpenAI:
+- Each evaluation makes 2 API calls per test case
+- Using `gpt-4o-mini` which is cost-effective
+- Monitor your OpenAI usage dashboard
 
 ## Troubleshooting
 
-If traces don't appear:
-1. Check that tracing is enabled in the config
-2. Verify the OTLP receiver is running (you should see "OTLP receiver successfully started")
-3. Look for span export messages in verbose output
-4. Ensure spans are created within the trace context from promptfoo
+1. **"OPENAI_API_KEY environment variable not set"**
+   - Set your OpenAI API key: `export OPENAI_API_KEY="sk-..."`
+
+2. **API Rate Limits**
+   - The example includes reasonable delays
+   - Reduce concurrency in promptfooconfig.yaml if needed
+
+3. **Traces not appearing**
+   - Ensure OTLP receiver started (check logs)
+   - Wait a moment for spans to export
+   - Check for errors in trace export logs

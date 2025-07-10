@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple multi-agent provider with OpenTelemetry tracing.
+Multi-agent provider with OpenTelemetry tracing and real LLM calls.
 """
 
 import asyncio
@@ -10,6 +10,7 @@ import sys
 import time
 from typing import Any, Dict, List
 
+from openai import AsyncOpenAI
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.propagate import extract
@@ -24,6 +25,9 @@ provider.add_span_processor(SimpleSpanProcessor(otlp_exporter))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
+# Initialize OpenAI client
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 async def process_request(prompt: str, traceparent: str = None) -> str:
     """Main orchestration function."""
@@ -35,16 +39,16 @@ async def process_request(prompt: str, traceparent: str = None) -> str:
     
     with tracer.start_as_current_span("process_request", context=trace_context) as span:
         span.set_attribute("prompt", prompt[:100])  # Truncate for display
+        span.set_attribute("agent.type", "coordinator")
         
         try:
-            # Simulate processing
-            await asyncio.sleep(0.1)
-            
-            # Call research agent
+            # Call research agent for detailed findings
             research_result = await research(prompt)
+            span.add_event("research_completed", {"findings_length": len(research_result)})
             
-            # Call summary agent
-            result = await summarize(research_result)
+            # Call summary agent to create executive summary
+            result = await summarize(prompt, research_result)
+            span.add_event("summary_completed", {"summary_length": len(result)})
             
             span.set_status(trace.Status(trace.StatusCode.OK))
             return result
@@ -56,33 +60,93 @@ async def process_request(prompt: str, traceparent: str = None) -> str:
 
 
 async def research(topic: str) -> str:
-    """Research agent that gathers information."""
+    """Research agent that gathers information using LLM."""
     with tracer.start_as_current_span("research") as span:
         span.set_attribute("agent.type", "research")
         span.set_attribute("topic", topic)
+        span.set_attribute("llm.model", "gpt-4o-mini")
         
-        # Simulate research work
-        await asyncio.sleep(0.05)
-        
-        return f"Research findings on {topic}"
+        try:
+            # Make real LLM call for research
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a research agent. Provide detailed, factual information about the given topic. Focus on recent developments, key concepts, and important considerations."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Research and provide detailed information about: {topic}"
+                    }
+                ],
+                temperature=0.7,
+                max_tokens=500
+            )
+            
+            result = response.choices[0].message.content
+            
+            # Add LLM metrics to span
+            span.set_attribute("llm.usage.prompt_tokens", response.usage.prompt_tokens)
+            span.set_attribute("llm.usage.completion_tokens", response.usage.completion_tokens)
+            span.set_attribute("llm.usage.total_tokens", response.usage.total_tokens)
+            span.set_attribute("llm.response_length", len(result))
+            
+            return result
+            
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            raise
 
 
-async def summarize(content: str) -> str:
-    """Summary agent that creates executive summary."""
+async def summarize(topic: str, research_findings: str) -> str:
+    """Summary agent that creates executive summary using LLM."""
     with tracer.start_as_current_span("summarize") as span:
         span.set_attribute("agent.type", "summary")
+        span.set_attribute("llm.model", "gpt-4o-mini")
+        span.set_attribute("research_length", len(research_findings))
         
-        # Simulate summarization
-        await asyncio.sleep(0.05)
-        
-        return f"""Executive Summary:
+        try:
+            # Make real LLM call for summarization
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an executive summary agent. Create concise, well-structured summaries with clear main points and actionable conclusions."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Create an executive summary for the topic: {topic}
 
-Main Points:
-• Research shows promising developments
-• Multiple approaches being explored  
-• Further investigation recommended
+Based on the following research findings:
+{research_findings}
 
-Conclusion: Analysis complete for the requested topic."""
+Format the summary with:
+- Executive Summary header
+- Main Points (3-5 bullet points)
+- Conclusion with actionable insights"""
+                    }
+                ],
+                temperature=0.5,
+                max_tokens=300
+            )
+            
+            result = response.choices[0].message.content
+            
+            # Add LLM metrics to span
+            span.set_attribute("llm.usage.prompt_tokens", response.usage.prompt_tokens)
+            span.set_attribute("llm.usage.completion_tokens", response.usage.completion_tokens)
+            span.set_attribute("llm.usage.total_tokens", response.usage.total_tokens)
+            span.set_attribute("llm.response_length", len(result))
+            
+            return result
+            
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            raise
 
 
 def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -93,6 +157,10 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     if traceparent:
         print(f"DEBUG: Received traceparent: {traceparent}", file=sys.stderr)
     
+    # Check for API key
+    if not os.getenv("OPENAI_API_KEY"):
+        return {"error": "OPENAI_API_KEY environment variable not set"}
+    
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
@@ -100,9 +168,11 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
         result = loop.run_until_complete(process_request(prompt, traceparent))
         
         # Give time for spans to export
-        time.sleep(0.1)
+        time.sleep(0.2)
         
         return {"output": result}
+    except Exception as e:
+        return {"error": f"Error processing request: {str(e)}"}
     finally:
         loop.close()
 
