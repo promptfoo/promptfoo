@@ -201,6 +201,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           metadata[metadataKey] = value;
         }
       }
+    } else if (key === '__metadata' && !uniqueErrorMessages.has(key)) {
+      uniqueErrorMessages.add(key);
+      logger.warn(
+        'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
+      );
     } else {
       vars[key] = value;
     }
