@@ -173,20 +173,6 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
       result.body.search_parameters = renderVarsInObject(searchParams, context?.vars);
     }
 
-    // Filter out unsupported parameters for Grok-4
-    if (this.modelName.startsWith('grok-4')) {
-      // Grok-4 doesn't support these parameters
-      delete result.body.presence_penalty;
-      delete result.body.frequency_penalty;
-      delete result.body.stop;
-      delete result.body.reasoning_effort; // Grok-4 doesn't support reasoning_effort
-    }
-
-    // Only add reasoning_effort for models that support it
-    if (this.originalConfig?.reasoning_effort && !this.supportsReasoningEffort()) {
-      delete result.body.reasoning_effort;
-    }
-
     return result;
   }
 
