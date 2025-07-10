@@ -7,6 +7,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -16,6 +17,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
+import InputAdornment from '@mui/material/InputAdornment';
 
 // Helper function to parse CSV content
 const parseCsvContent = async (content: string): Promise<string[]> => {
@@ -73,12 +75,25 @@ const parseJsonContent = (content: string): string | string[] => {
   }
 };
 
+// Helper function to generate a default prompt ID
+const generateDefaultPromptId = () => {
+  const now = new Date();
+  // Format: prompt-YYYY-MM-DD-HHMMSS
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  return `prompt-${year}-${month}-${day}-${hours}${minutes}${seconds}`;
+};
+
 export default function PromptCreatePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [promptId, setPromptId] = useState('');
+  const [promptId, setPromptId] = useState(generateDefaultPromptId());
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -133,8 +148,8 @@ export default function PromptCreatePage() {
         setUploadedFileName(file.name);
         setFileType(detectedType);
         
-        // Auto-populate prompt ID from filename if not set
-        if (!promptId) {
+        // Auto-populate prompt ID from filename if it's still the default
+        if (promptId.startsWith('prompt-') && /prompt-\d{4}-\d{2}-\d{2}-\d{6}/.test(promptId)) {
           const baseFileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
           setPromptId(baseFileName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase());
         }
@@ -220,7 +235,22 @@ export default function PromptCreatePage() {
             onChange={(e) => setPromptId(e.target.value)}
             fullWidth
             required
-            helperText="A unique identifier for your prompt"
+            helperText="A unique identifier for your prompt (auto-generated, but you can change it)"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title="Generate new ID">
+                    <IconButton
+                      size="small"
+                      onClick={() => setPromptId(generateDefaultPromptId())}
+                      edge="end"
+                    >
+                      <RefreshIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            }}
           />
           
           <TextField
