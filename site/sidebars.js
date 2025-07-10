@@ -403,7 +403,7 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'releases',
+      id: 'docs/releases',
     },
   ],
   // Within enterprise docs, show only the following sidebar
