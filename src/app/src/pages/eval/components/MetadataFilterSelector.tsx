@@ -51,7 +51,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
     } else if (selectedMetadata) {
       setSelectedKey(selectedMetadata);
       setFilterValue('');
-      setShowValueInput(false);
+      setShowValueInput(true); // Changed: Always show value input when a key is selected
     } else {
       setSelectedKey('');
       setFilterValue('');
@@ -72,6 +72,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
       setShowValueInput(false);
     } else {
       setSelectedKey(key);
+      setFilterValue(''); // Clear any previous value
       setShowValueInput(true);
       // Initially just filter by key existence
       onChange(key);
