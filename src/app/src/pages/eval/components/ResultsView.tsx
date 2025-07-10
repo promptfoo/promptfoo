@@ -41,7 +41,8 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import { MetricFilterSelector } from './MetricFilterSelector';
+import FiltersButton from './FiltersButton';
+import FiltersForm from './FiltersForm';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
@@ -225,6 +226,9 @@ export default function ResultsView({
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
+
+  const [filtersModalOpen, setFiltersModalOpen] = React.useState(false);
+  const filtersButtonRef = React.useRef<HTMLButtonElement>(null);
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -461,9 +465,12 @@ export default function ResultsView({
   // Add state for metric filter and available metrics
   const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
 
-  const availableMetrics = React.useMemo(() => {
+  const _availableMetrics = React.useMemo(() => {
     if (table && table.head?.prompts) {
       const metrics = new Set<string>();
+
+      console.log(table.head.prompts);
+
       table.head.prompts.forEach((prompt) => {
         if (prompt.metrics?.namedScores) {
           Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
@@ -556,11 +563,18 @@ export default function ResultsView({
             placeholder="Text or regex"
           />
         </Box>
-        <MetricFilterSelector
-          selectedMetric={selectedMetric}
-          availableMetrics={availableMetrics}
-          onChange={handleMetricFilterChange}
+
+        <FiltersButton
+          appliedFiltersCount={2}
+          onClick={() => setFiltersModalOpen(true)}
+          ref={filtersButtonRef}
         />
+        <FiltersForm
+          open={filtersModalOpen}
+          onClose={() => setFiltersModalOpen(false)}
+          anchorEl={filtersButtonRef.current}
+        />
+
         <Box
           sx={{
             display: 'flex',
