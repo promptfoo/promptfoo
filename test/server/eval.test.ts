@@ -176,4 +176,128 @@ describe('eval routes', () => {
       expect(updatedEval.prompts[result.promptIdx].metrics?.testFailCount).toBe(1);
     });
   });
+
+  describe('get("/:id/metadata-keys")', () => {
+    it('should return all unique metadata keys and their counts', async () => {
+      // Create an eval with metadata in results
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      
+      // Add results with metadata manually
+      await eval_.addResult({
+        description: 'test-1',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { state: 'colorado' } },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test-label' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { state: 'colorado' },
+        response: { output: 'test output' },
+        error: null,
+        failureReason: 0,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: { pass: true, score: 1, reason: 'Test' },
+        namedScores: {},
+        cost: 0,
+        metadata: { model: 'gpt-4', temperature: 0.7 },
+      });
+      
+      await eval_.addResult({
+        description: 'test-2',
+        promptIdx: 0,
+        testIdx: 1,
+        testCase: { vars: { state: 'california' } },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test-label' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { state: 'california' },
+        response: { output: 'test output' },
+        error: null,
+        failureReason: 0,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: { pass: true, score: 1, reason: 'Test' },
+        namedScores: {},
+        cost: 0,
+        metadata: { model: 'gpt-3.5', temperature: 0.5, max_tokens: 100 },
+      });
+      
+      await eval_.addResult({
+        description: 'test-3',
+        promptIdx: 1,
+        testIdx: 0,
+        testCase: { vars: { state: 'colorado' } },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test-label' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { state: 'colorado' },
+        response: { output: 'test output' },
+        error: null,
+        failureReason: 0,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: { pass: true, score: 1, reason: 'Test' },
+        namedScores: {},
+        cost: 0,
+        metadata: { model: 'gpt-4', version: '1.0' },
+      });
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        keys: ['max_tokens', 'model', 'temperature', 'version'],
+        counts: {
+          model: 3,
+          temperature: 2,
+          max_tokens: 1,
+          version: 1,
+        },
+      });
+    });
+
+    it('should return empty arrays when no metadata exists', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      
+      await eval_.addResult({
+        description: 'test-no-metadata',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { state: 'colorado' } },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test-label' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { state: 'colorado' },
+        response: { output: 'test output' },
+        error: null,
+        failureReason: 0,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: { pass: true, score: 1, reason: 'Test' },
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      });
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        keys: [],
+        counts: {},
+      });
+    });
+
+    it('should return 404 when eval does not exist', async () => {
+      const res = await request(app).get('/api/eval/non-existent-id/metadata-keys');
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Eval not found' });
+    });
+  });
 });

@@ -174,6 +174,9 @@ export default function ResultsView({
     filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
+    availableMetadata,
+    metadataCounts,
+    fetchMetadataKeys,
   } = useTableStore();
 
   const {
@@ -293,6 +296,61 @@ export default function ResultsView({
     [table.body],
   );
 
+  const hasAnyComments = React.useMemo(
+    () =>
+      table.body?.some((row) =>
+        row.outputs.some(
+          (output) =>
+            !!(output.gradingResult?.componentResults || output.gradingResult?.comment) ||
+            output.gradingResult?.comment?.startsWith('!highlight'),
+        ),
+      ),
+    [table.body],
+  );
+
+  const currentColumnState = columnStates[currentEvalId] || {
+    selectedColumns: [],
+    columnVisibility: {},
+  };
+
+  const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+  const [configModalOpen, setConfigModalOpen] = React.useState(false);
+
+  const allColumns = React.useMemo(() => {
+    const columns = [];
+    if (hasAnyDescriptions) {
+      columns.push('description');
+    }
+    columns.push('vars');
+    for (let i = 0; i < head.prompts.length; i++) {
+      columns.push(`Prompt ${i + 1}`);
+    }
+    if (hasAnyComments) {
+      columns.push('comments');
+    }
+    if (!hasAnyComments) {
+      columns.push('pass/fail');
+    }
+    return columns;
+  }, [head.prompts, hasAnyDescriptions, hasAnyComments]);
+
+  const columnVisibility = React.useMemo(() => {
+    // If we haven't explicitly set columns for this eval, default to showing all
+    if (!currentColumnState.selectedColumns || currentColumnState.selectedColumns.length === 0) {
+      const visibility: VisibilityState = {};
+      allColumns.forEach((col) => {
+        visibility[col] = true;
+      });
+      return visibility;
+    }
+    return currentColumnState.columnVisibility;
+  }, [currentColumnState, allColumns]);
+
+  const visiblePromptCount = React.useMemo(
+    () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
+    [head.prompts, columnVisibility],
+  );
+
   const promptOptions = head.prompts.map((prompt, idx) => {
     const label = prompt.label || prompt.display || prompt.raw;
     const provider = prompt.provider || 'unknown';
@@ -312,43 +370,26 @@ export default function ResultsView({
   });
 
   const columnData = React.useMemo(() => {
-    return [
-      ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
-      ...head.vars.map((_, idx) => ({
-        value: `Variable ${idx + 1}`,
-        label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-        }`,
-        group: 'Variables',
-      })),
-      ...promptOptions,
-    ];
-  }, [head.vars, promptOptions, hasAnyDescriptions]);
-
-  const [configModalOpen, setConfigModalOpen] = React.useState(false);
-  const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
-
-  const allColumns = React.useMemo(
-    () => [
-      ...(hasAnyDescriptions ? ['description'] : []),
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ],
-    [hasAnyDescriptions, head.vars, head.prompts],
-  );
-
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
-
-  const visiblePromptCount = React.useMemo(
-    () =>
-      head.prompts.filter(
-        (_, idx) => currentColumnState.columnVisibility[`Prompt ${idx + 1}`] !== false,
-      ).length,
-    [head.prompts, currentColumnState.columnVisibility],
-  );
+    const columns = [];
+    
+    if (hasAnyDescriptions) {
+      columns.push({ value: 'description', label: 'Description', group: 'General' });
+    }
+    
+    columns.push({ value: 'vars', label: 'Variables', group: 'General' });
+    
+    columns.push(...promptOptions);
+    
+    if (hasAnyComments) {
+      columns.push({ value: 'comments', label: 'Comments', group: 'Results' });
+    }
+    
+    if (!hasAnyComments) {
+      columns.push({ value: 'pass/fail', label: 'Pass/Fail', group: 'Results' });
+    }
+    
+    return columns;
+  }, [promptOptions, hasAnyDescriptions, hasAnyComments]);
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
@@ -464,7 +505,7 @@ export default function ResultsView({
   // Add state for metric filter and available metrics
   const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
 
-  // Add state for metadata filter and available metadata keys
+  // Add state for metadata filter
   const [selectedMetadata, setSelectedMetadata] = React.useState<string | null>(null);
 
   const availableMetrics = React.useMemo(() => {
@@ -480,29 +521,14 @@ export default function ResultsView({
     return [];
   }, [table]);
 
-  const { availableMetadata, metadataCounts } = React.useMemo(() => {
-    if (table && table.body) {
-      const keys = new Set<string>();
-      const counts: Record<string, number> = {};
-
-      table.body.forEach((row) => {
-        row.outputs.forEach((output) => {
-          if (output.metadata) {
-            Object.keys(output.metadata).forEach((k) => {
-              keys.add(k);
-              counts[k] = (counts[k] || 0) + 1;
-            });
-          }
-        });
-      });
-
-      return {
-        availableMetadata: Array.from(keys).sort(),
-        metadataCounts: counts,
-      };
+  // Fetch metadata keys when evalId changes
+  React.useEffect(() => {
+    if (evalId) {
+      fetchMetadataKeys(evalId);
+      // Reset metadata filter when eval changes
+      setSelectedMetadata(null);
     }
-    return { availableMetadata: [], metadataCounts: {} };
-  }, [table]);
+  }, [evalId, fetchMetadataKeys]);
 
   // Make the function a callback that can be passed to CustomMetrics
   const handleMetricFilterChange = React.useCallback((metric: string | null) => {

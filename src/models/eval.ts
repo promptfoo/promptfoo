@@ -791,6 +791,36 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
+
+  async getAllMetadataKeys(): Promise<{ keys: string[]; counts: Record<string, number> }> {
+    const db = getDb();
+    
+    // Query to get all unique metadata keys and their counts for this evaluation
+    const query = sql.raw(`
+      WITH metadata_keys AS (
+        SELECT json_each.key as metadata_key
+        FROM eval_results, json_each(eval_results.metadata)
+        WHERE eval_results.eval_id = '${this.id}'
+      )
+      SELECT metadata_key, COUNT(*) as count
+      FROM metadata_keys
+      GROUP BY metadata_key
+      ORDER BY metadata_key
+    `);
+    
+    // @ts-ignore
+    const results: { metadata_key: string; count: number }[] = await db.all(query);
+    
+    const keys: string[] = [];
+    const counts: Record<string, number> = {};
+    
+    results.forEach((row) => {
+      keys.push(row.metadata_key);
+      counts[row.metadata_key] = row.count;
+    });
+    
+    return { keys, counts };
+  }
 }
 
 /**

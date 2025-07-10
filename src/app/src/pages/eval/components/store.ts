@@ -69,8 +69,20 @@ interface TableState {
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
 
-  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+
+  // Add metadata state
+  availableMetadata: string[];
+  metadataCounts: Record<string, number>;
+  isLoadingMetadata: boolean;
+
+  fetchEvalData: (
+    id: string,
+    options?: FetchEvalOptions,
+  ) => Promise<EvalTableDTO | null>;
+
+  // Add method to fetch metadata keys
+  fetchMetadataKeys: (id: string) => Promise<void>;
 }
 
 interface SettingsState {
@@ -195,6 +207,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
   isFetching: false,
 
+  // Initialize metadata state
+  availableMetadata: [],
+  metadataCounts: {},
+  isLoadingMetadata: false,
+
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
       pageIndex = 0,
@@ -247,6 +264,38 @@ export const useTableStore = create<TableState>()((set, get) => ({
       console.error('Error fetching eval data:', error);
       set({ isFetching: false });
       return null;
+    }
+  },
+
+  fetchMetadataKeys: async (id: string) => {
+    set({ isLoadingMetadata: true });
+
+    try {
+      console.log(`Fetching metadata keys for eval ${id}`);
+      const resp = await callApi(`/eval/${id}/metadata-keys`);
+
+      if (resp.ok) {
+        const data = (await resp.json()) as { keys: string[]; counts: Record<string, number> };
+        set({
+          availableMetadata: data.keys,
+          metadataCounts: data.counts,
+          isLoadingMetadata: false,
+        });
+      } else {
+        console.error('Failed to fetch metadata keys');
+        set({ 
+          availableMetadata: [], 
+          metadataCounts: {},
+          isLoadingMetadata: false 
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching metadata keys:', error);
+      set({ 
+        availableMetadata: [], 
+        metadataCounts: {},
+        isLoadingMetadata: false 
+      });
     }
   },
 }));

@@ -36,6 +36,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
+    fetchMetadataKeys,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -80,6 +81,10 @@ export default function Eval({ fetchId }: EvalOptions) {
           setFailed(true);
           return false;
         }
+        
+        // Fetch metadata keys for this eval
+        await fetchMetadataKeys(id);
+        
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
@@ -87,7 +92,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId],
+    [fetchEvalData, fetchMetadataKeys, setFailed, setEvalId],
   );
 
   /**
@@ -194,6 +199,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
+    fetchMetadataKeys,
   ]);
 
   usePageMeta({
