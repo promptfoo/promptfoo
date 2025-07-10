@@ -87,6 +87,7 @@ describe('Strategy IDs', () => {
       audio: 'simpleAudio.ts',
       leetspeak: 'leetspeak.ts',
       'math-prompt': 'mathPrompt.ts',
+      'mischievous-user': 'mischievousUser.ts',
       morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
       pandamonium: 'pandamonium.ts',

@@ -196,13 +196,6 @@ export async function runPython(
       throw new Error('The Python script `call_api` function must return a dict with an `output`');
     }
 
-    // Add helpful logging about the data structure
-    if (result.data) {
-      logger.debug(
-        `Python script result data type: ${typeof result.data}, structure: ${result.data ? JSON.stringify(Object.keys(result.data)) : 'undefined'}`,
-      );
-    }
-
     return result.data;
   } catch (error) {
     logger.error(

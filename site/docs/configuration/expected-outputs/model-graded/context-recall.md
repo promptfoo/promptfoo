@@ -15,45 +15,11 @@ assert:
     threshold: 0.8 # Score from 0 to 1
 ```
 
-## Providing context
+:::note
 
-You can provide context in two ways:
+This assertion requires context and the LLM's output to evaluate recall. See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
 
-### Using context variables
-
-Include the context as a variable in your test case:
-
-```yaml
-tests:
-  - vars:
-      context: 'Paris is the capital of France. It has a population of over 2 million people.'
-    assert:
-      - type: context-recall
-        value: 'Paris is the capital of France'
-        threshold: 0.8
-```
-
-### Extracting from provider responses
-
-If your provider returns context within the response, use `contextTransform`:
-
-```yaml
-assert:
-  - type: context-recall
-    contextTransform: 'output.context'
-    value: 'Expected fact'
-    threshold: 0.8
-```
-
-For complex response structures:
-
-```yaml
-assert:
-  - type: context-recall
-    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
-    value: 'Expected fact'
-    threshold: 0.8
-```
+:::
 
 ### How it works
 
@@ -65,4 +31,5 @@ The context recall checker:
 
 # Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.
+- See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
+- See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.

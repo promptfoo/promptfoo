@@ -44,13 +44,15 @@ function HomepageWalkthrough() {
   const [selectedStep, setSelectedStep] = React.useState(() => {
     if (typeof window !== 'undefined') {
       if (window.location.hash === '#evals') {
-        return 4;
+        return 5;
       } else if (window.location.hash === '#redteam') {
         return 1;
       } else if (window.location.hash === '#guardrails') {
         return 2;
       } else if (window.location.hash === '#modelsecurity') {
         return 3;
+      } else if (window.location.hash === '#mcp') {
+        return 4;
       }
     }
     return 1; // Default to Red Teaming
@@ -169,6 +171,37 @@ function HomepageWalkthrough() {
     },
     {
       id: 4,
+      caption: 'MCP',
+      mobileCaption: 'MCP',
+      image: '/img/mcp-proxy-dashboard.png',
+      image2x: '/img/mcp-proxy-dashboard.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>
+            Enterprise MCP proxy for secure AI tool integration into your Applications and Users
+          </p>
+          <p>Control and monitor Model Context Protocol (MCP) servers in your organization:</p>
+          <ul>
+            <li>Whitelist approved MCP servers for enterprise use</li>
+            <li>Grant access to approved MCP servers to your applications and users</li>
+            <li>Real-time monitoring for PII and sensitive data</li>
+            <li>Prevent security risks from untrusted MCP servers</li>
+          </ul>
+          <p>
+            Ensure your AI applications only access authorized tools and data sources while
+            maintaining full visibility into MCP interactions.
+          </p>
+          <p>
+            <strong>
+              <Link to="/mcp">&raquo; Learn more about MCP Security</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <DescriptionIcon />,
+      destinationUrl: '/mcp',
+    },
+    {
       caption: 'Evaluations',
       mobileCaption: 'Evals',
       image: '/img/claude-vs-gpt-example.png',
