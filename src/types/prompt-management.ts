@@ -1,5 +1,3 @@
-import type { z } from 'zod';
-
 export interface ManagedPrompt {
   id: string;
   name: string;
@@ -67,4 +65,4 @@ export interface PromptDiffOptions {
   promptId: string;
   versionA?: number;
   versionB?: number;
-} 
+}

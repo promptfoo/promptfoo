@@ -33,11 +33,11 @@ import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
+import { promptsRouter } from './routes/prompts';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
-import { promptsRouter } from './routes/prompts';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;

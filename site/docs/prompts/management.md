@@ -87,6 +87,45 @@ Or create from an existing file:
 promptfoo prompt create my-assistant --from-file prompt.txt
 ```
 
+#### Supported File Formats
+
+The prompt management system supports all Promptfoo prompt formats when creating from files:
+
+- **Text/Markdown** (`.txt`, `.md`): Simple text prompts with variable substitution
+- **JSON** (`.json`, `.jsonl`): Chat conversations and structured prompts
+- **CSV** (`.csv`): Multiple prompts with optional labels (imports first prompt)
+- **YAML** (`.yaml`, `.yml`): Configuration-based prompts
+- **Jinja2** (`.j2`): Advanced templating with conditional logic
+- **Code** (`.js`, `.ts`, `.py`): Dynamic prompt generation functions
+
+Example usage:
+```bash
+# From chat conversation JSON
+promptfoo prompt create chat-agent --from-file templates/chat.json
+
+# From CSV with multiple prompts
+promptfoo prompt create email-templates --from-file templates/emails.csv
+
+# From Jinja2 template
+promptfoo prompt create dynamic-prompt --from-file templates/prompt.j2
+```
+
+#### Web UI File Upload
+
+The web interface provides a convenient file upload feature:
+
+1. Navigate to the prompts list and click "New Prompt"
+2. Click the "Upload File" button in the prompt editor
+3. Select a file in any supported format
+4. The system will:
+   - Parse the file content based on its extension
+   - Auto-populate the prompt ID from the filename
+   - Load the content into the editor
+   - Show the source file and detected format
+5. Review and adjust the content before saving
+
+For CSV and JSON files containing multiple prompts, only the first prompt is imported. To manage multiple prompts, create them individually or use the bulk import feature.
+
 ### Prompt Format
 
 Prompts support Nunjucks templating for variables:

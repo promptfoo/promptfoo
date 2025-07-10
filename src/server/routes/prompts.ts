@@ -1,20 +1,75 @@
+import { eq, and, desc } from 'drizzle-orm';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, desc } from 'drizzle-orm';
 import { getDb } from '../../database';
-import { 
-  managedPromptsTable, 
-  promptVersionsTable, 
-  promptDeploymentsTable 
+import {
+  managedPromptsTable,
+  promptVersionsTable,
+  promptDeploymentsTable,
 } from '../../database/tables';
-import logger from '../../logger';
 import { getUserEmail } from '../../globalConfig/accounts';
-import type { 
-  ManagedPrompt, 
-  ManagedPromptWithVersions, 
-  PromptVersion 
-} from '../../types/prompt-management';
+import logger from '../../logger';
+import type { ManagedPromptWithVersions } from '../../types/prompt-management';
+
+// Helper function to get prompt with versions
+async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWithVersions | null> {
+  const db = getDb();
+
+  const promptRows = await db
+    .select()
+    .from(managedPromptsTable)
+    .where(eq(managedPromptsTable.id, promptId))
+    .limit(1);
+
+  if (promptRows.length === 0) {
+    return null;
+  }
+
+  const prompt = promptRows[0];
+
+  // Get versions
+  const versions = await db
+    .select()
+    .from(promptVersionsTable)
+    .where(eq(promptVersionsTable.promptId, promptId))
+    .orderBy(promptVersionsTable.version);
+
+  // Get deployments
+  const deployments = await db
+    .select({
+      environment: promptDeploymentsTable.environment,
+      versionId: promptDeploymentsTable.versionId,
+    })
+    .from(promptDeploymentsTable)
+    .leftJoin(promptVersionsTable, eq(promptDeploymentsTable.versionId, promptVersionsTable.id))
+    .where(eq(promptDeploymentsTable.promptId, promptId));
+
+  // Build deployments map
+  const deploymentsMap: Record<string, number> = {};
+  for (const dep of deployments) {
+    const version = versions.find((v) => v.id === dep.versionId);
+    if (version) {
+      deploymentsMap[dep.environment] = version.version;
+    }
+  }
+
+  return {
+    ...prompt,
+    description: prompt.description || undefined,
+    tags: prompt.tags || undefined,
+    author: prompt.author || undefined,
+    createdAt: new Date(prompt.createdAt),
+    updatedAt: new Date(prompt.updatedAt),
+    versions: versions.map((v) => ({
+      ...v,
+      createdAt: new Date(v.createdAt),
+      author: v.author || undefined,
+      notes: v.notes || undefined,
+    })),
+    deployments: deploymentsMap,
+  };
+}
 
 export const promptsRouter = Router();
 
@@ -227,10 +282,12 @@ promptsRouter.get('/:id/versions/:version', async (req: Request, res: Response):
     const versionData = await db
       .select()
       .from(promptVersionsTable)
-      .where(and(
-        eq(promptVersionsTable.promptId, id),
-        eq(promptVersionsTable.version, parseInt(version))
-      ))
+      .where(
+        and(
+          eq(promptVersionsTable.promptId, id),
+          eq(promptVersionsTable.version, Number.parseInt(version)),
+        ),
+      )
       .limit(1);
 
     if (versionData.length === 0) {
@@ -272,10 +329,9 @@ promptsRouter.post('/:id/deploy', async (req: Request, res: Response): Promise<v
     const versionRows = await db
       .select()
       .from(promptVersionsTable)
-      .where(and(
-        eq(promptVersionsTable.promptId, id),
-        eq(promptVersionsTable.version, targetVersion)
-      ))
+      .where(
+        and(eq(promptVersionsTable.promptId, id), eq(promptVersionsTable.version, targetVersion)),
+      )
       .limit(1);
 
     if (versionRows.length === 0) {
@@ -315,10 +371,7 @@ promptsRouter.delete('/:id', async (req: Request, res: Response): Promise<void> 
     const { id } = req.params;
     const db = getDb();
 
-    const result = await db
-      .delete(managedPromptsTable)
-      .where(eq(managedPromptsTable.id, id))
-      .run();
+    const result = await db.delete(managedPromptsTable).where(eq(managedPromptsTable.id, id)).run();
 
     if (result.changes === 0) {
       res.status(404).json({ error: 'Prompt not found' });
@@ -331,60 +384,3 @@ promptsRouter.delete('/:id', async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ error: 'Failed to delete prompt' });
   }
 });
-
-// Helper function to get prompt with versions
-async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWithVersions | null> {
-  const db = getDb();
-
-  const promptRows = await db
-    .select()
-    .from(managedPromptsTable)
-    .where(eq(managedPromptsTable.id, promptId))
-    .limit(1);
-
-  if (promptRows.length === 0) {
-    return null;
-  }
-
-  const prompt = promptRows[0];
-
-  // Get versions
-  const versions = await db
-    .select()
-    .from(promptVersionsTable)
-    .where(eq(promptVersionsTable.promptId, promptId))
-    .orderBy(promptVersionsTable.version);
-
-  // Get deployments
-  const deployments = await db
-    .select({
-      environment: promptDeploymentsTable.environment,
-      versionId: promptDeploymentsTable.versionId,
-    })
-    .from(promptDeploymentsTable)
-    .leftJoin(
-      promptVersionsTable,
-      eq(promptDeploymentsTable.versionId, promptVersionsTable.id)
-    )
-    .where(eq(promptDeploymentsTable.promptId, promptId));
-
-  // Build deployments map
-  const deploymentsMap: Record<string, number> = {};
-  for (const dep of deployments) {
-    const version = versions.find(v => v.id === dep.versionId);
-    if (version) {
-      deploymentsMap[dep.environment] = version.version;
-    }
-  }
-
-  return {
-    ...prompt,
-    createdAt: new Date(prompt.createdAt),
-    updatedAt: new Date(prompt.updatedAt),
-    versions: versions.map(v => ({
-      ...v,
-      createdAt: new Date(v.createdAt),
-    })),
-    deployments: deploymentsMap,
-  };
-} 

@@ -108,13 +108,22 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h4">Prompts</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/prompts/new')}
-        >
-          New Prompt
-        </Button>
+        <Stack direction="row" spacing={2}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/prompts/new')}
+          >
+            Create from Scratch
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/prompts/new')}
+          >
+            New Prompt
+          </Button>
+        </Stack>
       </Stack>
 
       <TextField

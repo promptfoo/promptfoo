@@ -41,16 +41,10 @@ export default function PromptDiffPage() {
   const [versionA, setVersionA] = useState<number | null>(null);
   const [versionB, setVersionB] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (promptId) {
-      loadPrompt();
-    }
-  }, [promptId]);
-
   const loadPrompt = async () => {
     try {
       setLoading(true);
-      const response = await callApi(`/prompts/${promptId}`);
+      const response = await callApi(`/managed-prompts/${promptId}`);
       const data = await response.json();
       setPrompt(data);
       
@@ -69,6 +63,12 @@ export default function PromptDiffPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (promptId) {
+      loadPrompt();
+    }
+  }, [promptId]);
 
   if (loading) {
     return <Box sx={{ p: 3 }}>Loading...</Box>;

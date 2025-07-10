@@ -21,12 +21,12 @@ interface CodeEditorProps {
   disabled?: boolean;
 }
 
-export default function CodeEditor({ 
-  value, 
-  onChange, 
-  language, 
-  placeholder, 
-  disabled 
+export default function CodeEditor({
+  value,
+  onChange,
+  language,
+  placeholder,
+  disabled,
 }: CodeEditorProps) {
   return (
     <StyledTextField
@@ -46,4 +46,4 @@ export default function CodeEditor({
       }}
     />
   );
-} 
+}

@@ -31,16 +31,10 @@ export default function PromptTestPage() {
   const [testInput, setTestInput] = useState('');
   const [testResult, setTestResult] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (promptId) {
-      loadPrompt();
-    }
-  }, [promptId]);
-
   const loadPrompt = async () => {
     try {
       setLoading(true);
-      const response = await callApi(`/prompts/${promptId}`);
+      const response = await callApi(`/managed-prompts/${promptId}`);
       const data = await response.json();
       setPrompt(data);
       setSelectedVersion(data.currentVersion);
@@ -51,6 +45,12 @@ export default function PromptTestPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (promptId) {
+      loadPrompt();
+    }
+  }, [promptId]);
 
   const handleRunTest = async () => {
     if (!prompt || !selectedVersion || !testInput.trim()) {
@@ -63,7 +63,7 @@ export default function PromptTestPage() {
       setTestResult(null);
       
       const versionData = prompt.versions.find(v => v.version === selectedVersion);
-      if (!versionData) return;
+      if (!versionData) {return;}
 
       // Replace variables in prompt with test input
       const processedPrompt = versionData.content.replace(/\{\{.*?\}\}/g, testInput);

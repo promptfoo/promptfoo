@@ -27,16 +27,10 @@ export default function PromptHistoryPage() {
   const [prompt, setPrompt] = useState<ManagedPromptWithVersions | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (promptId) {
-      loadPrompt();
-    }
-  }, [promptId]);
-
   const loadPrompt = async () => {
     try {
       setLoading(true);
-      const response = await callApi(`/prompts/${promptId}`);
+      const response = await callApi(`/managed-prompts/${promptId}`);
       const data = await response.json();
       setPrompt(data);
     } catch (error) {
@@ -46,6 +40,12 @@ export default function PromptHistoryPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (promptId) {
+      loadPrompt();
+    }
+  }, [promptId]);
 
   if (loading) {
     return <Box sx={{ p: 3 }}>Loading...</Box>;

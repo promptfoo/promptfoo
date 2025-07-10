@@ -72,16 +72,10 @@ export default function PromptEditor() {
   const [deployEnvironment, setDeployEnvironment] = useState('');
   const [deployVersion, setDeployVersion] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (promptId) {
-      loadPrompt();
-    }
-  }, [promptId]);
-
   const loadPrompt = async () => {
     try {
       setLoading(true);
-      const response = await callApi(`/prompts/${promptId}`);
+      const response = await callApi(`/managed-prompts/${promptId}`);
       const data = await response.json();
       setPrompt(data);
       
@@ -99,6 +93,12 @@ export default function PromptEditor() {
     }
   };
 
+  useEffect(() => {
+    if (promptId) {
+      loadPrompt();
+    }
+  }, [promptId]);
+
   const handleSave = async () => {
     if (!prompt || !content.trim()) {
       showToast('Please enter prompt content', 'warning');
@@ -114,7 +114,7 @@ export default function PromptEditor() {
 
     try {
       setSaving(true);
-      const response = await callApi(`/prompts/${promptId}/versions`, {
+      const response = await callApi(`/managed-prompts/${promptId}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, notes }),
@@ -142,7 +142,7 @@ export default function PromptEditor() {
     }
 
     try {
-      const response = await callApi(`/prompts/${promptId}/deploy`, {
+      const response = await callApi(`/managed-prompts/${promptId}/deploy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -317,7 +317,7 @@ export default function PromptEditor() {
             {Object.entries(prompt.deployments || {}).length === 0 ? (
               <Typography color="text.secondary">No deployments configured</Typography>
             ) : (
-              Object.entries(prompt.deployments).map(([env, version]) => (
+              Object.entries(prompt.deployments || {}).map(([env, version]) => (
                 <Box key={env}>
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Chip label={env} variant="outlined" />
