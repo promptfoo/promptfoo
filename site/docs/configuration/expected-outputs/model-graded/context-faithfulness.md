@@ -14,59 +14,11 @@ assert:
     threshold: 0.8 # Score from 0 to 1
 ```
 
-Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
+:::note
 
-## Defining context
+This assertion requires `query`, context, and the LLM's output to evaluate faithfulness. See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
 
-Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
-
-### Statically using a test case variable
-
-Set `query` and `context` as variables in your test case:
-
-```yaml
-tests:
-  - vars:
-      query: 'What is the capital of France?'
-      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
-    assert:
-      - type: context-faithfulness
-        threshold: 0.8
-```
-
-### Dynamically from the provider's response
-
-If your provider returns context within the response, use `contextTransform` to extract it. For example:
-
-```typescript
-type ContextTransform = (output: Output, context: Context) => string;
-
-interface Output {
-  content: string;
-  citations: string;
-  retrieved_docs: {
-    content: string;
-  }[];
-}
-```
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.citations'
-    threshold: 0.8
-```
-
-Or to use the retrieved documents:
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
-    threshold: 0.8
-```
-
-See the [Context Transform reference](/docs/configuration/expected-outputs/model-graded#context-transform) for more details.
+:::
 
 ### How it works
 
@@ -139,4 +91,5 @@ defaultTest:
 
 # Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
+- See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
