@@ -39,6 +39,8 @@ tests:
 If your provider returns context within the response, use `contextTransform` to extract it. For example:
 
 ```typescript
+type ContextTransform = (output: Output, context: Context) => string;
+
 interface Output {
   content: string;
   citations: string;
@@ -64,7 +66,7 @@ assert:
     threshold: 0.8
 ```
 
-See the [Context Transform reference](/docs/configuration/reference#context-transform) for more details.
+See the [Context Transform reference](/docs/configuration/expected-outputs#context-transform) for more details.
 
 ### How it works
 

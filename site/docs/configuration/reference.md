@@ -64,115 +64,14 @@ A test case represents a single example input that is fed into all prompts and p
 
 More details on using assertions, including examples [here](/docs/configuration/expected-outputs).
 
-| Property         | Type   | Required | Description                                                                                                                                             |
-| ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| type             | string | Yes      | Type of assertion                                                                                                                                       |
-| value            | string | No       | The expected value, if applicable                                                                                                                       |
-| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                 |
-| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                |
-| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                |
-| contextTransform | string | No       | Javascript expression to dynamically construct context for context-based assertions (`context-faithfulness`, `context-relevance`, and `context-recall`) |
-
-#### Context Transform
-
-Context transform allow you to dynamically define context for use in context-based assertions – [Faithfulness](/docs/configuration/expected-outputs/model-graded/context-faithfulness), [Relevance](/docs/configuration/expected-outputs/model-graded/context-relevance), and [Recall](/docs/configuration/expected-outputs/model-graded/context-recall) – from provider responses.
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.citations.join("\n")'
-    threshold: 0.8
-```
-
-`contextTransform` accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
-
-```typescript
-type ContextTransform = (output: Output, context: Context) => string;
-
-/**
- * The provider's output.
- */
-type Output = string | object;
-
-/**
- * Context regarding the test case and the provider response.
- */
-type Context = {
-  // Test case variables
-  vars: Record<string, string | object>;
-
-  // Raw prompt sent to LLM
-  prompt: {
-    label: string;
-  };
-
-  // Provider-specific metadata
-  metadata?: object;
-};
-```
-
-For example, given the following provider response:
-
-```typescript
-/**
- * A response from a fictional Research Knowledge Base.
- */
-type ProviderResponse = {
-  output: {
-    content: string;
-  };
-  metadata: {
-    retrieved_docs: {
-      content: string;
-    }[];
-  };
-};
-```
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.content'
-    threshold: 0.8
-
-  - type: context-relevance
-    # Note: `ProviderResponse['metadata']` is accessible as `context.metadata`
-    contextTransform: 'context.metadata.retrieved_docs.map(d => d.content).join("\n")'
-    threshold: 0.7
-```
-
-If your expression should return `undefined` or `null`, for example because no context is available, add a fallback:
-
-```yaml
-contextTransform: 'output.context ?? "No context found"'
-```
-
-If you expected your context to be non-empty, but it's empty, you can debug your provider response by returning a stringified version of the response:
-
-```yaml
-contextTransform: 'JSON.stringify(output, null, 2)'
-```
-
-<!-- ---
-
-- When to use? For context-based assertions.
-  - Prepare context prior to running the assertion.
-- Let's imagine an example where the LLM returns citations within the output's metadata
-  - How is provider metadata defined????
-
-```yaml
-- type: context-faithfulness
-  contextTransform: context.metadata.citations[0]
-
-- type: context-relevance
-  contextTransform: output.docs[0].content
-```
-
-- Dynamic vs. static context: Alternative to providing context as a test variable.
-  - Static: `vars.context`
-  - Dynamic: Derived from the provider response.
-- Requires `vars.query` to be defined.
-- Must return a string. -->
+| Property         | Type   | Required | Description                                                                                                                                                                                                                                                |
+| ---------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                                          |
+| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                                          |
+| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                    |
+| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                   |
+| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                                   |
+| contextTransform | string | No       | Javascript expression to dynamically construct context for context-based assertions (`context-faithfulness`, `context-relevance`, and `context-recall`). See [Context Transform](/docs/configuration/expected-outputs#context-transform) for more details. |
 
 ### AssertionValueFunctionContext
 
