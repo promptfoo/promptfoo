@@ -11,9 +11,14 @@ targets:
       body:
         api_provider: openai
         chat_history: '{{prompt}}'
+        session_id: '{{sessionId}}'
       transformResponse: file://transforms.js:response
       transformRequest: file://transforms.js:request
     label: Red-Panda-Motors-Chatbot
+
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
 
 redteam:
   numTests: 1
