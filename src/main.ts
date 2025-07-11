@@ -140,3 +140,5 @@ if (require.main === module) {
   checkNodeVersion();
   main();
 }
+
+export { main };
