@@ -1,6 +1,6 @@
 ---
-title: "Promptfoo Achieves SOC 2 Type II and ISO 27001 Certification: Strengthening Trust in AI Security"
-description: Promptfoo achieves SOC2 Type II and ISO 27001 compliance 
+title: 'Promptfoo Achieves SOC 2 Type II and ISO 27001 Certification: Strengthening Trust in AI Security'
+description: Promptfoo achieves SOC2 Type II and ISO 27001 compliance
 image: /img/blog/soc2-compliance.png
 keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
 date: 2025-07-11
@@ -14,18 +14,22 @@ We’re proud to announce that Promptfoo is now SOC 2 Type II compliant and ISO 
 At Promptfoo, we help organizations secure their generative AI applications by proactively identifying and fixing vulnerabilities through adverserial emulation and red teaming. These new certifications reflect our continued investment in building secure, trustworthy AI systems — not only in our technology, but across our entire organization.
 
 ## Why This Matters
+
 - **SOC 2 Type II**: This audit confirms that our internal controls related to security, availability, and confidentiality are not only well-designed but operate effectively over time. It’s a rigorous, third-party validation that we maintain a robust security posture — every day, not just on paper.
 - **ISO 27001**: As the international standard for information security management systems (ISMS), ISO 27001 ensures that we have a systematic, risk-based approach to protecting sensitive data across people, processes, and technologies.
 
 Together, these certifications demonstrate that Promptfoo meets the security and compliance expectations of modern enterprises — from regulated industries to forward-thinking AI adopters.
 
 ## What This Means for You
+
 If you're building or deploying generative AI in production, you can trust that:
+
 - Your data is handled securely and with integrity
 - Our systems are monitored and audited against the highest global standards
 - Promptfoo operates with a mature, resilient, and continually improving security program
 
 ## Security Isn’t a Checkbox — It’s a Foundation
+
 These milestones are part of our broader mission: to make LLMs safer and more reliable for enterprises. We’ll continue to invest in our security practices, from encryption and access controls to red teaming and compliance, as we support the growing ecosystem of developers and organizations building with generative AI.
 
 To learn more about our security practices or request our audit reports, visit our [Trust Center](https://trust.promptfoo.dev/) or contact us at security@promptfoo.com.
