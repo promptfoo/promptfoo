@@ -315,3 +315,5 @@ export function upgradeCommand(program: Command) {
       }
     });
 }
+
+export { detectInstallMethod, checkForUpdates, performUpgrade };
