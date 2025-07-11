@@ -175,7 +175,6 @@ export default function ResultsView({
     highlightedResultsCount,
     selectedMetric,
     setSelectedMetric,
-    availableMetrics,
   } = useTableStore();
 
   const {
@@ -543,12 +542,6 @@ export default function ResultsView({
             placeholder="Text or regex"
           />
         </Box>
-
-        {/* <MetricFilterSelector
-          selectedMetric={selectedMetric}
-          availableMetrics={availableMetrics}
-          onChange={setSelectedMetric}
-        /> */}
 
         <FiltersButton
           appliedFiltersCount={2}

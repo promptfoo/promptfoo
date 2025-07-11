@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import CloseIcon from '@mui/icons-material/Close';
 import { Popover, Box, FormControl, InputLabel, Select, MenuItem, IconButton } from '@mui/material';
+import { useTableStore } from '../store';
 
 type FilterType = 'metric' | 'strategy' | 'plugin' | 'metadata';
 type Operator = 'equals';
@@ -37,15 +38,33 @@ function Dropdown({
 }
 
 function Filter() {
+  const { selectedMetric, setSelectedMetric, availableMetrics } = useTableStore();
+
   const [filterType, setFilterType] = useState<FilterType>('metric');
   const [operator, setOperator] = useState<Operator>('equals');
-  const [value, setValue] = useState<string>('');
+  //const [value, setValue] = useState<string>('');
+
+  /**
+   * Constructs the value dropdown props based on the filter type.
+   */
+  const [label, value, values, onChange] = useMemo(() => {
+    if (filterType === 'metric') {
+      return [
+        'Metric',
+        selectedMetric ?? '',
+        availableMetrics.map((metric) => ({ label: metric, value: metric })),
+        (value: string) => setSelectedMetric(value),
+      ];
+    }
+    return ['', '', [], () => {}];
+  }, [selectedMetric, availableMetrics, filterType, setSelectedMetric]);
 
   return (
     <Box sx={{ display: 'flex', gap: 1 }}>
       <IconButton>
         <CloseIcon />
       </IconButton>
+      {/* FILTER TYPE */}
       <Dropdown
         label="Filter Type"
         values={[
@@ -57,6 +76,7 @@ function Filter() {
         value={filterType}
         onChange={(value) => setFilterType(value as FilterType)}
       />
+      {/* OPERATOR */}
       <Dropdown
         label="Operator"
         values={[
@@ -68,15 +88,8 @@ function Filter() {
         value={operator}
         onChange={(value) => setOperator(value as Operator)}
       />
-      <Dropdown
-        label="Metric"
-        values={[
-          { label: 'Value 1', value: 'value1' },
-          { label: 'Value 2', value: 'value2' },
-        ]}
-        value={value}
-        onChange={(value) => setValue(value)}
-      />
+      {/* VALUE */}
+      <Dropdown label={label} values={values} value={value} onChange={onChange} />
     </Box>
   );
 }
