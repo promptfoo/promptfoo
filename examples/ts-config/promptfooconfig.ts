@@ -6,11 +6,7 @@ const config: UnifiedConfig = {
     'Rephrase this in {{language}}: {{text}}',
     'Translate this to conversational {{language}}: {{text}}',
   ],
-  providers: [
-    'openai:gpt-4o-mini',
-    'anthropic:claude-3-5-sonnet-20241022',
-    'openai:o3-mini',
-  ],
+  providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet-20241022', 'openai:o3-mini'],
   tests: [
     {
       vars: {
@@ -21,7 +17,7 @@ const config: UnifiedConfig = {
     {
       vars: {
         language: 'Medieval knight',
-        text: "I need to go to the store",
+        text: 'I need to go to the store',
       },
     },
     {

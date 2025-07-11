@@ -7,6 +7,7 @@ npx promptfoo@latest init --example ts-config
 ```
 
 This example demonstrates TypeScript configuration for promptfoo, including:
+
 - Type-safe configuration with IDE autocompletion
 - Dynamic schema generation using Zod
 - Fun translation examples with creative language styles
@@ -51,6 +52,7 @@ promptfoo view
 ### 1. Basic Configuration (`promptfooconfig.ts`)
 
 Demonstrates:
+
 - Type-safe configuration using the `UnifiedConfig` type
 - Multiple 2025 model providers (GPT-4o Mini, Claude 3.5 Sonnet, O3 Mini)
 - Fun translation examples with creative language styles
@@ -58,6 +60,7 @@ Demonstrates:
 ### 2. Dynamic Schema Generation (`promptfooconfig-with-schema.ts`)
 
 Shows advanced features:
+
 - Zod schema for structured translation responses
 - Automatic schema adaptation for different providers
 - Fun factor ratings and cultural notes in responses
@@ -66,6 +69,7 @@ Shows advanced features:
 ## TypeScript Support
 
 Node.js currently requires external loaders to run TypeScript files directly:
+
 - Node.js 20+ supports ES modules with the `--import` flag
 - The `tsx` loader provides the best developer experience
 - Future versions may include native TypeScript support
