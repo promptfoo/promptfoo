@@ -1,5 +1,6 @@
 import Cal, { getCalApi } from '@calcom/embed-react';
 import React, { useEffect } from 'react';
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import BugReportIcon from '@mui/icons-material/BugReport';
@@ -30,6 +31,34 @@ export default function BlackHat2025(): JSX.Element {
       title="Promptfoo at Black Hat USA 2025"
       description="Meet Promptfoo at Black Hat USA 2025. Schedule a demo to see how we're revolutionizing AI security testing and red teaming for enterprise LLM applications."
     >
+      <Head>
+        <meta property="og:title" content="Promptfoo at Black Hat USA 2025 | AI Security" />
+        <meta
+          property="og:description"
+          content="Visit booth #4712 at Black Hat USA 2025. See live demos of AI vulnerability testing, automated red teaming, and LLM security scanning. Schedule your meeting Aug 5-7 in Las Vegas."
+        />
+        <meta property="og:image" content="/img/events/blackhat-2025.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:url" content="/events/blackhat-2025" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Promptfoo" />
+
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Promptfoo at Black Hat USA 2025 | AI Security" />
+        <meta
+          name="twitter:description"
+          content="Visit booth #4712. Live demos of AI vulnerability testing & automated red teaming. Aug 5-7, Las Vegas."
+        />
+        <meta name="twitter:image" content="/img/events/blackhat-2025.png" />
+        <meta name="twitter:site" content="@promptfoo" />
+
+        <meta
+          name="keywords"
+          content="Black Hat USA 2025, AI security, LLM security, prompt injection, jailbreaking, red teaming, AI vulnerability testing, OWASP LLM Top 10"
+        />
+        <link rel="canonical" href="https://promptfoo.dev/events/blackhat-2025" />
+      </Head>
       <main className={styles.blackhatPage}>
         {/* Hero Section */}
         <section className={styles.hero}>

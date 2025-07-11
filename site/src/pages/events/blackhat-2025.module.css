@@ -1,5 +1,55 @@
 .blackhatPage {
   overflow-x: hidden;
+  position: relative;
+  background: 
+    linear-gradient(45deg, #0a0a0a 0%, #1a0a1a 25%, #0a0a1a 50%, #1a0a0a 75%, #0a0a0a 100%),
+    radial-gradient(ellipse at top left, rgba(255, 0, 128, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(255, 0, 255, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 20% 80%, rgba(0, 255, 255, 0.1) 0%, transparent 30%),
+    radial-gradient(circle at 80% 20%, rgba(128, 0, 255, 0.1) 0%, transparent 30%),
+    radial-gradient(circle at 50% 50%, rgba(255, 0, 128, 0.05) 0%, transparent 70%);
+  background-size: 400% 400%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  animation: gradientShift 20s ease infinite;
+}
+
+.blackhatPage::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    linear-gradient(0deg, transparent 0%, rgba(10, 10, 10, 0.4) 40%, rgba(10, 10, 10, 0.4) 60%, transparent 100%),
+    linear-gradient(90deg, transparent 0%, rgba(10, 10, 10, 0.4) 40%, rgba(10, 10, 10, 0.4) 60%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+  animation: scanlines 8s linear infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%, 0% 0%, 100% 100%, 0% 100%, 100% 0%, 50% 50%;
+  }
+  25% {
+    background-position: 50% 100%, 50% 0%, 50% 100%, 50% 50%, 50% 50%, 50% 50%;
+  }
+  50% {
+    background-position: 100% 50%, 100% 0%, 0% 100%, 100% 0%, 0% 100%, 50% 50%;
+  }
+  75% {
+    background-position: 50% 0%, 50% 100%, 50% 0%, 50% 50%, 50% 50%, 50% 50%;
+  }
+}
+
+@keyframes scanlines {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(10px);
+  }
 }
 
 /* Hero Section */
@@ -8,8 +58,9 @@
   min-height: 90vh;
   display: flex;
   align-items: center;
-  background: #0f0f0f;
+  background: transparent;
   overflow: hidden;
+  z-index: 1;
 }
 
 .heroBackground {
@@ -160,8 +211,9 @@
 .demoSection {
   position: relative;
   padding: 8rem 2rem;
-  background: #0a0a0a;
+  background: transparent;
   overflow: hidden;
+  z-index: 1;
 }
 
 .demoBackground {
@@ -412,7 +464,9 @@
 /* Calendar Section */
 .calendarSection {
   padding: 6rem 2rem;
-  background: #0a0a0a;
+  background: transparent;
+  position: relative;
+  z-index: 1;
 }
 
 .calendarSubtitle {
@@ -437,7 +491,9 @@
 /* Why Section */
 .whySection {
   padding: 6rem 2rem;
-  background: #0f0f0f;
+  background: transparent;
+  position: relative;
+  z-index: 1;
 }
 
 .statsGrid {
@@ -469,8 +525,10 @@
 /* Final CTA */
 .finalCta {
   padding: 6rem 2rem;
-  background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+  background: transparent;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .finalCta h2 {
