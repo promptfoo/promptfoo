@@ -42,6 +42,7 @@ import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
 import { MetricFilterSelector } from './MetricFilterSelector';
+import PromptVersionDialog from './PromptVersionDialog';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
@@ -324,6 +325,7 @@ export default function ResultsView({
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+  const [promptVersionDialogOpen, setPromptVersionDialogOpen] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -667,6 +669,25 @@ export default function ResultsView({
                     Edit and re-run
                   </MenuItem>
                 </Tooltip>
+                <Tooltip title="Re-run this eval with a different prompt version" placement="left">
+                  <MenuItem
+                    onClick={() => {
+                      // Check if any prompts are managed prompts
+                      const managedPrompts = head.prompts.filter((p) => p.raw?.startsWith('pf://'));
+                      if (managedPrompts.length === 0) {
+                        showToast('No managed prompts found in this eval', 'info');
+                        return;
+                      }
+                      setPromptVersionDialogOpen(true);
+                      handleMenuClose();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <PlayArrowIcon fontSize="small" />
+                    </ListItemIcon>
+                    Re-run with different prompt version
+                  </MenuItem>
+                </Tooltip>
                 <CompareEvalMenuItem
                   initialEvals={recentEvals}
                   onComparisonEvalSelected={handleComparisonEvalSelected}
@@ -747,6 +768,12 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <PromptVersionDialog
+        open={promptVersionDialogOpen}
+        onClose={() => setPromptVersionDialogOpen(false)}
+        evalConfig={config}
+        evalTable={table}
+      />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
     </div>
   );

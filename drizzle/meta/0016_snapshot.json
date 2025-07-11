@@ -1,0 +1,274 @@
+{
+    "version": "6",
+    "dialect": "sqlite",
+    "id": "0016_prompt_management",
+    "prevId": "0015_zippy_wallop",
+    "tables": {
+        "managed_prompts": {
+            "name": "managed_prompts",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "name": {
+                    "name": "name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "description": {
+                    "name": "description",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "tags": {
+                    "name": "tags",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "current_version": {
+                    "name": "current_version",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false,
+                    "default": 1
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false,
+                    "default": "CURRENT_TIMESTAMP"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false,
+                    "default": "CURRENT_TIMESTAMP"
+                },
+                "author": {
+                    "name": "author",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {
+                "managed_prompts_name_idx": {
+                    "name": "managed_prompts_name_idx",
+                    "columns": [
+                        "name"
+                    ],
+                    "isUnique": true
+                },
+                "managed_prompts_created_at_idx": {
+                    "name": "managed_prompts_created_at_idx",
+                    "columns": [
+                        "created_at"
+                    ],
+                    "isUnique": false
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {}
+        },
+        "prompt_versions": {
+            "name": "prompt_versions",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "prompt_id": {
+                    "name": "prompt_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "version": {
+                    "name": "version",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "content": {
+                    "name": "content",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "author": {
+                    "name": "author",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false,
+                    "default": "CURRENT_TIMESTAMP"
+                },
+                "notes": {
+                    "name": "notes",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {
+                "prompt_version_idx": {
+                    "name": "prompt_version_idx",
+                    "columns": [
+                        "prompt_id",
+                        "version"
+                    ],
+                    "isUnique": true
+                },
+                "prompt_versions_created_at_idx": {
+                    "name": "prompt_versions_created_at_idx",
+                    "columns": [
+                        "created_at"
+                    ],
+                    "isUnique": false
+                }
+            },
+            "foreignKeys": {
+                "prompt_versions_prompt_id_managed_prompts_id_fk": {
+                    "name": "prompt_versions_prompt_id_managed_prompts_id_fk",
+                    "tableFrom": "prompt_versions",
+                    "tableTo": "managed_prompts",
+                    "columnsFrom": [
+                        "prompt_id"
+                    ],
+                    "columnsTo": [
+                        "id"
+                    ],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {}
+        },
+        "prompt_deployments": {
+            "name": "prompt_deployments",
+            "columns": {
+                "prompt_id": {
+                    "name": "prompt_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "environment": {
+                    "name": "environment",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "version_id": {
+                    "name": "version_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false,
+                    "default": "CURRENT_TIMESTAMP"
+                },
+                "updated_by": {
+                    "name": "updated_by",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {
+                "prompt_deployments_env_idx": {
+                    "name": "prompt_deployments_env_idx",
+                    "columns": [
+                        "environment"
+                    ],
+                    "isUnique": false
+                }
+            },
+            "foreignKeys": {
+                "prompt_deployments_prompt_id_managed_prompts_id_fk": {
+                    "name": "prompt_deployments_prompt_id_managed_prompts_id_fk",
+                    "tableFrom": "prompt_deployments",
+                    "tableTo": "managed_prompts",
+                    "columnsFrom": [
+                        "prompt_id"
+                    ],
+                    "columnsTo": [
+                        "id"
+                    ],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                },
+                "prompt_deployments_version_id_prompt_versions_id_fk": {
+                    "name": "prompt_deployments_version_id_prompt_versions_id_fk",
+                    "tableFrom": "prompt_deployments",
+                    "tableTo": "prompt_versions",
+                    "columnsFrom": [
+                        "version_id"
+                    ],
+                    "columnsTo": [
+                        "id"
+                    ],
+                    "onDelete": "no action",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {
+                "prompt_deployments_prompt_id_environment_pk": {
+                    "columns": [
+                        "prompt_id",
+                        "environment"
+                    ],
+                    "name": "prompt_deployments_prompt_id_environment_pk"
+                }
+            },
+            "uniqueConstraints": {}
+        }
+    },
+    "enums": {},
+    "_meta": {
+        "schemas": {},
+        "tables": {},
+        "columns": {}
+    }
+}

@@ -322,6 +322,24 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Prompt Management',
+      collapsed: true,
+      link: {
+        type: 'doc',
+        id: 'prompts/index',
+      },
+      items: [
+        { type: 'doc', id: 'prompts/quickstart' },
+        { type: 'doc', id: 'prompts/concepts' },
+        { type: 'doc', id: 'prompts/management' },
+        { type: 'doc', id: 'prompts/configuration' },
+        { type: 'doc', id: 'prompts/auto-tracking' },
+        { type: 'doc', id: 'prompts/api-reference' },
+        { type: 'doc', id: 'prompts/best-practices' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Usage',
       collapsed: true,
       link: {

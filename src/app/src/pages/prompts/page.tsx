@@ -1,55 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { callApi } from '@app/utils/api';
-import type { ServerPromptWithMetadata } from '@promptfoo/types';
-import ErrorBoundary from '../../components/ErrorBoundary';
-import Prompts from './Prompts';
+import Container from '@mui/material/Container';
+import PromptList from './PromptList';
 
-interface PromptsPageProps {
-  showDatasetColumn?: boolean;
-}
-
-function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
-  const [prompts, setPrompts] = useState<ServerPromptWithMetadata[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchPrompts = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await callApi('/prompts');
-        const data = await response.json();
-        if (data?.data) {
-          setPrompts(data.data);
-        }
-      } catch (error) {
-        setError('Failed to load prompts. Please try again.');
-        console.error('Failed to fetch prompts:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchPrompts();
-  }, []);
+export default function PromptsPage() {
+  usePageMeta({
+    title: 'Prompts',
+    description: 'Manage prompt templates with versioning and deployment',
+  });
 
   return (
-    <Prompts
-      data={prompts}
-      isLoading={isLoading}
-      error={error}
-      showDatasetColumn={showDatasetColumn}
-    />
-  );
-}
-
-export default function PromptsPage({ showDatasetColumn = true }: PromptsPageProps) {
-  usePageMeta({ title: 'Prompts', description: 'Saved prompt templates' });
-  return (
-    <ErrorBoundary name="Prompts Page">
-      <PromptsPageContent showDatasetColumn={showDatasetColumn} />
-    </ErrorBoundary>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <PromptList onPromptSelect={(promptId) => window.location.href = `/prompts/${promptId}/edit`} />
+    </Container>
   );
 }

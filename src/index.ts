@@ -5,6 +5,7 @@ import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { readProviderPromptMap, processPrompts } from './prompts';
+import { PromptManager } from './prompts/management/PromptManager';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
@@ -146,7 +147,12 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
+const prompts = {
+  PromptManager,
+  processPrompts,
+};
+
+export { assertions, cache, evaluate, guardrails, loadApiProvider, prompts, redteam };
 
 export default {
   assertions,
@@ -154,5 +160,6 @@ export default {
   evaluate,
   guardrails,
   loadApiProvider,
+  prompts,
   redteam,
 };

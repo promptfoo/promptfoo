@@ -16,6 +16,7 @@ import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { modelScanCommand } from './commands/modelScan';
+import { promptCommand } from './commands/prompt';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
@@ -105,6 +106,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  promptCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
