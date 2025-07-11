@@ -7,7 +7,7 @@ prompts:
 providers:
   # Grok-4 Models (Latest)
   - xai:grok-4
-  # Grok-3 Models (New)
+  # Grok-3 Models
   - xai:grok-3-fast
   - id: xai:grok-3-mini-fast
     config:
