@@ -450,7 +450,14 @@ describe('evaluator', () => {
     it('should filter by specific metrics', async () => {
       // This test requires setting up results with named scores in the eval factory
       const result = await evalWithResults.getTablePage({
-        filters: ['and:metric:equals:accuracy'],
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: 'accuracy',
+          }),
+        ],
       });
 
       // All results should have the specified metric
@@ -466,7 +473,14 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({
         filterMode: 'passes',
         searchQuery: 'searchable_content',
-        filters: ['and:metric:equals:relevance'],
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: 'relevance',
+          }),
+        ],
         limit: 10,
       });
 
@@ -477,7 +491,20 @@ describe('evaluator', () => {
 
     it('should be filterable by multiple metrics', async () => {
       const result = await evalWithResults.getTablePage({
-        filters: ['or:metric:equals:accuracy', 'or:metric:equals:relevance'],
+        filters: [
+          JSON.stringify({
+            logicOperator: 'or',
+            type: 'metric',
+            operator: 'equals',
+            value: 'accuracy',
+          }),
+          JSON.stringify({
+            logicOperator: 'or',
+            type: 'metric',
+            operator: 'equals',
+            value: 'relevance',
+          }),
+        ],
       });
 
       // Row should have at least one of the metrics
