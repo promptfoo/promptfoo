@@ -42,6 +42,7 @@ import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
 import { MetricFilterSelector } from './MetricFilterSelector';
+import PromptVersionDialog from './PromptVersionDialog';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
@@ -324,6 +325,7 @@ export default function ResultsView({
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+  const [promptVersionDialogOpen, setPromptVersionDialogOpen] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -676,8 +678,8 @@ export default function ResultsView({
                         showToast('No managed prompts found in this eval', 'info');
                         return;
                       }
-                      // TODO: Implement prompt version selection dialog
-                      showToast('Prompt version selection coming soon', 'info');
+                      setPromptVersionDialogOpen(true);
+                      handleMenuClose();
                     }}
                   >
                     <ListItemIcon>
@@ -766,6 +768,12 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <PromptVersionDialog
+        open={promptVersionDialogOpen}
+        onClose={() => setPromptVersionDialogOpen(false)}
+        evalConfig={config}
+        evalTable={table}
+      />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
     </div>
   );
