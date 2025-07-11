@@ -6,31 +6,36 @@ You can run this example with:
 npx promptfoo@latest init --example ts-config
 ```
 
-This guide demonstrates how to set up a TypeScript configuration for promptfoo using `promptfooconfig.ts`.
+This guide demonstrates how to set up a TypeScript configuration for promptfoo using `promptfooconfig.ts`, including:
+- Basic TypeScript configuration with type safety
+- Dynamic schema generation using Zod
+- Reusing application schemas in test configurations
 
 ## Prerequisites
 
 - Node.js 20 or later
 - A TypeScript loader for Node.js such as `@swc-node/register` or `tsx`
 
-Install your chosen loader:
+Install dependencies:
 
 ```bash
-npm install @swc-node/register
-# or
-npm install tsx
+npm install tsx zod openai
 ```
 
 ## Running the Evaluation
 
-Execute the evaluation using one of the following commands:
+### Basic Example
 
 ```bash
-# Using @swc-node/register
-NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c examples/ts-config/promptfooconfig.ts
-
 # Using tsx
 NODE_OPTIONS="--import tsx" promptfoo eval -c examples/ts-config/promptfooconfig.ts
+```
+
+### Dynamic Schema Example
+
+```bash
+# Using tsx with dynamic schema configuration
+NODE_OPTIONS="--import tsx" promptfoo eval -c examples/ts-config/promptfooconfig-with-schema.ts
 ```
 
 View the results:
@@ -38,6 +43,28 @@ View the results:
 ```bash
 promptfoo view
 ```
+
+## Features Demonstrated
+
+### Basic TypeScript Configuration
+
+The `promptfooconfig.ts` file shows:
+- Type-safe configuration using the `UnifiedConfig` type
+- Simple prompt templates with variables
+- Basic test cases
+
+### Dynamic Schema Generation
+
+The `promptfooconfig-with-schema.ts` file demonstrates:
+- Using Zod schemas from your application code
+- Dynamically generating response formats for different providers
+- Converting schemas between OpenAI and Gemini formats
+- Maintaining a single source of truth for data models
+
+This is particularly useful when:
+- Your application uses structured outputs with JSON schemas
+- You want to avoid duplicating schema definitions
+- You need to test the same prompts across different providers with different schema formats
 
 ## TypeScript Support in Node.js
 
