@@ -41,7 +41,6 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
