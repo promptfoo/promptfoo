@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { POSTHOG_KEY } from './generated-constants';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
 
@@ -36,6 +35,9 @@ function getPostHogClient(): PostHog | null {
   if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
     return null;
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { POSTHOG_KEY } = require('./generated-constants');
 
   if (posthogClient === null && POSTHOG_KEY) {
     try {
