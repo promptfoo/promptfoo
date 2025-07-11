@@ -18,7 +18,7 @@ graph TD
     G --> H[Backend: queryTestIndices]
     H --> I[SQL with JSON filtering]
     I --> J[Filtered results returned]
-    
+
     K[Component Mount] --> L[fetchMetadataKeys]
     L --> M[GET /eval/:id/metadata-keys]
     M --> N[getAllMetadataKeys SQL]
@@ -33,17 +33,19 @@ graph TD
 Fetches all unique metadata keys for a given evaluation.
 
 **Request:**
+
 ```http
 GET /api/eval/abc123/metadata-keys
 ```
 
 **Response:**
+
 ```json
 {
   "keys": ["model", "strategy", "version", "temperature"],
   "counts": {
     "model": 150,
-    "strategy": 150, 
+    "strategy": 150,
     "version": 75,
     "temperature": 50
   }
@@ -51,13 +53,14 @@ GET /api/eval/abc123/metadata-keys
 ```
 
 **Implementation:**
+
 ```sql
-SELECT DISTINCT json_each.key as metadata_key, 
+SELECT DISTINCT json_each.key as metadata_key,
        COUNT(*) as count
 FROM results_test_cases,
-     json_each(CASE 
-       WHEN json_valid(metadata) THEN metadata 
-       ELSE '{}' 
+     json_each(CASE
+       WHEN json_valid(metadata) THEN metadata
+       ELSE '{}'
      END)
 WHERE evalId = ?
 GROUP BY metadata_key
@@ -69,6 +72,7 @@ ORDER BY metadata_key;
 ### MetadataFilterSelector
 
 **Props:**
+
 ```typescript
 interface MetadataFilterSelectorProps {
   selectedMetadata: string | null;
@@ -80,6 +84,7 @@ interface MetadataFilterSelectorProps {
 ```
 
 **State Management:**
+
 ```typescript
 // In useTableStore
 interface TableState {
@@ -103,19 +108,21 @@ actions: {
     } catch (error) {
       set({ isLoadingMetadata: false });
     }
-  }
+  };
 }
 ```
 
 ## Filter Format
 
 ### Key-Only Filter
+
 Filters for any test case that has the specified metadata key, regardless of value.
 
 **Format:** `"model"`  
 **SQL:** `json_extract(metadata, '$.model') IS NOT NULL`
 
 ### Key-Value Filter
+
 Filters for test cases where the metadata key has a specific value.
 
 **Format:** `"model:gpt-4"`  
@@ -123,12 +130,12 @@ Filters for test cases where the metadata key has a specific value.
 
 ### Wildcard Patterns
 
-| Pattern | Description | SQL |
-|---------|-------------|-----|
-| `key:value` | Exact match | `json_extract(metadata, '$.key') = 'value'` |
-| `key:prefix*` | Starts with | `json_extract(metadata, '$.key') LIKE 'prefix%'` |
-| `key:*suffix` | Ends with | `json_extract(metadata, '$.key') LIKE '%suffix'` |
-| `key:*middle*` | Contains | `json_extract(metadata, '$.key') LIKE '%middle%'` |
+| Pattern        | Description | SQL                                               |
+| -------------- | ----------- | ------------------------------------------------- |
+| `key:value`    | Exact match | `json_extract(metadata, '$.key') = 'value'`       |
+| `key:prefix*`  | Starts with | `json_extract(metadata, '$.key') LIKE 'prefix%'`  |
+| `key:*suffix`  | Ends with   | `json_extract(metadata, '$.key') LIKE '%suffix'`  |
+| `key:*middle*` | Contains    | `json_extract(metadata, '$.key') LIKE '%middle%'` |
 
 ## Backend Implementation
 
@@ -139,7 +146,7 @@ Modified to support metadata filtering:
 ```typescript
 if (metadataFilter) {
   const colonIndex = metadataFilter.indexOf(':');
-  
+
   if (colonIndex === -1) {
     // Key-only filter
     conditions.push(`json_extract(r.metadata, '$.${metadataFilter}') IS NOT NULL`);
@@ -147,7 +154,7 @@ if (metadataFilter) {
     // Key:value filter
     const key = metadataFilter.substring(0, colonIndex);
     const value = metadataFilter.substring(colonIndex + 1);
-    
+
     if (value.includes('*')) {
       // Wildcard pattern
       const sqlPattern = value.replace(/\*/g, '%');
@@ -165,6 +172,7 @@ if (metadataFilter) {
 ## State Synchronization
 
 ### Filter Reset on Eval Change
+
 ```typescript
 // In ResultsView.tsx
 React.useEffect(() => {
@@ -176,6 +184,7 @@ React.useEffect(() => {
 ```
 
 ### Filter Chip Display
+
 ```typescript
 {selectedMetadata && (
   <Chip
@@ -193,12 +202,14 @@ React.useEffect(() => {
 ## Performance Considerations
 
 ### Current Implementation
+
 - Metadata keys fetched on every eval load
 - No caching between eval switches
 - Count calculation in same query as key extraction
 - All results filtered in SQL (good for performance)
 
 ### Optimization Opportunities
+
 1. **Client-side caching:** Cache metadata keys with TTL
 2. **Lazy count loading:** Load counts separately or on-demand
 3. **Indexed columns:** Add index on metadata JSON field
@@ -207,11 +218,13 @@ React.useEffect(() => {
 ## Security Considerations
 
 ### SQL Injection Prevention
+
 - Parameterized queries for values
 - Key names inserted directly into SQL (potential risk)
 - Should validate key names against pattern: `/^[a-zA-Z0-9_.-]+$/`
 
 ### Recommended Validation
+
 ```typescript
 function validateMetadataKey(key: string): boolean {
   return /^[a-zA-Z0-9_.-]+$/.test(key);
@@ -221,6 +234,7 @@ function validateMetadataKey(key: string): boolean {
 ## Testing Strategy
 
 ### Unit Tests Required
+
 1. **MetadataFilterSelector Component**
    - Renders dropdown with available keys
    - Shows value input when key selected
@@ -241,6 +255,7 @@ function validateMetadataKey(key: string): boolean {
    - SQL injection prevention
 
 ### Integration Tests
+
 1. Filter persists during pagination
 2. Filter combines with other filters (search, pass/fail)
 3. Filter resets on eval change
@@ -266,6 +281,7 @@ For users upgrading to use metadata filtering:
 ## Future API Changes
 
 ### Proposed Enhanced Filter API
+
 ```typescript
 // Support multiple filters
 GET /api/eval/:id/results?metadata_filters=[
@@ -277,4 +293,4 @@ GET /api/eval/:id/results?metadata_filters=[
 // Support metadata value autocomplete
 GET /api/eval/:id/metadata-values?key=model
 Response: ["gpt-4", "gpt-3.5-turbo", "claude-3"]
-``` 
+```

@@ -199,7 +199,6 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   let returnTable = { head: table.head, body: table.body };
 
   if (comparisonEvalIds.length > 0) {
-    console.log('comparisonEvalIds', comparisonEvalIds);
     const comparisonEvals = await Promise.all(
       comparisonEvalIds.map(async (comparisonEvalId) => {
         const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
@@ -276,7 +275,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
-  
+
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     res.status(404).json({ error: 'Eval not found' });

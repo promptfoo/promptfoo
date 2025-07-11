@@ -181,7 +181,7 @@ describe('eval routes', () => {
     it('should return all unique metadata keys and their counts', async () => {
       // Create an eval with metadata in results
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      
+
       // Add results with metadata manually
       await eval_.addResult({
         description: 'test-1',
@@ -203,7 +203,7 @@ describe('eval routes', () => {
         cost: 0,
         metadata: { model: 'gpt-4', temperature: 0.7 },
       });
-      
+
       await eval_.addResult({
         description: 'test-2',
         promptIdx: 0,
@@ -224,7 +224,7 @@ describe('eval routes', () => {
         cost: 0,
         metadata: { model: 'gpt-3.5', temperature: 0.5, max_tokens: 100 },
       });
-      
+
       await eval_.addResult({
         description: 'test-3',
         promptIdx: 1,
@@ -262,7 +262,7 @@ describe('eval routes', () => {
 
     it('should return empty arrays when no metadata exists', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      
+
       await eval_.addResult({
         description: 'test-no-metadata',
         promptIdx: 0,

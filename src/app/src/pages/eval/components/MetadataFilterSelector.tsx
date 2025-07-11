@@ -1,9 +1,11 @@
 import React from 'react';
 import ClearIcon from '@mui/icons-material/Clear';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
@@ -11,9 +13,11 @@ import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
+import Skeleton from '@mui/material/Skeleton';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { isValidMetadataKey, isValidWildcardPattern } from './metadataUtils';
 
 interface MetadataFilterSelectorProps {
   selectedMetadata: string | null;
@@ -33,6 +37,8 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   const [selectedKey, setSelectedKey] = React.useState<string>('');
   const [filterValue, setFilterValue] = React.useState<string>('');
   const [showValueInput, setShowValueInput] = React.useState(false);
+  const [keyError, setKeyError] = React.useState<string>('');
+  const [valueError, setValueError] = React.useState<string>('');
 
   // Parse the current filter to extract key and value
   React.useEffect(() => {
@@ -60,12 +66,21 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
 
   const handleKeyChange = (event: SelectChangeEvent) => {
     const key = event.target.value;
+    setKeyError('');
+    setValueError('');
+
     if (key === '') {
       onChange(null);
       setSelectedKey('');
       setFilterValue('');
       setShowValueInput(false);
     } else {
+      // Validate the key
+      if (!isValidMetadataKey(key)) {
+        setKeyError('Invalid characters in metadata key');
+        return;
+      }
+
       setSelectedKey(key);
       setFilterValue('');
       setShowValueInput(true);
@@ -77,6 +92,13 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   const handleValueChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setFilterValue(value);
+    setValueError('');
+
+    // Validate wildcard patterns
+    if (value && !isValidWildcardPattern(value)) {
+      setValueError('Invalid wildcard pattern (avoid multiple consecutive *)');
+      return;
+    }
 
     if (selectedKey) {
       if (value) {
@@ -90,7 +112,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   };
 
   const handleValueKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && selectedKey) {
+    if (event.key === 'Enter' && selectedKey && !valueError) {
       event.preventDefault();
       if (filterValue) {
         onChange(`${selectedKey}:${filterValue}`);
@@ -102,6 +124,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
 
   const handleClearValue = () => {
     setFilterValue('');
+    setValueError('');
     if (selectedKey) {
       onChange(selectedKey);
     }
@@ -110,32 +133,61 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   const renderMenuItems = () => {
     if (metadataCounts) {
       // Enhanced version with counts
-      return availableMetadata.map((key) => (
-        <MenuItem key={key} value={key}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 2 }}>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-              {key}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {metadataCounts[key] || 0}
-            </Typography>
-          </Box>
-        </MenuItem>
-      ));
+      return availableMetadata.map((key) => {
+        const isInvalid = !isValidMetadataKey(key);
+        return (
+          <MenuItem key={key} value={key} disabled={isInvalid}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {key}
+                </Typography>
+                {isInvalid && (
+                  <Tooltip title="This key contains invalid characters">
+                    <WarningAmberIcon fontSize="small" color="warning" />
+                  </Tooltip>
+                )}
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                {metadataCounts[key] || 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+        );
+      });
     }
 
     // Basic version
-    return availableMetadata.map((key) => (
-      <MenuItem key={key} value={key}>
-        {key}
-      </MenuItem>
-    ));
+    return availableMetadata.map((key) => {
+      const isInvalid = !isValidMetadataKey(key);
+      return (
+        <MenuItem key={key} value={key} disabled={isInvalid}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {key}
+            {isInvalid && (
+              <Tooltip title="This key contains invalid characters">
+                <WarningAmberIcon fontSize="small" color="warning" />
+              </Tooltip>
+            )}
+          </Box>
+        </MenuItem>
+      );
+    });
   };
+
+  // Loading skeleton
+  if (isLoading && availableMetadata.length === 0) {
+    return (
+      <Box sx={{ minWidth: 180 }}>
+        <Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} />
+      </Box>
+    );
+  }
 
   // Group the filter components visually
   const filterContent = (
-    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-      <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
+    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'flex-start' }}>
+      <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }} error={!!keyError}>
         <InputLabel id="metadata-filter-label">
           {isLoading ? 'Loading...' : 'Filter by Metadata'}
         </InputLabel>
@@ -161,6 +213,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
           </MenuItem>
           {!isLoading && renderMenuItems()}
         </Select>
+        {keyError && <FormHelperText>{keyError}</FormHelperText>}
       </FormControl>
 
       {showValueInput && (
@@ -185,11 +238,13 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
             value={filterValue}
             onChange={handleValueChange}
             onKeyPress={handleValueKeyPress}
-            sx={{ 
+            error={!!valueError}
+            helperText={valueError}
+            sx={{
               minWidth: 150,
               '& .MuiOutlinedInput-root': {
                 backgroundColor: 'background.paper',
-              }
+              },
             }}
             aria-label="Filter by metadata value"
             InputProps={{

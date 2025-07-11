@@ -27,6 +27,7 @@ This document provides a critical audit of the metadata filtering feature implem
 ## Retroactive Implementation Plan
 
 ### Phase 1: Core Filtering (✅ Completed)
+
 1. **Backend Infrastructure**
    - Create endpoint to fetch metadata keys from entire evaluation
    - Implement SQL query with json_each for metadata extraction
@@ -43,6 +44,7 @@ This document provides a critical audit of the metadata filtering feature implem
    - Ensure proper cleanup on eval switch
 
 ### Phase 2: Enhanced UX (✅ Completed)
+
 1. **Visual Improvements**
    - Add Paper wrapper for value input grouping
    - Implement loading states with spinner
@@ -63,15 +65,18 @@ This document provides a critical audit of the metadata filtering feature implem
 ## Current Limitations & Issues
 
 ### 1. Security Concerns
+
 - **SQL Injection Risk**: While the SQL is parameterized, the JSON path construction could be vulnerable
 - **Mitigation**: Since this is a local development tool, risk is minimal but should be addressed
 
 ### 2. Performance Issues
+
 - **No Caching**: Metadata keys are fetched on every eval load
 - **Count Calculation**: Computing counts for each key might be expensive on large datasets
 - **Large Metadata**: No pagination or virtualization for metadata dropdowns
 
 ### 3. Feature Limitations
+
 - **Single Filter Only**: Cannot combine multiple metadata filters
 - **No OR Logic**: All filters are AND-ed together
 - **No Regex Support**: Only wildcard patterns supported
@@ -79,11 +84,13 @@ This document provides a critical audit of the metadata filtering feature implem
 - **No Bulk Actions**: Cannot export or operate on filtered results
 
 ### 4. UX Concerns
+
 - **Discovery**: Users might not realize the value field accepts wildcards
 - **Complex Filters**: No way to build complex filter expressions
 - **Filter Persistence**: Filters lost on page refresh
 
 ### 5. Testing Gaps
+
 - **No Frontend Tests**: MetadataFilterSelector lacks unit tests
 - **Limited Backend Tests**: Only basic endpoint testing
 - **No E2E Tests**: User flows not covered
@@ -146,12 +153,14 @@ describe('Metadata API Endpoint', () => {
 ## Todo List
 
 ### Immediate Priorities (P0)
+
 - [ ] Add frontend unit tests for MetadataFilterSelector
 - [ ] Add input validation for metadata filter values
 - [ ] Implement metadata key caching to improve performance
 - [ ] Add loading skeleton instead of just spinner
 
 ### Short Term (P1)
+
 - [ ] Support multiple metadata filters (AND/OR logic)
 - [ ] Add regex pattern support (not just wildcards)
 - [ ] Implement filter presets/saved filters
@@ -159,6 +168,7 @@ describe('Metadata API Endpoint', () => {
 - [ ] Improve SQL security with better validation
 
 ### Medium Term (P2)
+
 - [ ] Advanced filter builder UI (like GitHub issues)
 - [ ] Metadata value autocomplete/suggestions
 - [ ] Filter history with undo/redo
@@ -166,6 +176,7 @@ describe('Metadata API Endpoint', () => {
 - [ ] Performance optimization for large datasets
 
 ### Long Term (P3)
+
 - [ ] GraphQL API for more flexible querying
 - [ ] Real-time collaborative filtering
 - [ ] AI-powered filter suggestions
@@ -174,29 +185,35 @@ describe('Metadata API Endpoint', () => {
 ## Future Direction
 
 ### 1. Advanced Filter Builder
+
 Create a visual query builder similar to GitHub's issue filters or Jira's JQL:
+
 ```
-(metadata.model = "gpt-4" OR metadata.model = "claude-3") 
-AND metadata.score > 0.8 
+(metadata.model = "gpt-4" OR metadata.model = "claude-3")
+AND metadata.score > 0.8
 AND NOT metadata.flagged
 ```
 
 ### 2. Smart Filtering
+
 - **Filter Templates**: Pre-built filters for common scenarios
 - **AI Suggestions**: "Users who filtered by X also filtered by Y"
 - **Anomaly Detection**: Highlight unusual metadata combinations
 
 ### 3. Performance Optimization
+
 - **Indexed Metadata**: Create dedicated metadata tables for faster queries
 - **Incremental Loading**: Load metadata keys on demand
 - **Query Caching**: Cache filter results for faster subsequent loads
 
 ### 4. Integration Enhancements
+
 - **API Access**: REST/GraphQL endpoints for programmatic filtering
 - **Webhook Support**: Notify external systems of filter changes
 - **Export Formats**: CSV, JSON, Parquet for filtered data
 
 ### 5. Visualization
+
 - **Metadata Dashboard**: Visualize metadata distribution
 - **Filter Impact**: Show how filters affect result distribution
 - **Trend Analysis**: Track metadata changes over time
@@ -204,6 +221,7 @@ AND NOT metadata.flagged
 ## Architecture Recommendations
 
 ### 1. Separate Metadata Service
+
 ```typescript
 // Proposed metadata service architecture
 interface MetadataService {
@@ -215,9 +233,10 @@ interface MetadataService {
 ```
 
 ### 2. Filter Expression Language
+
 ```typescript
 // Define a proper filter AST
-type FilterExpression = 
+type FilterExpression =
   | { type: 'key'; key: string }
   | { type: 'keyValue'; key: string; op: Operator; value: string }
   | { type: 'and'; left: FilterExpression; right: FilterExpression }
@@ -226,13 +245,17 @@ type FilterExpression =
 ```
 
 ### 3. Caching Strategy
+
 ```typescript
 // Implement multi-level caching
-const metadataCache = new Map<string, {
-  keys: MetadataKey[];
-  timestamp: number;
-  ttl: number;
-}>();
+const metadataCache = new Map<
+  string,
+  {
+    keys: MetadataKey[];
+    timestamp: number;
+    ttl: number;
+  }
+>();
 ```
 
 ## Conclusion
@@ -240,16 +263,19 @@ const metadataCache = new Map<string, {
 The metadata filter feature provides valuable functionality for filtering evaluation results. While the current implementation meets basic requirements, there are significant opportunities for enhancement in performance, security, and user experience. The immediate priority should be adding tests and improving performance through caching, followed by extending the filtering capabilities to support more complex queries.
 
 ### Risk Assessment
+
 - **Security**: Low (local tool, but should be addressed)
 - **Performance**: Medium (could impact UX with large datasets)
 - **Maintainability**: Medium (needs more tests)
 - **Usability**: Low (current implementation is intuitive)
 
 ### Recommendation
+
 Continue iterating on the feature with focus on:
+
 1. Test coverage
 2. Performance optimization
 3. Multiple filter support
 4. Security hardening
 
-The foundation is solid and the feature is already providing value to users. 
+The foundation is solid and the feature is already providing value to users.

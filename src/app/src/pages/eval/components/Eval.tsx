@@ -81,10 +81,10 @@ export default function Eval({ fetchId }: EvalOptions) {
           setFailed(true);
           return false;
         }
-        
+
         // Fetch metadata keys for this eval
         await fetchMetadataKeys(id);
-        
+
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);

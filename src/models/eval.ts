@@ -794,7 +794,7 @@ export default class Eval {
 
   async getAllMetadataKeys(): Promise<{ keys: string[]; counts: Record<string, number> }> {
     const db = getDb();
-    
+
     // Query to get all unique metadata keys and their counts for this evaluation
     const query = sql.raw(`
       WITH metadata_keys AS (
@@ -807,18 +807,18 @@ export default class Eval {
       GROUP BY metadata_key
       ORDER BY metadata_key
     `);
-    
+
     // @ts-ignore
     const results: { metadata_key: string; count: number }[] = await db.all(query);
-    
+
     const keys: string[] = [];
     const counts: Record<string, number> = {};
-    
+
     results.forEach((row) => {
       keys.push(row.metadata_key);
       counts[row.metadata_key] = row.count;
     });
-    
+
     return { keys, counts };
   }
 }

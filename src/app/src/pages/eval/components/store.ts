@@ -44,6 +44,15 @@ export interface PaginationState {
   pageSize: number;
 }
 
+interface MetadataCache {
+  keys: string[];
+  counts: Record<string, number>;
+  timestamp: number;
+  evalId: string;
+}
+
+const METADATA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
@@ -75,14 +84,13 @@ interface TableState {
   availableMetadata: string[];
   metadataCounts: Record<string, number>;
   isLoadingMetadata: boolean;
+  metadataCache: MetadataCache | null;
 
-  fetchEvalData: (
-    id: string,
-    options?: FetchEvalOptions,
-  ) => Promise<EvalTableDTO | null>;
+  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
 
   // Add method to fetch metadata keys
   fetchMetadataKeys: (id: string) => Promise<void>;
+  clearMetadataCache: () => void;
 }
 
 interface SettingsState {
@@ -211,6 +219,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   availableMetadata: [],
   metadataCounts: {},
   isLoadingMetadata: false,
+  metadataCache: null,
 
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
@@ -228,8 +237,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set({ isFetching: true });
 
     try {
-      console.log(`Fetching data for eval ${id} with options:`, options);
-
       const url = `/eval/${id}/table?offset=${pageIndex * pageSize}&limit=${pageSize}&filter=${filterMode}${
         comparisonEvalIds.length > 0
           ? `&comparisonEvalIds=${comparisonEvalIds.join('&comparisonEvalIds=')}`
@@ -268,34 +275,64 @@ export const useTableStore = create<TableState>()((set, get) => ({
   },
 
   fetchMetadataKeys: async (id: string) => {
+    const currentCache = get().metadataCache;
+
+    // Check if we have a valid cache for this eval
+    if (
+      currentCache &&
+      currentCache.evalId === id &&
+      Date.now() - currentCache.timestamp < METADATA_CACHE_TTL
+    ) {
+      // Use cached data
+      set({
+        availableMetadata: currentCache.keys,
+        metadataCounts: currentCache.counts,
+        isLoadingMetadata: false,
+      });
+      return;
+    }
+
     set({ isLoadingMetadata: true });
 
     try {
-      console.log(`Fetching metadata keys for eval ${id}`);
       const resp = await callApi(`/eval/${id}/metadata-keys`);
 
       if (resp.ok) {
         const data = (await resp.json()) as { keys: string[]; counts: Record<string, number> };
+
+        // Update cache
+        const cache: MetadataCache = {
+          keys: data.keys,
+          counts: data.counts,
+          timestamp: Date.now(),
+          evalId: id,
+        };
+
         set({
           availableMetadata: data.keys,
           metadataCounts: data.counts,
           isLoadingMetadata: false,
+          metadataCache: cache,
         });
       } else {
         console.error('Failed to fetch metadata keys');
-        set({ 
-          availableMetadata: [], 
+        set({
+          availableMetadata: [],
           metadataCounts: {},
-          isLoadingMetadata: false 
+          isLoadingMetadata: false,
         });
       }
     } catch (error) {
       console.error('Error fetching metadata keys:', error);
-      set({ 
-        availableMetadata: [], 
+      set({
+        availableMetadata: [],
         metadataCounts: {},
-        isLoadingMetadata: false 
+        isLoadingMetadata: false,
       });
     }
+  },
+
+  clearMetadataCache: () => {
+    set({ metadataCache: null });
   },
 }));

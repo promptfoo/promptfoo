@@ -371,23 +371,23 @@ export default function ResultsView({
 
   const columnData = React.useMemo(() => {
     const columns = [];
-    
+
     if (hasAnyDescriptions) {
       columns.push({ value: 'description', label: 'Description', group: 'General' });
     }
-    
+
     columns.push({ value: 'vars', label: 'Variables', group: 'General' });
-    
+
     columns.push(...promptOptions);
-    
+
     if (hasAnyComments) {
       columns.push({ value: 'comments', label: 'Comments', group: 'Results' });
     }
-    
+
     if (!hasAnyComments) {
       columns.push({ value: 'pass/fail', label: 'Pass/Fail', group: 'Results' });
     }
-    
+
     return columns;
   }, [promptOptions, hasAnyDescriptions, hasAnyComments]);
 
@@ -505,8 +505,10 @@ export default function ResultsView({
   // Add state for metric filter and available metrics
   const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
 
-  // Add state for metadata filter
-  const [selectedMetadata, setSelectedMetadata] = React.useState<string | null>(null);
+  // Add state for metadata filter - Initialize from URL
+  const [selectedMetadata, setSelectedMetadata] = React.useState<string | null>(
+    searchParams.get('metadata'),
+  );
 
   const availableMetrics = React.useMemo(() => {
     if (table && table.head?.prompts) {
@@ -525,19 +527,33 @@ export default function ResultsView({
   React.useEffect(() => {
     if (evalId) {
       fetchMetadataKeys(evalId);
-      // Reset metadata filter when eval changes
-      setSelectedMetadata(null);
+      // Don't reset metadata filter when eval changes if it's in the URL
+      if (!searchParams.get('metadata')) {
+        setSelectedMetadata(null);
+      }
     }
-  }, [evalId, fetchMetadataKeys]);
+  }, [evalId, fetchMetadataKeys, searchParams]);
 
   // Make the function a callback that can be passed to CustomMetrics
   const handleMetricFilterChange = React.useCallback((metric: string | null) => {
     setSelectedMetric(metric);
   }, []);
 
-  const handleMetadataFilterChange = React.useCallback((key: string | null) => {
-    setSelectedMetadata(key);
-  }, []);
+  const handleMetadataFilterChange = React.useCallback(
+    (key: string | null) => {
+      setSelectedMetadata(key);
+
+      // Update URL params
+      const newSearchParams = new URLSearchParams(searchParams);
+      if (key) {
+        newSearchParams.set('metadata', key);
+      } else {
+        newSearchParams.delete('metadata');
+      }
+      setSearchParams(newSearchParams, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
