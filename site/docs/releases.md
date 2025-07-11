@@ -9,15 +9,13 @@ keywords: [promptfoo releases, changelog, updates, features, monthly summaries]
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
-<!-- truncate -->
-
-## June Release
+## June 2025 Release
 
 ### Red Team Coverage
 
 #### Updates to Strategies
 
-1. **Unblocking multi-turn** When a blocking question is detected, the generated unblocking prompt is sent back to the target, with token usage and session state updated accordingly.
+1. **Enhanced multi-turn strategies**: The [GOAT](/docs/red-team/strategies/goat/) and [Crescendo](/docs/red-team/strategies/crescendo/) strategies have been augmented with an agent that can detect and respond to intermediate steps (such as "confirm your account number" or "would you like A or B?").
 2. **Emoji encoding**: We have added a new strategy that [uses emoji encoding](/docs/red-team/strategies/other-encodings/#emoji-encoding) for obfuscation.
 
 #### New Red Team Plugins
@@ -25,7 +23,7 @@ Full release history for Promptfoo open source can be found on [GitHub](https://
 1. **Enhanced bias plugins**: [Age](/docs/red-team/plugins/age-bias/), [disability](/docs/red-team/plugins/disability-bias/), and [race](/docs/red-team/plugins/race-bias/) bias plugins have been added to increase coverage in Trust and Safety tests.
 2. **Medical plugins**: New plugins [test for harmful output](/docs/red-team/plugins/medical/) in medical content, such as fabricated medical facts and studies, fixation on irrelevant medical information, poor medical triage decisions, and inappropriate agreement with incorrect medical assumptions.
 3. **Financial plugins**: These plugins [address the unique risks](/docs/red-team/plugins/financial/) that emerge when AI systems handle financial data, provide investment guidance, or assist with trading decisions in high-stakes financial environments.
-4. **Aegis dataset**: There is a new [Aegis plugin](/docs/red-team/plugins/aegis/) using NVIDIA's Aegis AI Content Safety Dataset.
+4. **Guardrail testing datasets**: Added multiple datasets for red-teaming guardrails, including the new [Aegis plugin](/docs/red-team/plugins/aegis/) which uses NVIDIA's Aegis AI Content Safety Dataset.
 
 #### Static Model Scanning
 
@@ -46,15 +44,15 @@ The custom strategy allows you to [define your own](/docs/red-team/strategies/cu
 
 You can now [customize the grader](/docs/red-team/troubleshooting/grading-results/#customizing-graders-for-specific-plugins-in-promptfoo-enterprise) at the plugin level. Provide an example output that you would consider a pass or fail, then elaborate on the reason why. Including more concrete examples gives additional context to the LLM grader, improving the efficacy of grading.
 
-### Provider Improvements
+## Evaluation Improvements
+
+### Provider Updates
 
 1. **Google Live Audio Outputs**: There is now [audio output support](/docs/providers/google/#audio-generation) for Google's Live API, enabling audio generation, transcription, and advanced features like affective dialog and voice customization.
-2. **Hyperbolic Support**: Promptfoo [now supports](/docs/providers/hyperbolic/) for Hyperbolic image and audio providers.
+2. **Hyperbolic Support**: Promptfoo now supports [Hyperbolic](/docs/providers/hyperbolic/) image and audio providers.
 3. **Helicone AI Gateway**: The Helicone provider [allows you to route requests](/docs/providers/helicone/) through a locally running Helicone AI Gateway instance.
-4. **Additional Provider Support**: Mistral Magistral reasoning models, Gemini models include latest 2.5 Pro Preview and Flash have been added.
+4. **Additional Provider Support**: Added support for Mistral Magistral reasoning models and the latest Gemini 2.5 Pro Preview and Flash models.
 
-### Additional Updates
-
-#### Tracing for Red Teaming
+### Tracing
 
 Promptfoo now [collects OpenTelemetry data](/docs/tracing/) and displays it in the UI to help you understand the internal operations of your LLM providers during evaluations. This feature allows you to collect detailed performance metrics and debug complex provider implementations.
