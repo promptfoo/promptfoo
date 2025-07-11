@@ -193,7 +193,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     limit,
     filterMode,
     searchQuery: searchText,
-    filters,
+    filters: filters as string[],
   });
 
   const indices = table.body.map((row) => row.testIdx);
@@ -222,7 +222,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           filterMode: 'all',
           testIndices: indices,
           searchQuery: searchText,
-          filters,
+          filters: filters as string[],
         });
       }),
     );
