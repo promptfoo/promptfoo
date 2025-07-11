@@ -198,7 +198,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
           onChange={handleKeyChange}
           label={isLoading ? 'Loading...' : 'Filter by Metadata'}
           aria-label="Filter results by metadata key"
-          aria-describedby="metadata-filter-description"
+          aria-describedby={keyError ? 'metadata-key-error' : 'metadata-filter-help'}
           disabled={isLoading}
           endAdornment={
             isLoading ? (
@@ -213,7 +213,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
           </MenuItem>
           {!isLoading && renderMenuItems()}
         </Select>
-        {keyError && <FormHelperText>{keyError}</FormHelperText>}
+        {keyError && <FormHelperText id="metadata-key-error">{keyError}</FormHelperText>}
       </FormControl>
 
       {showValueInput && (
@@ -247,6 +247,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
               },
             }}
             aria-label="Filter by metadata value"
+            aria-describedby={valueError ? 'metadata-value-error' : 'metadata-value-help'}
             InputProps={{
               endAdornment: filterValue && (
                 <InputAdornment position="end">
@@ -281,7 +282,13 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
             }
             arrow
           >
-            <InfoOutlinedIcon fontSize="small" color="action" sx={{ ml: 0.5 }} />
+            <IconButton
+              size="small"
+              sx={{ ml: 0.5, p: 0.5 }}
+              aria-label="Metadata filter help. Use wildcards: exact match (gpt-4), starts with (gpt-*), ends with (*-4), or contains (*gpt*)"
+            >
+              <InfoOutlinedIcon fontSize="small" color="action" />
+            </IconButton>
           </Tooltip>
         </Paper>
       )}
@@ -297,5 +304,44 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
     </Box>
   );
 
-  return filterContent;
+  return (
+    <>
+      {filterContent}
+      {/* Screen reader help text */}
+      <Box
+        id="metadata-filter-help"
+        sx={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        Select a metadata key to filter results. You can optionally enter a value with wildcard
+        support.
+      </Box>
+      <Box
+        id="metadata-value-help"
+        sx={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        Enter a value to filter by. Use asterisk for wildcards: gpt-* for starts with, *-4 for ends
+        with, *gpt* for contains. Press Enter to apply.
+      </Box>
+    </>
+  );
 };

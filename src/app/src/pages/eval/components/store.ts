@@ -85,6 +85,7 @@ interface TableState {
   metadataCounts: Record<string, number>;
   isLoadingMetadata: boolean;
   metadataCache: MetadataCache | null;
+  metadataAbortController: AbortController | null;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
 
@@ -220,6 +221,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   metadataCounts: {},
   isLoadingMetadata: false,
   metadataCache: null,
+  metadataAbortController: null,
 
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
@@ -276,6 +278,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
   fetchMetadataKeys: async (id: string) => {
     const currentCache = get().metadataCache;
+    const currentAbortController = get().metadataAbortController;
+
+    // Cancel any pending request
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
 
     // Check if we have a valid cache for this eval
     if (
@@ -292,10 +300,14 @@ export const useTableStore = create<TableState>()((set, get) => ({
       return;
     }
 
-    set({ isLoadingMetadata: true });
+    // Create new abort controller for this request
+    const abortController = new AbortController();
+    set({ isLoadingMetadata: true, metadataAbortController: abortController });
 
     try {
-      const resp = await callApi(`/eval/${id}/metadata-keys`);
+      const resp = await callApi(`/eval/${id}/metadata-keys`, {
+        signal: abortController.signal,
+      });
 
       if (resp.ok) {
         const data = (await resp.json()) as { keys: string[]; counts: Record<string, number> };
@@ -313,6 +325,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           metadataCounts: data.counts,
           isLoadingMetadata: false,
           metadataCache: cache,
+          metadataAbortController: null,
         });
       } else {
         console.error('Failed to fetch metadata keys');
@@ -320,14 +333,20 @@ export const useTableStore = create<TableState>()((set, get) => ({
           availableMetadata: [],
           metadataCounts: {},
           isLoadingMetadata: false,
+          metadataAbortController: null,
         });
       }
     } catch (error) {
+      // Don't log errors for aborted requests
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching metadata keys:', error);
       set({
         availableMetadata: [],
         metadataCounts: {},
         isLoadingMetadata: false,
+        metadataAbortController: null,
       });
     }
   },

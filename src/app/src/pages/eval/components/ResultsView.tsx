@@ -43,6 +43,7 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
+import { MetadataFilterErrorBoundary } from './MetadataFilterErrorBoundary';
 import { MetadataFilterSelector } from './MetadataFilterSelector';
 import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
@@ -532,6 +533,14 @@ export default function ResultsView({
         setSelectedMetadata(null);
       }
     }
+
+    // Cleanup function to cancel pending requests when component unmounts
+    return () => {
+      const { metadataAbortController } = useTableStore.getState();
+      if (metadataAbortController) {
+        metadataAbortController.abort();
+      }
+    };
   }, [evalId, fetchMetadataKeys, searchParams]);
 
   // Make the function a callback that can be passed to CustomMetrics
@@ -637,13 +646,15 @@ export default function ResultsView({
           availableMetrics={availableMetrics}
           onChange={handleMetricFilterChange}
         />
-        <MetadataFilterSelector
-          selectedMetadata={selectedMetadata}
-          availableMetadata={availableMetadata}
-          onChange={handleMetadataFilterChange}
-          metadataCounts={metadataCounts}
-          isLoading={isLoadingMetadata}
-        />
+        <MetadataFilterErrorBoundary onReset={() => setSelectedMetadata(null)}>
+          <MetadataFilterSelector
+            selectedMetadata={selectedMetadata}
+            availableMetadata={availableMetadata}
+            onChange={handleMetadataFilterChange}
+            metadataCounts={metadataCounts}
+            isLoading={isLoadingMetadata}
+          />
+        </MetadataFilterErrorBoundary>
         <Box
           sx={{
             display: 'flex',
