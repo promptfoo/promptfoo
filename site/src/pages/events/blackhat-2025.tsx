@@ -160,6 +160,8 @@ export default function BlackHat2025(): JSX.Element {
                   </svg>
                   <span>Booth #4712</span>
                 </div>
+              </div>
+              <div className={styles.eventDetails} style={{ marginTop: '1rem' }}>
                 <div className={styles.detail}>
                   <svg
                     className={styles.icon}
@@ -174,8 +176,41 @@ export default function BlackHat2025(): JSX.Element {
                       d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
                     />
                   </svg>
-                  <span style={{ fontWeight: 'bold', color: '#ff6b6b' }}>
+                  <Link
+                    to="https://www.blackhat.com/us-25/ai-summit.html"
+                    style={{ fontWeight: 'bold', color: '#ff6b6b' }}
+                  >
                     AI Summit Speaker - Aug 6
+                  </Link>
+                </div>
+                <div className={styles.detail}>
+                  <svg
+                    className={styles.icon}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                  <span style={{ fontWeight: 'bold', color: '#ff6b6b' }}>
+                    <Link
+                      to="https://www.blackhat.com/us-25/arsenal/schedule/index.html#promptfoo-44648"
+                      style={{ color: 'inherit' }}
+                    >
+                      Arsenal Labs - Aug 6
+                    </Link>
+                    {' & '}
+                    <Link
+                      to="https://www.blackhat.com/us-25/arsenal/schedule/#promptfoo-47875"
+                      style={{ color: 'inherit' }}
+                    >
+                      7
+                    </Link>
                   </span>
                 </div>
               </div>
@@ -188,7 +223,7 @@ export default function BlackHat2025(): JSX.Element {
           <div className={styles.demoBackground}>
             <div className={styles.demoContainer}>
               <div className={styles.demoHeader}>
-                <h2 className={styles.demoTitle}>What We'll Demo at Black Hat</h2>
+                <h2 className={styles.demoTitle}>Live From Vegas</h2>
               </div>
               <div className={styles.demoGrid}>
                 <div className={styles.demoCard} data-demo="1">
@@ -198,12 +233,12 @@ export default function BlackHat2025(): JSX.Element {
                       <div className={styles.demoIconGlow} />
                     </div>
                     <div className={styles.demoContent}>
-                      <h3>Live Attack Demonstrations</h3>
+                      <h3>Real-Time Attack Demonstrations</h3>
                       <p>
-                        Watch our security researchers perform real-time demonstrations of prompt
-                        injection, jailbreaking, and data exfiltration attacks. See how Promptfoo
-                        automatically detects and prevents these threats across GPT-4, Claude,
-                        Llama, and other popular models.
+                        Watch our security researchers perform demonstrations of prompt injection,
+                        jailbreaking, and data exfiltration attacks. See how Promptfoo automatically
+                        detects and prevents these threats across GPT-4, Claude, Llama, and other
+                        popular models.
                       </p>
                       <div className={styles.demoTag}>LIVE DEMO</div>
                     </div>
@@ -272,7 +307,7 @@ export default function BlackHat2025(): JSX.Element {
         {/* Calendar Section */}
         <section className={styles.calendarSection} id="schedule-demo">
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Meet with us at Black Hat</h2>
+            <h2 className={styles.sectionTitle}>Meet us at Black Hat</h2>
             <p className={styles.calendarSubtitle}>
               Book a 30-minute demo slot to see Promptfoo in action. Our security experts will show
               you how to find and fix vulnerabilities in your LLM applications.
