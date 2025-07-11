@@ -230,44 +230,69 @@ export async function processPrompts(
   ).flat();
 }
 
-export const GEVAL_PROMPT_STEPS = `
-Given an evaluation criteria which outlines how you should judge some text, generate 3-4 concise evaluation steps for any text based on the criteria below.
+// G-Eval prompts
+export const GEVAL_PROMPT_STEPS = JSON.stringify([
+  {
+    role: 'system',
+    content: `Given an evaluation criteria, produce a numbered list of evaluation steps.
 
-Evaluation Criteria:
-{{criteria}}
+The output should be plain text, with each step on a new line starting with its number. E.g.:
+1. Clarity: Assess if the submission is clear and easy to understand.
+2. Relevance: Check if the submission addresses the criteria directly.
+...`,
+  },
+  {
+    role: 'user',
+    content: 'Evaluation criteria:\n{{criteria}}',
+  },
+]);
 
-**
-IMPORTANT: Please make sure to only return in minified JSON format, with the "steps" key as a list of strings. No additional words, explanation or formatting is needed.
-Example JSON:
-{"steps": <list_of_strings>}
-**
+export const GEVAL_PROMPT_EVALUATE = JSON.stringify([
+  {
+    role: 'system',
+    content: `You are assessing a submitted answer on a given task based on a given criteria. Here is the data:
 
-JSON:
-`;
+[BEGIN DATA]
+***
+[Task]: {{input}}
+***
+[Submission]: {{output}}
+***
+[Criteria]: {{criteria}}
+***
+[Steps]: {{steps}}
+***
+[END DATA]
 
-export const GEVAL_PROMPT_EVALUATE = `
-You will be given one Reply for a Source Text below. Your task is to rate the Reply on one metric.
-Please make sure you read and understand these instructions carefully. Please keep this document open while reviewing, and refer to it as needed.
+Please follow the evaluation steps and produce a score between 1 and {{maxScore}}. Then at the very end, output a JSON object in the following format:
+{"score": X, "reason": "Brief explanation of the score."}`,
+  },
+]);
 
-Evaluation Criteria:
-{{criteria}}
+export const RESEARCH_RUBRIC_FINAL_EVALUATION = `You are an AI grader evaluating the accuracy of an output using web search.
 
-Evaluation Steps:
-- {{steps}}
-- Given the evaluation steps, return a JSON with two keys: 1) a "score" key ranging from 0 - {{maxScore}}, with {{maxScore}} being that it follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that it does not; 2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Source Text and Reply in your reason, but be very concise with it!
+Output to evaluate: {{output}}
+Evaluation criteria: {{rubric}}
+{% if prompt %}
+Original prompt that generated the output: {{prompt}}
+{% endif %}
 
-Source Text:
-{{input}}
+YOUR TASK:
+1. Identify key factual claims in the output that need verification
+2. Use web search to verify each claim (current data, facts, citations, etc.)
+3. Evaluate the overall accuracy based on your findings
 
-Reply:
-{{output}}
+IMPORTANT:
+- You MUST use web search to verify factual claims
+- Check dates, numbers, names, and any specific claims
+- If output mentions citations/papers, verify they exist
+- For current information (prices, weather, news), check against live data
 
-**
-IMPORTANT: Please make sure to only return in minified JSON format, with the "score" and "reason" key. No additional words, explanation or formatting is needed.
-
-Example JSON:
-{"score":0,"reason":"The text does not follow the evaluation steps provided."}
-**
-
-JSON:
-`;
+Return a JSON object with this exact structure:
+{
+  "pass": boolean (true if output meets accuracy criteria, false otherwise),
+  "score": number (0.0 to 1.0, representing accuracy percentage),
+  "reason": "Clear explanation of what you found and why it passes/fails",
+  "verifiedClaims": ["List of claims you successfully verified"],
+  "failedClaims": ["List of claims that were incorrect or unverifiable"]
+}`;

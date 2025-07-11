@@ -103,6 +103,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
+      // Azure doesn't have web search by default
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
@@ -115,6 +116,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
+      // Anthropic doesn't have built-in web search
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
@@ -129,6 +131,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
+      // Google providers can have web search capabilities
+      researchProvider: GeminiGradingProvider,
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
@@ -145,6 +149,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
+      // Mistral doesn't have web search
     };
   } else {
     logger.debug('Using OpenAI default providers');
@@ -155,6 +160,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
       synthesizeProvider: OpenAiGradingJsonProvider,
+      // OpenAI can use responses API with web search
+      researchProvider: OpenAiGradingProvider,
     };
   }
 

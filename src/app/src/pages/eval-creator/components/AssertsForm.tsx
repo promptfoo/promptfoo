@@ -22,6 +22,7 @@ const assertTypes: AssertionType[] = [
   'contains-any',
   'starts-with',
   'regex',
+  'research-rubric',
   'is-json',
   'contains-json',
   'is-xml',

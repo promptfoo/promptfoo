@@ -1,0 +1,78 @@
+# Research Verification Example
+# This example shows how to use research-rubric to verify output accuracy
+
+description: Research verification example
+
+prompts:
+  - "{{prompt}}"
+
+# These providers will generate outputs to be tested
+# They don't need web search capabilities
+providers:
+  - id: openai:gpt-4o
+    label: GPT-4o (No Search)
+  
+  - id: openai:gpt-4o-mini
+    label: GPT-4o Mini (No Search)
+
+# The grading provider needs web search to verify accuracy
+# Option 1: Perplexity (has built-in web search)
+# grading:
+#   provider: perplexity:sonar
+
+# Option 2: Google Gemini with search tools
+grading:
+  provider: google:gemini-2.0-flash
+  providerOptions:
+    config:
+      tools:
+        - googleSearch: {}
+
+# Option 3: xAI with search parameters  
+# grading:
+#   provider: xai:grok-2
+#   providerOptions:
+#     config:
+#       search_parameters:
+#         mode: on
+
+tests:
+  - vars:
+      prompt: "What's the current temperature in New York City?"
+    assert:
+      - type: research-rubric
+        value: Must provide accurate current temperature information
+
+  - vars:
+      prompt: "Calculate the compound interest on $10,000 at 5% annual rate for 3 years"
+    assert:
+      - type: research-rubric
+        value: The calculation must be mathematically correct ($1,576.25)
+
+  - vars:
+      prompt: "Write a brief summary about transformer neural networks and cite 2-3 academic papers"
+    assert:
+      - type: research-rubric
+        value: All cited papers must exist and be accurately referenced
+
+  - vars:
+      prompt: "Who won the most recent Super Bowl and what was the final score?"
+    assert:
+      - type: research-rubric
+        value: Must provide accurate and up-to-date Super Bowl winner and score
+
+  - vars:
+      prompt: |
+        Provide the following information about Paris, France:
+        1. Current population
+        2. Current weather
+        3. When the Eiffel Tower was built
+        4. The distance from London
+    assert:
+      - type: research-rubric
+        value: |
+          All facts must be accurate:
+          - Population should be approximately 2.1 million (city proper)
+          - Weather must be current
+          - Eiffel Tower construction dates (1887-1889) must be correct
+          - Distance from London should be around 344 km
