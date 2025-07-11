@@ -730,12 +730,6 @@ export default function ResultsView({
             }}
           />
         )}
-        {(searchText || filterMode !== 'all' || selectedMetric || selectedMetadata) &&
-          filteredResultsCount < totalResultsCount && (
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-              (filters apply to all {totalResultsCount} results)
-            </Typography>
-          )}
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
