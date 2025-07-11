@@ -1,5 +1,5 @@
-import type { UnifiedConfig } from 'promptfoo';
 import { zodResponseFormat } from 'openai/helpers/zod.mjs';
+import type { UnifiedConfig } from 'promptfoo';
 import { TranslationResponseSchema } from './src/schemas/translation-response';
 
 // Generate the response format for OpenAI
@@ -7,7 +7,9 @@ const responseFormat = zodResponseFormat(TranslationResponseSchema, 'translation
 
 // Helper function to clean schema for Gemini compatibility
 function cleanSchemaForGemini(schema: any): any {
-  if (typeof schema !== 'object' || schema === null) return schema;
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
 
   const cleaned = { ...schema };
 
@@ -18,10 +20,7 @@ function cleanSchemaForGemini(schema: any): any {
   // Recursively clean nested objects
   if (cleaned.properties) {
     cleaned.properties = Object.fromEntries(
-      Object.entries(cleaned.properties).map(([key, value]) => [
-        key,
-        cleanSchemaForGemini(value),
-      ]),
+      Object.entries(cleaned.properties).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
     );
   }
 
@@ -213,4 +212,4 @@ Provide your response in the required JSON format with translation, confidence s
   ],
 };
 
-export default config; 
+export default config;

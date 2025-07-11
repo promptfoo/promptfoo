@@ -7,6 +7,7 @@ npx promptfoo@latest init --example ts-config
 ```
 
 This guide demonstrates how to set up a TypeScript configuration for promptfoo using `promptfooconfig.ts`, including:
+
 - Basic TypeScript configuration with type safety
 - Dynamic schema generation using Zod
 - Reusing application schemas in test configurations
@@ -49,6 +50,7 @@ promptfoo view
 ### Basic TypeScript Configuration
 
 The `promptfooconfig.ts` file shows:
+
 - Type-safe configuration using the `UnifiedConfig` type
 - Simple prompt templates with variables
 - Basic test cases
@@ -56,12 +58,14 @@ The `promptfooconfig.ts` file shows:
 ### Dynamic Schema Generation
 
 The `promptfooconfig-with-schema.ts` file demonstrates:
+
 - Using Zod schemas from your application code
 - Dynamically generating response formats for different providers
 - Converting schemas between OpenAI and Gemini formats
 - Maintaining a single source of truth for data models
 
 This is particularly useful when:
+
 - Your application uses structured outputs with JSON schemas
 - You want to avoid duplicating schema definitions
 - You need to test the same prompts across different providers with different schema formats
