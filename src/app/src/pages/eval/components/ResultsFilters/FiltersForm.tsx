@@ -197,7 +197,7 @@ export default function FiltersForm({
     if (open && Object.keys(filters.values).length === 0) {
       handleAddFilter();
     }
-  }, [filters.values, handleAddFilter, open]);
+  }, [filters.values, open]);
 
   const filterValuesList = useMemo(() => Object.values(filters.values), [filters.values]);
 
