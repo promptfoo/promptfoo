@@ -173,8 +173,7 @@ export default function ResultsView({
     filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
-    selectedMetric,
-    setSelectedMetric,
+    filters,
   } = useTableStore();
 
   const {
@@ -544,7 +543,7 @@ export default function ResultsView({
         </Box>
 
         <FiltersButton
-          appliedFiltersCount={2}
+          appliedFiltersCount={filters.values.length}
           onClick={() => setFiltersModalOpen(true)}
           ref={filtersButtonRef}
         />
@@ -564,7 +563,7 @@ export default function ResultsView({
             fontSize: '0.875rem',
           }}
         >
-          {searchText || filterMode !== 'all' || selectedMetric ? (
+          {searchText || filterMode !== 'all' || filters.values.length > 0 ? (
             <>
               <strong>{filteredResultsCount}</strong>
               <span style={{ margin: '0 4px' }}>of</span>
@@ -583,14 +582,6 @@ export default function ResultsView({
                   size="small"
                   label={`Filter: ${filterMode}`}
                   onDelete={() => setFilterMode('all')}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                />
-              )}
-              {selectedMetric && (
-                <Chip
-                  size="small"
-                  label={`Metric: ${selectedMetric}`}
-                  onDelete={() => setSelectedMetric(null)}
                   sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                 />
               )}
@@ -729,8 +720,9 @@ export default function ResultsView({
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
-        selectedMetric={selectedMetric}
-        onMetricFilter={setSelectedMetric}
+        // TODO: Handle this.
+        selectedMetric={null}
+        onMetricFilter={() => {}}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

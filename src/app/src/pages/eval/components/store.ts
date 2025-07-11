@@ -58,6 +58,15 @@ export interface PaginationState {
   pageSize: number;
 }
 
+export type ResultsFilterType = 'metric';
+
+export type ResultsFilter = {
+  type: ResultsFilterType;
+  value: string;
+  operator: 'equals';
+  logicOperator?: 'and' | 'or';
+};
+
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
@@ -83,13 +92,39 @@ interface TableState {
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
 
-  selectedMetric: string | null;
-  setSelectedMetric: (metric: string | null) => void;
-
-  availableMetrics: string[];
-
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+
+  /**
+   * Adds a new filter to the filters array.
+   * @param filter - The filter to add.
+   */
+  addFilter: (filter: ResultsFilter) => void;
+
+  /**
+   * Removes a filter from the filters array.
+   * @param index - The index of the filter to remove.
+   */
+  removeFilter: (index: number) => void;
+
+  /**
+   * Removes all filters from the filters array.
+   */
+  removeAllFilters: () => void;
+
+  /**
+   * Updates a filter in the filters array.
+   * @param filter - The filter to update.
+   * @param index - The index of the filter to update.
+   */
+  updateFilter: (filter: ResultsFilter, index: number) => void;
+
+  filters: {
+    values: ResultsFilter[];
+    options: {
+      [key in ResultsFilterType]: string[];
+    };
+  };
 }
 
 interface SettingsState {
@@ -181,27 +216,42 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
   table: null,
   setTable: (table: EvaluateTable | null) =>
-    set(() => ({
+    set((prevState) => ({
       table,
       highlightedResultsCount: computeHighlightCount(table),
-      availableMetrics: computeAvailableMetrics(table),
+      filters: {
+        ...prevState.filters,
+        options: {
+          metric: computeAvailableMetrics(table),
+        },
+      },
     })),
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
     if (resultsFile.version && resultsFile.version >= 4) {
       const table = convertResultsToTable(resultsFile);
-      set(() => ({
+      set((prevState) => ({
         table,
         version: resultsFile.version,
         highlightedResultsCount: computeHighlightCount(table),
-        availableMetrics: computeAvailableMetrics(table),
+        filters: {
+          ...prevState.filters,
+          options: {
+            metric: computeAvailableMetrics(table),
+          },
+        },
       }));
     } else {
       const results = resultsFile.results as EvaluateSummaryV2;
-      set(() => ({
+      set((prevState) => ({
         table: results.table,
         version: resultsFile.version,
         highlightedResultsCount: computeHighlightCount(results.table),
-        availableMetrics: computeAvailableMetrics(results.table),
+        filters: {
+          ...prevState.filters,
+          options: {
+            metric: computeAvailableMetrics(results.table),
+          },
+        },
       }));
     }
   },
@@ -214,11 +264,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
   highlightedResultsCount: 0,
-
-  selectedMetric: null,
-  setSelectedMetric: (metric: string | null) => set(() => ({ selectedMetric: metric })),
-
-  availableMetrics: [],
 
   isFetching: false,
 
@@ -252,18 +297,23 @@ export const useTableStore = create<TableState>()((set, get) => ({
       if (resp.ok) {
         const data = (await resp.json()) as EvalTableDTO;
 
-        set({
+        set((prevState) => ({
           table: data.table,
           filteredResultsCount: data.filteredCount,
           totalResultsCount: data.totalCount,
           highlightedResultsCount: computeHighlightCount(data.table),
-          availableMetrics: computeAvailableMetrics(data.table),
           config: data.config,
           version: data.version,
           author: data.author,
           evalId: skipSettingEvalId ? get().evalId : id,
           isFetching: false,
-        });
+          filters: {
+            ...prevState.filters,
+            options: {
+              metric: computeAvailableMetrics(data.table),
+            },
+          },
+        }));
 
         return data;
       }
@@ -275,5 +325,48 @@ export const useTableStore = create<TableState>()((set, get) => ({
       set({ isFetching: false });
       return null;
     }
+  },
+
+  filters: {
+    values: [],
+    options: {
+      metric: [],
+    },
+  },
+
+  addFilter: (filter: ResultsFilter) => {
+    set((prevState) => ({
+      filters: {
+        ...prevState.filters,
+        values: [...prevState.filters.values, filter],
+      },
+    }));
+  },
+
+  removeFilter: (index: number) => {
+    set((prevState) => ({
+      filters: {
+        ...prevState.filters,
+        values: prevState.filters.values.filter((_, i) => i !== index),
+      },
+    }));
+  },
+
+  removeAllFilters: () => {
+    set((prevState) => ({
+      filters: {
+        ...prevState.filters,
+        values: [],
+      },
+    }));
+  },
+
+  updateFilter: (filter: ResultsFilter, index: number) => {
+    set((prevState) => ({
+      filters: {
+        ...prevState.filters,
+        values: prevState.filters.values.map((f, i) => (i === index ? filter : f)),
+      },
+    }));
   },
 }));
