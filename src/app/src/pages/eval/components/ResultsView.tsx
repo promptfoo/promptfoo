@@ -166,7 +166,6 @@ export default function ResultsView({
   const {
     author,
     table,
-
     config,
     setConfig,
     evalId,
@@ -177,6 +176,7 @@ export default function ResultsView({
     availableMetadata,
     metadataCounts,
     fetchMetadataKeys,
+    isLoadingMetadata,
   } = useTableStore();
 
   const {
@@ -626,6 +626,7 @@ export default function ResultsView({
           availableMetadata={availableMetadata}
           onChange={handleMetadataFilterChange}
           metadataCounts={metadataCounts}
+          isLoading={isLoadingMetadata}
         />
         <Box
           sx={{

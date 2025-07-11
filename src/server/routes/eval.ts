@@ -287,7 +287,7 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
     const metadataInfo = await eval_.getAllMetadataKeys();
     res.json(metadataInfo);
   } catch (error) {
-    logger.error(`Failed to fetch metadata keys for eval ${id}:`, error);
+    logger.error(`Failed to fetch metadata keys for eval ${id}: ${error}`);
     res.status(500).json({ error: 'Failed to fetch metadata keys' });
   }
 });
