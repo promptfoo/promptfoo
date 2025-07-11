@@ -160,7 +160,7 @@
   background: rgba(255, 255, 255, 0.03);
   border: 2px solid rgba(229, 58, 58, 0.2);
   border-radius: 10px;
-  text-decoration: none;
+  text-decoration: none !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(10px);
   position: relative;
@@ -187,6 +187,7 @@
   background: rgba(229, 58, 58, 0.1);
   border-color: rgba(229, 58, 58, 0.4);
   box-shadow: 0 8px 20px rgba(229, 58, 58, 0.3);
+  text-decoration: none !important;
 }
 
 .eventCard:hover::before {
@@ -233,12 +234,14 @@
   white-space: nowrap;
   opacity: 0.8;
   transition: all 0.3s ease;
+  text-decoration: none;
 }
 
 .eventCard:hover .eventCta {
   opacity: 1;
-  color: #ff7a7a;
-  text-shadow: 0 0 6px rgba(229, 58, 58, 0.6);
+  color: #ff5555;
+  text-shadow: none;
+  text-decoration: none;
 }
 
 .divider {
