@@ -171,7 +171,7 @@ export default function FiltersForm({
   /**
    * Adds a new filter with default values.
    */
-  const handleAddFilter = () => {
+  const handleAddFilter = useCallback(() => {
     addFilter({
       type: 'metric',
       operator: 'equals',
@@ -179,7 +179,7 @@ export default function FiltersForm({
       // In other words, the filter is not applied until the user selects a value.
       value: '',
     });
-  };
+  }, [addFilter]);
 
   /**
    * Removes all filters and closes the popover.
@@ -197,7 +197,7 @@ export default function FiltersForm({
     if (open && Object.keys(filters.values).length === 0) {
       handleAddFilter();
     }
-  }, [filters.values, open]);
+  }, [filters.values, open, handleAddFilter]);
 
   const filterValuesList = useMemo(() => Object.values(filters.values), [filters.values]);
 
