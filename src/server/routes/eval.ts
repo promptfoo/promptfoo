@@ -168,9 +168,13 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const { id } = req.params;
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
-  const filter = String(req.query.filter || 'all');
+  const filterMode = String(req.query.filterMode || 'all');
   const searchText = req.query.search ? String(req.query.search) : '';
-  const metricFilter = req.query.metric ? String(req.query.metric) : '';
+  const filters = Array.isArray(req.query.filter)
+    ? req.query.filter
+    : typeof req.query.filter === 'string'
+      ? [req.query.filter]
+      : [];
 
   const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
     ? req.query.comparisonEvalIds
@@ -187,9 +191,9 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const table = await eval_.getTablePage({
     offset,
     limit,
-    filterMode: filter as any,
+    filterMode,
     searchQuery: searchText,
-    metricFilter,
+    filters,
   });
 
   const indices = table.body.map((row) => row.testIdx);
@@ -197,7 +201,6 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   let returnTable = { head: table.head, body: table.body };
 
   if (comparisonEvalIds.length > 0) {
-    console.log('comparisonEvalIds', comparisonEvalIds);
     const comparisonEvals = await Promise.all(
       comparisonEvalIds.map(async (comparisonEvalId) => {
         const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
@@ -219,7 +222,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           filterMode: 'all',
           testIndices: indices,
           searchQuery: searchText,
-          metricFilter,
+          filters,
         });
       }),
     );

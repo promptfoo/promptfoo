@@ -14,7 +14,6 @@ import {
   Stack,
   Divider,
 } from '@mui/material';
-import { v4 as uuidv4 } from 'uuid';
 import { useTableStore, type ResultsFilter } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
@@ -181,7 +180,6 @@ export default function FiltersForm({
    */
   const handleAddFilter = () => {
     addFilter({
-      id: uuidv4(),
       type: 'metric',
       operator: 'equals',
       value: '',

@@ -719,9 +719,6 @@ export default function ResultsView({
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
-        // TODO: Handle this.
-        selectedMetric={null}
-        onMetricFilter={() => {}}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

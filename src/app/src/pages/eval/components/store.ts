@@ -1,6 +1,7 @@
 import { callApi } from '@app/utils/api';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import type { VisibilityState } from '@tanstack/table-core';
+import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
@@ -44,8 +45,8 @@ interface FetchEvalOptions {
   pageSize?: number;
   filterMode?: FilterMode;
   searchText?: string;
-  selectedMetric?: string | null;
   skipSettingEvalId?: boolean;
+  filters?: ResultsFilter[];
 }
 
 interface ColumnState {
@@ -68,7 +69,7 @@ export type ResultsFilter = {
   type: ResultsFilterType;
   value: string;
   operator: 'equals';
-  logicOperator?: 'and' | 'or';
+  logicOperator: 'and' | 'or';
 };
 
 interface TableState {
@@ -103,7 +104,7 @@ interface TableState {
    * Adds a new filter to the filters array.
    * @param filter - The filter to add.
    */
-  addFilter: (filter: ResultsFilter) => void;
+  addFilter: (filter: Omit<ResultsFilter, 'id' | 'logicOperator'>) => void;
 
   /**
    * Removes a filter from the filters array.
@@ -127,7 +128,7 @@ interface TableState {
      * The filters that are currently defined. Note that a filter is only applied once it has
      * a non-empty string value defined.
      */
-    values: { [id: ResultsFilter['id']]: ResultsFilter };
+    values: Record<ResultsFilter['id'], ResultsFilter>;
     /**
      * The number of filters that have a value i.e. they're applied.
      */
@@ -287,8 +288,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
       pageSize = 50,
       filterMode = 'all',
       searchText = '',
-      selectedMetric = null,
       skipSettingEvalId = false,
+      filters = [],
     } = options;
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
@@ -298,15 +299,35 @@ export const useTableStore = create<TableState>()((set, get) => ({
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
 
-      const url = `/eval/${id}/table?offset=${pageIndex * pageSize}&limit=${pageSize}&filter=${filterMode}${
-        comparisonEvalIds.length > 0
-          ? `&comparisonEvalIds=${comparisonEvalIds.join('&comparisonEvalIds=')}`
-          : ''
-      }${searchText ? `&search=${encodeURIComponent(searchText)}` : ''}${
-        selectedMetric ? `&metric=${encodeURIComponent(selectedMetric)}` : ''
-      }`;
+      const url = new URL(
+        `/eval/${id}/table`,
+        // URL constructor expects a valid url
+        window.location.origin,
+      );
 
-      const resp = await callApi(url);
+      url.searchParams.set('offset', (pageIndex * pageSize).toString());
+      url.searchParams.set('limit', pageSize.toString());
+      url.searchParams.set('filterMode', filterMode);
+
+      comparisonEvalIds.forEach((evalId) => {
+        url.searchParams.append('comparisonEvalIds', evalId);
+      });
+
+      if (searchText) {
+        url.searchParams.set('search', searchText);
+      }
+
+      filters.forEach((filter) => {
+        url.searchParams.append(
+          'filter',
+          `${filter.logicOperator}:${filter.type}:${filter.operator}:${filter.value}`,
+        );
+      });
+
+      const resp = await callApi(
+        // Remove the origin as it was only added to satisfy the URL constructor.
+        url.toString().replace(window.location.origin, ''),
+      );
 
       if (resp.ok) {
         const data = (await resp.json()) as EvalTableDTO;
@@ -349,16 +370,28 @@ export const useTableStore = create<TableState>()((set, get) => ({
     },
   },
 
-  addFilter: (filter: ResultsFilter) => {
-    set((prevState) => ({
-      filters: {
-        ...prevState.filters,
-        values: {
-          ...prevState.filters.values,
-          [filter.id]: filter,
+  addFilter: (filter: Omit<ResultsFilter, 'id' | 'logicOperator'>) => {
+    const filterId = uuidv4();
+
+    set((prevState) => {
+      const appliedCount = prevState.filters.appliedCount + (filter.value ? 1 : 0);
+
+      return {
+        filters: {
+          ...prevState.filters,
+          values: {
+            ...prevState.filters.values,
+            [filterId]: {
+              ...filter,
+              id: filterId,
+              // Default to 'and' logic operator.
+              logicOperator: 'and',
+            },
+          },
+          appliedCount,
         },
-      },
-    }));
+      };
+    });
   },
 
   removeFilter: (id: ResultsFilter['id']) => {

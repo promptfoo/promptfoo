@@ -122,8 +122,6 @@ interface ResultsTableProps {
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
-  selectedMetric?: string | null;
-  onMetricFilter?: (metric: string | null) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -173,8 +171,6 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
-  selectedMetric,
-  onMetricFilter,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -185,6 +181,8 @@ function ResultsTable({
     filteredResultsCount,
     fetchEvalData,
     isFetching,
+    filters,
+    addFilter,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -366,7 +364,7 @@ function ResultsTable({
 
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -402,7 +400,7 @@ function ResultsTable({
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      selectedMetric,
+      filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -412,8 +410,10 @@ function ResultsTable({
     filterMode,
     comparisonEvalIds,
     debouncedSearchText,
-    selectedMetric,
     fetchEvalData,
+    filters.values,
+    // Ensure this re-triggers for filter CxUD operations.
+    filters.appliedCount,
   ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
@@ -594,11 +594,20 @@ function ResultsTable({
 
   const handleMetricFilter = React.useCallback(
     (metric: string | null) => {
-      if (onMetricFilter) {
-        onMetricFilter(metric);
+      // TODO(Will): Handle this state; clicking a metric disables the filter?
+      if (!metric) {
+        return;
       }
+
+      console.log('handleMetricFilter', metric);
+
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value: metric,
+      });
     },
-    [onMetricFilter],
+    [addFilter],
   );
 
   const promptColumns = React.useMemo(() => {
@@ -835,7 +844,7 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    selectedMetric,
+    filters.appliedCount,
     handleMetricFilter,
   ]);
 
@@ -994,7 +1003,7 @@ function ResultsTable({
 
       {filteredResultsCount === 0 &&
         !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
+        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
           <Box
             sx={{
               padding: '20px',
