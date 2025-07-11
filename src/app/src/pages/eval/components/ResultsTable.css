@@ -6,10 +6,16 @@ pre {
   font-weight: bold;
 }
 
+.results-table-container {
+  overflow-x: scroll;
+  margin: 0 -1rem;
+  padding: 0 1rem;
+}
+
 table.results-table,
 .divTable {
   border-collapse: collapse;
-  width: 100%;
+  min-width: 100%;
   margin: 1rem 0;
   background-color: #fff;
 }
