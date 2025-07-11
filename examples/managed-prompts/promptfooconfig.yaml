@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Example of using managed prompts in evaluations
+description: "Managed prompts example"
+
+prompts:
+  # Reference managed prompts using pf:// prefix
+  - pf://customer-support          # Uses current version
+  - pf://customer-support:1         # Uses specific version (v1)
+  - pf://customer-support:production # Uses version deployed to production
+  
+  # You can also mix managed prompts with regular prompts
+  - "You are a helpful assistant. {{query}}"
+  
+  # Or reference prompt files
+  - file://prompts/baseline.txt
+
+providers:
+  - openai:gpt-4o-mini
+  - anthropic:messages:claude-3-5-sonnet-20241022
+
+tests:
+  - vars:
+      query: "How do I reset my password?"
+      company: "Acme Corp"
+    assert:
+      - type: icontains
+        value: "password"
+      - type: llm-rubric
+        value: "Response should be helpful and provide clear steps"
+
+  - vars:
+      query: "I want to cancel my subscription"
+      company: "Acme Corp"
+    assert:
+      - type: icontains
+        value: "cancel"
+      - type: llm-rubric
+        value: "Response should be empathetic and offer alternatives"
+
+  - vars:
+      query: "What are your business hours?"
+      company: "Acme Corp"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention specific hours or how to find them" 

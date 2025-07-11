@@ -272,10 +272,10 @@ export const managedPromptsTable = sqliteTable(
     currentVersion: integer('current_version').notNull().default(1),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .default(sql`(unixepoch())`),
     updatedAt: integer('updated_at')
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .default(sql`(unixepoch())`),
     author: text('author'),
   },
   (table) => ({
@@ -296,7 +296,7 @@ export const promptVersionsTable = sqliteTable(
     author: text('author'),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .default(sql`(unixepoch())`),
     notes: text('notes'),
   },
   (table) => ({
@@ -317,7 +317,7 @@ export const promptDeploymentsTable = sqliteTable(
       .references(() => promptVersionsTable.id),
     updatedAt: integer('updated_at')
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .default(sql`(unixepoch())`),
     updatedBy: text('updated_by'),
   },
   (table) => ({

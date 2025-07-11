@@ -12,6 +12,8 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import type { ManagedPromptWithVersions } from '../../types/prompt-management';
 
+const VALID_ID_REGEX = /^[a-zA-Z0-9-_]+$/;
+
 // Helper function to get prompt with versions
 async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWithVersions | null> {
   const db = getDb();
@@ -104,6 +106,14 @@ promptsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     const { id, description, content, notes } = req.body;
     const author = getUserEmail() || 'unknown';
     const db = getDb();
+
+    // Validate prompt ID
+    if (!id || !VALID_ID_REGEX.test(id)) {
+      res.status(400).json({ 
+        error: 'Invalid prompt ID. Must contain only letters, numbers, hyphens, and underscores.' 
+      });
+      return;
+    }
 
     // Check if prompt already exists
     const existing = await db

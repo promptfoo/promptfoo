@@ -18,6 +18,7 @@ import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
+import { processManagedPrompt } from './processors/managed';
 import { processMarkdownFile } from './processors/markdown';
 import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
@@ -102,6 +103,11 @@ export async function processPrompt(
   // Handling when the prompt is a raw function (e.g. javascript function)
   if (prompt.function) {
     return [prompt as Prompt];
+  }
+
+  // Handle managed prompts with pf:// prefix
+  if (prompt.raw.startsWith('pf://')) {
+    return processManagedPrompt(prompt);
   }
 
   if (!maybeFilePath(prompt.raw)) {

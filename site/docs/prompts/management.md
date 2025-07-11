@@ -219,9 +219,9 @@ Reference managed prompts in your evaluation configs:
 ```yaml
 # promptfooconfig.yaml
 prompts:
-  - managed:customer-support      # Uses current version
-  - managed:customer-support:v2   # Uses specific version
-  - managed:customer-support:prod # Uses production deployment
+  - pf://customer-support       # Uses current version
+  - pf://customer-support:2     # Uses specific version
+  - pf://customer-support:prod  # Uses production deployment
 
 providers:
   - openai:gpt-4

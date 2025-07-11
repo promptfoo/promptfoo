@@ -4,8 +4,8 @@ CREATE TABLE `managed_prompts` (
   `description` text,
   `tags` text,
   `current_version` integer DEFAULT 1 NOT NULL,
-  `created_at` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  `updated_at` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  `created_at` integer DEFAULT (unixepoch()) NOT NULL,
+  `updated_at` integer DEFAULT (unixepoch()) NOT NULL,
   `author` text
 );
 --> statement-breakpoint
@@ -17,7 +17,7 @@ CREATE TABLE `prompt_versions` (
   `version` integer NOT NULL,
   `content` text NOT NULL,
   `author` text,
-  `created_at` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  `created_at` integer DEFAULT (unixepoch()) NOT NULL,
   `notes` text,
   FOREIGN KEY (`prompt_id`) REFERENCES `managed_prompts`(`id`) ON DELETE CASCADE
 );
@@ -28,7 +28,7 @@ CREATE TABLE `prompt_deployments` (
   `prompt_id` text NOT NULL,
   `environment` text NOT NULL,
   `version_id` text NOT NULL,
-  `updated_at` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  `updated_at` integer DEFAULT (unixepoch()) NOT NULL,
   `updated_by` text,
   PRIMARY KEY(`prompt_id`, `environment`),
   FOREIGN KEY (`prompt_id`) REFERENCES `managed_prompts`(`id`) ON DELETE CASCADE,
