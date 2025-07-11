@@ -157,7 +157,7 @@ A new [System Prompt Override plugin](/docs/red-team/plugins/system-prompt-overr
 
 Real attacks rarely succeed in a single message. We've enhanced our attack strategies to better simulate how bad actors actually try to manipulate AI systems through extended, adaptive conversations:
 
-1. **Enhanced [GOAT](/docs/red-team/strategies/goat/) and [Crescendo](/docs/red-team/strategies/crescendo/)** - Now include intelligent agents that can:
+1. **Enhanced [GOAT](/docs/red-team/strategies/goat/) and [Crescendo](/docs/red-team/strategies/multi-turn/)** - Now include intelligent agents that can:
    - Navigate multi-step verification processes
    - Respond to intermediate prompts like "confirm your account"
    - Handle conditional logic in conversations
