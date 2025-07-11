@@ -54,7 +54,11 @@ promptfoo init --example google-aistudio-gemini
 2. Run the example:
 
 ```sh
+# Basic example
 promptfoo eval
+
+# Example with image understanding
+promptfoo eval -c promptfooconfig.image.yaml
 ```
 
 Afterwards, you can view the results by running `promptfoo view`
