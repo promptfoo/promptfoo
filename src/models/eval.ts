@@ -449,7 +449,7 @@ export default class Eval {
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
       opts.filters.forEach((filter) => {
-        const [logicOperator, type, operator, value] = filter.split(':');
+        const { logicOperator, type, operator, value } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {

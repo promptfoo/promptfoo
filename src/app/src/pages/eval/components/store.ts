@@ -325,7 +325,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
       filters.forEach((filter) => {
         url.searchParams.append(
           'filter',
-          `${filter.logicOperator}:${filter.type}:${filter.operator}:${filter.value}`,
+          JSON.stringify({
+            logicOperator: filter.logicOperator,
+            type: filter.type,
+            operator: filter.operator,
+            value: filter.value,
+          }),
         );
       });
 
