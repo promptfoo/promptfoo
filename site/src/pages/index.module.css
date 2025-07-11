@@ -783,7 +783,8 @@
 
 .asSeenOnSection {
   padding: 4rem 0 6rem;
-  background-color: var(--ifm-background-surface-color);
+  /* Removed background-color - using page-level gradient instead */
+  background: transparent;
 }
 
 .asSeenOnSection h2 {
@@ -947,11 +948,8 @@
 }
 
 [data-theme='dark'] .asSeenOnSection {
-  background: linear-gradient(
-    to bottom,
-    var(--ifm-background-color),
-    var(--ifm-background-surface-color)
-  );
+  /* Removed background gradient - using page-level gradient instead */
+  background: transparent;
 }
 
 [data-theme='dark'] .asSeenOnCard {
