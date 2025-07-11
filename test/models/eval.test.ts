@@ -449,13 +449,14 @@ describe('evaluator', () => {
 
     it('should filter by specific metrics', async () => {
       // This test requires setting up results with named scores in the eval factory
-      const metricName = 'accuracy';
-      const result = await evalWithResults.getTablePage({ metricFilter: metricName });
+      const result = await evalWithResults.getTablePage({
+        filters: ['and:metric:equals:accuracy'],
+      });
 
       // All results should have the specified metric
       for (const row of result.body) {
         const hasMetric = row.outputs.some(
-          (output) => output.namedScores && output.namedScores[metricName] !== undefined,
+          (output) => output.namedScores && output.namedScores['accuracy'] !== undefined,
         );
         expect(hasMetric).toBe(true);
       }
@@ -465,13 +466,31 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({
         filterMode: 'passes',
         searchQuery: 'searchable_content',
-        metricFilter: 'relevance',
+        filters: ['and:metric:equals:relevance'],
         limit: 10,
       });
 
       // Results should satisfy all conditions and respect limit
       expect(result.body.length).toBeLessThanOrEqual(10);
       expect(result.filteredCount).toBeLessThan(result.totalCount);
+    });
+
+    it('should be filterable by multiple metrics', async () => {
+      const result = await evalWithResults.getTablePage({
+        filters: ['or:metric:equals:accuracy', 'or:metric:equals:relevance'],
+      });
+
+      // Row should have both metrics
+      for (const row of result.body) {
+        const hasMetric1 = row.outputs.some(
+          (output) => output.namedScores && output.namedScores['accuracy'] !== undefined,
+        );
+        const hasMetric2 = row.outputs.some(
+          (output) => output.namedScores && output.namedScores['relevance'] !== undefined,
+        );
+        expect(hasMetric1).toBe(true);
+        expect(hasMetric2).toBe(true);
+      }
     });
 
     it('should return correct counts for filtered results', async () => {

@@ -446,7 +446,6 @@ export default class Eval {
     }
 
     // Add filters
-    console.log('filters', opts.filters);
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
       opts.filters.forEach((filter) => {
@@ -525,7 +524,7 @@ export default class Eval {
     filterMode?: string;
     testIndices?: number[];
     searchQuery?: string;
-    filters: string[];
+    filters?: string[];
   }): Promise<{
     head: { prompts: Prompt[]; vars: string[] };
     body: EvaluateTableRow[];
