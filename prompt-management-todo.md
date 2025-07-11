@@ -5,6 +5,7 @@
 ### ✅ Completed Features
 
 #### Core Functionality
+
 - [x] **Database schema and migrations** - Tables for managed prompts, versions, and deployments
 - [x] **Type definitions** - Complete TypeScript interfaces for prompt management
 - [x] **PromptManager service** - Dual-mode (local/cloud) implementation with full CRUD operations
@@ -15,6 +16,7 @@
 - [x] **pf:// protocol integration** - Reference managed prompts in configs (e.g., `pf://my-prompt:v2`)
 
 #### Integration & Features
+
 - [x] **Documentation** - Comprehensive guide at `site/docs/prompts/management.md`
 - [x] **Telemetry tracking** - Usage analytics for all prompt operations
 - [x] **Usage statistics** - Display usage count in prompt list UI
@@ -25,23 +27,26 @@
 - [x] **Export to index.ts** - Programmatic access via `import { prompts } from 'promptfoo'`
 
 - [x] **LLM-powered prompt testing** - Smart variable suggestions and auto-detection
-   - Auto-detects variables from prompt template
-   - Suggests test values based on context using AI
-   - Fallback suggestions when LLM unavailable
-   - Variable detection shown on creation page
+  - Auto-detects variables from prompt template
+  - Suggests test values based on context using AI
+  - Fallback suggestions when LLM unavailable
+  - Variable detection shown on creation page
 
 #### Partial Implementation
+
 - [x] **Re-run eval with different version** - Version selector dialog implemented, navigates to setup page
 
 ### 🚧 Remaining Core Features
 
 #### High Priority
+
 1. [ ] **Cloud support** - Sync prompts to Promptfoo cloud service
    - Store prompts in cloud database
    - Multi-user collaboration features
    - Access control and permissions
 
 #### Medium Priority
+
 4. [ ] **Auto-suggest improvements** - AI-powered prompt optimization
    - Analyze test case failures
    - Suggest prompt modifications
@@ -53,6 +58,7 @@
    - User experience evaluation
 
 #### Low Priority
+
 6. [ ] **Git-like version control** - Advanced versioning features
    - Branching and merging
    - Conflict resolution

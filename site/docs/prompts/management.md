@@ -126,6 +126,21 @@ The web interface provides a convenient file upload feature:
 
 For CSV and JSON files containing multiple prompts, only the first prompt is imported. To manage multiple prompts, create them individually or use the bulk import feature.
 
+#### Variable Detection
+
+When creating or editing prompts, the system automatically detects variables in your template:
+
+- **Automatic Detection**: Scans for `{{variable}}` patterns in your prompt
+- **Visual Display**: Shows detected variables as chips below the editor
+- **Validation**: Helps ensure all variables are properly documented
+- **Usage Guidance**: Indicates which values will be needed during testing
+
+This feature helps you:
+- Quickly identify all variables in complex prompts
+- Ensure consistent variable naming
+- Document requirements for prompt users
+- Prepare test cases with the right variables
+
 ### Prompt Format
 
 Prompts support Nunjucks templating for variables:
@@ -232,6 +247,24 @@ tests:
       company: "Acme Corp"
 ```
 
+### Re-running Evaluations with Different Prompt Versions
+
+When viewing evaluation results that use managed prompts, you can easily re-run the same test cases with different prompt versions:
+
+1. **Access the Version Selector**: In the evaluation results page, click "Eval actions" → "Re-run with different prompt version"
+2. **Select Versions**: For each managed prompt in the evaluation:
+   - View the current version being used
+   - Select a new version from the dropdown (specific versions or environment deployments)
+   - Click "View Diff" to see changes between versions
+   - Access full version history with the "History" button
+3. **Re-run**: Click "Re-run with Selected Versions" to update the configuration and navigate to the setup page
+
+This feature is particularly useful for:
+- **A/B Testing**: Compare how different prompt versions perform on the same test cases
+- **Regression Testing**: Ensure new prompt versions don't break existing functionality
+- **Performance Comparison**: Evaluate improvements between prompt iterations
+- **Rollback Testing**: Quickly test previous versions if issues arise
+
 ### Testing Prompts
 
 The prompt management system includes a powerful testing interface that properly handles variables in your prompts.
@@ -254,25 +287,48 @@ promptfoo prompt test customer-support \
 
 #### Web UI Testing
 
-The web interface provides an interactive testing experience:
+The web interface provides an interactive testing experience with AI-powered assistance:
 
 1. **Variable Detection**: Automatically extracts all `{{variables}}` from your prompt template
 2. **Individual Inputs**: Provides separate input fields for each variable
-3. **Preview Mode**: Shows the rendered prompt with all variables replaced before testing
-4. **Rich Results**: Displays the provider response along with metadata like token usage and cost
+3. **Smart Variable Suggestions**: AI-powered suggestions for test values based on prompt context
+4. **Preview Mode**: Shows the rendered prompt with all variables replaced before testing
+5. **Rich Results**: Displays the provider response along with metadata like token usage and cost
 
-To test a prompt in the UI:
+##### Smart Variable Suggestions
+
+The testing interface includes an intelligent variable suggestion feature that helps you quickly generate realistic test values:
+
+- **Context-Aware**: Analyzes your prompt content to suggest relevant values
+- **Multiple Options**: Provides 3-5 suggestions per variable
+- **One-Click Application**: Apply individual suggestions or all at once
+- **Intelligent Fallbacks**: Works even without LLM access using pattern matching
+
+For example, if your prompt contains:
+```text
+You are a {{role}} assistant helping with {{task}}.
+The user's name is {{userName}} and they work at {{company}}.
+```
+
+The system might suggest:
+- **role**: "customer support", "technical", "sales", "general"
+- **task**: "troubleshooting", "product information", "billing inquiry"
+- **userName**: "Alice Johnson", "Bob Smith", "Charlie Brown"
+- **company**: "Acme Corp", "Tech Solutions Inc", "Global Enterprises"
+
+To use smart suggestions:
 1. Navigate to a prompt and click "Test"
-2. Select the version and provider from a comprehensive list
-3. Fill in values for each variable
-4. Click "Preview Prompt" to see the final rendered prompt
-5. Click "Run Test" to execute
+2. Click "Generate" in the Smart Variable Suggestions section
+3. Review the AI-generated suggestions for each variable
+4. Click on any suggestion to select it
+5. Apply individual suggestions or click "Apply All"
 
 The test feature properly handles:
 - Multiple variables with individual inputs
 - Complex templates with conditional logic
 - Different provider configurations
 - Token usage and cost tracking
+- Automatic variable detection and suggestions
 
 The provider selection includes models from:
 - OpenAI (GPT-4.1, GPT-4o, o3/o4 with thinking capabilities)

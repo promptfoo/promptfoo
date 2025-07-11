@@ -239,7 +239,7 @@ export function createApp() {
 
   app.post('/api/generate', async (req: Request, res: Response): Promise<void> => {
     const { prompt, systemPrompt, provider = 'openai:gpt-3.5-turbo', temperature = 0.7 } = req.body;
-    
+
     if (!prompt) {
       res.status(400).json({ error: 'Prompt is required' });
       return;
@@ -248,18 +248,20 @@ export function createApp() {
     try {
       // Import providers dynamically to avoid circular dependencies
       const { loadApiProviders } = await import('../providers');
-      const providers = await loadApiProviders([{
-        id: provider,
-        config: { temperature },
-      }]);
-      
+      const providers = await loadApiProviders([
+        {
+          id: provider,
+          config: { temperature },
+        },
+      ]);
+
       if (providers.length === 0) {
         res.status(400).json({ error: 'Failed to load provider' });
         return;
       }
 
       const apiProvider = providers[0];
-      
+
       // Prepare the prompt based on whether it's a chat or completion model
       let finalPrompt: string | any[];
       if (provider.includes('gpt') || provider.includes('claude') || provider.includes('gemini')) {
@@ -275,7 +277,7 @@ export function createApp() {
       }
 
       const result = await apiProvider.callApi(finalPrompt);
-      
+
       if (result.error) {
         res.status(500).json({ error: result.error });
         return;

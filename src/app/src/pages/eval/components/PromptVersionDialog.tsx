@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import LaunchIcon from '@mui/icons-material/Launch';
@@ -27,11 +27,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
-import type { 
-  ManagedPromptWithVersions, 
-  PromptVersion,
-  EvaluateTable 
-} from '@promptfoo/types';
+import type { ManagedPromptWithVersions, PromptVersion, EvaluateTable } from '@promptfoo/types';
 
 interface PromptVersionDialogProps {
   open: boolean;
@@ -95,27 +91,27 @@ export default function PromptVersionDialog({
 
       // Fetch version info for each managed prompt
       const selections: PromptVersionSelection[] = [];
-      
+
       for (const ref of managedPromptRefs) {
         try {
           const response = await callApi(`/managed-prompts/${ref.promptId}`);
           if (response.ok) {
             const prompt: ManagedPromptWithVersions = await response.json();
-            
+
             // Determine current version
             let currentVersion = ref.versionOrEnv;
             if (currentVersion === 'current') {
               currentVersion = `v${prompt.currentVersion}`;
             } else if (!/^v?\d+$/.test(currentVersion)) {
               // It's an environment name, find the deployed version
-              const deployment = prompt.deployments?.find(d => d.environment === currentVersion);
+              const deployment = prompt.deployments?.find((d) => d.environment === currentVersion);
               if (deployment) {
                 currentVersion = `v${deployment.version}`;
               }
             }
 
             // Get environment deployments
-            const environments = (prompt.deployments || []).map(d => ({
+            const environments = (prompt.deployments || []).map((d) => ({
               name: d.environment,
               version: d.version,
             }));
@@ -143,17 +139,15 @@ export default function PromptVersionDialog({
   };
 
   const handleVersionChange = (promptId: string, newVersion: string) => {
-    setPromptSelections(prev =>
-      prev.map(selection =>
-        selection.promptId === promptId
-          ? { ...selection, selectedVersion: newVersion }
-          : selection
-      )
+    setPromptSelections((prev) =>
+      prev.map((selection) =>
+        selection.promptId === promptId ? { ...selection, selectedVersion: newVersion } : selection,
+      ),
     );
   };
 
   const handleViewDiff = (promptId: string) => {
-    const selection = promptSelections.find(s => s.promptId === promptId);
+    const selection = promptSelections.find((s) => s.promptId === promptId);
     if (selection) {
       const v1 = selection.currentVersion.replace(/^v/, '');
       const v2 = selection.selectedVersion.replace(/^v/, '');
@@ -166,14 +160,14 @@ export default function PromptVersionDialog({
     try {
       // Create a new config with updated prompt versions
       const updatedConfig = { ...evalConfig };
-      
+
       // Update prompts array with new versions
       updatedConfig.prompts = evalTable.head.prompts.map((prompt) => {
         if (prompt.raw?.startsWith('pf://')) {
           const match = prompt.raw.match(/^pf:\/\/([^:]+)(?::(.+))?$/);
           if (match) {
             const promptId = match[1];
-            const selection = promptSelections.find(s => s.promptId === promptId);
+            const selection = promptSelections.find((s) => s.promptId === promptId);
             if (selection && selection.selectedVersion !== selection.currentVersion) {
               // Update to new version
               const versionNum = selection.selectedVersion.replace(/^v/, '');
@@ -186,14 +180,13 @@ export default function PromptVersionDialog({
 
       // Use the eval config store to set the configuration
       setStateFromConfig(updatedConfig);
-      
+
       showToast('Configuration updated. Redirecting to setup...', 'success');
-      
+
       // Navigate to setup page to run the eval
       setTimeout(() => {
         navigate('/setup/');
       }, 500);
-      
     } catch (error) {
       showToast('Failed to update configuration', 'error');
       console.error('Error updating config:', error);
@@ -203,7 +196,7 @@ export default function PromptVersionDialog({
   };
 
   const hasChanges = promptSelections.some(
-    selection => selection.selectedVersion !== selection.currentVersion
+    (selection) => selection.selectedVersion !== selection.currentVersion,
   );
 
   return (
@@ -212,16 +205,11 @@ export default function PromptVersionDialog({
         <Stack direction="row" alignItems="center" spacing={2}>
           <Typography variant="h6">Select Prompt Versions</Typography>
           {hasChanges && (
-            <Chip
-              label="Changes pending"
-              color="primary"
-              size="small"
-              icon={<CheckCircleIcon />}
-            />
+            <Chip label="Changes pending" color="primary" size="small" icon={<CheckCircleIcon />} />
           )}
         </Stack>
       </DialogTitle>
-      
+
       <DialogContent>
         {loading ? (
           <Box display="flex" justifyContent="center" p={4}>
@@ -247,11 +235,7 @@ export default function PromptVersionDialog({
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={selection.currentVersion}
-                        size="small"
-                        variant="outlined"
-                      />
+                      <Chip label={selection.currentVersion} size="small" variant="outlined" />
                     </TableCell>
                     <TableCell>
                       <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -262,7 +246,7 @@ export default function PromptVersionDialog({
                           <MenuItem value={`v${selection.availableVersions[0]?.version}`}>
                             <em>Latest (v{selection.availableVersions[0]?.version})</em>
                           </MenuItem>
-                          
+
                           {selection.environments.length > 0 && (
                             <MenuItem disabled>
                               <Typography variant="caption" color="text.secondary">
@@ -275,7 +259,7 @@ export default function PromptVersionDialog({
                               {env.name} (v{env.version})
                             </MenuItem>
                           ))}
-                          
+
                           <MenuItem disabled>
                             <Typography variant="caption" color="text.secondary">
                               All Versions
@@ -285,11 +269,7 @@ export default function PromptVersionDialog({
                             <MenuItem key={version.version} value={`v${version.version}`}>
                               v{version.version}
                               {version.notes && (
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ ml: 1 }}
-                                >
+                                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
                                   - {version.notes.substring(0, 30)}...
                                 </Typography>
                               )}
@@ -311,7 +291,9 @@ export default function PromptVersionDialog({
                         <Button
                           size="small"
                           startIcon={<LaunchIcon />}
-                          onClick={() => window.open(`/prompts/${selection.promptId}/history`, '_blank')}
+                          onClick={() =>
+                            window.open(`/prompts/${selection.promptId}/history`, '_blank')
+                          }
                         >
                           History
                         </Button>
@@ -323,7 +305,7 @@ export default function PromptVersionDialog({
             </Table>
           </TableContainer>
         )}
-        
+
         {!loading && promptSelections.length > 0 && (
           <Box mt={2}>
             <Typography variant="body2" color="text.secondary">
@@ -333,7 +315,7 @@ export default function PromptVersionDialog({
           </Box>
         )}
       </DialogContent>
-      
+
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button
@@ -347,4 +329,4 @@ export default function PromptVersionDialog({
       </DialogActions>
     </Dialog>
   );
-} 
+}
