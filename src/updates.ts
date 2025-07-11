@@ -33,9 +33,9 @@ ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(
         VERSION,
       )} is lower than the latest available version ${chalk.green(latestVersion)}.
 
-Please run ${chalk.green('npx promptfoo@latest')} or ${chalk.green(
-        'npm install -g promptfoo@latest',
-      )} to update.
+Please run ${chalk.green('promptfoo upgrade')} to update.
+
+For npx users: ${chalk.green('npx promptfoo@latest')}
 ${border}\n`,
     );
     return true;

@@ -213,6 +213,35 @@ promptfoo validate -c config1.yaml config2.yaml
 
 The command will exit with code `1` if validation fails, making it useful for CI/CD pipelines to catch configuration errors early.
 
+## `promptfoo upgrade`
+
+Upgrade promptfoo to the latest version or a specific version. Automatically detects your installation method (npm, yarn, pnpm, homebrew, or npx) and uses the appropriate upgrade command.
+
+| Option                | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `--version <version>` | Upgrade to a specific version                       |
+| `--check`             | Check for updates without upgrading                 |
+| `--force`             | Force upgrade even if already on the target version |
+| `--dry-run`           | Show what would be done without actually upgrading  |
+
+Examples:
+
+```sh
+# Upgrade to the latest version
+promptfoo upgrade
+
+# Check if updates are available
+promptfoo upgrade --check
+
+# Upgrade to a specific version
+promptfoo upgrade --version 0.75.0
+
+# See what would happen without actually upgrading
+promptfoo upgrade --dry-run
+```
+
+Note: If you're using npx, the command will provide instructions for upgrading since npx installations are managed differently. Binary installations must be upgraded manually by downloading from the GitHub releases page.
+
 ## `promptfoo scan-model`
 
 Scan ML models for security vulnerabilities. Provide one or more paths to model files or directories.
