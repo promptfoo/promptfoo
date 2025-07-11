@@ -169,12 +169,14 @@ export default function FiltersForm({
   const { filters, addFilter, removeAllFilters } = useTableStore();
 
   /**
-   * Adds a new filter with default values (an unapplied metric filter).
+   * Adds a new filter with default values.
    */
   const handleAddFilter = () => {
     addFilter({
       type: 'metric',
       operator: 'equals',
+      // By default, the value is empty, which means the filter is not applied.
+      // In other words, the filter is not applied until the user selects a value.
       value: '',
     });
   };
