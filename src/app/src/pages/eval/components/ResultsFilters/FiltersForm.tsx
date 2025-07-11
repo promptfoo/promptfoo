@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -14,6 +14,7 @@ import {
   Stack,
   Divider,
 } from '@mui/material';
+import { v4 as uuidv4 } from 'uuid';
 import { useTableStore, type ResultsFilter } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
@@ -66,9 +67,9 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      updateFilter({ ...value, type: filterType }, index);
+      updateFilter({ ...value, type: filterType });
     },
-    [value, index, updateFilter],
+    [value, updateFilter],
   );
 
   /**
@@ -77,9 +78,9 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
    */
   const handleOperatorChange = useCallback(
     (filterOperator: ResultsFilter['operator']) => {
-      updateFilter({ ...value, operator: filterOperator }, index);
+      updateFilter({ ...value, operator: filterOperator });
     },
-    [value, index, updateFilter],
+    [value, updateFilter],
   );
 
   /**
@@ -88,9 +89,9 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
    */
   const handleValueChange = useCallback(
     (filterValue: string) => {
-      updateFilter({ ...value, value: filterValue }, index);
+      updateFilter({ ...value, value: filterValue });
     },
-    [value, index, updateFilter],
+    [value, updateFilter],
   );
 
   /**
@@ -99,14 +100,14 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
    */
   const handleLogicOperatorChange = useCallback(
     (filterLogicOperator: ResultsFilter['logicOperator']) => {
-      updateFilter({ ...value, logicOperator: filterLogicOperator }, index);
+      updateFilter({ ...value, logicOperator: filterLogicOperator });
     },
-    [value, index, updateFilter],
+    [value, updateFilter],
   );
 
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
-      <IconButton onClick={() => removeFilter(index)}>
+      <IconButton onClick={() => removeFilter(value.id)}>
         <CloseIcon />
       </IconButton>
 
@@ -180,6 +181,7 @@ export default function FiltersForm({
    */
   const handleAddFilter = () => {
     addFilter({
+      id: uuidv4(),
       type: 'metric',
       operator: 'equals',
       value: '',
@@ -199,10 +201,12 @@ export default function FiltersForm({
    * the number of clicks required to create a filter.
    */
   useEffect(() => {
-    if (open && filters.values.length === 0) {
+    if (open && Object.keys(filters.values).length === 0) {
       handleAddFilter();
     }
-  }, [filters.values.length, handleAddFilter, open]);
+  }, [filters.values, handleAddFilter, open]);
+
+  const filterValuesList = useMemo(() => Object.values(filters.values), [filters.values]);
 
   return (
     <Popover
@@ -217,11 +221,11 @@ export default function FiltersForm({
       <Box sx={{ p: 2 }}>
         <Stack direction="column" spacing={1}>
           <Stack direction="column" spacing={1}>
-            {(filters.values ?? []).map((filter, index) => (
-              <Filter key={index} value={filter} index={index} />
+            {filterValuesList.map((filter, index) => (
+              <Filter key={filter.id} value={filter} index={index} />
             ))}
           </Stack>
-          {filters.values.length > 0 && <Divider />}
+          {filterValuesList.length > 0 && <Divider />}
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
             <Button startIcon={<AddIcon />} onClick={handleAddFilter}>
               Add Filter

@@ -61,6 +61,10 @@ export interface PaginationState {
 export type ResultsFilterType = 'metric';
 
 export type ResultsFilter = {
+  /**
+   * A unique identifier for the filter.
+   */
+  id: string;
   type: ResultsFilterType;
   value: string;
   operator: 'equals';
@@ -103,9 +107,9 @@ interface TableState {
 
   /**
    * Removes a filter from the filters array.
-   * @param index - The index of the filter to remove.
+   * @param id - The id of the filter to remove.
    */
-  removeFilter: (index: number) => void;
+  removeFilter: (id: ResultsFilter['id']) => void;
 
   /**
    * Removes all filters from the filters array.
@@ -115,16 +119,15 @@ interface TableState {
   /**
    * Updates a filter in the filters array.
    * @param filter - The filter to update.
-   * @param index - The index of the filter to update.
    */
-  updateFilter: (filter: ResultsFilter, index: number) => void;
+  updateFilter: (filter: ResultsFilter) => void;
 
   filters: {
     /**
      * The filters that are currently defined. Note that a filter is only applied once it has
      * a non-empty string value defined.
      */
-    values: ResultsFilter[];
+    values: { [id: ResultsFilter['id']]: ResultsFilter };
     /**
      * The number of filters that have a value i.e. they're applied.
      */
@@ -339,7 +342,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   },
 
   filters: {
-    values: [],
+    values: {},
     appliedCount: 0,
     options: {
       metric: [],
@@ -350,19 +353,25 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set((prevState) => ({
       filters: {
         ...prevState.filters,
-        values: [...prevState.filters.values, filter],
+        values: {
+          ...prevState.filters.values,
+          [filter.id]: filter,
+        },
       },
     }));
   },
 
-  removeFilter: (index: number) => {
+  removeFilter: (id: ResultsFilter['id']) => {
     set((prevState) => {
-      const target = prevState.filters.values[index];
+      const target = prevState.filters.values[id];
       const appliedCount = prevState.filters.appliedCount - (target.value ? 1 : 0);
+      const values = { ...prevState.filters.values };
+      delete values[id];
+
       return {
         filters: {
           ...prevState.filters,
-          values: prevState.filters.values.filter((_, i) => i !== index),
+          values,
           appliedCount,
         },
       };
@@ -373,22 +382,25 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set((prevState) => ({
       filters: {
         ...prevState.filters,
-        values: [],
+        values: {},
         appliedCount: 0,
       },
     }));
   },
 
-  updateFilter: (filter: ResultsFilter, index: number) => {
+  updateFilter: (filter: ResultsFilter) => {
     set((prevState) => {
-      const target = prevState.filters.values[index];
+      const target = prevState.filters.values[filter.id];
       const appliedCount =
         prevState.filters.appliedCount - (target.value ? 1 : 0) + (filter.value ? 1 : 0);
 
       return {
         filters: {
           ...prevState.filters,
-          values: prevState.filters.values.map((f, i) => (i === index ? filter : f)),
+          values: {
+            ...prevState.filters.values,
+            [filter.id]: filter,
+          },
           appliedCount,
         },
       };
