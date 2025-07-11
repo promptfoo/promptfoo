@@ -1,210 +1,129 @@
-import { zodResponseFormat } from 'openai/helpers/zod.mjs';
 import type { UnifiedConfig } from 'promptfoo';
+import { zodResponseFormat } from 'openai/helpers/zod.mjs';
 import { TranslationResponseSchema } from './src/schemas/translation-response';
 
 // Generate the response format for OpenAI
 const responseFormat = zodResponseFormat(TranslationResponseSchema, 'translation_response');
 
-// Helper function to clean schema for Gemini compatibility
-function cleanSchemaForGemini(schema: any): any {
-  if (typeof schema !== 'object' || schema === null) {
-    return schema;
-  }
-
+// Helper to adapt schema for Gemini (removes OpenAI-specific fields)
+function adaptSchemaForGemini(schema: any): any {
   const cleaned = { ...schema };
-
-  // Remove properties that Gemini doesn't support
   delete cleaned.additionalProperties;
   delete cleaned.$schema;
 
-  // Recursively clean nested objects
   if (cleaned.properties) {
     cleaned.properties = Object.fromEntries(
-      Object.entries(cleaned.properties).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
+      Object.entries(cleaned.properties).map(([key, value]) => [
+        key,
+        typeof value === 'object' ? adaptSchemaForGemini(value) : value,
+      ]),
     );
   }
 
   if (cleaned.items) {
-    cleaned.items = cleanSchemaForGemini(cleaned.items);
+    cleaned.items = adaptSchemaForGemini(cleaned.items);
   }
 
   return cleaned;
 }
 
-// Clean the schema for Gemini
-const geminiSchema = cleanSchemaForGemini(responseFormat.json_schema.schema);
-
 const config: UnifiedConfig = {
-  description: 'Translation with structured outputs using dynamic schemas',
+  description: 'Fun translation tests with structured outputs',
 
   prompts: [
-    `You are a professional translator. Translate the following text to {{language}} and provide a structured response with translation details.
+    `You are a creative translator who adds personality to translations.
 
-Text to translate: "{{body}}"
+Translate this to {{language}}: "{{text}}"
 
-Provide your response in the required JSON format with translation, confidence score, and any relevant cultural notes.`,
+Return a JSON response with your translation, confidence level, and any fun cultural notes.`,
   ],
 
   providers: [
     {
       id: 'openai:gpt-4o-mini',
-      label: 'GPT-4o Mini with Schema',
+      label: 'GPT-4o Mini (structured)',
       config: {
         response_format: responseFormat,
       },
     },
     {
+      id: 'anthropic:claude-3-5-sonnet-20241022',
+      label: 'Claude 3.5 Sonnet',
+      // Claude doesn't need special config for JSON
+    },
+    {
       id: 'google:gemini-2.0-flash-exp',
-      label: 'Gemini with Schema',
+      label: 'Gemini 2.0 Flash (structured)',
       config: {
         generationConfig: {
           response_mime_type: 'application/json',
-          response_schema: geminiSchema,
+          response_schema: adaptSchemaForGemini(responseFormat.json_schema.schema),
         },
       },
-    },
-    // Test without schema for comparison
-    {
-      id: 'openai:gpt-4o-mini',
-      label: 'GPT-4o Mini without Schema',
     },
   ],
 
   tests: [
     {
       vars: {
-        language: 'French',
-        body: 'Hello world',
+        language: 'Pirate speak',
+        text: "I can't find my coffee",
       },
       assert: [
         {
           type: 'javascript',
           value: `
-            // Handle both pure JSON and markdown-wrapped JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(output);
-            } catch (e) {
-              // Try to extract JSON from markdown code block
-              const jsonMatch = output.match(/\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\`/);
-              if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[1]);
-              } else {
-                return false;
-              }
-            }
-            return parsed.translation && parsed.language === 'French' && parsed.confidence >= 0;
-          `,
-        },
-        {
-          type: 'javascript',
-          value: `
-            // Handle both pure JSON and markdown-wrapped JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(output);
-            } catch (e) {
-              const jsonMatch = output.match(/\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\`/);
-              if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[1]);
-              } else {
-                return false;
-              }
-            }
-            const translation = parsed.translation.toLowerCase();
-            return translation.includes('bonjour') || translation.includes('salut');
+            // Handle both object and string outputs
+            const parsed = typeof output === 'object' ? output : 
+                          JSON.parse(output.replace(/^\`\`\`json\\s*|\\s*\`\`\`$/g, ''));
+            return parsed.translation && 
+                   parsed.language.toLowerCase().includes('pirate') &&
+                   (parsed.translation.toLowerCase().includes('arr') || 
+                    parsed.translation.toLowerCase().includes('matey') ||
+                    parsed.translation.toLowerCase().includes('ye'));
           `,
         },
       ],
     },
     {
       vars: {
-        language: 'Spanish',
-        body: "I'm hungry",
+        language: 'Shakespeare English',
+        text: 'This app is broken',
       },
       assert: [
         {
           type: 'javascript',
           value: `
-            // Handle both pure JSON and markdown-wrapped JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(output);
-            } catch (e) {
-              const jsonMatch = output.match(/\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\`/);
-              if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[1]);
-              } else {
-                return false;
-              }
-            }
-            return parsed.translation && parsed.language === 'Spanish' && parsed.confidence >= 0;
-          `,
-        },
-        {
-          type: 'javascript',
-          value: `
-            // Handle both pure JSON and markdown-wrapped JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(output);
-            } catch (e) {
-              const jsonMatch = output.match(/\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\`/);
-              if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[1]);
-              } else {
-                return false;
-              }
-            }
-            const translation = parsed.translation.toLowerCase();
-            return translation.includes('hambre') || translation.includes('hambriento');
+            const parsed = typeof output === 'object' ? output : 
+                          JSON.parse(output.replace(/^\`\`\`json\\s*|\\s*\`\`\`$/g, ''));
+            return parsed.translation && 
+                   (parsed.translation.toLowerCase().includes('thou') || 
+                    parsed.translation.toLowerCase().includes('thee') ||
+                    parsed.translation.toLowerCase().includes('doth') ||
+                    parsed.translation.toLowerCase().includes('hath'));
           `,
         },
       ],
     },
     {
       vars: {
-        language: 'Japanese',
-        body: 'Good morning',
+        language: 'Gen Z slang',
+        text: "That's really impressive",
       },
       assert: [
         {
           type: 'javascript',
           value: `
-            // Handle both pure JSON and markdown-wrapped JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(output);
-            } catch (e) {
-              const jsonMatch = output.match(/\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\`/);
-              if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[1]);
-              } else {
-                return false;
-              }
-            }
-            return parsed.translation && parsed.language === 'Japanese' && parsed.confidence >= 0;
-          `,
-        },
-        {
-          type: 'javascript',
-          value: `
-            // Handle both pure JSON and markdown-wrapped JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(output);
-            } catch (e) {
-              const jsonMatch = output.match(/\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\`/);
-              if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[1]);
-              } else {
-                return false;
-              }
-            }
-            // Check for common Japanese greetings
-            return parsed.translation.includes('おはよう') || 
-                   parsed.translation.includes('お早う') ||
-                   parsed.translation.includes('ohayou');
+            const parsed = typeof output === 'object' ? output : 
+                          JSON.parse(output.replace(/^\`\`\`json\\s*|\\s*\`\`\`$/g, ''));
+            const translation = parsed.translation.toLowerCase();
+            return parsed.translation && 
+                   parsed.confidence > 0 &&
+                   (translation.includes('slay') || 
+                    translation.includes('fire') ||
+                    translation.includes('bussin') ||
+                    translation.includes('lit') ||
+                    translation.includes('no cap'));
           `,
         },
       ],

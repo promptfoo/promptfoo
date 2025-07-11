@@ -1,4 +1,4 @@
-# ts-config (TypeScript Configuration Example for promptfoo)
+# ts-config (TypeScript Configuration Example)
 
 You can run this example with:
 
@@ -6,73 +6,66 @@ You can run this example with:
 npx promptfoo@latest init --example ts-config
 ```
 
-This guide demonstrates how to set up a TypeScript configuration for promptfoo using `promptfooconfig.ts`, including:
-
-- Basic TypeScript configuration with type safety
+This example demonstrates TypeScript configuration for promptfoo, including:
+- Type-safe configuration with IDE autocompletion
 - Dynamic schema generation using Zod
-- Reusing application schemas in test configurations
+- Fun translation examples with creative language styles
 
 ## Prerequisites
 
 - Node.js 20 or later
-- A TypeScript loader for Node.js such as `@swc-node/register` or `tsx`
+- TypeScript loader (`tsx` recommended)
 
 Install dependencies:
 
 ```bash
-npm install tsx zod openai
+npm install
 ```
 
-## Running the Evaluation
+## Running Examples
 
-### Basic Example
+### Basic TypeScript Configuration
 
 ```bash
-# Using tsx
-NODE_OPTIONS="--import tsx" promptfoo eval -c examples/ts-config/promptfooconfig.ts
+NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig.ts
 ```
 
-### Dynamic Schema Example
+This example translates text into fun language styles like Valley Girl speak, Medieval knight, and Baby Yoda using the latest 2025 models.
+
+### Dynamic Schema Generation
 
 ```bash
-# Using tsx with dynamic schema configuration
-NODE_OPTIONS="--import tsx" promptfoo eval -c examples/ts-config/promptfooconfig-with-schema.ts
+NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig-with-schema.ts
 ```
 
-View the results:
+This example shows structured JSON outputs with fun translations into Pirate speak, Shakespeare English, and Gen Z slang.
+
+View results:
 
 ```bash
 promptfoo view
 ```
 
-## Features Demonstrated
+## Examples Overview
 
-### Basic TypeScript Configuration
+### 1. Basic Configuration (`promptfooconfig.ts`)
 
-The `promptfooconfig.ts` file shows:
-
+Demonstrates:
 - Type-safe configuration using the `UnifiedConfig` type
-- Simple prompt templates with variables
-- Basic test cases
+- Multiple 2025 model providers (GPT-4o Mini, Claude 3.5 Sonnet, O3 Mini)
+- Fun translation examples with creative language styles
 
-### Dynamic Schema Generation
+### 2. Dynamic Schema Generation (`promptfooconfig-with-schema.ts`)
 
-The `promptfooconfig-with-schema.ts` file demonstrates:
+Shows advanced features:
+- Zod schema for structured translation responses
+- Automatic schema adaptation for different providers
+- Fun factor ratings and cultural notes in responses
+- Object-based assertions for structured outputs
 
-- Using Zod schemas from your application code
-- Dynamically generating response formats for different providers
-- Converting schemas between OpenAI and Gemini formats
-- Maintaining a single source of truth for data models
+## TypeScript Support
 
-This is particularly useful when:
-
-- Your application uses structured outputs with JSON schemas
-- You want to avoid duplicating schema definitions
-- You need to test the same prompts across different providers with different schema formats
-
-## TypeScript Support in Node.js
-
-- Currently, Node.js requires external loaders to run TypeScript files directly. However, future versions of Node.js are expected to include native TypeScript support:
-- Node.js 20 introduced the `--experimental-loader` flag for ES module.
-- The Node.js team is actively working on enhancing TypeScript integration.
-- Future versions may reduce or eliminate the need for external loaders.
+Node.js currently requires external loaders to run TypeScript files directly:
+- Node.js 20+ supports ES modules with the `--import` flag
+- The `tsx` loader provides the best developer experience
+- Future versions may include native TypeScript support

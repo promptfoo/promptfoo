@@ -1,16 +1,12 @@
 import { z } from 'zod';
 
-// Schema for structured translation responses
+// Fun schema for creative translation responses
 export const TranslationResponseSchema = z.object({
   translation: z.string().describe('The translated text'),
-  language: z.string().describe('The target language'),
-  confidence: z.number().min(0).max(1).describe('Confidence score of the translation'),
-  alternatives: z.array(z.string()).nullable().describe('Alternative translations if available'),
-  culturalNotes: z.string().nullable().describe('Cultural context or notes about the translation'),
-  formality: z
-    .enum(['informal', 'neutral', 'formal'])
-    .nullable()
-    .describe('The formality level of the translation'),
+  language: z.string().describe('The target language or style'),
+  confidence: z.number().min(0).max(1).describe('How confident the AI is (0-1)'),
+  funFactor: z.number().min(0).max(10).nullable().describe('Fun rating from 0-10'),
+  culturalNotes: z.string().nullable().describe('Any amusing cultural observations'),
 });
 
 export type TranslationResponse = z.infer<typeof TranslationResponseSchema>;
