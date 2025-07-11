@@ -108,3 +108,6 @@ redteam:
     - id: goat
       config:
         stateful: true
+    - id: mischievous-user
+      config:
+        stateful: true
