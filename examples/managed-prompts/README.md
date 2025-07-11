@@ -5,6 +5,7 @@ This example demonstrates how to use Promptfoo's managed prompts feature to vers
 ## What are Managed Prompts?
 
 Managed prompts allow you to:
+
 - Version control your prompts with full history
 - Deploy specific versions to different environments (dev, staging, production)
 - Reference prompts consistently across evaluations
@@ -13,21 +14,25 @@ Managed prompts allow you to:
 ## Quick Start
 
 1. **Create a managed prompt**:
+
 ```bash
 promptfoo prompt create customer-support --desc "Customer support agent prompt"
 ```
 
 2. **Edit the prompt**:
+
 ```bash
 promptfoo prompt edit customer-support
 ```
 
 3. **Deploy to an environment**:
+
 ```bash
 promptfoo prompt deploy customer-support production
 ```
 
 4. **Run the evaluation**:
+
 ```bash
 promptfoo eval
 ```
@@ -38,14 +43,15 @@ Reference managed prompts using the `pf://` prefix:
 
 ```yaml
 prompts:
-  - pf://customer-support          # Uses current version
-  - pf://customer-support:2         # Uses specific version
-  - pf://customer-support:prod      # Uses production deployment
+  - pf://customer-support # Uses current version
+  - pf://customer-support:2 # Uses specific version
+  - pf://customer-support:prod # Uses production deployment
 ```
 
 ## Example Workflow
 
 1. Create and iterate on prompts:
+
 ```bash
 # Create initial version
 promptfoo prompt create greeting --from-file greeting.txt
@@ -61,6 +67,7 @@ promptfoo prompt test greeting --provider openai:gpt-4o
 ```
 
 2. Deploy to environments:
+
 ```bash
 # Deploy v2 to staging
 promptfoo prompt deploy greeting staging --version 2
@@ -70,10 +77,11 @@ promptfoo prompt deploy greeting production --version 2
 ```
 
 3. Use in evaluations:
+
 ```yaml
 # promptfooconfig.yaml
 prompts:
-  - pf://greeting:staging   # Test staging version
+  - pf://greeting:staging # Test staging version
   - pf://greeting:production # Compare with production
 ```
 
@@ -100,4 +108,4 @@ export PROMPTFOO_PROMPT_LOCAL_MODE=true
 
 - Run `promptfoo prompt --help` for all available commands
 - Check out the [prompt management docs](https://promptfoo.dev/docs/prompts/management)
-- Explore version control strategies for your prompts 
+- Explore version control strategies for your prompts

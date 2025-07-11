@@ -716,10 +716,29 @@ function ResultsTable({
                   )}
                 </Tooltip>
               );
+              // Check if this is a managed prompt
+              const isManagedPrompt = prompt.raw?.startsWith('pf://');
+              const managedPromptInfo = isManagedPrompt ? (() => {
+                const match = prompt.raw?.match(/^pf:\/\/([^:]+)(?::(.+))?$/);
+                if (match) {
+                  const [, promptId, versionOrEnv] = match;
+                  return { promptId, versionOrEnv };
+                }
+                return null;
+              })() : null;
+
               return (
                 <div className="output-header">
                   <div className="pills">
                     {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
+                    {managedPromptInfo && (
+                      <Tooltip title={`Managed prompt: ${managedPromptInfo.promptId}${managedPromptInfo.versionOrEnv ? ` (${managedPromptInfo.versionOrEnv})` : ''}`}>
+                        <div className="provider managed-prompt">
+                          📋 {managedPromptInfo.promptId}
+                          {managedPromptInfo.versionOrEnv && <span>:{managedPromptInfo.versionOrEnv}</span>}
+                        </div>
+                      </Tooltip>
+                    )}
                     <div className="summary">
                       <div
                         className={`highlight ${

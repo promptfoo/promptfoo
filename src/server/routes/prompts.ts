@@ -109,8 +109,8 @@ promptsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
     // Validate prompt ID
     if (!id || !VALID_ID_REGEX.test(id)) {
-      res.status(400).json({ 
-        error: 'Invalid prompt ID. Must contain only letters, numbers, hyphens, and underscores.' 
+      res.status(400).json({
+        error: 'Invalid prompt ID. Must contain only letters, numbers, hyphens, and underscores.',
       });
       return;
     }

@@ -5,7 +5,7 @@ import type { ManagedPromptWithVersions } from '../../src/types/prompt-managemen
 jest.mock('../../src/prompts/management/PromptManager');
 
 describe('Managed prompts integration', () => {
-  const mockPromptManager = PromptManager as jest.MockedClass<typeof PromptManager>;
+  const mockPromptManager = jest.mocked(PromptManager);
 
   beforeEach(() => {
     jest.clearAllMocks();

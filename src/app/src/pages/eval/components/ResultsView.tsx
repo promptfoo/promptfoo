@@ -667,6 +667,25 @@ export default function ResultsView({
                     Edit and re-run
                   </MenuItem>
                 </Tooltip>
+                <Tooltip title="Re-run this eval with a different prompt version" placement="left">
+                  <MenuItem
+                    onClick={() => {
+                      // Check if any prompts are managed prompts
+                      const managedPrompts = head.prompts.filter((p) => p.raw?.startsWith('pf://'));
+                      if (managedPrompts.length === 0) {
+                        showToast('No managed prompts found in this eval', 'info');
+                        return;
+                      }
+                      // TODO: Implement prompt version selection dialog
+                      showToast('Prompt version selection coming soon', 'info');
+                    }}
+                  >
+                    <ListItemIcon>
+                      <PlayArrowIcon fontSize="small" />
+                    </ListItemIcon>
+                    Re-run with different prompt version
+                  </MenuItem>
+                </Tooltip>
                 <CompareEvalMenuItem
                   initialEvals={recentEvals}
                   onComparisonEvalSelected={handleComparisonEvalSelected}

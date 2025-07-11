@@ -4,6 +4,7 @@ import yaml from 'js-yaml';
 import { diffLines } from 'diff';
 import os from 'os';
 import logger from '../../logger';
+import telemetry from '../../telemetry';
 import { cloudConfig } from '../../globalConfig/cloud';
 import { fetchWithRetries } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -44,11 +45,19 @@ export class PromptManager {
   }
 
   async createPrompt(id: string, description?: string, content?: string): Promise<ManagedPromptWithVersions> {
-    if (this.config.mode === 'local') {
-      return this.createPromptLocal(id, description, content);
-    } else {
-      return this.createPromptCloud(id, description, content);
-    }
+    const result = this.config.mode === 'local' 
+      ? await this.createPromptLocal(id, description, content)
+      : await this.createPromptCloud(id, description, content);
+    
+    // Track telemetry
+    telemetry.record('feature_used', {
+      feature: 'prompt_management_create',
+      mode: this.config.mode,
+      hasDescription: !!description,
+      contentLength: content?.length || 0,
+    });
+    
+    return result;
   }
 
   private async createPromptLocal(id: string, description?: string, content?: string): Promise<ManagedPromptWithVersions> {
@@ -283,11 +292,18 @@ export class PromptManager {
   }
 
   async updatePrompt(id: string, content: string, notes?: string): Promise<ManagedPromptWithVersions> {
-    if (this.config.mode === 'local') {
-      return this.updatePromptLocal(id, content, notes);
-    } else {
-      return this.updatePromptCloud(id, content, notes);
-    }
+    const result = this.config.mode === 'local'
+      ? await this.updatePromptLocal(id, content, notes)
+      : await this.updatePromptCloud(id, content, notes);
+    
+    // Track telemetry
+    telemetry.record('feature_used', {
+      feature: 'prompt_management_update',
+      mode: this.config.mode,
+      versionNumber: result.currentVersion,
+    });
+    
+    return result;
   }
 
   private async updatePromptLocal(id: string, content: string, notes?: string): Promise<ManagedPromptWithVersions> {
@@ -443,11 +459,15 @@ export class PromptManager {
   }
 
   async deletePrompt(id: string): Promise<void> {
-    if (this.config.mode === 'local') {
-      return this.deletePromptLocal(id);
-    } else {
-      return this.deletePromptCloud(id);
-    }
+    await (this.config.mode === 'local'
+      ? this.deletePromptLocal(id)
+      : this.deletePromptCloud(id));
+    
+    // Track telemetry
+    telemetry.record('feature_used', {
+      feature: 'prompt_management_delete',
+      mode: this.config.mode,
+    });
   }
 
   private async deletePromptLocal(id: string): Promise<void> {

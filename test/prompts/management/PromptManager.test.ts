@@ -1,5 +1,4 @@
 import fs from 'fs/promises';
-import path from 'path';
 import yaml from 'js-yaml';
 import { PromptManager } from '../../../src/prompts/management/PromptManager';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
@@ -15,8 +14,8 @@ jest.mock('../../../src/globalConfig/accounts');
 describe('PromptManager', () => {
   const mockFs = fs as jest.Mocked<typeof fs>;
   const mockCloudConfig = cloudConfig as jest.Mocked<typeof cloudConfig>;
-  const mockFetchWithRetries = fetchWithRetries as jest.MockedFunction<typeof fetchWithRetries>;
-  const mockGetUserEmail = getUserEmail as jest.MockedFunction<typeof getUserEmail>;
+  const mockFetchWithRetries = jest.mocked(fetchWithRetries);
+  const mockGetUserEmail = jest.mocked(getUserEmail);
 
   beforeEach(() => {
     jest.clearAllMocks();

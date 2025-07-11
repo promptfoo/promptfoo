@@ -1,5 +1,6 @@
 import type { Prompt } from '../../types';
 import logger from '../../logger';
+import telemetry from '../../telemetry';
 import { PromptManager } from '../management/PromptManager';
 
 const VALID_ID_REGEX = /^[a-zA-Z0-9-_]+$/;
@@ -35,6 +36,13 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
   // Track usage (async, don't wait)
   manager.trackUsage(promptId).catch(err => {
     logger.debug(`Failed to track prompt usage: ${err.message}`);
+  });
+
+  // Record telemetry
+  telemetry.record('feature_used', {
+    feature: 'managed_prompt',
+    promptId,
+    versionOrEnv: versionOrEnv || 'current',
   });
 
   let targetVersion: number;

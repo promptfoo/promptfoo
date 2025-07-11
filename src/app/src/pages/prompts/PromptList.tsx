@@ -148,6 +148,7 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
               <StyledTableCell>Name</StyledTableCell>
               <StyledTableCell>Description</StyledTableCell>
               <StyledTableCell>Version</StyledTableCell>
+              <StyledTableCell>Usage</StyledTableCell>
               <StyledTableCell>Tags</StyledTableCell>
               <StyledTableCell>Updated</StyledTableCell>
               <StyledTableCell align="right">Actions</StyledTableCell>
@@ -156,13 +157,13 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : filteredPrompts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   {searchTerm ? 'No prompts found matching your search' : 'No prompts created yet'}
                 </TableCell>
               </TableRow>
@@ -185,6 +186,9 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
                     </Typography>
                   </TableCell>
                   <TableCell>v{prompt.currentVersion}</TableCell>
+                  <TableCell>
+                    {(prompt as any).metadata?.usageCount || 0} uses
+                  </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={0.5}>
                       {prompt.tags?.map((tag) => (
