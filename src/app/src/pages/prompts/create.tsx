@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { callApi } from '@app/utils/api';
 import { useToast } from '@app/hooks/useToast';
@@ -18,6 +18,7 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import InputAdornment from '@mui/material/InputAdornment';
+import Alert from '@mui/material/Alert';
 
 // Helper function to parse CSV content
 const parseCsvContent = async (content: string): Promise<string[]> => {
@@ -88,6 +89,21 @@ const generateDefaultPromptId = () => {
   return `prompt-${year}-${month}-${day}-${hours}${minutes}${seconds}`;
 };
 
+// Helper function to extract variables from prompt template
+const extractVariables = (template: string): string[] => {
+  const regex = /\{\{([^}]+)\}\}/g;
+  const variables = new Set<string>();
+  let match;
+  while ((match = regex.exec(template)) !== null) {
+    const varName = match[1].trim();
+    // Filter out special variables
+    if (!varName.startsWith('_')) {
+      variables.add(varName);
+    }
+  }
+  return Array.from(variables);
+};
+
 export default function PromptCreatePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -99,6 +115,11 @@ export default function PromptCreatePage() {
   const [saving, setSaving] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [fileType, setFileType] = useState<string | null>(null);
+  
+  // Extract variables from content
+  const detectedVariables = useMemo(() => {
+    return extractVariables(content);
+  }, [content]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -352,6 +373,31 @@ export default function PromptCreatePage() {
               Tip: Use {'{{variables}}'} for dynamic values in your prompts
             </Typography>
           </Box>
+          
+          {/* Variable Detection */}
+          {detectedVariables.length > 0 && (
+            <Alert severity="info" icon={<InfoOutlinedIcon />}>
+              <Stack spacing={1}>
+                <Typography variant="subtitle2">
+                  Detected {detectedVariables.length} variable{detectedVariables.length > 1 ? 's' : ''}:
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {detectedVariables.map((variable) => (
+                    <Chip
+                      key={variable}
+                      label={`{{${variable}}}`}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  ))}
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  These variables will need values when testing or using this prompt
+                </Typography>
+              </Stack>
+            </Alert>
+          )}
         </Stack>
       </Paper>
     </Box>

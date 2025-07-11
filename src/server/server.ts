@@ -237,6 +237,61 @@ export function createApp() {
     }
   });
 
+  app.post('/api/generate', async (req: Request, res: Response): Promise<void> => {
+    const { prompt, systemPrompt, provider = 'openai:gpt-3.5-turbo', temperature = 0.7 } = req.body;
+    
+    if (!prompt) {
+      res.status(400).json({ error: 'Prompt is required' });
+      return;
+    }
+
+    try {
+      // Import providers dynamically to avoid circular dependencies
+      const { loadApiProviders } = await import('../providers');
+      const providers = await loadApiProviders([{
+        id: provider,
+        config: { temperature },
+      }]);
+      
+      if (providers.length === 0) {
+        res.status(400).json({ error: 'Failed to load provider' });
+        return;
+      }
+
+      const apiProvider = providers[0];
+      
+      // Prepare the prompt based on whether it's a chat or completion model
+      let finalPrompt: string | any[];
+      if (provider.includes('gpt') || provider.includes('claude') || provider.includes('gemini')) {
+        // Chat model format
+        finalPrompt = [];
+        if (systemPrompt) {
+          finalPrompt.push({ role: 'system', content: systemPrompt });
+        }
+        finalPrompt.push({ role: 'user', content: prompt });
+      } else {
+        // Completion model format
+        finalPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+      }
+
+      const result = await apiProvider.callApi(finalPrompt);
+      
+      if (result.error) {
+        res.status(500).json({ error: result.error });
+        return;
+      }
+
+      res.json({
+        output: result.output,
+        tokenUsage: result.tokenUsage,
+        cost: result.cost,
+      });
+    } catch (error) {
+      logger.error('Failed to generate:', error);
+      res.status(500).json({ error: 'Failed to generate response' });
+    }
+  });
+
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
 

@@ -25,6 +25,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
+import SmartVariableSuggestions from './SmartVariableSuggestions';
 import type { ManagedPromptWithVersions } from '@promptfoo/types/prompt-management';
 
 // Helper function to extract variables from prompt template
@@ -167,6 +168,10 @@ export default function PromptTestPage() {
   const handleVariableChange = (varName: string, value: string) => {
     setVariableValues(prev => ({ ...prev, [varName]: value }));
   };
+  
+  const handleApplySuggestions = (suggestions: Record<string, string>) => {
+    setVariableValues(prev => ({ ...prev, ...suggestions }));
+  };
 
   if (loading) {
     return <Box sx={{ p: 3 }}>Loading...</Box>;
@@ -252,6 +257,15 @@ export default function PromptTestPage() {
                   ))}
                 </Stack>
               </Box>
+              
+              {/* Smart Variable Suggestions */}
+              {currentVersion && (
+                <SmartVariableSuggestions
+                  promptContent={currentVersion.content}
+                  variables={templateVariables}
+                  onApplySuggestions={handleApplySuggestions}
+                />
+              )}
             </>
           )}
 
