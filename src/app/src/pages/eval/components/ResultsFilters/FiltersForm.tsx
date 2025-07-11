@@ -18,9 +18,6 @@ import { useTableStore, type ResultsFilter } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
-  //strategy: 'Strategy',
-  //plugin: 'Plugin',
-  //metadata: 'Metadata',
 };
 
 function Dropdown({
@@ -29,15 +26,17 @@ function Dropdown({
   values,
   value,
   onChange,
+  width = 200,
 }: {
   id: string;
   label?: string;
   values: { label: string; value: string }[];
   value: string;
   onChange: (value: string) => void;
+  width?: number;
 }) {
   return (
-    <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
+    <FormControl variant="outlined" size="small">
       {label && <InputLabel id={`${id}-label`}>{label}</InputLabel>}
       <Select
         labelId={`${id}-label`}
@@ -45,7 +44,7 @@ function Dropdown({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         label={label}
-        sx={{ width: 200 }}
+        sx={{ width }}
       >
         {values.map((value) => (
           <MenuItem key={value.value} value={value.value}>
@@ -110,7 +109,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
         <CloseIcon />
       </IconButton>
 
-      <Box sx={{ display: 'flex', gap: 1 }}>
+      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
         {index !== 0 && (
           <Dropdown
             id={`${index}-logic-operator-select`}
@@ -120,33 +119,26 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
             ]}
             value={value.logicOperator ?? 'and'}
             onChange={(e) => handleLogicOperatorChange(e as ResultsFilter['logicOperator'])}
+            width={100}
           />
         )}
 
         <Dropdown
           id={`${index}-filter-type-select`}
           label="Filter Type"
-          values={[
-            { label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' },
-            // { label: 'Strategy', value: 'strategy' },
-            // { label: 'Plugin', value: 'plugin' },
-            // { label: 'Metadata', value: 'metadata' },
-          ]}
+          values={[{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
+          width={125}
         />
 
         <Dropdown
           id={`${index}-operator-select`}
           label="Operator"
-          values={[
-            {
-              label: 'Equals',
-              value: 'equals',
-            },
-          ]}
+          values={[{ label: 'Equals', value: 'equals' }]}
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
+          width={125}
         />
 
         <Dropdown
@@ -158,6 +150,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
           }))}
           value={value.value}
           onChange={(e) => handleValueChange(e)}
+          width={275}
         />
       </Box>
     </Box>
