@@ -480,7 +480,7 @@ describe('evaluator', () => {
         filters: ['or:metric:equals:accuracy', 'or:metric:equals:relevance'],
       });
 
-      // Row should have both metrics
+      // Row should have at least one of the metrics
       for (const row of result.body) {
         const hasMetric1 = row.outputs.some(
           (output) => output.namedScores && output.namedScores['accuracy'] !== undefined,
@@ -488,8 +488,7 @@ describe('evaluator', () => {
         const hasMetric2 = row.outputs.some(
           (output) => output.namedScores && output.namedScores['relevance'] !== undefined,
         );
-        expect(hasMetric1).toBe(true);
-        expect(hasMetric2).toBe(true);
+        expect(hasMetric1 || hasMetric2).toBe(true);
       }
     });
 
