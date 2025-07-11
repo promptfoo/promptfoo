@@ -3343,6 +3343,171 @@ describe('RSA signature authentication', () => {
     // Clean up
     mockWarn.mockRestore();
   });
+
+  it('should use JKS keystore password from environment variable when config password not provided', async () => {
+    // Mock JKS module
+    const mockJksModule = {
+      toPem: jest.fn().mockReturnValue({
+        client: {
+          key: mockPrivateKey,
+        },
+      }),
+    };
+
+    // Mock eval for JKS import
+    const evalSpy = jest.spyOn(global, 'eval').mockImplementation((code: string) => {
+      if (code.includes('import("jks-js")')) {
+        return Promise.resolve(mockJksModule);
+      }
+      return Promise.resolve();
+    });
+
+    // Mock environment variable by setting it directly
+    const _originalValue = process.env.PROMPTFOO_JKS_PASSWORD;
+    process.env.PROMPTFOO_JKS_PASSWORD = 'env-password';
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          type: 'jks',
+          keystorePath: '/path/to/keystore.jks',
+          // keystorePassword not provided - should use env var
+          keyAlias: 'client',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify JKS module was called with environment variable password
+    expect(mockJksModule.toPem).toHaveBeenCalledWith(expect.anything(), 'env-password');
+
+    // Clean up
+    evalSpy.mockRestore();
+    if (_originalValue) {
+      process.env.PROMPTFOO_JKS_PASSWORD = _originalValue;
+    } else {
+      delete process.env.PROMPTFOO_JKS_PASSWORD;
+    }
+  });
+
+  it('should prioritize config keystorePassword over environment variable', async () => {
+    // Mock JKS module
+    const mockJksModule = {
+      toPem: jest.fn().mockReturnValue({
+        client: {
+          key: mockPrivateKey,
+        },
+      }),
+    };
+
+    // Mock eval for JKS import
+    const evalSpy = jest.spyOn(global, 'eval').mockImplementation((code: string) => {
+      if (code.includes('import("jks-js")')) {
+        return Promise.resolve(mockJksModule);
+      }
+      return Promise.resolve();
+    });
+
+    // Mock environment variable
+    jest.mock('../../src/envars', () => ({
+      getEnvString: jest.fn().mockImplementation((key: string) => {
+        if (key === 'PROMPTFOO_JKS_PASSWORD') {
+          return 'env-password';
+        }
+        return '';
+      }),
+    }));
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          type: 'jks',
+          keystorePath: '/path/to/keystore.jks',
+          keystorePassword: 'config-password', // This should take precedence
+          keyAlias: 'client',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify JKS module was called with config password, not env var
+    expect(mockJksModule.toPem).toHaveBeenCalledWith(expect.any(Buffer), 'config-password');
+
+    // Clean up
+    evalSpy.mockRestore();
+    jest.unmock('../../src/envars');
+  });
+
+  it('should throw error when neither config password nor environment variable is provided for JKS', async () => {
+    // Mock JKS module
+    const mockJksModule = {
+      toPem: jest.fn(),
+    };
+
+    // Mock eval for JKS import
+    const evalSpy = jest.spyOn(global, 'eval').mockImplementation((code: string) => {
+      if (code.includes('import("jks-js")')) {
+        return Promise.resolve(mockJksModule);
+      }
+      return Promise.resolve();
+    });
+
+    // Mock environment variable to return empty string
+    jest.mock('../../src/envars', () => ({
+      getEnvString: jest.fn().mockReturnValue(''),
+    }));
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          type: 'jks',
+          keystorePath: '/path/to/keystore.jks',
+          // keystorePassword not provided and env var is empty
+          keyAlias: 'client',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'JKS keystore password is required. Provide it via config keystorePassword or PROMPTFOO_JKS_PASSWORD environment variable',
+    );
+
+    // Clean up
+    evalSpy.mockRestore();
+    jest.unmock('../../src/envars');
+  });
 });
 
 describe('createSessionParser', () => {
