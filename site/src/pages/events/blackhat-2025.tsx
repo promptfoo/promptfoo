@@ -26,6 +26,21 @@ export default function BlackHat2025(): JSX.Element {
     };
   }, []);
 
+  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+    e.preventDefault();
+    const element = document.querySelector(targetId);
+    if (element) {
+      const offset = 80; // Offset for fixed header
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - offset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth',
+      });
+    }
+  };
+
   return (
     <Layout
       title="Promptfoo at Black Hat USA 2025"
@@ -75,10 +90,18 @@ export default function BlackHat2025(): JSX.Element {
                 vulnerabilities before attackers do.
               </p>
               <div className={styles.heroButtons}>
-                <a href="#schedule-demo" className={styles.primaryButton}>
+                <a
+                  href="#schedule-demo"
+                  className={styles.primaryButton}
+                  onClick={(e) => handleSmoothScroll(e, '#schedule-demo')}
+                >
                   Schedule a Demo at Black Hat
                 </a>
-                <a href="#learn-more" className={styles.secondaryButton}>
+                <a
+                  href="#learn-more"
+                  className={styles.secondaryButton}
+                  onClick={(e) => handleSmoothScroll(e, '#learn-more')}
+                >
                   Learn More
                 </a>
               </div>
@@ -298,7 +321,11 @@ export default function BlackHat2025(): JSX.Element {
               Join hundreds of security teams who trust Promptfoo to protect their LLM applications.
             </p>
             <div className={styles.ctaButtons}>
-              <a href="#schedule-demo" className={styles.primaryButton}>
+              <a
+                href="#schedule-demo"
+                className={styles.primaryButton}
+                onClick={(e) => handleSmoothScroll(e, '#schedule-demo')}
+              >
                 Book Your Demo Slot
               </a>
               <Link to="/security" className={styles.secondaryButton}>
