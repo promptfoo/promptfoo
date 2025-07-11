@@ -1,13 +1,13 @@
 ---
 title: Release Notes
-description: Monthly summaries of promptfoo releases, features, and improvements for the open-source LLM testing framework
+description: Monthly summaries of Promptfoo releases, features, and improvements for the open-source LLM testing framework
 tags: [releases, changelog, updates, features]
-keywords: [promptfoo releases, changelog, updates, features, monthly summaries]
+keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 ---
 
 # Release Notes
 
-Full release history for promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
+Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
 ## June 2025 Release Highlights
 
