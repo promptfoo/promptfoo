@@ -104,9 +104,14 @@ interface AssertionValueFunctionContext {
 
 :::note
 
-promptfoo supports `.js` and `.json` file extensions in addition to `.yaml`.
+promptfoo supports `.yaml`, `.yml`, `.json`, `.js`, `.mjs`, `.cjs`, and `.ts` file extensions for configuration files.
 
 It automatically loads `promptfooconfig.*`, but you can use a custom config file with `promptfoo eval -c path/to/config`.
+
+**TypeScript configuration**: When using `.ts` files, you need a TypeScript loader like `tsx` or `@swc-node/register`. Run with:
+```bash
+NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig.ts
+```
 
 :::
 
@@ -598,4 +603,3 @@ interface CompletedPrompt {
     cost: number;
   };
 }
-```
