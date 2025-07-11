@@ -7,27 +7,27 @@
 /* You can override the default Infima variables here. */
 :root {
   /* Primary red color palette */
-  --ifm-color-primary: #E53A3A;
-  --ifm-color-primary-dark: #CB3434;
-  --ifm-color-primary-darker: #B32E2E;
+  --ifm-color-primary: #e53a3a;
+  --ifm-color-primary-dark: #cb3434;
+  --ifm-color-primary-darker: #b32e2e;
   --ifm-color-primary-darkest: #991515;
-  --ifm-color-primary-light: #FF7A7A;
-  --ifm-color-primary-lighter: #FFA0A0;
-  --ifm-color-primary-lightest: #FFC6C6;
-  
+  --ifm-color-primary-light: #ff7a7a;
+  --ifm-color-primary-lighter: #ffa0a0;
+  --ifm-color-primary-lightest: #ffc6c6;
+
   /* Custom palette */
-  --pf-red-base: #E53A3A;
-  --pf-red-dark: #CB3434;
-  --pf-red-darker: #B32E2E;
-  --pf-red-light: #FF7A7A;
-  --pf-red-lighter: #FFA0A0;
-  --pf-red-lightest: #FFC6C6;
-  --pf-red-ultra-light: #FFD9D9;
-  
-  --pf-dark-base: #2E3C46;
-  --pf-dark-darker: #17252B;
-  --pf-dark-darkest: #10191C;
-  
+  --pf-red-base: #e53a3a;
+  --pf-red-dark: #cb3434;
+  --pf-red-darker: #b32e2e;
+  --pf-red-light: #ff7a7a;
+  --pf-red-lighter: #ffa0a0;
+  --pf-red-lightest: #ffc6c6;
+  --pf-red-ultra-light: #ffd9d9;
+
+  --pf-dark-base: #2e3c46;
+  --pf-dark-darker: #17252b;
+  --pf-dark-darkest: #10191c;
+
   --ifm-code-font-size: 95%;
   --ifm-font-family-base:
     'Inter', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif,
@@ -38,19 +38,19 @@
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #FF7A7A;
-  --ifm-color-primary-dark: #E53A3A;
-  --ifm-color-primary-darker: #CB3434;
-  --ifm-color-primary-darkest: #B32E2E;
-  --ifm-color-primary-light: #FFA0A0;
-  --ifm-color-primary-lighter: #FFC6C6;
-  --ifm-color-primary-lightest: #FFD9D9;
+  --ifm-color-primary: #ff7a7a;
+  --ifm-color-primary-dark: #e53a3a;
+  --ifm-color-primary-darker: #cb3434;
+  --ifm-color-primary-darkest: #b32e2e;
+  --ifm-color-primary-light: #ffa0a0;
+  --ifm-color-primary-lighter: #ffc6c6;
+  --ifm-color-primary-lightest: #ffd9d9;
   --ifm-button-color: #fff;
   --docusaurus-highlighted-code-line-bg: #353531;
-  
+
   /* Update background colors */
-  --ifm-background-color: #10191C;
-  --ifm-background-surface-color: #17252B;
+  --ifm-background-color: #10191c;
+  --ifm-background-surface-color: #17252b;
 }
 
 code p {

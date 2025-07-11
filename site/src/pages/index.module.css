@@ -1,31 +1,53 @@
-/* Add page-level gradient */
+/* Page-level gradient - main background for entire page */
 :global(.homepage-wrapper) {
   background: 
-    radial-gradient(ellipse at top right, rgba(229, 58, 58, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at bottom left, rgba(179, 46, 46, 0.1) 0%, transparent 50%),
+    /* Main gradient flow */
     linear-gradient(
-      135deg,
-      rgba(255, 199, 199, 0.12) -5%,
-      rgba(229, 58, 58, 0.05) 15%,
-      rgba(203, 52, 52, 0.02) 35%,
-      transparent 60%
-    );
+      180deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.02) 10%,
+      rgba(255, 246, 246, 0.05) 20%,
+      rgba(255, 240, 240, 0.08) 35%,
+      rgba(255, 236, 236, 0.1) 50%,
+      rgba(255, 240, 240, 0.08) 65%,
+      rgba(255, 246, 246, 0.05) 80%,
+      rgba(255, 255, 255, 0.02) 90%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    /* Accent gradients */
+      radial-gradient(ellipse at 20% 10%, rgba(229, 58, 58, 0.12) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 30%, rgba(255, 122, 122, 0.08) 0%, transparent 40%),
+    radial-gradient(ellipse at 10% 60%, rgba(203, 52, 52, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 80%, rgba(179, 46, 46, 0.08) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 95%, rgba(229, 58, 58, 0.05) 0%, transparent 60%),
+    /* Base color */ #ffffff;
   min-height: 100vh;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 [data-theme='dark'] :global(.homepage-wrapper) {
   background: 
-    radial-gradient(ellipse at top right, rgba(229, 58, 58, 0.2) 0%, transparent 50%),
-    radial-gradient(ellipse at bottom left, rgba(179, 46, 46, 0.15) 0%, transparent 50%),
+    /* Main gradient flow for dark theme */
     linear-gradient(
-      135deg,
-      rgba(46, 60, 70, 0.3) -5%,
-      rgba(23, 37, 43, 0.2) 25%,
-      transparent 60%
+      180deg,
+      rgba(16, 25, 28, 0) 0%,
+      rgba(23, 37, 43, 0.15) 10%,
+      rgba(46, 60, 70, 0.25) 20%,
+      rgba(46, 60, 70, 0.3) 35%,
+      rgba(46, 60, 70, 0.35) 50%,
+      rgba(46, 60, 70, 0.3) 65%,
+      rgba(46, 60, 70, 0.25) 80%,
+      rgba(23, 37, 43, 0.15) 90%,
+      rgba(16, 25, 28, 0) 100%
     ),
-    #10191C;
+    /* Accent gradients for dark theme */
+      radial-gradient(ellipse at 20% 10%, rgba(229, 58, 58, 0.18) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 30%, rgba(255, 122, 122, 0.12) 0%, transparent 40%),
+    radial-gradient(ellipse at 10% 60%, rgba(203, 52, 52, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 80%, rgba(179, 46, 46, 0.12) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 95%, rgba(229, 58, 58, 0.08) 0%, transparent 60%),
+    /* Base dark color */ #10191c;
 }
 
 .heroBanner {
@@ -33,9 +55,8 @@
   text-align: center;
   position: relative;
   overflow: hidden;
-  background: 
-    radial-gradient(circle at 30% 20%, rgba(229, 58, 58, 0.1) 0%, transparent 40%),
-    radial-gradient(circle at 70% 80%, rgba(179, 46, 46, 0.08) 0%, transparent 40%);
+  /* Removed background gradient - using page-level gradient instead */
+  background: transparent;
 }
 
 .heroBanner::before {
@@ -97,7 +118,11 @@
 }
 
 @keyframes bounce {
-  0%, 20%, 50%, 80%, 100% {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
     transform: translateX(-50%) translateY(0);
   }
   40% {
@@ -109,7 +134,7 @@
 }
 
 .heroMainText {
-  background: linear-gradient(135deg, #B32E2E, #CB3434, #E53A3A, #FF7A7A);
+  background: linear-gradient(135deg, #b32e2e, #cb3434, #e53a3a, #ff7a7a);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -157,7 +182,7 @@
 }
 
 [data-theme='dark'] .heroMainText {
-  background: linear-gradient(135deg, #FF7A7A, #FFA0A0, #FFC6C6, #FFD9D9);
+  background: linear-gradient(135deg, #ff7a7a, #ffa0a0, #ffc6c6, #ffd9d9);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -256,11 +281,10 @@
   max-width: min(1400px, 95%);
   margin: 4rem auto;
   padding: 3rem 2rem;
-  background: 
-    linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%),
-    radial-gradient(circle at 20% 50%, rgba(229, 58, 58, 0.05) 0%, transparent 50%);
+  /* Use subtle white overlay instead of gradient */
+  background: rgba(255, 255, 255, 0.85);
   border-radius: 24px;
-  box-shadow: 
+  box-shadow:
     0 20px 40px -10px rgba(179, 46, 46, 0.1),
     0 10px 20px -5px rgba(0, 0, 0, 0.05);
   backdrop-filter: blur(10px);
@@ -269,10 +293,9 @@
 }
 
 [data-theme='dark'] .walkthroughContainer {
-  background: 
-    linear-gradient(135deg, rgba(23, 37, 43, 0.9) 0%, rgba(46, 60, 70, 0.95) 100%),
-    radial-gradient(circle at 20% 50%, rgba(229, 58, 58, 0.1) 0%, transparent 50%);
-  box-shadow: 
+  /* Use subtle dark overlay instead of gradient */
+  background: rgba(23, 37, 43, 0.85);
+  box-shadow:
     0 20px 40px -10px rgba(0, 0, 0, 0.3),
     0 10px 20px -5px rgba(229, 58, 58, 0.1);
 }
@@ -393,7 +416,7 @@
 .walkthroughImage {
   width: 100%;
   border-radius: 16px;
-  box-shadow: 
+  box-shadow:
     0 20px 40px -10px rgba(0, 0, 0, 0.15),
     0 10px 20px -5px rgba(229, 58, 58, 0.1);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -413,7 +436,7 @@
 
 .walkthroughImage:hover {
   transform: scale(1.02);
-  box-shadow: 
+  box-shadow:
     0 30px 60px -15px rgba(0, 0, 0, 0.2),
     0 15px 30px -7px rgba(229, 58, 58, 0.15);
 }
@@ -503,7 +526,7 @@
     margin: 2rem 0;
     line-height: 1.2;
   }
-  
+
   .heroBanner p {
     font-size: 1.25rem;
     padding: 0 1rem;
@@ -587,7 +610,7 @@
   max-width: min(100%, 1024px);
   border: 2px solid var(--pf-red-ultra-light);
   border-radius: 20px;
-  box-shadow: 
+  box-shadow:
     0 10px 30px rgba(229, 58, 58, 0.1),
     0 20px 60px rgba(0, 0, 0, 0.08);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -598,7 +621,12 @@
   content: '';
   position: absolute;
   inset: -3px;
-  background: linear-gradient(45deg, var(--pf-red-base), var(--pf-red-light), var(--pf-red-lighter));
+  background: linear-gradient(
+    45deg,
+    var(--pf-red-base),
+    var(--pf-red-light),
+    var(--pf-red-lighter)
+  );
   border-radius: 20px;
   opacity: 0;
   z-index: -1;
@@ -608,7 +636,7 @@
 
 .featureImage:hover {
   transform: scale(1.03) translateY(-5px);
-  box-shadow: 
+  box-shadow:
     0 20px 50px rgba(229, 58, 58, 0.15),
     0 30px 80px rgba(0, 0, 0, 0.1);
   border-color: var(--pf-red-light);
@@ -625,22 +653,23 @@
   gap: 2rem;
   padding: 5rem 0;
   position: relative;
-  background: 
-    radial-gradient(ellipse at center, rgba(229, 58, 58, 0.03) 0%, transparent 70%);
+  /* Removed background gradient - using page-level gradient instead */
+  background: transparent;
 }
 
 .logoSection::before {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: 
+  background-image:
     radial-gradient(circle at 25% 25%, rgba(229, 58, 58, 0.05) 0%, transparent 30%),
     radial-gradient(circle at 75% 75%, rgba(179, 46, 46, 0.05) 0%, transparent 30%);
   animation: floatingBg 20s ease-in-out infinite;
 }
 
 @keyframes floatingBg {
-  0%, 100% {
+  0%,
+  100% {
     transform: translate(0, 0) scale(1);
   }
   33% {
@@ -689,9 +718,8 @@
 }
 
 .ctaSection {
-  background: 
-    linear-gradient(135deg, rgba(229, 58, 58, 0.05) 0%, rgba(255, 255, 255, 0.95) 50%, rgba(179, 46, 46, 0.05) 100%),
-    radial-gradient(circle at 50% 0%, rgba(229, 58, 58, 0.1) 0%, transparent 50%);
+  /* Removed background gradient - using page-level gradient instead */
+  background: transparent;
   text-align: center;
   padding: 6rem 0;
   margin: 4rem 0;
@@ -721,9 +749,8 @@
 }
 
 [data-theme='dark'] .ctaSection {
-  background: 
-    linear-gradient(135deg, var(--pf-dark-darker) 0%, var(--pf-dark-base) 50%, var(--pf-dark-darker) 100%),
-    radial-gradient(circle at 50% 0%, rgba(229, 58, 58, 0.15) 0%, transparent 50%);
+  /* Removed background gradient - using page-level gradient instead */
+  background: transparent;
 }
 
 .ctaSection h2 {
@@ -780,8 +807,9 @@
   align-items: center;
   padding: 2.5rem;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
-  box-shadow: 
+  /* Use subtle white card background */
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -805,7 +833,7 @@
 
 .asSeenOnCard:hover {
   transform: translateY(-8px);
-  box-shadow: 
+  box-shadow:
     0 12px 40px rgba(229, 58, 58, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
@@ -815,14 +843,15 @@
 }
 
 [data-theme='dark'] .asSeenOnCard {
-  background: linear-gradient(135deg, var(--pf-dark-base) 0%, rgba(46, 60, 70, 0.95) 100%);
-  box-shadow: 
+  /* Use subtle dark card background */
+  background: rgba(46, 60, 70, 0.9);
+  box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 [data-theme='dark'] .asSeenOnCard:hover {
-  box-shadow: 
+  box-shadow:
     0 12px 40px rgba(229, 58, 58, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
