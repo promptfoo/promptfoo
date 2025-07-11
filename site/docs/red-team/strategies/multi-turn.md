@@ -76,6 +76,26 @@ When `continueAfterSuccess: true`:
 - The strategy only stops when `maxTurns` is reached
 - This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
 
+## Advanced Features
+
+Multi-turn strategies include several advanced features that enhance their effectiveness:
+
+### Unblocking Agent
+
+Both Crescendo and GOAT strategies include an intelligent unblocking agent that automatically handles blocking questions from target systems. This feature:
+
+- Detects when targets ask for verification or clarification
+- Generates appropriate responses to maintain conversation flow
+- Enables more comprehensive vulnerability testing
+
+See the [Advanced Features documentation](/docs/red-team/advanced-features#unblocking-agent) for detailed information about how the unblocking agent works.
+
+### Continue After Success
+
+Multi-turn strategies support continuing the attack sequence even after finding successful vulnerabilities. This allows for comprehensive security assessments that discover multiple attack vectors in a single run.
+
+Learn more about this feature in the [Advanced Features documentation](/docs/red-team/advanced-features#continue-after-success).
+
 ## How They Work
 
 The multi-turn strategies operate by:

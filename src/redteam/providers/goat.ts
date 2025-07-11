@@ -56,6 +56,11 @@ interface GoatConfig {
 
 export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
+
+  /**
+   * Tracks successful attacks found during conversation.
+   * Grows when continueAfterSuccess is enabled.
+   */
   private successfulAttacks: Array<{
     turn: number;
     prompt: string;
@@ -72,6 +77,10 @@ export default class GoatProvider implements ApiProvider {
       injectVar?: string;
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+      /**
+       * When true, continues searching for vulnerabilities after finding successful attacks.
+       * Default: false (stops at first success to minimize token usage).
+       */
       continueAfterSuccess?: boolean;
     } = {},
   ) {
@@ -139,7 +148,11 @@ export default class GoatProvider implements ApiProvider {
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
-        // Handle unblocking logic BEFORE attack (skip on first turn)
+        /**
+         * UNBLOCKING AGENT: Handles blocking questions from target systems
+         * (e.g., "What is your company registration number?").
+         * Generates appropriate responses to maintain conversation flow.
+         */
         if (turn > 0 && previousTargetOutput) {
           const unblockingResult = await tryUnblocking({
             messages,
@@ -161,6 +174,7 @@ export default class GoatProvider implements ApiProvider {
               `[GOAT] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
             );
 
+            // Send unblocking response to continue conversation
             messages.push({ role: 'user', content: unblockingResult.unblockingPrompt });
 
             const unblockingTargetPrompt = this.config.stateful
@@ -382,10 +396,11 @@ export default class GoatProvider implements ApiProvider {
             response: stringifiedOutput,
           });
 
-          // Only break early if continueAfterSuccess is false
+          // Continue or stop based on configuration
           if (this.config.continueAfterSuccess) {
-            // Continue to next turn
+            // Continue to find more vulnerabilities
           } else {
+            // Stop at first success
             break;
           }
         }
@@ -404,6 +419,7 @@ export default class GoatProvider implements ApiProvider {
             ? 'Grader failed'
             : 'Max turns reached',
         redteamHistory: messagesToRedteamHistory(messages),
+        // Include all successful attacks for comprehensive analysis
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
       },

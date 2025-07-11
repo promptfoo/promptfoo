@@ -227,7 +227,14 @@ export interface BaseRedteamResponse {
 }
 
 /**
- * Shared unblocking functionality used by redteam providers to handle blocking questions
+ * Handles blocking questions during multi-turn attacks.
+ * Detects verification/clarification requests and generates appropriate responses.
+ *
+ * @param messages - Conversation history for context
+ * @param lastResponse - Recent response that may contain blocking question
+ * @param goal - Attack objective for contextual responses
+ * @param purpose - Target system purpose (e.g., "e-commerce platform")
+ * @returns Success status, optional unblocking prompt, and token usage
  */
 export async function tryUnblocking({
   messages,
@@ -245,7 +252,7 @@ export async function tryUnblocking({
   tokenUsage?: TokenUsage;
 }> {
   try {
-    // Check if the server supports unblocking feature
+    // Check server support for blocking-question-analysis feature
     const { checkServerFeatureSupport } = await import('../../util/server');
     const supportsUnblocking = await checkServerFeatureSupport(
       'blocking-question-analysis',
@@ -259,13 +266,14 @@ export async function tryUnblocking({
 
     logger.debug('[Unblocking] Attempting to unblock with blocking-question-analysis task');
 
-    // Create unblocking provider
+    // Create specialized provider for unblocking analysis
     const unblockingProvider = new PromptfooChatCompletionProvider({
       task: 'blocking-question-analysis',
       jsonOnly: true,
       preferSmallModel: false,
     });
 
+    // Prepare request with full context
     const unblockingRequest = {
       conversationObjective: goal || '',
       recentHistory: messages.map((msg) => ({
@@ -289,10 +297,12 @@ export async function tryUnblocking({
       return { success: false, tokenUsage: response.tokenUsage };
     }
 
+    // Parse response: { isBlocking: boolean, unblockingAnswer: string }
     const parsed = response.output as any;
     logger.debug(`[Unblocking] Unblocking analysis: ${JSON.stringify(parsed)}`);
 
     if (parsed.isBlocking && parsed.unblockingAnswer) {
+      // Blocking question detected - return unblocking response
       logger.debug(
         `[Unblocking] Blocking question detected, unblocking answer: ${parsed.unblockingAnswer}`,
       );
@@ -302,6 +312,7 @@ export async function tryUnblocking({
         tokenUsage: response.tokenUsage,
       };
     } else {
+      // No blocking question - continue normally
       logger.debug('[Unblocking] No blocking question detected');
       return {
         success: false,
@@ -309,6 +320,7 @@ export async function tryUnblocking({
       };
     }
   } catch (error) {
+    // Fail gracefully to ensure robustness
     logger.error(`[Unblocking] Error in unblocking: ${error}`);
     return { success: false };
   }

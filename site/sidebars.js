@@ -196,6 +196,10 @@ const redTeamSidebar = [
     ],
   },
   {
+    type: 'doc',
+    id: 'red-team/advanced-features',
+  },
+  {
     type: 'category',
     label: 'Tools',
     collapsed: true,

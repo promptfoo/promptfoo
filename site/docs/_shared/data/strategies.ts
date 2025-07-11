@@ -119,7 +119,7 @@ export const strategies: Strategy[] = [
     displayName: 'Crescendo',
     description: 'Gradual escalation',
     longDescription:
-      'Gradually escalates prompt harm over multiple turns while using backtracking to optimize attack paths',
+      'Gradually escalates prompt harm over multiple turns while using backtracking to optimize attack paths. Includes intelligent unblocking agent to handle verification requests.',
     cost: 'High',
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/multi-turn/',
@@ -130,7 +130,7 @@ export const strategies: Strategy[] = [
     displayName: 'GOAT',
     description: 'Generative Offensive Agent Tester',
     longDescription:
-      'Uses a Generative Offensive Agent Tester to dynamically generate multi-turn conversations',
+      'Uses a Generative Offensive Agent Tester to dynamically generate multi-turn conversations. Features an unblocking agent for handling blocking questions.',
     cost: 'High',
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/goat/',

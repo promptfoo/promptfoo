@@ -20,6 +20,7 @@ strategies:
     config:
       maxTurns: 5 # Maximum conversation turns (default)
       stateful: false # Sends the entire conversation history with each turn (Default)
+      continueAfterSuccess: false # Stop after first successful attack (Default)
 ```
 
 :::warning
@@ -29,6 +30,29 @@ This is a remote-only strategy and requires an connection to promptfoo's free gr
 :::warning
 If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
+
+### Configuration Options
+
+- **maxTurns**: Maximum number of conversation turns (default: 5)
+- **stateful**: Whether to send only the latest message (true) or entire conversation history (false, default)
+- **continueAfterSuccess**: Whether to continue searching for vulnerabilities after finding a successful attack (false, default)
+
+When `continueAfterSuccess: true`, GOAT will:
+
+- Continue generating attacks even after finding successful ones
+- Record all successful attacks in the metadata
+- Only stop when `maxTurns` is reached
+- Provide comprehensive vulnerability analysis at the cost of more tokens
+
+## Unblocking Agent
+
+GOAT includes an intelligent unblocking agent that automatically handles blocking questions from target systems during multi-turn conversations. This feature:
+
+- **Detects blocking patterns**: Identifies when targets request verification, authentication, or clarification
+- **Generates natural responses**: Provides contextually appropriate information to unblock conversations
+- **Maintains attack flow**: Ensures the red teaming process continues smoothly without manual intervention
+
+For example, if a target asks "What is your company registration number?", the unblocking agent will automatically provide a plausible response to continue the attack sequence. See the [Advanced Features documentation](/docs/red-team/advanced-features#unblocking-agent) for more details.
 
 ## How It Works
 

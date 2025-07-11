@@ -109,6 +109,9 @@ export class CrescendoProvider implements ApiProvider {
   private maxBacktracks: number;
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  /**
+   * Tracks successful attacks. Grows when continueAfterSuccess is enabled.
+   */
   private successfulAttacks: Array<{
     turn: number;
     prompt: string;
@@ -331,7 +334,11 @@ export class CrescendoProvider implements ApiProvider {
           context.vars['sessionId'] = lastResponse.sessionId;
         }
 
-        // Check if the target is asking a blocking question that needs an answer to proceed
+        /**
+         * UNBLOCKING AGENT: Detects and handles blocking questions
+         * (e.g., identity verification, clarification requests).
+         * Generates contextually appropriate responses.
+         */
         const unblockingResult = await tryUnblocking({
           messages: this.memory.getConversation(this.targetConversationId),
           lastResponse: lastResponse.output,
@@ -347,7 +354,7 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
-          // Target is asking a blocking question, send the unblocking answer
+          // Send unblocking response to continue attack sequence
           logger.debug(
             `[Crescendo] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
@@ -464,7 +471,7 @@ export class CrescendoProvider implements ApiProvider {
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
-          // Only break early if continueAfterSuccess is false
+          // Continue or stop based on configuration
           if (this.config.continueAfterSuccess) {
             logger.debug(
               `[Crescendo] Jailbreak Successful via Internal Evaluator at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
@@ -481,7 +488,7 @@ export class CrescendoProvider implements ApiProvider {
         if (graderPassed === false) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
-          // Only break early if continueAfterSuccess is false
+          // Continue or stop based on configuration
           if (this.config.continueAfterSuccess) {
             logger.debug(
               `[Crescendo] Jailbreak Successful via External Grader at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
@@ -517,7 +524,7 @@ export class CrescendoProvider implements ApiProvider {
     this.logChatHistory(this.targetConversationId);
     this.logChatHistory(this.redTeamingChatConversationId);
 
-    // Determine final exit reason and result
+    // Determine final result based on successful attacks
     const hasSuccessfulAttacks = this.successfulAttacks.length > 0;
     if (hasSuccessfulAttacks) {
       evalFlag = true;
@@ -536,6 +543,7 @@ export class CrescendoProvider implements ApiProvider {
         crescendoConfidence: evalPercentage,
         stopReason: exitReason,
         redteamHistory: messagesToRedteamHistory(messages),
+        // Include all successful attacks for analysis
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
       },
@@ -859,12 +867,15 @@ export class CrescendoProvider implements ApiProvider {
     }
   }
 
-  private recordSuccessfulAttack(roundNum: number, attackPrompt: string, response: string): void {
+  /**
+   * Records successful attack, preventing duplicates.
+   */
+  private recordSuccessfulAttack(roundNum: number, prompt: string, response: string): void {
     const alreadyRecorded = this.successfulAttacks.some((attack) => attack.turn === roundNum);
     if (!alreadyRecorded) {
       this.successfulAttacks.push({
         turn: roundNum,
-        prompt: attackPrompt,
+        prompt,
         response,
       });
     }

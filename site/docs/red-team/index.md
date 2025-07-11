@@ -193,6 +193,16 @@ AI developers work to ensure these kinds of results don't emerge, but it's alway
 
 And yes, someone did actually [eat the glue pizza](https://www.businessinsider.com/google-ai-glue-pizza-i-tried-it-2024-5).
 
+## Advanced features
+
+Modern red teaming frameworks include sophisticated features that enhance the effectiveness of vulnerability discovery:
+
+- **[Unblocking Agent](/docs/red-team/advanced-features#unblocking-agent)**: Automatically handles verification and blocking questions during multi-turn attacks, enabling deeper vulnerability testing
+- **[Continue After Success](/docs/red-team/advanced-features#continue-after-success)**: Allows strategies to discover multiple vulnerabilities in a single run rather than stopping at the first success
+- **Adaptive Attack Generation**: Dynamically adjusts attack strategies based on target responses
+
+These features are particularly important for testing complex conversational AI systems where vulnerabilities may only emerge after extended interactions. Learn more in our [Advanced Features documentation](/docs/red-team/advanced-features).
+
 ## Best practices
 
 Based on our experience as practitioners deploying LLMs, we recommend the following best practices for effective red teaming:
