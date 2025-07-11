@@ -41,8 +41,9 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
+import FiltersButton from './ResultsFilters/FiltersButton';
+import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import SettingsModal from './TableSettings/TableSettingsModal';
@@ -171,6 +172,7 @@ export default function ResultsView({
     filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
+    filters,
   } = useTableStore();
 
   const {
@@ -225,6 +227,9 @@ export default function ResultsView({
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
+
+  const [filtersFormOpen, setFiltersFormOpen] = React.useState(false);
+  const filtersButtonRef = React.useRef<HTMLButtonElement>(null);
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -458,27 +463,6 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Add state for metric filter and available metrics
-  const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
-
-  const availableMetrics = React.useMemo(() => {
-    if (table && table.head?.prompts) {
-      const metrics = new Set<string>();
-      table.head.prompts.forEach((prompt) => {
-        if (prompt.metrics?.namedScores) {
-          Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
-        }
-      });
-      return Array.from(metrics).sort();
-    }
-    return [];
-  }, [table]);
-
-  // Make the function a callback that can be passed to CustomMetrics
-  const handleMetricFilterChange = React.useCallback((metric: string | null) => {
-    setSelectedMetric(metric);
-  }, []);
-
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -556,11 +540,18 @@ export default function ResultsView({
             placeholder="Text or regex"
           />
         </Box>
-        <MetricFilterSelector
-          selectedMetric={selectedMetric}
-          availableMetrics={availableMetrics}
-          onChange={handleMetricFilterChange}
+
+        <FiltersButton
+          appliedFiltersCount={filters.appliedCount}
+          onClick={() => setFiltersFormOpen(true)}
+          ref={filtersButtonRef}
         />
+        <FiltersForm
+          open={filtersFormOpen}
+          onClose={() => setFiltersFormOpen(false)}
+          anchorEl={filtersButtonRef.current}
+        />
+
         <Box
           sx={{
             display: 'flex',
@@ -571,7 +562,7 @@ export default function ResultsView({
             fontSize: '0.875rem',
           }}
         >
-          {searchText || filterMode !== 'all' || selectedMetric ? (
+          {searchText || filterMode !== 'all' || filters.appliedCount > 0 ? (
             <>
               <strong>{filteredResultsCount}</strong>
               <span style={{ margin: '0 4px' }}>of</span>
@@ -590,14 +581,6 @@ export default function ResultsView({
                   size="small"
                   label={`Filter: ${filterMode}`}
                   onDelete={() => setFilterMode('all')}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                />
-              )}
-              {selectedMetric && (
-                <Chip
-                  size="small"
-                  label={`Metric: ${selectedMetric}`}
-                  onDelete={() => handleMetricFilterChange(null)}
                   sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                 />
               )}
@@ -736,8 +719,6 @@ export default function ResultsView({
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
-        selectedMetric={selectedMetric}
-        onMetricFilter={handleMetricFilterChange}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
