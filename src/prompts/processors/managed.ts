@@ -32,6 +32,11 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
     throw new Error(`Managed prompt not found: ${promptId}`);
   }
 
+  // Track usage (async, don't wait)
+  manager.trackUsage(promptId).catch(err => {
+    logger.debug(`Failed to track prompt usage: ${err.message}`);
+  });
+
   let targetVersion: number;
 
   if (!versionOrEnv) {

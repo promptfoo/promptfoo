@@ -9,6 +9,8 @@ describe('processManagedPrompt', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Mock trackUsage to return a resolved promise
+    mockPromptManager.prototype.trackUsage = jest.fn().mockResolvedValue(undefined);
   });
 
   const createMockPrompt = (overrides?: Partial<ManagedPromptWithVersions>): ManagedPromptWithVersions => ({

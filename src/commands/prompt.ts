@@ -385,4 +385,59 @@ export function promptCommand(program: Command) {
         process.exitCode = 1;
       }
     });
+
+  // Export prompts
+  promptCmd
+    .command('export')
+    .description('Export prompts to JSON')
+    .option('--ids <ids...>', 'Specific prompt IDs to export')
+    .option('-o, --output <file>', 'Output file (defaults to stdout)')
+    .action(async (cmdObj: { ids?: string[]; output?: string }) => {
+      telemetry.record('command_used', { name: 'prompt export' });
+
+      try {
+        const manager = new PromptManager();
+        const exported = await manager.exportPrompts(cmdObj.ids);
+        
+        const json = JSON.stringify(exported, null, 2);
+        
+        if (cmdObj.output) {
+          const fs = await import('fs/promises');
+          await fs.writeFile(cmdObj.output, json, 'utf-8');
+          logger.info(chalk.green(`Exported ${Object.keys(exported).length} prompts to ${cmdObj.output}`));
+        } else {
+          console.log(json);
+        }
+      } catch (error) {
+        logger.error(chalk.red(`Export failed: ${error}`));
+        process.exitCode = 1;
+      }
+    });
+
+  // Import prompts
+  promptCmd
+    .command('import <file>')
+    .description('Import prompts from JSON')
+    .option('--overwrite', 'Overwrite existing prompts')
+    .action(async (file: string, cmdObj: { overwrite?: boolean }) => {
+      telemetry.record('command_used', { name: 'prompt import' });
+
+      try {
+        const manager = new PromptManager();
+        const fs = await import('fs/promises');
+        const content = await fs.readFile(file, 'utf-8');
+        const data = JSON.parse(content);
+        
+        const imported = await manager.importPrompts(data, cmdObj.overwrite);
+        
+        logger.info(chalk.green(`Successfully imported ${imported.length} prompts`));
+        if (imported.length > 0) {
+          logger.info('Imported prompts:');
+          imported.forEach(id => logger.info(`  - ${id}`));
+        }
+      } catch (error) {
+        logger.error(chalk.red(`Import failed: ${error}`));
+        process.exitCode = 1;
+      }
+    });
 }

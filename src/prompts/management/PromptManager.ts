@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'js-yaml';
 import { diffLines } from 'diff';
+import os from 'os';
 import logger from '../../logger';
 import { cloudConfig } from '../../globalConfig/cloud';
 import { fetchWithRetries } from '../../fetch';
@@ -12,6 +13,7 @@ import type {
   PromptYaml,
   PromptManagementConfig 
 } from '../../types/prompt-management';
+import packageJson from '../../../package.json';
 
 export class PromptManager {
   private config: PromptManagementConfig;
@@ -113,13 +115,24 @@ export class PromptManager {
       throw new Error('Not authenticated. Please run "promptfoo auth login" first.');
     }
 
+    // Collect metadata
+    const metadata = {
+      promptfooVersion: packageJson.version,
+      os: os.type(),
+      platform: os.platform(),
+      arch: os.arch(),
+      usageCount: 0,
+      lastUsedAt: null,
+      isCloudSynced: true,
+    };
+
     const response = await fetchWithRetries(apiUrl, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({ id, description, content, notes: 'Initial version' }),
+      body: JSON.stringify({ id, description, content, notes: 'Initial version', metadata }),
     }, 30000);
 
     if (!response.ok) {
@@ -475,5 +488,107 @@ export class PromptManager {
       const error = await response.text();
       throw new Error(`Failed to delete prompt: ${error}`);
     }
+  }
+
+  async trackUsage(id: string): Promise<void> {
+    try {
+      if (this.config.mode === 'local') {
+        // For local mode, we don't track usage to keep it simple
+        return;
+      }
+
+      const apiUrl = `${this.config.cloudApiUrl}/api/prompts/${id}/usage`;
+      const apiKey = cloudConfig.getApiKey();
+      
+      if (!apiKey) {
+        return; // Silently skip if not authenticated
+      }
+
+      await fetchWithRetries(apiUrl, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${apiKey}`
+        }
+      }, 5000); // Short timeout for tracking
+    } catch (error) {
+      // Silently fail - we don't want usage tracking to break the main flow
+      logger.debug(`Failed to track usage for prompt ${id}: ${error}`);
+    }
+  }
+
+  async exportPrompts(ids?: string[]): Promise<Record<string, PromptYaml>> {
+    const prompts = await this.listPrompts();
+    const result: Record<string, PromptYaml> = {};
+    
+    const targetIds = ids || prompts.map(p => p.id);
+    
+    for (const id of targetIds) {
+      const prompt = await this.getPrompt(id);
+      if (prompt) {
+        result[id] = {
+          id: prompt.id,
+          description: prompt.description,
+          tags: prompt.tags,
+          currentVersion: prompt.currentVersion,
+          versions: prompt.versions.map(v => ({
+            version: v.version,
+            author: v.author || 'unknown',
+            createdAt: v.createdAt.toISOString(),
+            content: v.content,
+            notes: v.notes,
+          })),
+          deployments: prompt.deployments || {},
+        };
+      }
+    }
+    
+    return result;
+  }
+
+  async importPrompts(data: Record<string, PromptYaml>, overwrite: boolean = false): Promise<string[]> {
+    const imported: string[] = [];
+    const errors: string[] = [];
+    
+    for (const [id, promptData] of Object.entries(data)) {
+      try {
+        const existing = await this.getPrompt(id);
+        
+        if (existing && !overwrite) {
+          errors.push(`Prompt "${id}" already exists (use --overwrite to replace)`);
+          continue;
+        }
+        
+        if (existing) {
+          // Delete existing prompt first
+          await this.deletePrompt(id);
+        }
+        
+        // Create the prompt with first version
+        const firstVersion = promptData.versions[0];
+        await this.createPrompt(id, promptData.description, firstVersion.content);
+        
+        // Add remaining versions
+        for (let i = 1; i < promptData.versions.length; i++) {
+          const version = promptData.versions[i];
+          await this.updatePrompt(id, version.content, version.notes);
+        }
+        
+        // Apply deployments
+        for (const [env, version] of Object.entries(promptData.deployments || {})) {
+          await this.deployPrompt(id, env, version);
+        }
+        
+        imported.push(id);
+      } catch (error: any) {
+        errors.push(`Failed to import "${id}": ${error.message}`);
+      }
+    }
+    
+    if (errors.length > 0) {
+      logger.warn('Import completed with errors:');
+      errors.forEach(err => logger.warn(`  - ${err}`));
+    }
+    
+    return imported;
   }
 } 

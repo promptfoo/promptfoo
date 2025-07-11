@@ -277,6 +277,16 @@ export const managedPromptsTable = sqliteTable(
       .notNull()
       .default(sql`(unixepoch())`),
     author: text('author'),
+    // Metadata fields
+    metadata: text('metadata', { mode: 'json' }).$type<{
+      promptfooVersion?: string;
+      os?: string;
+      platform?: string;
+      arch?: string;
+      usageCount?: number;
+      lastUsedAt?: number;
+      isCloudSynced?: boolean;
+    }>(),
   },
   (table) => ({
     createdAtIdx: index('managed_prompts_created_at_idx').on(table.createdAt),

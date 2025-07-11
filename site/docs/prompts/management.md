@@ -423,6 +423,51 @@ done
 3. **Audit Trail**: All changes are logged with author and timestamp
 4. **Encryption**: Cloud-stored prompts are encrypted at rest
 
+## Caveats and Considerations
+
+### File References
+
+When using managed prompts, there are important considerations regarding file references:
+
+1. **File References in Prompts**: If your prompt contains `file://` references to external files (e.g., `file://templates/base.txt`), these references are **preserved as-is** in the managed prompt. They are not serialized or embedded into the prompt content.
+
+2. **Path Resolution**: File references are resolved relative to where the evaluation is run, not where the prompt was created. This means:
+   - If you create a prompt with `file://data/context.txt` in one directory
+   - And run an evaluation using that prompt from a different directory
+   - The file path will be resolved from the evaluation directory
+
+3. **Best Practices**:
+   - Use absolute paths when possible for consistency
+   - Or ensure relative paths are consistent across your project structure
+   - Consider embedding the content directly in the prompt if it's not too large
+   - Document any required files in the prompt description
+
+4. **Example**:
+   ```yaml
+   # This prompt contains a file reference
+   prompts:
+     - |
+       {{#include file://templates/system.txt}}
+       
+       User: {{query}}
+   ```
+   
+   When this prompt is stored as a managed prompt, the `file://templates/system.txt` reference is preserved. Anyone using this prompt needs to have that file available at the expected path.
+
+### Version Control Integration
+
+While managed prompts provide built-in versioning, they are not currently backed by git or other VCS. Each version is stored independently in the database or YAML files. Consider:
+
+- Exporting important prompts to your git repository for additional backup
+- Using the CLI export functionality for disaster recovery
+- Implementing your own backup strategy for production prompts
+
+### Size Limitations
+
+- **Local Mode**: Limited only by filesystem constraints
+- **Cloud Mode**: Prompts larger than 1MB may require special handling
+- Consider splitting very large prompts into smaller, composable pieces
+
 ## Next Steps
 
 - Learn about [prompt testing strategies](../guides/prompt-testing)

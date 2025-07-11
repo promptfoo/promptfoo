@@ -6,7 +6,8 @@ CREATE TABLE `managed_prompts` (
   `current_version` integer DEFAULT 1 NOT NULL,
   `created_at` integer DEFAULT (unixepoch()) NOT NULL,
   `updated_at` integer DEFAULT (unixepoch()) NOT NULL,
-  `author` text
+  `author` text,
+  `metadata` text
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `managed_prompts_name_idx` ON `managed_prompts` (`name`);--> statement-breakpoint
