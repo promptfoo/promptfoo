@@ -263,7 +263,7 @@ The web interface provides an interactive testing experience:
 
 To test a prompt in the UI:
 1. Navigate to a prompt and click "Test"
-2. Select the version and provider
+2. Select the version and provider from a comprehensive list
 3. Fill in values for each variable
 4. Click "Preview Prompt" to see the final rendered prompt
 5. Click "Run Test" to execute
@@ -273,6 +273,15 @@ The test feature properly handles:
 - Complex templates with conditional logic
 - Different provider configurations
 - Token usage and cost tracking
+
+The provider selection includes models from:
+- OpenAI (GPT-4.1, GPT-4o, o3/o4 with thinking capabilities)
+- Anthropic (Claude 4, Claude 3.7, Claude 3.5 families)
+- AWS Bedrock (Claude, Llama, Amazon Nova models)
+- Azure OpenAI deployments
+- Google Vertex AI (Gemini, Claude, Llama models)
+- OpenRouter (various models)
+- And many more providers with their latest models
 
 ## Best Practices
 

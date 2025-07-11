@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { callApi } from '@app/utils/api';
 import { useToast } from '@app/hooks/useToast';
+import { toSimpleProviderList } from '@app/providers/defaultProviders';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -56,11 +57,14 @@ export default function PromptTestPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   
+  // Get the centralized provider list
+  const providerOptions = toSimpleProviderList();
+  
   const [prompt, setPrompt] = useState<ManagedPromptWithVersions | null>(null);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
-  const [provider, setProvider] = useState('openai:gpt-3.5-turbo');
+  const [provider, setProvider] = useState(providerOptions[0]?.value || 'openai:gpt-3.5-turbo');
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -209,11 +213,11 @@ export default function PromptTestPage() {
               onChange={(e) => setProvider(e.target.value)}
               label="Provider"
             >
-              <MenuItem value="openai:gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</MenuItem>
-              <MenuItem value="openai:gpt-4">OpenAI GPT-4</MenuItem>
-              <MenuItem value="openai:gpt-4-turbo">OpenAI GPT-4 Turbo</MenuItem>
-              <MenuItem value="anthropic:claude-3-sonnet">Anthropic Claude 3 Sonnet</MenuItem>
-              <MenuItem value="anthropic:claude-3-opus">Anthropic Claude 3 Opus</MenuItem>
+              {providerOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 
