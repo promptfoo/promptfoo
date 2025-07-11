@@ -1,13 +1,13 @@
 ---
 title: Release Notes
-description: Monthly summaries of promptfoo releases, features, and improvements
+description: Monthly summaries of promptfoo releases, features, and improvements for the open-source LLM testing framework
 tags: [releases, changelog, updates, features]
 keywords: [promptfoo releases, changelog, updates, features, monthly summaries]
 ---
 
 # Release Notes
 
-Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
+Full release history for promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
 ## June 2025 Release Highlights
 
@@ -19,7 +19,7 @@ This month we focused on enhancing **observability**, expanding **provider suppo
 
 #### See Inside Your LLM Applications with OpenTelemetry
 
-We've added [OpenTelemetry tracing support](/docs/tracing/) to help you understand what's happening inside your AI applications. Previously, LLM applications were often "black boxes" - you could see inputs and outputs, but not what happened in between. Now you can visualize the entire execution flow, measure performance of individual steps, and quickly identify issues.
+We've added [OpenTelemetry tracing support](/docs/tracing/) to help you understand what's happening inside your AI applications. Previously, LLM applications were often "black boxes"—you could see inputs and outputs, but not what happened in between. Now you can visualize the entire execution flow, measure performance of individual steps, and quickly identify issues.
 
 This is especially valuable for complex RAG pipelines or multi-step workflows where you need to identify performance bottlenecks or debug failures.
 
@@ -79,7 +79,10 @@ Supply chain attacks through compromised models are a growing threat. We've sign
 
 - **Assertion Generation** - Automatically generate test assertions based on your use cases, saving time in test creation
 - **SQLite WAL Mode** - Improved performance and reliability for local evaluations with better concurrent access
-- **Enhanced Token Tracking** - Better visibility into token usage across providers for cost monitoring
+- **Enhanced Token Tracking** - Per-provider token usage statistics help you monitor costs across different LLM providers
+- **Evaluation Time Limits** - New `PROMPTFOO_MAX_EVAL_TIME_MS` environment variable prevents runaway evaluations from consuming excessive resources
+- **Custom Headers Support** - Added support for custom headers in Azure and Google Gemini providers for enterprise authentication needs
+- **WebSocket Header Support** - Enhanced WebSocket providers with custom header capabilities
 
 ## Red Teaming
 
@@ -91,9 +94,11 @@ Generic attacks often miss system-specific vulnerabilities. We've added powerful
 
 1. **[Target Discovery Agent](/docs/red-team/discovery/)** - Automatically analyzes your AI system to understand its capabilities and craft more effective, targeted attacks
 
-2. **[Custom Strategy Builder](/docs/red-team/strategies/custom-strategy/)** - Define complex multi-turn attack strategies using natural language instructions - no coding required
+2. **[Custom Strategy Builder](/docs/red-team/strategies/custom-strategy/)** - Define complex multi-turn attack strategies using natural language instructions—no coding required
 
 3. **[Grader Customization](/docs/red-team/troubleshooting/grading-results/#customizing-graders-for-specific-plugins-in-promptfoo-enterprise)** - Fine-tune evaluation criteria at the plugin level with concrete examples for more accurate assessments
+
+4. **Cloud-based Plugin Severity Overrides** - Enterprise users can centrally manage and customize severity levels for red team plugins across their organization
 
 ### Plugins
 
@@ -131,6 +136,20 @@ Biased AI systems can perpetuate discrimination at scale. Our new [comprehensive
 ##### Enterprise-Grade Datasets
 
 - **[Aegis Dataset](/docs/red-team/plugins/aegis/)** - NVIDIA's 26,000+ manually annotated interactions across 13 safety categories for comprehensive content safety testing
+
+#### New Red Team Capabilities
+
+##### Intent Plugin Enhancements
+
+The [Intent (Custom Prompts) plugin](/docs/red-team/plugins/intent/) now supports JSON file uploads with nested arrays for multi-step attack sequences. The enhanced UI makes it easier to manage complex test scenarios.
+
+##### Enhanced HTTP Provider Support
+
+Red team tests now include automatic token estimation for HTTP providers, helping you track costs even with custom API integrations.
+
+##### System Prompt Override Testing
+
+A new [System Prompt Override plugin](/docs/red-team/plugins/system-prompt-override/) tests whether your LLM deployment is vulnerable to system instruction manipulation—a critical security flaw that could disable safety features.
 
 ### Strategies
 
