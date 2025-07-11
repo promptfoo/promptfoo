@@ -44,7 +44,7 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
     targetVersion = managedPrompt.currentVersion;
   } else if (/^\d+$/.test(versionOrEnv)) {
     // It's a version number
-    targetVersion = parseInt(versionOrEnv, 10);
+    targetVersion = Number.parseInt(versionOrEnv, 10);
   } else {
     // It's an environment name
     const deployedVersion = managedPrompt.deployments?.[versionOrEnv];

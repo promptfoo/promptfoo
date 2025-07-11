@@ -5,12 +5,12 @@ import type { ManagedPromptWithVersions } from '../../../src/types/prompt-manage
 jest.mock('../../../src/prompts/management/PromptManager');
 
 describe('processManagedPrompt', () => {
-  const mockPromptManager = PromptManager as jest.MockedClass<typeof PromptManager>;
+  const mockPromptManager = jest.mocked(PromptManager);
 
   beforeEach(() => {
     jest.clearAllMocks();
     // Mock trackUsage to return a resolved promise
-    mockPromptManager.prototype.trackUsage = jest.fn().mockResolvedValue(undefined);
+    jest.spyOn(mockPromptManager.prototype, 'trackUsage').mockImplementation().mockResolvedValue(undefined);
   });
 
   const createMockPrompt = (overrides?: Partial<ManagedPromptWithVersions>): ManagedPromptWithVersions => ({

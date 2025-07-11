@@ -398,13 +398,15 @@ export function promptCommand(program: Command) {
       try {
         const manager = new PromptManager();
         const exported = await manager.exportPrompts(cmdObj.ids);
-        
+
         const json = JSON.stringify(exported, null, 2);
-        
+
         if (cmdObj.output) {
           const fs = await import('fs/promises');
           await fs.writeFile(cmdObj.output, json, 'utf-8');
-          logger.info(chalk.green(`Exported ${Object.keys(exported).length} prompts to ${cmdObj.output}`));
+          logger.info(
+            chalk.green(`Exported ${Object.keys(exported).length} prompts to ${cmdObj.output}`),
+          );
         } else {
           console.log(json);
         }
@@ -427,13 +429,13 @@ export function promptCommand(program: Command) {
         const fs = await import('fs/promises');
         const content = await fs.readFile(file, 'utf-8');
         const data = JSON.parse(content);
-        
+
         const imported = await manager.importPrompts(data, cmdObj.overwrite);
-        
+
         logger.info(chalk.green(`Successfully imported ${imported.length} prompts`));
         if (imported.length > 0) {
           logger.info('Imported prompts:');
-          imported.forEach(id => logger.info(`  - ${id}`));
+          imported.forEach((id) => logger.info(`  - ${id}`));
         }
       } catch (error) {
         logger.error(chalk.red(`Import failed: ${error}`));
