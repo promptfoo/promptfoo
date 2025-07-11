@@ -296,6 +296,70 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 
 Then, enable 'Render markdown' under Table Settings.
 
+## Web Search Support
+
+The OpenAI Responses API supports web search capabilities through the `web_search` tool, which is essential for the `research-rubric` assertion type. This allows models to verify facts, check current information, and validate citations.
+
+### Enabling Web Search
+
+To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add the `web_search` tool to your configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      tools:
+        - type: web_search
+```
+
+### Using Web Search with Research-Rubric
+
+The `research-rubric` assertion type automatically uses web search when available to verify:
+
+- Real-time information (weather, stock prices, news)
+- Mathematical calculations and facts
+- Citations and academic references
+- Current events and statistics
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'What is the current temperature in {{city}}?'
+
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      tools:
+        - type: web_search
+
+tests:
+  - vars:
+      city: New York
+    assert:
+      - type: research-rubric
+        value: Must provide accurate current temperature for the specified city
+```
+
+### Cost Considerations
+
+:::warning
+Web search API calls are significantly more expensive than regular completions:
+- Each research-rubric assertion may perform multiple searches
+- Costs can be 5-10x higher than standard assertions
+- Use caching (`--cache`) to avoid redundant searches
+:::
+
+### Best Practices
+
+1. **Use specific rubrics**: More specific requirements reduce the number of searches needed
+2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+3. **Limit scope**: Only use research-rubric for tests that truly need fact verification
+4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
+
+For more details on using research-rubric assertions, see the [Research-Rubric documentation](/docs/configuration/expected-outputs/model-graded/research-rubric).
+
 ## Using tools and functions
 
 OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).

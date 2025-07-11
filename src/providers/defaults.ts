@@ -25,6 +25,7 @@ import {
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
+import { loadApiProvider } from './index';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'gradingJsonProvider',
@@ -124,6 +125,19 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (await hasGoogleDefaultCredentials())
   ) {
     logger.debug('Using Google default providers');
+    
+    // Load Gemini with search tools for research
+    let researchProvider: ApiProvider | undefined;
+    try {
+      researchProvider = await loadApiProvider('google:gemini-2.0-flash', {
+        options: { 
+          config: { tools: [{ googleSearch: {} }] }
+        },
+      });
+    } catch (err) {
+      logger.debug(`Failed to load Google research provider: ${err}`);
+    }
+    
     providers = {
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
@@ -132,7 +146,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
       // Google providers can have web search capabilities
-      researchProvider: GeminiGradingProvider,
+      researchProvider,
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
@@ -153,6 +167,19 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else {
     logger.debug('Using OpenAI default providers');
+    
+    // Load OpenAI responses API with web search for research
+    let researchProvider: ApiProvider | undefined;
+    try {
+      researchProvider = await loadApiProvider('openai:responses:gpt-4o', {
+        options: { 
+          config: { tools: [{ type: 'web_search' }] }
+        },
+      });
+    } catch (err) {
+      logger.debug(`Failed to load OpenAI research provider: ${err}`);
+    }
+    
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider,
       gradingJsonProvider: OpenAiGradingJsonProvider,
@@ -161,7 +188,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: OpenAiSuggestionsProvider,
       synthesizeProvider: OpenAiGradingJsonProvider,
       // OpenAI can use responses API with web search
-      researchProvider: OpenAiGradingProvider,
+      researchProvider,
     };
   }
 

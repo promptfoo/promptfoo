@@ -157,7 +157,7 @@ describe('handleResearchRubric', () => {
       test: {
         vars: {},
         options: {
-          rubricPrompt: { key: 'value' },
+          rubricPrompt: [{ role: 'system', content: 'test prompt' }],
         },
       },
       renderedValue: 'test',
@@ -174,7 +174,7 @@ describe('handleResearchRubric', () => {
     const result = await handleResearchRubric(params);
 
     expect(result).toEqual(expectedResult);
-    expect(params.test.options?.rubricPrompt).toBe('{"key":"value"}');
+    expect(params.test.options?.rubricPrompt).toBe('[{"role":"system","content":"test prompt"}]');
   });
 
   it('should update assertion value from test options rubricPrompt', async () => {
