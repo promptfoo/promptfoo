@@ -106,11 +106,13 @@ You can extend this pattern to:
 ### "Expected one candidate in API response" Error
 
 This error typically occurs when:
+
 - The Google API key is not set correctly
 - The response schema format is incompatible with the Gemini API
 - The API quota has been exceeded
 
 To debug:
+
 1. Verify your API key is set: `echo $GOOGLE_API_KEY`
 2. Try running without response schema first
 3. Check the Google Cloud Console for API errors
@@ -118,6 +120,7 @@ To debug:
 ### TypeScript Errors
 
 If you encounter TypeScript errors:
+
 1. Ensure you have `tsx` installed: `npm install tsx`
 2. Check that your Node.js version is 20 or later
-3. Verify the import paths in your configuration 
+3. Verify the import paths in your configuration

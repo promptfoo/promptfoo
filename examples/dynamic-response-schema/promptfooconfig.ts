@@ -1,5 +1,5 @@
-import type { UnifiedConfig } from 'promptfoo';
 import { zodResponseFormat } from 'openai/helpers/zod.mjs';
+import type { UnifiedConfig } from 'promptfoo';
 import { createConversationSchema } from './src/schemas/conversation';
 
 // Create the schema instance with a default language
@@ -10,10 +10,12 @@ const responseFormat = zodResponseFormat(schema, 'conversation_response');
 
 // Helper function to clean schema for Gemini compatibility
 function cleanSchemaForGemini(schema: any): any {
-  if (typeof schema !== 'object' || schema === null) return schema;
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
 
   const cleaned = { ...schema };
-  
+
   // Remove properties that Gemini doesn't support
   delete cleaned.additionalProperties;
   delete cleaned.$schema;
@@ -21,10 +23,7 @@ function cleanSchemaForGemini(schema: any): any {
   // Recursively clean nested objects
   if (cleaned.properties) {
     cleaned.properties = Object.fromEntries(
-      Object.entries(cleaned.properties).map(([key, value]) => [
-        key,
-        cleanSchemaForGemini(value),
-      ]),
+      Object.entries(cleaned.properties).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
     );
   }
 
@@ -46,10 +45,7 @@ function cleanSchemaForGemini(schema: any): any {
   // Handle definitions if present
   if (cleaned.definitions) {
     cleaned.definitions = Object.fromEntries(
-      Object.entries(cleaned.definitions).map(([key, value]) => [
-        key,
-        cleanSchemaForGemini(value),
-      ]),
+      Object.entries(cleaned.definitions).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
     );
   }
 
@@ -58,9 +54,9 @@ function cleanSchemaForGemini(schema: any): any {
 
 const config: UnifiedConfig = {
   description: 'Dynamic schema generation for language learning conversations',
-  
+
   prompts: ['file://prompts/conversation.txt'],
-  
+
   providers: [
     {
       id: 'openai:gpt-4o-mini',
@@ -80,7 +76,7 @@ const config: UnifiedConfig = {
       },
     },
   ],
-  
+
   tests: [
     {
       vars: {
@@ -183,4 +179,4 @@ const config: UnifiedConfig = {
   outputPath: './results.json',
 };
 
-export default config; 
+export default config;

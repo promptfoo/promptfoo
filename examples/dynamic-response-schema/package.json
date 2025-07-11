@@ -1,18 +1,18 @@
 {
-    "name": "dynamic-response-schema-example",
-    "version": "1.0.0",
-    "description": "Example of using TypeScript config with dynamic schema generation in promptfoo",
-    "scripts": {
-        "eval": "NODE_OPTIONS=\"--import tsx\" promptfoo eval -c promptfooconfig.ts",
-        "view": "promptfoo view"
-    },
-    "dependencies": {
-        "openai": "^4.0.0",
-        "tsx": "^4.0.0",
-        "zod": "^3.0.0"
-    },
-    "devDependencies": {
-        "@types/node": "^20.0.0",
-        "promptfoo": "latest"
-    }
+  "name": "dynamic-response-schema-example",
+  "version": "1.0.0",
+  "description": "Example of using TypeScript config with dynamic schema generation in promptfoo",
+  "scripts": {
+    "eval": "NODE_OPTIONS=\"--import tsx\" promptfoo eval -c promptfooconfig.ts",
+    "view": "promptfoo view"
+  },
+  "dependencies": {
+    "openai": "^4.0.0",
+    "tsx": "^4.0.0",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "promptfoo": "latest"
+  }
 }

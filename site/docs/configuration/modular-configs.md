@@ -246,13 +246,8 @@ import type { UnifiedConfig } from 'promptfoo';
 
 const config: UnifiedConfig = {
   description: 'My evaluation suite',
-  prompts: [
-    'Tell me about {{topic}} in {{style}}',
-  ],
-  providers: [
-    'openai:gpt-4.1-mini',
-    'anthropic:claude-3-haiku',
-  ],
+  prompts: ['Tell me about {{topic}} in {{style}}'],
+  providers: ['openai:gpt-4.1-mini', 'anthropic:claude-3-haiku'],
   tests: [
     {
       vars: {
@@ -297,8 +292,8 @@ NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c prompt
 TypeScript configs are particularly useful when you need to share types, schemas, or logic with your application:
 
 ```typescript title="promptfooconfig.ts"
-import type { UnifiedConfig } from 'promptfoo';
 import { zodResponseFormat } from 'openai/helpers/zod.mjs';
+import type { UnifiedConfig } from 'promptfoo';
 import { createConversationSchema } from './src/llm/conversation-schema.js';
 
 // Dynamically generate schema based on your application code
@@ -332,7 +327,7 @@ function cleanSchemaForGemini(schema: any): any {
   if (typeof schema !== 'object' || schema === null) return schema;
 
   const cleaned = { ...schema };
-  
+
   // Remove properties that Gemini doesn't support
   delete cleaned.additionalProperties;
   delete cleaned.$schema;
@@ -340,10 +335,7 @@ function cleanSchemaForGemini(schema: any): any {
   // Recursively clean nested objects
   if (cleaned.properties) {
     cleaned.properties = Object.fromEntries(
-      Object.entries(cleaned.properties).map(([key, value]) => [
-        key,
-        cleanSchemaForGemini(value),
-      ]),
+      Object.entries(cleaned.properties).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
     );
   }
 
@@ -374,6 +366,7 @@ export default config;
 5. **Refactoring Support**: Rename symbols and refactor with confidence
 
 This approach is especially valuable when:
+
 - Working with structured outputs or response schemas
 - Building complex evaluation suites that need to stay in sync with your application
 - You want to leverage existing TypeScript types and interfaces

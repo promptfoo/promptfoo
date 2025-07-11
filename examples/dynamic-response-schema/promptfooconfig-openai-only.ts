@@ -1,5 +1,5 @@
-import type { UnifiedConfig } from 'promptfoo';
 import { zodResponseFormat } from 'openai/helpers/zod.mjs';
+import type { UnifiedConfig } from 'promptfoo';
 import { createConversationSchema } from './src/schemas/conversation';
 
 // Create the schema instance with a default language
@@ -10,9 +10,9 @@ const responseFormat = zodResponseFormat(schema, 'conversation_response');
 
 const config: UnifiedConfig = {
   description: 'Dynamic schema generation for language learning conversations (OpenAI only)',
-  
+
   prompts: ['file://prompts/conversation.txt'],
-  
+
   providers: [
     {
       id: 'openai:gpt-4o-mini',
@@ -30,7 +30,7 @@ const config: UnifiedConfig = {
       },
     },
   ],
-  
+
   tests: [
     {
       vars: {
@@ -92,4 +92,4 @@ const config: UnifiedConfig = {
   outputPath: './results.json',
 };
 
-export default config; 
+export default config;

@@ -109,6 +109,7 @@ promptfoo supports `.yaml`, `.yml`, `.json`, `.js`, `.mjs`, `.cjs`, and `.ts` fi
 It automatically loads `promptfooconfig.*`, but you can use a custom config file with `promptfoo eval -c path/to/config`.
 
 **TypeScript configuration**: When using `.ts` files, you need a TypeScript loader like `tsx` or `@swc-node/register`. Run with:
+
 ```bash
 NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig.ts
 ```
@@ -603,3 +604,4 @@ interface CompletedPrompt {
     cost: number;
   };
 }
+```
