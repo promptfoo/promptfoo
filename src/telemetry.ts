@@ -38,10 +38,11 @@ function getPostHogClient(): PostHog | null {
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { POSTHOG_KEY } = require('./generated-constants');
+  const key = process.env.PROMPTFOO_POSTHOG_KEY ?? POSTHOG_KEY;
 
-  if (posthogClient === null && POSTHOG_KEY) {
+  if (posthogClient === null && key) {
     try {
-      posthogClient = new PostHog(POSTHOG_KEY, {
+      posthogClient = new PostHog(key, {
         host: EVENTS_ENDPOINT,
       });
     } catch {
