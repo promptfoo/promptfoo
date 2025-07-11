@@ -102,8 +102,10 @@ describe('Metadata Filter Integration Tests', () => {
 
     it('should return 404 for non-existent eval', async () => {
       const nonExistentId = '00000000-0000-0000-0000-000000000000';
-      await request(app).get(`/api/eval/${nonExistentId}/metadata-keys`).expect(404);
+      const response = await request(app).get(`/api/eval/${nonExistentId}/metadata-keys`).expect(404);
+      expect(response.status).toBe(404);
     });
+
   });
 
   describe('GET /api/eval/:id with metadata filter', () => {
