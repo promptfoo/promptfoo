@@ -229,7 +229,7 @@ export default function ResultsView({
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
 
-  const [filtersModalOpen, setFiltersModalOpen] = React.useState(false);
+  const [filtersFormOpen, setFiltersFormOpen] = React.useState(false);
   const filtersButtonRef = React.useRef<HTMLButtonElement>(null);
 
   // State for anchor element
@@ -544,12 +544,12 @@ export default function ResultsView({
 
         <FiltersButton
           appliedFiltersCount={filters.appliedCount}
-          onClick={() => setFiltersModalOpen(true)}
+          onClick={() => setFiltersFormOpen(true)}
           ref={filtersButtonRef}
         />
         <FiltersForm
-          open={filtersModalOpen}
-          onClose={() => setFiltersModalOpen(false)}
+          open={filtersFormOpen}
+          onClose={() => setFiltersFormOpen(false)}
           anchorEl={filtersButtonRef.current}
         />
 
