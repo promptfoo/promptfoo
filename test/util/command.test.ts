@@ -1,5 +1,5 @@
-import { getCommand, getCommandPrefix } from '../../src/util/command';
 import * as util from '../../src/util';
+import { getCommand, getCommandPrefix } from '../../src/util/command';
 
 jest.mock('../../src/util', () => ({
   isRunningUnderNpx: jest.fn(),

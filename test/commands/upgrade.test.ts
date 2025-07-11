@@ -1,16 +1,14 @@
+import { execSync } from 'child_process';
 import type { Command } from 'commander';
 import { upgradeCommand } from '../../src/commands/upgrade';
+import { VERSION } from '../../src/constants';
+import logger from '../../src/logger';
+import { execAsync } from '../../src/python/execAsync';
+import telemetry from '../../src/telemetry';
 import * as updates from '../../src/updates';
 import * as util from '../../src/util';
-import { execAsync } from '../../src/python/execAsync';
-import logger from '../../src/logger';
-import { VERSION } from '../../src/constants';
-import telemetry from '../../src/telemetry';
 
-jest.mock('child_process', () => ({
-  execSync: jest.fn(),
-  exec: jest.fn(),
-}));
+jest.mock('child_process');
 jest.mock('../../src/python/execAsync', () => ({
   execAsync: jest.fn(),
 }));
@@ -35,7 +33,7 @@ const mockedExecAsync = jest.mocked(execAsync);
 const mockedGetLatestVersion = jest.mocked(updates.getLatestVersion);
 const mockedIsRunningUnderNpx = jest.mocked(util.isRunningUnderNpx);
 const mockedTelemetry = jest.mocked(telemetry);
-const { execSync } = require('child_process');
+const mockedExecSync = jest.mocked(execSync);
 
 describe('upgrade command', () => {
   let program: Command;
@@ -43,49 +41,80 @@ describe('upgrade command', () => {
   let processExitSpy: jest.SpyInstance;
   let mockCommand: any;
   let mockAction: jest.Mock;
+  let originalExecPath: string;
 
   beforeEach(() => {
+    originalExecPath = process.execPath;
     mockAction = jest.fn();
     mockCommand = {
       description: jest.fn().mockReturnThis(),
       option: jest.fn().mockReturnThis(),
       action: mockAction,
     };
-    
+
     program = {
       command: jest.fn().mockReturnValue(mockCommand),
     } as unknown as Command;
 
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    process.exitCode = undefined;
     jest.clearAllMocks();
+
+    // Reset all mocks to their initial state
+    mockedExecAsync.mockReset();
+    mockedGetLatestVersion.mockReset();
+    mockedIsRunningUnderNpx.mockReset();
+    mockedTelemetry.record.mockReset();
+    mockedExecSync.mockReset();
   });
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
     processExitSpy.mockRestore();
+    process.exitCode = undefined;
+    // Restore original execPath
+    Object.defineProperty(process, 'execPath', {
+      value: originalExecPath,
+      writable: true,
+      configurable: true,
+    });
   });
 
   it('should register the upgrade command', () => {
     upgradeCommand(program);
 
     expect(program.command).toHaveBeenCalledWith('upgrade');
-    expect(mockCommand.description).toHaveBeenCalledWith('Upgrade promptfoo to the latest version or a specific version');
-    expect(mockCommand.option).toHaveBeenCalledWith('--version <version>', 'Upgrade to a specific version');
-    expect(mockCommand.option).toHaveBeenCalledWith('--check', 'Check for updates without upgrading');
-    expect(mockCommand.option).toHaveBeenCalledWith('--force', 'Force upgrade even if already on the target version');
-    expect(mockCommand.option).toHaveBeenCalledWith('--dry-run', 'Show what would be done without actually upgrading');
+    expect(mockCommand.description).toHaveBeenCalledWith(
+      'Upgrade promptfoo to the latest version or a specific version',
+    );
+    expect(mockCommand.option).toHaveBeenCalledWith(
+      '--version <version>',
+      'Upgrade to a specific version',
+    );
+    expect(mockCommand.option).toHaveBeenCalledWith(
+      '--check',
+      'Check for updates without upgrading',
+    );
+    expect(mockCommand.option).toHaveBeenCalledWith(
+      '--force',
+      'Force upgrade even if already on the target version',
+    );
+    expect(mockCommand.option).toHaveBeenCalledWith(
+      '--dry-run',
+      'Show what would be done without actually upgrading',
+    );
   });
 
   describe('installation detection', () => {
     it('should detect npx installation', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(true);
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ check: true });
 
-      expect(mockedIsRunningUnderNpx).toHaveBeenCalled();
+      expect(mockedIsRunningUnderNpx).toHaveBeenCalledWith();
     });
 
     it('should detect npm global installation', async () => {
@@ -94,7 +123,7 @@ describe('upgrade command', () => {
         stdout: JSON.stringify({ dependencies: { promptfoo: { version: '1.0.0' } } }),
         stderr: '',
       });
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       mockedGetLatestVersion.mockResolvedValue('1.0.0');
@@ -105,13 +134,11 @@ describe('upgrade command', () => {
 
     it('should detect yarn global installation', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(false);
-      mockedExecAsync
-        .mockRejectedValueOnce(new Error('npm not found'))
-        .mockResolvedValueOnce({
-          stdout: 'promptfoo@1.0.0',
-          stderr: '',
-        });
-      
+      mockedExecAsync.mockRejectedValueOnce(new Error('npm not found')).mockResolvedValueOnce({
+        stdout: 'promptfoo@1.0.0',
+        stderr: '',
+      });
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       mockedGetLatestVersion.mockResolvedValue('1.0.0');
@@ -129,7 +156,7 @@ describe('upgrade command', () => {
           stdout: JSON.stringify([{ dependencies: { promptfoo: { version: '1.0.0' } } }]),
           stderr: '',
         });
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       mockedGetLatestVersion.mockResolvedValue('1.0.0');
@@ -147,7 +174,7 @@ describe('upgrade command', () => {
         stderr: '',
       });
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ check: true });
@@ -162,12 +189,14 @@ describe('upgrade command', () => {
         stderr: '',
       });
       mockedGetLatestVersion.mockResolvedValue(VERSION);
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ check: true });
 
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('You are on the latest version'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('You are on the latest version'),
+      );
     });
   });
 
@@ -184,13 +213,15 @@ describe('upgrade command', () => {
           stderr: '',
         });
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-      execSync.mockImplementation(() => {});
-      
+      mockedExecSync.mockImplementation(() => Buffer.from(''));
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({});
 
-      expect(execSync).toHaveBeenCalledWith('npm install -g promptfoo@latest', { stdio: 'inherit' });
+      expect(mockedExecSync).toHaveBeenCalledWith('npm install -g promptfoo@latest', {
+        stdio: 'inherit',
+      });
     });
 
     it('should upgrade to specific version', async () => {
@@ -208,13 +239,13 @@ describe('upgrade command', () => {
           stdout: '1.5.0',
           stderr: '',
         });
-      execSync.mockImplementation(() => {});
-      
+      mockedExecSync.mockImplementation(() => Buffer.from(''));
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ version: '1.5.0' });
 
-      expect(execSync).toHaveBeenCalledWith('npm install -g promptfoo@1.5.0', { stdio: 'inherit' });
+      expect(mockedExecSync).toHaveBeenCalledWith('npm install -g promptfoo@1.5.0', { stdio: 'inherit' });
     });
 
     it('should handle dry-run mode', async () => {
@@ -224,25 +255,27 @@ describe('upgrade command', () => {
         stderr: '',
       });
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ dryRun: true });
 
-      expect(execSync).not.toHaveBeenCalled();
+      expect(mockedExecSync).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Dry run mode'));
     });
 
     it('should handle npx with special message', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(true);
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({});
 
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('running promptfoo via npx'));
-      expect(execSync).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('running promptfoo via npx'),
+      );
+      expect(mockedExecSync).not.toHaveBeenCalled();
     });
 
     it('should force reinstall when --force is used', async () => {
@@ -257,13 +290,15 @@ describe('upgrade command', () => {
           stderr: '',
         });
       mockedGetLatestVersion.mockResolvedValue(VERSION);
-      execSync.mockImplementation(() => {});
-      
+      mockedExecSync.mockImplementation(() => Buffer.from(''));
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ force: true });
 
-      expect(execSync).toHaveBeenCalledWith(`npm install -g promptfoo@latest`, { stdio: 'inherit' });
+      expect(mockedExecSync).toHaveBeenCalledWith(`npm install -g promptfoo@latest`, {
+        stdio: 'inherit',
+      });
     });
 
     it('should handle upgrade errors gracefully', async () => {
@@ -273,16 +308,16 @@ describe('upgrade command', () => {
         stderr: '',
       });
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-      execSync.mockImplementation(() => {
+      mockedExecSync.mockImplementation(() => {
         throw new Error('Permission denied');
       });
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({});
 
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to upgrade'));
-      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
   });
 
@@ -295,20 +330,20 @@ describe('upgrade command', () => {
           stderr: '',
         })
         .mockRejectedValueOnce(new Error('Not found'));
-      
+
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ version: '99.99.99' });
 
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Upgrade failed'));
-      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle binary installation error', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(false);
       mockedExecAsync.mockRejectedValue(new Error('Not found'));
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-      
+
       Object.defineProperty(process, 'argv', {
         value: ['/usr/local/bin/node', '/usr/local/bin/promptfoo'],
         writable: true,
@@ -318,8 +353,152 @@ describe('upgrade command', () => {
       const action = mockAction.mock.calls[0][0];
       await action({});
 
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Binary installations cannot be upgraded automatically'));
-      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Binary installations cannot be upgraded automatically'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle homebrew specific version error', async () => {
+      mockedIsRunningUnderNpx.mockReturnValue(false);
+      mockedExecAsync.mockRejectedValue(new Error('Not found'));
+
+      // Mock homebrew detection
+      const originalExecPath = process.execPath;
+      Object.defineProperty(process, 'execPath', {
+        value: '/opt/homebrew/Cellar/node/20.0.0/bin/node',
+        writable: true,
+        configurable: true,
+      });
+
+      upgradeCommand(program);
+      const action = mockAction.mock.calls[0][0];
+      await action({ version: '1.5.0' });
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Homebrew does not support installing specific versions'),
+      );
+      expect(process.exitCode).toBe(1);
+
+      // Restore original
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should allow homebrew upgrade with version latest', async () => {
+      mockedIsRunningUnderNpx.mockReturnValue(false);
+      mockedGetLatestVersion.mockResolvedValue('2.0.0');
+      mockedExecSync.mockImplementation(() => Buffer.from(''));
+
+      // Mock homebrew detection
+      const originalExecPath = process.execPath;
+      Object.defineProperty(process, 'execPath', {
+        value: '/opt/homebrew/Cellar/node/20.0.0/bin/node',
+        writable: true,
+        configurable: true,
+      });
+
+      // Setup mock to fail other detections but succeed for homebrew path check
+      mockedExecAsync
+        .mockRejectedValueOnce(new Error('Not found')) // npm check
+        .mockRejectedValueOnce(new Error('Not found')) // yarn check
+        .mockRejectedValueOnce(new Error('Not found')) // pnpm check
+        .mockResolvedValueOnce({
+          stdout: '2.0.0',
+          stderr: '',
+        });
+
+      upgradeCommand(program);
+      const action = mockAction.mock.calls[0][0];
+
+      await action({ version: 'latest' });
+
+      expect(mockedExecSync).toHaveBeenCalledWith('brew upgrade promptfoo', { stdio: 'inherit' });
+
+      // Restore original
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('should handle unknown installation method', async () => {
+      mockedIsRunningUnderNpx.mockReturnValue(false);
+      mockedExecAsync.mockRejectedValue(new Error('Not found'));
+      mockedGetLatestVersion.mockResolvedValue('2.0.0');
+
+      // Mock unknown installation
+      Object.defineProperty(process, 'argv', {
+        value: ['/unknown/path/node', '/unknown/path/promptfoo'],
+        writable: true,
+      });
+
+      upgradeCommand(program);
+      const action = mockAction.mock.calls[0][0];
+      await action({});
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Could not detect installation method'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe('telemetry', () => {
+    it('should record successful upgrade', async () => {
+      mockedIsRunningUnderNpx.mockReturnValue(false);
+      mockedGetLatestVersion.mockResolvedValue('2.0.0');
+      mockedExecSync.mockImplementation(() => Buffer.from(''));
+
+      upgradeCommand(program);
+      const action = mockAction.mock.calls[0][0];
+
+      // Set up mocks in the correct order
+      mockedExecAsync
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({ dependencies: { promptfoo: { version: '1.0.0' } } }),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: '2.0.0',
+          stderr: '',
+        });
+
+      await action({});
+
+      expect(mockedTelemetry.record).toHaveBeenCalledTimes(2);
+      expect(mockedTelemetry.record).toHaveBeenNthCalledWith(2, 'command_used', {
+        name: 'upgrade:completed',
+        from_version: VERSION,
+        to_version: '2.0.0',
+        install_method: 'npm-global',
+        forced: false,
+      });
+    });
+
+    it('should record failed upgrade', async () => {
+      mockedIsRunningUnderNpx.mockReturnValue(false);
+      mockedExecAsync.mockResolvedValueOnce({
+        stdout: JSON.stringify({ dependencies: { promptfoo: { version: '1.0.0' } } }),
+        stderr: '',
+      });
+      mockedGetLatestVersion.mockResolvedValue('2.0.0');
+      mockedExecSync.mockImplementation(() => {
+        throw new Error('Permission denied');
+      });
+
+      upgradeCommand(program);
+      const action = mockAction.mock.calls[0][0];
+      await action({});
+
+      expect(mockedTelemetry.record).toHaveBeenCalledWith('command_used', {
+        name: 'upgrade:failed',
+        error: 'Permission denied',
+      });
     });
   });
 });

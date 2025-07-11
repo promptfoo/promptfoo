@@ -16,7 +16,14 @@ interface UpgradeOptions {
   dryRun?: boolean;
 }
 
-type InstallMethod = 'npm-global' | 'yarn-global' | 'pnpm-global' | 'homebrew' | 'binary' | 'npx' | 'unknown';
+type InstallMethod =
+  | 'npm-global'
+  | 'yarn-global'
+  | 'pnpm-global'
+  | 'homebrew'
+  | 'binary'
+  | 'npx'
+  | 'unknown';
 
 interface InstallInfo {
   method: InstallMethod;
@@ -120,7 +127,7 @@ async function checkForUpdates(targetVersion?: string): Promise<{
   targetVersion?: string;
 }> {
   const currentVersion = VERSION;
-  
+
   let latestVersion: string;
   if (targetVersion) {
     // Verify the target version exists
@@ -135,7 +142,7 @@ async function checkForUpdates(targetVersion?: string): Promise<{
     latestVersion = await getLatestVersion();
   }
 
-  const updateAvailable = targetVersion 
+  const updateAvailable = targetVersion
     ? currentVersion !== targetVersion
     : semver.gt(latestVersion, currentVersion);
 
@@ -147,7 +154,11 @@ async function checkForUpdates(targetVersion?: string): Promise<{
   };
 }
 
-async function performUpgrade(installInfo: InstallInfo, targetVersion?: string, dryRun?: boolean): Promise<void> {
+async function performUpgrade(
+  installInfo: InstallInfo,
+  targetVersion?: string,
+  dryRun?: boolean,
+): Promise<void> {
   const version = targetVersion || 'latest';
   let command: string;
 
@@ -155,31 +166,35 @@ async function performUpgrade(installInfo: InstallInfo, targetVersion?: string, 
     case 'npm-global':
       command = `npm install -g promptfoo@${version}`;
       break;
-    
+
     case 'yarn-global':
       command = `yarn global add promptfoo@${version}`;
       break;
-    
+
     case 'pnpm-global':
       command = `pnpm add -g promptfoo@${version}`;
       break;
-    
+
     case 'homebrew':
-      if (targetVersion) {
-        throw new Error('Homebrew does not support installing specific versions. Use --force to upgrade to the latest version.');
+      if (targetVersion && targetVersion !== 'latest') {
+        throw new Error(
+          'Homebrew does not support installing specific versions. Use --force to upgrade to the latest version.',
+        );
       }
       command = 'brew upgrade promptfoo';
       break;
-    
+
     case 'npx':
       logger.info(chalk.yellow('You are running promptfoo via npx.'));
       logger.info(chalk.cyan(`To use a specific version, run: npx promptfoo@${version}`));
       logger.info(chalk.cyan(`To always use the latest version, run: npx promptfoo@latest`));
       return;
-    
+
     case 'binary':
-      throw new Error('Binary installations cannot be upgraded automatically. Please download the latest version from https://github.com/promptfoo/promptfoo/releases');
-    
+      throw new Error(
+        'Binary installations cannot be upgraded automatically. Please download the latest version from https://github.com/promptfoo/promptfoo/releases',
+      );
+
     default:
       throw new Error('Could not detect installation method. Please upgrade manually.');
   }
@@ -191,15 +206,15 @@ async function performUpgrade(installInfo: InstallInfo, targetVersion?: string, 
   }
 
   logger.info(chalk.blue(`Upgrading promptfoo using: ${command}`));
-  
+
   try {
     // Show real-time output
     execSync(command, { stdio: 'inherit' });
-    
+
     // Verify the upgrade
     const { stdout: newVersionOutput } = await execAsync('promptfoo --version');
     const newVersion = newVersionOutput.trim();
-    
+
     logger.info(chalk.green(`✅ Successfully upgraded to version ${newVersion}`));
   } catch (error) {
     logger.error(chalk.red('Failed to upgrade promptfoo'));
@@ -229,27 +244,34 @@ export function upgradeCommand(program: Command) {
         if (options.check) {
           // Just check for updates
           const updateInfo = await checkForUpdates(options.version);
-          
+
           if (updateInfo.updateAvailable) {
-            logger.info(chalk.yellow(`Update available: ${updateInfo.currentVersion} → ${updateInfo.latestVersion}`));
-            
-            const command = installInfo.method === 'npx' 
-              ? 'npx promptfoo@latest'
-              : 'promptfoo upgrade';
+            logger.info(
+              chalk.yellow(
+                `Update available: ${updateInfo.currentVersion} → ${updateInfo.latestVersion}`,
+              ),
+            );
+
+            const command =
+              installInfo.method === 'npx' ? 'npx promptfoo@latest' : 'promptfoo upgrade';
             logger.info(chalk.cyan(`Run ${chalk.bold(command)} to upgrade`));
           } else {
-            logger.info(chalk.green(`You are on the latest version (${updateInfo.currentVersion})`));
+            logger.info(
+              chalk.green(`You are on the latest version (${updateInfo.currentVersion})`),
+            );
           }
           return;
         }
 
         // Check for updates
         const updateInfo = await checkForUpdates(options.version);
-        
+
         if (!updateInfo.updateAvailable && !options.force) {
           logger.info(chalk.green(`You are already on version ${updateInfo.currentVersion}`));
           if (options.version) {
-            logger.info(chalk.yellow(`Target version ${options.version} is the same as current version`));
+            logger.info(
+              chalk.yellow(`Target version ${options.version} is the same as current version`),
+            );
           } else {
             logger.info(chalk.yellow('Use --force to reinstall'));
           }
@@ -258,15 +280,19 @@ export function upgradeCommand(program: Command) {
 
         // Show update information
         if (updateInfo.updateAvailable) {
-          logger.info(chalk.yellow(`Update available: ${updateInfo.currentVersion} → ${updateInfo.latestVersion}`));
+          logger.info(
+            chalk.yellow(
+              `Update available: ${updateInfo.currentVersion} → ${updateInfo.latestVersion}`,
+            ),
+          );
         } else {
           logger.info(chalk.yellow(`Forcing reinstall of version ${updateInfo.currentVersion}`));
         }
 
         // Perform upgrade
         await performUpgrade(installInfo, options.version, options.dryRun);
-        
-        telemetry.record('command_used', { 
+
+        telemetry.record('command_used', {
           name: 'upgrade:completed',
           from_version: updateInfo.currentVersion,
           to_version: updateInfo.latestVersion,
@@ -274,18 +300,18 @@ export function upgradeCommand(program: Command) {
           forced: options.force || false,
         });
       } catch (error) {
-        telemetry.record('command_used', { 
+        telemetry.record('command_used', {
           name: 'upgrade:failed',
           error: error instanceof Error ? error.message : 'Unknown error',
         });
-        
+
         logger.error(chalk.red('Upgrade failed:'));
         if (error instanceof Error) {
           logger.error(error.message);
         } else {
           logger.error(String(error));
         }
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }
