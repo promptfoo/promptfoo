@@ -488,6 +488,7 @@ export const categoryDescriptions = {
   'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
   Datasets: 'Pre-defined test cases from research datasets.',
+  'Domain-Specific Risks': 'Specialized risks and failure modes.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
