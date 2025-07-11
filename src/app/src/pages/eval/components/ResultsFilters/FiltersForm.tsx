@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -176,7 +176,7 @@ export default function FiltersForm({
   const { filters, addFilter, removeAllFilters } = useTableStore();
 
   /**
-   * Adds a new filter with a default metric filter.
+   * Adds a new filter with default values (an unapplied metric filter).
    */
   const handleAddFilter = () => {
     addFilter({
@@ -187,13 +187,22 @@ export default function FiltersForm({
   };
 
   /**
-   * Removes all filters.
+   * Removes all filters and closes the popover.
    */
   const handleRemoveAllFilters = () => {
+    onClose();
     removeAllFilters();
   };
 
-  // TODO(Will): There should always be a single filter even if its default.
+  /**
+   * If there are no filters when the popover is opened, add a default filter, reducing
+   * the number of clicks required to create a filter.
+   */
+  useEffect(() => {
+    if (open && filters.values.length === 0) {
+      handleAddFilter();
+    }
+  }, [filters.values.length, handleAddFilter, open]);
 
   return (
     <Popover
