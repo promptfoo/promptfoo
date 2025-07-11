@@ -400,6 +400,7 @@ function ResultsTable({
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
+      // Only pass the filters that have been applied (have a value).
       filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });

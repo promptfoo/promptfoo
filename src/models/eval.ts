@@ -460,6 +460,7 @@ export default class Eval {
         if (condition) {
           // Logic operator can only be applied if there are already conditions
           filterConditions.push(
+            // Logic operator can only be applied if there are already conditions
             filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
           );
         }
