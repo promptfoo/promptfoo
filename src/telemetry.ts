@@ -36,13 +36,19 @@ function getPostHogClient(): PostHog | null {
     return null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { POSTHOG_KEY } = require('./generated-constants');
-  const key = process.env.PROMPTFOO_POSTHOG_KEY ?? POSTHOG_KEY;
+  let posthogKey: string | undefined;
 
-  if (posthogClient === null && key) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { POSTHOG_KEY } = require('./generated-constants');
+    posthogKey = POSTHOG_KEY;
+  } catch {
+    posthogKey = process.env.PROMPTFOO_POSTHOG_KEY;
+  }
+
+  if (posthogClient === null && posthogKey) {
     try {
-      posthogClient = new PostHog(key, {
+      posthogClient = new PostHog(posthogKey, {
         host: EVENTS_ENDPOINT,
       });
     } catch {
