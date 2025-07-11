@@ -407,6 +407,10 @@ const sidebars = {
       type: 'doc',
       id: 'faq',
     },
+    {
+      type: 'doc',
+      id: 'releases',
+    },
   ],
   // Within enterprise docs, show only the following sidebar
   enterprise: [
