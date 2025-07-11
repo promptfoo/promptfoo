@@ -46,12 +46,12 @@ export default function BlackHat2025(): JSX.Element {
                 vulnerabilities before attackers do.
               </p>
               <div className={styles.heroButtons}>
-                <Link to="#schedule-demo" className={styles.primaryButton}>
+                <a href="#schedule-demo" className={styles.primaryButton}>
                   Schedule a Demo at Black Hat
-                </Link>
-                <Link to="#learn-more" className={styles.secondaryButton}>
+                </a>
+                <a href="#learn-more" className={styles.secondaryButton}>
                   Learn More
-                </Link>
+                </a>
               </div>
               <div className={styles.eventDetails}>
                 <div className={styles.detail}>
@@ -269,9 +269,9 @@ export default function BlackHat2025(): JSX.Element {
               Join hundreds of security teams who trust Promptfoo to protect their LLM applications.
             </p>
             <div className={styles.ctaButtons}>
-              <Link to="#schedule-demo" className={styles.primaryButton}>
+              <a href="#schedule-demo" className={styles.primaryButton}>
                 Book Your Demo Slot
-              </Link>
+              </a>
               <Link to="/security" className={styles.secondaryButton}>
                 Explore Our Security Platform
               </Link>
