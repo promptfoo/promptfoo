@@ -66,6 +66,14 @@ jest.mock('../src/globalConfig/accounts', () => ({
   getUserId: jest.fn().mockReturnValue('test-user-id'),
 }));
 
+jest.mock('../src/telemetry', () => {
+  const actual = jest.requireActual('../src/telemetry');
+  return {
+    ...actual,
+    getPostHogKey: jest.fn().mockReturnValue('test-key'),
+  };
+});
+
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let fetchSpy: jest.SpyInstance;
@@ -74,7 +82,6 @@ describe('Telemetry', () => {
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
-    process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
     fetchSpy = jest
       .spyOn(global, 'fetch')
@@ -224,9 +231,9 @@ describe('Telemetry', () => {
     jest.resetModules();
 
     const telemetryModule = await import('../src/telemetry');
-    const telemetryInstance = telemetryModule.default;
+    const _telemetry = new telemetryModule.Telemetry();
 
-    telemetryInstance.record('eval_ran', { foo: 'bar' });
+    _telemetry.record('eval_ran', { foo: 'bar' });
 
     expect(sendEventSpy).toHaveBeenCalledTimes(0);
   });

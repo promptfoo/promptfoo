@@ -31,20 +31,30 @@ const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 
+/**
+ * Get the PostHog key.
+ *
+ * If the key is not set in the environment, try to load it from the generated-constants.ts file,
+ * which is generated during the production build.
+ *
+ * @returns The PostHog key, if it is set.
+ */
+function getPostHogKey(): string | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { POSTHOG_KEY } = require('./generated-constants');
+    return POSTHOG_KEY;
+  } catch {
+    return process.env.PROMPTFOO_POSTHOG_KEY;
+  }
+}
+
 function getPostHogClient(): PostHog | null {
   if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
     return null;
   }
 
-  let posthogKey: string | undefined;
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { POSTHOG_KEY } = require('./generated-constants');
-    posthogKey = POSTHOG_KEY;
-  } catch {
-    posthogKey = process.env.PROMPTFOO_POSTHOG_KEY;
-  }
+  const posthogKey = getPostHogKey();
 
   if (posthogClient === null && posthogKey) {
     try {
