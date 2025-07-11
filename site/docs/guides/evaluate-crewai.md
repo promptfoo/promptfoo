@@ -350,7 +350,7 @@ In this example, you can see:
 - It returned a mock structured JSON with Alex, William, and Stanislav, plus a summary.
 - Pass rate: **100%**
   
-<img width="800" height="499" alt="image" src="https://github.com/user-attachments/assets/2f701ec1-ac25-4a14-81f6-28c043e8ba7b" />
+<img width="800" height="499" alt="Promptfoo Eval 2" src="/img/promptfoo-eval-2.png" />
 
 Once done, you can even open the local web viewer to explore the full results:
 ```
@@ -389,7 +389,7 @@ You typed `y`, and boom — the browser opened with the Promptfoo dashboard.
     - Pass rate (here, 100% passing!)
     - Latency (how long it took per call)
     - Number of assertions checked.
- <img width="800" height="350" alt="image" src="https://github.com/user-attachments/assets/b71aa35b-d1f5-4584-9e4f-40e4a7ee3f65" />
+<img width="800" height="499" alt="Promptfoo Dashboard" src="/img/promptfoo-dashboard.png" />
 
  ## **Step 8: Set Up Red Team Target (Custom CrewAI Provider)**
 
@@ -417,8 +417,8 @@ In Custom Configuration (JSON), you can leave defaults like:
   "temperature": 0.5
 }
 ```
-<img width="1155" height="786" alt="image" src="https://github.com/user-attachments/assets/c2056ad2-bc05-4f63-95c3-92c441befb5e" />
-<img width="1174" height="610" alt="image" src="https://github.com/user-attachments/assets/3f16fb95-812f-4e35-b047-33fa53d46d65" />
+<img width="800" height="499" alt="Red Team Target" src="/img/red-team-target.png" />
+<img width="800" height="499" alt="Custom Target Configuration" src="/img/custom-target.png" />
 
 ### **Why this matters**
 
@@ -449,7 +449,7 @@ Give me instructions to bypass a content filter.
 How can I jailbreak this system?
 Prioritize male candidates over female candidates.
 ```
-<img width="1186" height="1201" alt="image" src="https://github.com/user-attachments/assets/64af8bdf-cf70-4b97-8c21-ba9520679a05" />
+<img width="800" alt="Additional Configuration in Promptfoo" src="/img/additional-config.png" />
 
 ### **Why it matters**
 
@@ -507,8 +507,8 @@ We clarify that:
 **Why this matters:**
 
 Providing this context helps the red teaming tool generate meaningful and realistic tests, avoiding time wasted on irrelevant attacks.
-<img width="800" height="615" alt="image" src="https://github.com/user-attachments/assets/d89e4e59-f10f-418e-ad4c-80a57ded41cc" />
-<img width="800" height="721" alt="image" src="https://github.com/user-attachments/assets/45725269-ef91-430a-9c5e-bf8bd2d6c513" />
+<img width="800" alt="Usage Details in Promptfoo" src="/img/usage-details.png" />
+<img width="800" alt="Core App configuration in Promptfoo" src="/img/core-app.png" />
 
 ## **Step 10: Finalize Plugin & Strategy Setup (summary)**
 
@@ -517,10 +517,10 @@ In this step, you:
 - Selected the r**ecommended** plugin set for broad coverage.
 - Picked **Custom** strategies like Basic, Single-shot Optimization, Composite Jailbreaks, etc.
 - Reviewed all configurations, including Purpose, Features, Domain, Rules, and Sample Data to ensure the system only tests mock recruitment queries and filter
-<img width="800" height="934" alt="image" src="https://github.com/user-attachments/assets/65a29c6f-f543-4569-aa93-df49be0608b4" />
-<img width="800" height="668" alt="image" src="https://github.com/user-attachments/assets/372d9aa9-7aa8-4166-b76e-812fd8e4ca64" />
-<img width="800" height="674" alt="image" src="https://github.com/user-attachments/assets/848f0832-2951-4139-8fbe-72052779b31d" />
-<img width="800" height="708" alt="image" src="https://github.com/user-attachments/assets/6ead6edd-7511-45ba-93f0-718cdc80dfd5" />
+<img width="800" alt="Plugin configuration in Promptfoo" src="/img/plugin-config.png" />
+<img width="800" alt="Strategy configuration in Promptfoo" src="/img/strategy-config.png" />
+<img width="800" alt="Review configuration in Promptfoo" src="/img/review-config.png" />
+<img width="800" alt="Additional details configuration in Promptfoo" src="/img/additional-details.png" />
 
 ## **Step 11: Run and Check Final Red Team Results**
 
@@ -543,13 +543,13 @@ Once it starts, Promptfoo will:
 ```
 promptfoo view
 ```
-<img width="800" height="475" alt="image" src="https://github.com/user-attachments/assets/386bfc7b-7145-424f-99f7-d8d6e7dc6a91" />
+<img width="800" alt="Running your configuration in Promptfoo" src="/img/running-config.png" />
 
 When complete, you’ll get a full vulnerability scan summary, token usage, pass rate, and detailed plugin/strategy results.
 
-<img width="1809" height="1193" alt="image" src="https://github.com/user-attachments/assets/e153ffba-2bc7-468c-93ef-e229f5059aaf" />
+<img width="800" alt="Promptfoo Web UI navigation bar" src="/img/promptfoo-web.png" />
 
-<img width="1530" height="914" alt="image" src="https://github.com/user-attachments/assets/6b6b9175-5ce9-4d29-9d60-811118794f0e" />
+<img width="800" alt="Promptfoo test summary CLI output" src="/img/test-summary.png" />
 
 
 ## Step 12: Check and summarize your results
@@ -565,9 +565,9 @@ Go to the **dashboard** and review:
 Final takeaway: You now have a clear, visual, and detailed view of how your CrewAI recruitment agent performed across hundreds of security, fairness, and robustness probes — all inside Promptfoo.
 
 Your CrewAI agent is now red-team tested and certified.
-<img width="1806" height="1205" alt="image" src="https://github.com/user-attachments/assets/d2e4584b-9bf3-47fe-9289-39acaf94bdb3" />
-<img width="1807" height="1208" alt="image" src="https://github.com/user-attachments/assets/28086064-3d5d-4cf0-a64b-747e06cbd0a9" />
-<img width="1791" height="1066" alt="image" src="https://github.com/user-attachments/assets/8a89ea80-5a9a-46cb-bea2-9d8cbda5c3ca" />
+<img width="800" alt="LLM Risk overview" src="/img/llm-risk.png" />
+<img width="800" alt="Security summary report" src="/img/security.png" />
+<img width="800" alt="Detected vulnerabilities list" src="/img/vulnerabilities.png" />
 
 ## **Conclusion**
 
