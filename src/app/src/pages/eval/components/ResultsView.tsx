@@ -543,7 +543,7 @@ export default function ResultsView({
         </Box>
 
         <FiltersButton
-          appliedFiltersCount={filters.values.length}
+          appliedFiltersCount={filters.appliedCount}
           onClick={() => setFiltersModalOpen(true)}
           ref={filtersButtonRef}
         />
@@ -563,7 +563,7 @@ export default function ResultsView({
             fontSize: '0.875rem',
           }}
         >
-          {searchText || filterMode !== 'all' || filters.values.length > 0 ? (
+          {searchText || filterMode !== 'all' || filters.appliedCount > 0 ? (
             <>
               <strong>{filteredResultsCount}</strong>
               <span style={{ margin: '0 4px' }}>of</span>

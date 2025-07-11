@@ -120,7 +120,18 @@ interface TableState {
   updateFilter: (filter: ResultsFilter, index: number) => void;
 
   filters: {
+    /**
+     * The filters that are currently defined. Note that a filter is only applied once it has
+     * a non-empty string value defined.
+     */
     values: ResultsFilter[];
+    /**
+     * The number of filters that have a value i.e. they're applied.
+     */
+    appliedCount: number;
+    /**
+     * The options for each filter type.
+     */
     options: {
       [key in ResultsFilterType]: string[];
     };
@@ -329,6 +340,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
   filters: {
     values: [],
+    appliedCount: 0,
     options: {
       metric: [],
     },
@@ -344,12 +356,17 @@ export const useTableStore = create<TableState>()((set, get) => ({
   },
 
   removeFilter: (index: number) => {
-    set((prevState) => ({
-      filters: {
-        ...prevState.filters,
-        values: prevState.filters.values.filter((_, i) => i !== index),
-      },
-    }));
+    set((prevState) => {
+      const target = prevState.filters.values[index];
+      const appliedCount = prevState.filters.appliedCount - (target.value ? 1 : 0);
+      return {
+        filters: {
+          ...prevState.filters,
+          values: prevState.filters.values.filter((_, i) => i !== index),
+          appliedCount,
+        },
+      };
+    });
   },
 
   removeAllFilters: () => {
@@ -357,16 +374,24 @@ export const useTableStore = create<TableState>()((set, get) => ({
       filters: {
         ...prevState.filters,
         values: [],
+        appliedCount: 0,
       },
     }));
   },
 
   updateFilter: (filter: ResultsFilter, index: number) => {
-    set((prevState) => ({
-      filters: {
-        ...prevState.filters,
-        values: prevState.filters.values.map((f, i) => (i === index ? filter : f)),
-      },
-    }));
+    set((prevState) => {
+      const target = prevState.filters.values[index];
+      const appliedCount =
+        prevState.filters.appliedCount - (target.value ? 1 : 0) + (filter.value ? 1 : 0);
+
+      return {
+        filters: {
+          ...prevState.filters,
+          values: prevState.filters.values.map((f, i) => (i === index ? filter : f)),
+          appliedCount,
+        },
+      };
+    });
   },
 }));
