@@ -51,6 +51,32 @@ const textContentTypographySx = {
   wordBreak: 'break-word',
 };
 
+/**
+ * Returns the value of the assertion.
+ * For context-related assertions, read the context value from metadata, if it exists.
+ * Otherwise, return the assertion value.
+ * @param result - The grading result.
+ * @returns The value of the assertion.
+ */
+function getValue(result: GradingResult) {
+  // For context-related assertions, read the context value from metadata, if it exists
+  if (
+    result.assertion?.type &&
+    // prettier-ignore
+    ['context-faithfulness', 'context-recall', 'context-relevance'].includes(result.assertion.type) &&
+    result.metadata?.context
+  ) {
+    return result.metadata?.context;
+  }
+
+  // Otherwise, return the assertion value
+  return result.assertion?.value
+    ? typeof result.assertion.value === 'object'
+      ? JSON.stringify(result.assertion.value, null, 2)
+      : String(result.assertion.value)
+    : '-';
+}
+
 // Code display component
 interface CodeDisplayProps {
   content: string;
@@ -196,17 +222,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                 return null;
               }
 
-              const value =
-                // For context-related assertions, read the context value from metadata, if it exists
-                ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
-                  result.assertion?.type ?? '',
-                ) && result.metadata?.context
-                  ? result.metadata?.context
-                  : result.assertion?.value
-                    ? typeof result.assertion.value === 'object'
-                      ? JSON.stringify(result.assertion.value, null, 2)
-                      : String(result.assertion.value)
-                    : '-';
+              const value = getValue(result);
               const truncatedValue = ellipsize(value, 300);
               const isExpanded = expandedValues[i] || false;
               const valueKey = `value-${i}`;
