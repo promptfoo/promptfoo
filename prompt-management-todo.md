@@ -24,8 +24,14 @@
 - [x] **Metadata storage** - Track version, OS info, user, usage count, and more
 - [x] **Export to index.ts** - Programmatic access via `import { prompts } from 'promptfoo'`
 
+- [x] **LLM-powered prompt testing** - Smart variable suggestions and auto-detection
+   - Auto-detects variables from prompt template
+   - Suggests test values based on context using AI
+   - Fallback suggestions when LLM unavailable
+   - Variable detection shown on creation page
+
 #### Partial Implementation
-- [x] **Re-run eval with different version** - Menu item added, version selector dialog pending
+- [x] **Re-run eval with different version** - Version selector dialog implemented, navigates to setup page
 
 ### 🚧 Remaining Core Features
 
@@ -34,16 +40,6 @@
    - Store prompts in cloud database
    - Multi-user collaboration features
    - Access control and permissions
-
-2. [ ] **Version selector dialog** - Complete the "re-run with different version" feature
-   - UI to select prompt version or environment
-   - Preview changes between versions
-   - One-click re-run with new version
-
-3. [ ] **LLM-powered prompt testing** - Smart features on creation page
-   - Auto-detect variables from prompt template
-   - Suggest test values based on context
-   - Quick test with multiple models
 
 #### Medium Priority
 4. [ ] **Auto-suggest improvements** - AI-powered prompt optimization
