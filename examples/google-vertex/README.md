@@ -67,7 +67,10 @@ promptfoo eval -c promptfooconfig.yaml
 promptfoo eval -c promptfooconfig.gemini.yaml
 promptfoo eval -c promptfooconfig.claude.yaml
 promptfoo eval -c promptfooconfig.llama.yaml
+
+# Search grounding tool and image understanding
 promptfoo eval -c promptfooconfig.search.yaml
+promptfoo eval -c promptfooconfig.image.yaml
 
 # View results
 promptfoo view
@@ -82,3 +85,4 @@ Each configuration demonstrates different model capabilities, from function call
 - [Vertex AI Provider Documentation](https://www.promptfoo.dev/docs/providers/vertex/)
 - [Google Cloud Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
 - [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding)
+- [Google documentation on Image Understanding](https://ai.google.dev/gemini-api/docs/image-understanding#inline-image)
