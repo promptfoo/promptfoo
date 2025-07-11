@@ -333,7 +333,7 @@ Then run:
 ```
 promptfoo eval
 ```
-<img width="800" alt="Promptfoo eval" src="/img/promptfoo-eval.png" />
+<img width="800" height="499" alt="Promptfoo eval" src="/img/promptfoo-eval.png"/>
 
 What happens here:
 
