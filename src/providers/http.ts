@@ -6,6 +6,7 @@ import path from 'path';
 import { z } from 'zod';
 import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
+import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import type {
@@ -114,21 +115,145 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
   return rawRequest;
 }
 
+const isPemSignatureAuth = (
+  signatureAuth:
+    | typeof PemSignatureAuthSchema
+    | typeof JksSignatureAuthSchema
+    | typeof PfxSignatureAuthSchema
+    | typeof LegacySignatureAuthSchema,
+): signatureAuth is typeof PemSignatureAuthSchema =>
+  'type' in signatureAuth && signatureAuth.type === 'pem';
+
+const isJksSignatureAuth = (
+  signatureAuth:
+    | typeof PemSignatureAuthSchema
+    | typeof JksSignatureAuthSchema
+    | typeof PfxSignatureAuthSchema
+    | typeof LegacySignatureAuthSchema,
+): signatureAuth is typeof JksSignatureAuthSchema =>
+  'type' in signatureAuth && signatureAuth.type === 'jks';
+
+const isPfxSignatureAuth = (
+  signatureAuth:
+    | typeof PemSignatureAuthSchema
+    | typeof JksSignatureAuthSchema
+    | typeof PfxSignatureAuthSchema
+    | typeof LegacySignatureAuthSchema,
+): signatureAuth is typeof PfxSignatureAuthSchema =>
+  'type' in signatureAuth && signatureAuth.type === 'pfx';
+
+const isLegacySignatureAuth = (
+  signatureAuth:
+    | typeof PemSignatureAuthSchema
+    | typeof JksSignatureAuthSchema
+    | typeof PfxSignatureAuthSchema
+    | typeof LegacySignatureAuthSchema,
+): signatureAuth is typeof LegacySignatureAuthSchema =>
+  'type' in signatureAuth && signatureAuth.type === 'legacy';
+
+/**
+ * Generate signature using different certificate types
+ */
 export async function generateSignature(
-  privateKeyPathOrKey: string,
+  signatureAuth:
+    | typeof PemSignatureAuthSchema
+    | typeof JksSignatureAuthSchema
+    | typeof PfxSignatureAuthSchema
+    | typeof LegacySignatureAuthSchema,
   signatureTimestamp: number,
-  signatureDataTemplate: string,
-  signatureAlgorithm: string = 'SHA256',
-  isPath: boolean = true,
 ): Promise<string> {
   try {
-    const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
+    let privateKey: string;
+
+    if (isPemSignatureAuth(signatureAuth)) {
+      if (signatureAuth.privateKeyPath) {
+        privateKey = fs.readFileSync(signatureAuth.privateKeyPath, 'utf8');
+      } else {
+        privateKey = signatureAuth.privateKey;
+      }
+    } else if (isJksSignatureAuth(signatureAuth)) {
+      // Use eval to avoid TypeScript static analysis of the dynamic import
+      const jksModule = await eval('import("jks-js")').catch(() => {
+        throw new Error(
+          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+        );
+      });
+
+      const jks = jksModule as any;
+      const keystoreData = fs.readFileSync(signatureAuth.keystorePath);
+
+      // Check for keystore password in config first, then fallback to environment variable
+      const keystorePassword =
+        signatureAuth.keystorePassword || getEnvString('PROMPTFOO_JKS_PASSWORD');
+
+      if (!keystorePassword) {
+        throw new Error(
+          'JKS keystore password is required. Provide it via config keystorePassword or PROMPTFOO_JKS_PASSWORD environment variable',
+        );
+      }
+
+      const keystore = jks.toPem(keystoreData, keystorePassword);
+
+      const aliases = Object.keys(keystore);
+      if (aliases.length === 0) {
+        throw new Error('No certificates found in JKS file');
+      }
+
+      const targetAlias = signatureAuth.keyAlias || aliases[0];
+      const entry = keystore[targetAlias];
+
+      if (!entry) {
+        throw new Error(
+          `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
+        );
+      }
+
+      if (!entry.key) {
+        throw new Error('No private key found for the specified alias in JKS file');
+      }
+
+      privateKey = entry.key;
+    } else if (isPfxSignatureAuth(signatureAuth)) {
+      const pfxData = fs.readFileSync(signatureAuth.pfxPath);
+
+      // Use Node.js crypto.createPrivateKey for PFX handling
+      try {
+        const keyObject = crypto.createPrivateKey({
+          key: pfxData,
+          format: 'der',
+          passphrase: signatureAuth.pfxPassword,
+        });
+
+        privateKey = keyObject.export({
+          format: 'pem',
+          type: 'pkcs8',
+        }) as string;
+      } catch (err) {
+        logger.error(`Error generating signature: ${String(err)}`);
+        // If the above doesn't work, try without specifying format
+        const keyObject = crypto.createPrivateKey({
+          key: pfxData,
+          passphrase: signatureAuth.pfxPassword,
+        });
+
+        privateKey = keyObject.export({
+          format: 'pem',
+          type: 'pkcs8',
+        }) as string;
+      }
+    } else if (isLegacySignatureAuth(signatureAuth)) {
+      throw new Error('Legacy signature auth is not supported');
+    } else {
+      throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
+    }
+
     const data = getNunjucksEngine()
-      .renderString(signatureDataTemplate, {
+      .renderString(signatureAuth.signatureDataTemplate, {
         signatureTimestamp,
       })
       .replace(/\\n/g, '\n');
-    const sign = crypto.createSign(signatureAlgorithm);
+
+    const sign = crypto.createSign(signatureAuth.signatureAlgorithm);
     sign.update(data);
     sign.end();
     const signature = sign.sign(privateKey);
@@ -157,6 +282,70 @@ export const TokenEstimationConfigSchema = z.object({
 
 export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
 
+// Base signature auth fields
+const BaseSignatureAuthSchema = z.object({
+  signatureValidityMs: z.number().default(300000),
+  signatureDataTemplate: z.string().default('{{signatureTimestamp}}'),
+  signatureAlgorithm: z.string().default('SHA256'),
+  signatureRefreshBufferMs: z.number().optional(),
+});
+
+// PEM signature auth schema
+const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
+  type: z.literal('pem'),
+  privateKeyPath: z.string().optional(),
+  privateKey: z.string().optional(),
+}).refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
+  message: 'Either privateKeyPath or privateKey must be provided for PEM type',
+});
+
+// JKS signature auth schema
+const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
+  type: z.literal('jks'),
+  keystorePath: z.string(),
+  keystorePassword: z.string().optional(),
+  keyAlias: z.string().optional(),
+});
+
+// PFX signature auth schema
+const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
+  type: z.literal('pfx'),
+  pfxPath: z.string(),
+  pfxPassword: z.string(),
+});
+
+// Legacy signature auth schema (for backward compatibility)
+const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
+  privateKeyPath: z.string().optional(),
+  privateKey: z.string().optional(),
+  keystorePath: z.string().optional(),
+  keystorePassword: z.string().optional(),
+  keyAlias: z.string().optional(),
+  keyPassword: z.string().optional(),
+  pfxPath: z.string().optional(),
+  pfxPassword: z.string().optional(),
+}).refine(
+  (data) => {
+    // Check for PEM format
+    if (data.privateKeyPath !== undefined || data.privateKey !== undefined) {
+      return true;
+    }
+    // Check for JKS format
+    if (data.keystorePath !== undefined) {
+      return true;
+    }
+    // Check for PFX format
+    if (data.pfxPath !== undefined && data.pfxPassword !== undefined) {
+      return true;
+    }
+    return false;
+  },
+  {
+    message:
+      'Must provide either PEM (privateKeyPath/privateKey), JKS (keystorePath/keystorePassword), or PFX (pfxPath/pfxPassword) configuration',
+  },
+);
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -181,22 +370,14 @@ export const HttpProviderConfigSchema = z.object({
   responseParser: z.union([z.string(), z.function()]).optional(),
   // Token estimation configuration
   tokenEstimation: TokenEstimationConfigSchema.optional(),
-  // Digital Signature Authentication
+  // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
-    .object({
-      privateKeyPath: z.string().optional(),
-      privateKey: z.string().optional(),
-      signatureValidityMs: z.number().default(300000), // 5 minutes
-      // Template for generating the data to sign
-      signatureDataTemplate: z.string().default('{{timestamp}}'),
-      // Signature algorithm to use (defaults to SHA256)
-      signatureAlgorithm: z.string().default('SHA256'),
-      // Buffer time in ms before expiry to refresh (defaults to 10% of validity time)
-      signatureRefreshBufferMs: z.number().optional(),
-    })
-    .refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
-      message: 'Either privateKeyPath or privateKey must be provided',
-    })
+    .union([
+      PemSignatureAuthSchema,
+      JksSignatureAuthSchema,
+      PfxSignatureAuthSchema,
+      LegacySignatureAuthSchema,
+    ])
     .optional(),
 });
 
@@ -722,33 +903,34 @@ export class HttpProvider implements ApiProvider {
       return;
     }
 
-    const {
-      privateKeyPath,
-      privateKey,
-      signatureValidityMs,
-      signatureDataTemplate,
-      signatureAlgorithm,
-      signatureRefreshBufferMs,
-    } = this.config.signatureAuth;
+    const signatureAuth = this.config.signatureAuth;
 
     if (
       !this.lastSignatureTimestamp ||
       !this.lastSignature ||
       needsSignatureRefresh(
         this.lastSignatureTimestamp,
-        signatureValidityMs,
-        signatureRefreshBufferMs,
+        signatureAuth.signatureValidityMs,
+        signatureAuth.signatureRefreshBufferMs,
       )
     ) {
       logger.debug('[HTTP Provider Auth]: Generating new signature');
       this.lastSignatureTimestamp = Date.now();
-      this.lastSignature = await generateSignature(
-        privateKeyPath || privateKey!,
-        this.lastSignatureTimestamp,
-        signatureDataTemplate,
-        signatureAlgorithm,
-        privateKeyPath !== undefined,
-      );
+
+      // Determine the signature auth type for legacy configurations
+      let authConfig = signatureAuth;
+      if (!('type' in signatureAuth)) {
+        // Legacy configuration - determine type based on available properties
+        if (signatureAuth.keystorePath && signatureAuth.keystorePassword) {
+          authConfig = { ...signatureAuth, type: 'jks' };
+        } else if (signatureAuth.pfxPath && signatureAuth.pfxPassword) {
+          authConfig = { ...signatureAuth, type: 'pfx' };
+        } else {
+          authConfig = { ...signatureAuth, type: 'pem' };
+        }
+      }
+
+      this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
       logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
     } else {
       logger.debug('[HTTP Provider Auth]: Using cached signature');
