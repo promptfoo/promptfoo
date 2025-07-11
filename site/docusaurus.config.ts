@@ -104,6 +104,11 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/thumbnail.png',
+    colorMode: {
+      defaultMode: 'light',
+      disableSwitch: true,
+      respectPrefersColorScheme: false,
+    },
     navbar: {
       title: 'promptfoo',
       logo: {
