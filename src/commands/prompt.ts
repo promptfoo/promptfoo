@@ -1,6 +1,8 @@
 import chalk from 'chalk';
 import { exec } from 'child_process';
 import type { Command } from 'commander';
+import fs from 'fs';
+import path from 'path';
 import promptSync from 'prompt-sync';
 import { promisify } from 'util';
 import { evaluate } from '../index';
@@ -20,84 +22,94 @@ export function promptCommand(program: Command) {
 
   // Create a new prompt
   promptCmd
-    .command('create <prompt-id>')
-    .description('Create a new prompt template')
-    .option('--desc <description>', 'Description of the prompt')
-    .option('--from-file <file>', 'Initialize content from a supported file format')
-    .action(async (promptId: string, cmdObj: { desc?: string; fromFile?: string }) => {
-      telemetry.record('command_used', { name: 'prompt create' });
-
-      const manager = new PromptManager();
-
+    .command('create <id>')
+    .description('Create a new managed prompt')
+    .option('-d, --description <description>', 'Prompt description')
+    .option('-c, --content <content>', 'Initial prompt content')
+    .option('-f, --from-file <path>', 'Load content from file')
+    .option('--config <json>', 'Prompt configuration (JSON string)')
+    .option('--label <label>', 'Custom label for the prompt')
+    .option('--function', 'Treat content as a function')
+    .action(async (id, options) => {
       try {
-        let content: string | undefined;
-        const metadata: Record<string, any> = {};
+        let content = options.content;
+        const additionalFields: any = {};
 
-        if (cmdObj.fromFile) {
-          const fs = await import('fs/promises');
-          const path = await import('path');
-          const fileContent = await fs.readFile(cmdObj.fromFile, 'utf-8');
-          const ext = path.extname(cmdObj.fromFile).toLowerCase();
-
-          // Process content based on file type
-          content = fileContent;
-          metadata.sourceFile = path.basename(cmdObj.fromFile);
-
-          if (ext === '.json' || ext === '.jsonl') {
-            try {
-              const parsed = JSON.parse(fileContent);
-              if (Array.isArray(parsed)) {
-                // Chat format or array of prompts
-                content = JSON.stringify(parsed, null, 2);
-                metadata.sourceType = 'json';
-              }
-            } catch {}
-          } else if (ext === '.csv') {
-            metadata.sourceType = 'csv';
-            logger.info(
-              chalk.yellow(
-                'Note: CSV files can contain multiple prompts. Only the raw content will be stored.',
-              ),
-            );
-          } else if (ext === '.yaml' || ext === '.yml') {
-            metadata.sourceType = 'yaml';
-          } else if (ext === '.j2') {
-            metadata.sourceType = 'jinja2';
-          } else if (ext === '.md') {
-            metadata.sourceType = 'markdown';
-          } else if (['.js', '.mjs', '.ts', '.py'].includes(ext)) {
-            metadata.sourceType = ext.substring(1);
-            logger.info(
-              chalk.yellow(
-                `Note: ${ext} files should export functions for dynamic prompt generation.`,
-              ),
-            );
+        // Handle file input
+        if (options.fromFile) {
+          const filePath = options.fromFile;
+          if (!fs.existsSync(filePath)) {
+            logger.error(`File not found: ${filePath}`);
+            process.exit(1);
           }
 
-          logger.info(chalk.blue(`Loaded content from ${cmdObj.fromFile}`));
-        } else {
-          // Open editor for content
-          const tempFile = `/tmp/promptfoo-prompt-${Date.now()}.txt`;
-          const fs = await import('fs/promises');
-          await fs.writeFile(tempFile, '');
+          const fileContent = fs.readFileSync(filePath, 'utf-8');
+          const ext = path.extname(filePath);
 
-          const editor = process.env.EDITOR || 'vi';
-          await execAsync(`${editor} ${tempFile}`);
-
-          content = await fs.readFile(tempFile, 'utf-8');
-          await fs.unlink(tempFile);
+          // Determine content type based on file extension
+          if (['.json', '.jsonl'].includes(ext)) {
+            additionalFields.contentType = 'json';
+            additionalFields.fileFormat = ext;
+            try {
+              // Validate JSON
+              JSON.parse(fileContent);
+              content = fileContent;
+            } catch {
+              logger.error('Invalid JSON in file');
+              process.exit(1);
+            }
+          } else if (['.js', '.mjs', '.ts', '.py'].includes(ext)) {
+            additionalFields.contentType = 'function';
+            additionalFields.fileFormat = ext;
+            additionalFields.functionSource = fileContent;
+            content = fileContent;
+          } else if (['.yaml', '.yml'].includes(ext)) {
+            additionalFields.fileFormat = ext;
+            content = fileContent;
+          } else {
+            content = fileContent;
+            additionalFields.fileFormat = ext;
+          }
         }
 
-        await manager.createPrompt(promptId, cmdObj.desc, content);
-        logger.info(chalk.green(`Created prompt "${promptId}" (version 1)`));
-        if (metadata.sourceFile) {
-          logger.info(
-            chalk.blue(`Source: ${metadata.sourceFile} (${metadata.sourceType || 'text'})`),
-          );
+        // Parse configuration
+        if (options.config) {
+          try {
+            additionalFields.config = JSON.parse(options.config);
+          } catch {
+            logger.error('Invalid JSON in --config option');
+            process.exit(1);
+          }
         }
+
+        // Set label
+        if (options.label) {
+          additionalFields.label = options.label;
+        }
+
+        // Handle function flag
+        if (options.function && !options.fromFile) {
+          additionalFields.contentType = 'function';
+          additionalFields.functionSource = content;
+        }
+
+        const manager = new PromptManager();
+        await manager.createPrompt(id, options.description, content, additionalFields);
+
+        logger.info(`✅ Created prompt "${id}"`);
+        if (options.description) {
+          logger.info(`   Description: ${options.description}`);
+        }
+        if (additionalFields.contentType) {
+          logger.info(`   Type: ${additionalFields.contentType}`);
+        }
+        if (additionalFields.config) {
+          logger.info(`   Config: ${JSON.stringify(additionalFields.config)}`);
+        }
+        logger.info(`   Version: 1`);
       } catch (error) {
-        logger.error(chalk.red(`Failed to create prompt: ${error}`));
-        process.exitCode = 1;
+        logger.error(`Failed to create prompt: ${error}`);
+        process.exit(1);
       }
     });
 

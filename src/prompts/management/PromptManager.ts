@@ -44,10 +44,23 @@ export class PromptManager {
     };
   }
 
-  async createPrompt(id: string, description?: string, content?: string): Promise<ManagedPromptWithVersions> {
+  async createPrompt(
+    id: string, 
+    description?: string, 
+    content?: string,
+    additionalFields?: {
+      config?: Record<string, any>;
+      contentType?: 'string' | 'json' | 'function' | 'file';
+      functionSource?: string;
+      functionName?: string;
+      fileFormat?: string;
+      transform?: string;
+      label?: string;
+    }
+  ): Promise<ManagedPromptWithVersions> {
     const result = this.config.mode === 'local' 
-      ? await this.createPromptLocal(id, description, content)
-      : await this.createPromptCloud(id, description, content);
+      ? await this.createPromptLocal(id, description, content, additionalFields)
+      : await this.createPromptCloud(id, description, content, additionalFields);
     
     // Track telemetry
     telemetry.record('feature_used', {
@@ -55,12 +68,26 @@ export class PromptManager {
       mode: this.config.mode,
       hasDescription: !!description,
       contentLength: content?.length || 0,
+      contentType: additionalFields?.contentType || 'string',
     });
     
     return result;
   }
 
-  private async createPromptLocal(id: string, description?: string, content?: string): Promise<ManagedPromptWithVersions> {
+  private async createPromptLocal(
+    id: string, 
+    description?: string, 
+    content?: string,
+    additionalFields?: {
+      config?: Record<string, any>;
+      contentType?: 'string' | 'json' | 'function' | 'file';
+      functionSource?: string;
+      functionName?: string;
+      fileFormat?: string;
+      transform?: string;
+      label?: string;
+    }
+  ): Promise<ManagedPromptWithVersions> {
     const promptsDir = this.config.localPath!;
     await fs.mkdir(promptsDir, { recursive: true });
     
@@ -89,6 +116,7 @@ export class PromptManager {
         createdAt: now.toISOString(),
         content: content || '',
         notes: 'Initial version',
+        ...additionalFields,
       }],
       deployments: {},
     };
@@ -111,12 +139,26 @@ export class PromptManager {
         author,
         createdAt: now,
         notes: 'Initial version',
+        ...additionalFields,
       }],
       deployments: {},
     };
   }
 
-  private async createPromptCloud(id: string, description?: string, content?: string): Promise<ManagedPromptWithVersions> {
+  private async createPromptCloud(
+    id: string, 
+    description?: string, 
+    content?: string,
+    additionalFields?: {
+      config?: Record<string, any>;
+      contentType?: 'string' | 'json' | 'function' | 'file';
+      functionSource?: string;
+      functionName?: string;
+      fileFormat?: string;
+      transform?: string;
+      label?: string;
+    }
+  ): Promise<ManagedPromptWithVersions> {
     const apiUrl = `${this.config.cloudApiUrl}/api/prompts`;
     const apiKey = cloudConfig.getApiKey();
     
@@ -141,7 +183,14 @@ export class PromptManager {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({ id, description, content, notes: 'Initial version', metadata }),
+      body: JSON.stringify({ 
+        id, 
+        description, 
+        content, 
+        notes: 'Initial version', 
+        metadata,
+        ...additionalFields
+      }),
     }, 30000);
 
     if (!response.ok) {
@@ -291,22 +340,49 @@ export class PromptManager {
     return response.json();
   }
 
-  async updatePrompt(id: string, content: string, notes?: string): Promise<ManagedPromptWithVersions> {
+  async updatePrompt(
+    id: string, 
+    content: string, 
+    notes?: string,
+    additionalFields?: {
+      config?: Record<string, any>;
+      contentType?: 'string' | 'json' | 'function' | 'file';
+      functionSource?: string;
+      functionName?: string;
+      fileFormat?: string;
+      transform?: string;
+      label?: string;
+    }
+  ): Promise<ManagedPromptWithVersions> {
     const result = this.config.mode === 'local'
-      ? await this.updatePromptLocal(id, content, notes)
-      : await this.updatePromptCloud(id, content, notes);
+      ? await this.updatePromptLocal(id, content, notes, additionalFields)
+      : await this.updatePromptCloud(id, content, notes, additionalFields);
     
     // Track telemetry
     telemetry.record('feature_used', {
       feature: 'prompt_management_update',
       mode: this.config.mode,
       versionNumber: result.currentVersion,
+      contentType: additionalFields?.contentType || 'string',
     });
     
     return result;
   }
 
-  private async updatePromptLocal(id: string, content: string, notes?: string): Promise<ManagedPromptWithVersions> {
+  private async updatePromptLocal(
+    id: string, 
+    content: string, 
+    notes?: string,
+    additionalFields?: {
+      config?: Record<string, any>;
+      contentType?: 'string' | 'json' | 'function' | 'file';
+      functionSource?: string;
+      functionName?: string;
+      fileFormat?: string;
+      transform?: string;
+      label?: string;
+    }
+  ): Promise<ManagedPromptWithVersions> {
     const prompt = await this.getPromptLocal(id);
     if (!prompt) {
       throw new Error(`Prompt with id "${id}" not found`);
@@ -327,6 +403,7 @@ export class PromptManager {
       createdAt: now.toISOString(),
       content,
       notes: notes || '',
+      ...additionalFields,
     });
     
     await fs.writeFile(filePath, yaml.dump(data), 'utf-8');
@@ -338,7 +415,20 @@ export class PromptManager {
     return result;
   }
 
-  private async updatePromptCloud(id: string, content: string, notes?: string): Promise<ManagedPromptWithVersions> {
+  private async updatePromptCloud(
+    id: string, 
+    content: string, 
+    notes?: string,
+    additionalFields?: {
+      config?: Record<string, any>;
+      contentType?: 'string' | 'json' | 'function' | 'file';
+      functionSource?: string;
+      functionName?: string;
+      fileFormat?: string;
+      transform?: string;
+      label?: string;
+    }
+  ): Promise<ManagedPromptWithVersions> {
     const apiUrl = `${this.config.cloudApiUrl}/api/prompts/${id}/versions`;
     const apiKey = cloudConfig.getApiKey();
     
@@ -352,7 +442,11 @@ export class PromptManager {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({ content, notes }),
+      body: JSON.stringify({ 
+        content, 
+        notes,
+        ...additionalFields
+      }),
     }, 30000);
 
     if (!response.ok) {

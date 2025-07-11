@@ -4,7 +4,22 @@ sidebar_position: 50
 
 # Prompt Management
 
-Promptfoo includes a comprehensive prompt management system that helps you version, track, and deploy your prompts across different environments.
+:::tip Comprehensive Documentation Available
+
+This page provides a technical overview. For in-depth guides, see:
+
+- 🚀 **[Quickstart Guide](quickstart)** - Get up and running in 5 minutes
+- 📚 **[Core Concepts](concepts)** - Understand the fundamentals
+- ⚙️ **[Configuration Reference](configuration)** - All configuration options
+- 🤖 **[Auto-Tracking Guide](auto-tracking)** - Automatic prompt discovery
+- 🔧 **[API Reference](api-reference)** - Programmatic access
+- ✨ **[Best Practices](best-practices)** - Production patterns
+
+:::
+
+![Prompt Management Dashboard](../assets/prompt-management-dashboard.png)
+
+Promptfoo provides a comprehensive prompt management system that enables version control, deployment tracking, and team collaboration for your AI prompts. This system allows you to treat prompts as first-class citizens in your development workflow.
 
 ## Overview
 
@@ -387,6 +402,167 @@ description: |
 3. **Review Process**: Use diff to review changes before deployment
 
 ## Advanced Features
+
+### Full Configuration Support
+
+Managed prompts now support all the features available in regular prompts:
+
+#### Prompt Configuration
+
+You can attach configuration to prompts to control model behavior:
+
+```bash
+# Create a prompt with configuration
+promptfoo prompt create weather-assistant \
+  --content "You are a weather assistant" \
+  --config '{"temperature": 0.7, "max_tokens": 500}'
+```
+
+#### Function Prompts
+
+Store JavaScript or Python functions as prompts:
+
+```bash
+# Create a function prompt from file
+promptfoo prompt create dynamic-prompt \
+  --from-file prompt-function.js \
+  --function
+
+# Or inline
+promptfoo prompt create simple-function \
+  --content "({vars}) => `Hello ${vars.name}`" \
+  --function
+```
+
+#### Chat Format Prompts
+
+Store chat-style prompts with roles:
+
+```bash
+# Create a chat prompt
+promptfoo prompt create chat-assistant \
+  --from-file chat-prompt.json
+```
+
+Where `chat-prompt.json` contains:
+```json
+[
+  {"role": "system", "content": "You are a helpful assistant"},
+  {"role": "user", "content": "{{query}}"}
+]
+```
+
+#### Response Formats and Schemas
+
+Configure structured output formats:
+
+```yaml
+# In your eval config
+prompts:
+  - id: pf://structured-output
+    config:
+      response_format:
+        type: json_schema
+        json_schema:
+          name: analysis
+          schema:
+            type: object
+            properties:
+              sentiment: { type: string }
+              score: { type: number }
+```
+
+### Auto-Tracking Unmanaged Prompts
+
+Promptfoo can automatically track prompts that aren't managed yet. This helps you discover and organize prompts across your codebase.
+
+#### Enable Auto-Tracking
+
+Set the environment variable:
+```bash
+export PROMPTFOO_AUTO_TRACK_PROMPTS=true
+```
+
+Or in your config:
+```yaml
+promptAutoTracking:
+  enabled: true
+  excludePatterns:
+    - "*.test.*"
+    - "*test*"
+  includeMetadata: true
+```
+
+When enabled, any prompt used in evaluations will be automatically:
+1. Assigned a unique ID based on content hash or label
+2. Stored in the prompt management system
+3. Available for future reference via `pf://prompt-id`
+
+#### How Auto-Tracking Works
+
+1. **Detection**: When you run an evaluation, all prompts are analyzed
+2. **ID Generation**: Each prompt gets a unique ID:
+   - If it has a label: `sanitized-label`
+   - Otherwise: `prompt-{hash}`
+3. **Storage**: The prompt is stored with all its features:
+   - Configuration
+   - Content type (string, JSON, function)
+   - Original format
+   - Labels and metadata
+
+#### Example Workflow
+
+```bash
+# Run an eval with unmanaged prompts
+promptfoo eval
+
+# Auto-tracking creates managed versions:
+# - "customer-support" from label
+# - "prompt-a5f3c2d1" from content hash
+
+# Now you can reference them
+prompts:
+  - pf://customer-support
+  - pf://prompt-a5f3c2d1
+```
+
+### Supported File Formats
+
+When creating prompts from files, all standard formats are supported:
+
+- **Text formats**: `.txt`, `.md`
+- **Data formats**: `.json`, `.jsonl`, `.yaml`, `.yml`, `.csv`
+- **Template formats**: `.j2` (Jinja2)
+- **Function formats**: `.js`, `.mjs`, `.ts`, `.py`
+
+Example:
+```bash
+# Each format is properly detected and stored
+promptfoo prompt create my-prompt --from-file prompt.yaml
+promptfoo prompt create my-function --from-file generate.js
+promptfoo prompt create my-template --from-file template.j2
+```
+
+### Provider-Specific Features
+
+Managed prompts support provider-specific configurations:
+
+```yaml
+prompts:
+  - id: pf://my-prompt
+    config:
+      # OpenAI specific
+      temperature: 0.7
+      response_format: { type: "json_object" }
+      
+      # Anthropic specific  
+      max_tokens: 1000
+      system: "You are Claude"
+      
+      # Custom transforms
+      transform: |
+        return `[INST] ${prompt} [/INST]`
+```
 
 ### Bulk Operations
 

@@ -1,81 +1,94 @@
 import type { Prompt } from '../../types';
 import logger from '../../logger';
-import telemetry from '../../telemetry';
 import { PromptManager } from '../management/PromptManager';
-
-const VALID_ID_REGEX = /^[a-zA-Z0-9-_]+$/;
+import { versionToPrompt } from '../management/promptAnalyzer';
 
 /**
- * Processes a managed prompt with pf:// prefix
- * Format: pf://prompt-id[:version|:environment]
+ * Process managed prompts with pf:// prefix
+ * Format: pf://prompt-id, pf://prompt-id:version, or pf://prompt-id:environment
  */
 export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Prompt[]> {
   if (!prompt.raw || !prompt.raw.startsWith('pf://')) {
-    throw new Error(`Invalid managed prompt format: ${prompt.raw}`);
+    return [];
   }
 
-  // Parse the prompt reference
-  const parts = prompt.raw.substring(5).split(':'); // Remove 'pf://' prefix
+  const url = prompt.raw.substring(5); // Remove 'pf://' prefix
+  const parts = url.split(':');
   const promptId = parts[0];
   const versionOrEnv = parts[1];
-
-  // Validate prompt ID
-  if (!VALID_ID_REGEX.test(promptId)) {
-    throw new Error(`Invalid prompt ID: ${promptId}. Must contain only letters, numbers, hyphens, and underscores.`);
+  
+  // Validate prompt ID format
+  if (!promptId || promptId.trim() === '') {
+    throw new Error('Invalid managed prompt reference: missing prompt ID');
   }
-
-  logger.debug(`Loading managed prompt: ${promptId} with version/env: ${versionOrEnv || 'current'}`);
 
   const manager = new PromptManager();
-  const managedPrompt = await manager.getPrompt(promptId);
-
-  if (!managedPrompt) {
-    throw new Error(`Managed prompt not found: ${promptId}`);
-  }
-
-  // Track usage (async, don't wait)
-  manager.trackUsage(promptId).catch(err => {
-    logger.debug(`Failed to track prompt usage: ${err.message}`);
-  });
-
-  // Record telemetry
-  telemetry.record('feature_used', {
-    feature: 'managed_prompt',
-    promptId,
-    versionOrEnv: versionOrEnv || 'current',
-  });
-
-  let targetVersion: number;
-
-  if (!versionOrEnv) {
-    // Use current version
-    targetVersion = managedPrompt.currentVersion;
-  } else if (/^\d+$/.test(versionOrEnv)) {
-    // It's a version number
-    targetVersion = Number.parseInt(versionOrEnv, 10);
-  } else {
-    // It's an environment name
-    const deployedVersion = managedPrompt.deployments?.[versionOrEnv];
-    if (!deployedVersion) {
-      throw new Error(`No deployment found for environment: ${versionOrEnv}`);
+  
+  try {
+    const managedPrompt = await manager.getPrompt(promptId);
+    
+    if (!managedPrompt) {
+      throw new Error(`Managed prompt not found: ${promptId}`);
     }
-    targetVersion = deployedVersion;
+
+    let targetVersion: number;
+    
+    if (versionOrEnv) {
+      // Check if it's a number (version) or string (environment)
+      const versionNum = Number.parseInt(versionOrEnv);
+      if (isNaN(versionNum)) {
+        // It's an environment name
+        const deployedVersion = managedPrompt.deployments?.[versionOrEnv];
+        if (!deployedVersion) {
+          throw new Error(`No deployment found for environment: ${versionOrEnv}`);
+        }
+        targetVersion = deployedVersion;
+      } else {
+        targetVersion = versionNum;
+      }
+    } else {
+      // Use current version
+      targetVersion = managedPrompt.currentVersion;
+    }
+
+    // Find the specific version
+    const version = managedPrompt.versions.find(v => v.version === targetVersion);
+    if (!version) {
+      throw new Error(`Version ${targetVersion} not found for prompt: ${promptId}`);
+    }
+
+    // Track usage asynchronously
+    manager.trackUsage(promptId).catch(err => 
+      logger.debug(`Failed to track usage for prompt ${promptId}: ${err}`)
+    );
+
+    // Convert version to prompt object with all features
+    const resultPrompt = versionToPrompt(version);
+    
+    // Merge any additional properties from the original prompt
+    if (prompt.config) {
+      resultPrompt.config = { ...resultPrompt.config, ...prompt.config };
+    }
+    if (prompt.label && !resultPrompt.label) {
+      resultPrompt.label = prompt.label;
+    }
+
+    // Handle function prompts
+    if (version.contentType === 'function' && version.functionSource) {
+      try {
+        // Evaluate the function source
+        const func = eval(`(${version.functionSource})`);
+        resultPrompt.function = func;
+        resultPrompt.raw = func.toString();
+      } catch (error) {
+        logger.error(`Failed to evaluate function prompt: ${error}`);
+        // Fall back to string content
+      }
+    }
+
+    return [resultPrompt];
+  } catch (error) {
+    logger.error(`Error processing managed prompt ${promptId}: ${error}`);
+    throw error;
   }
-
-  // Find the specific version
-  const version = managedPrompt.versions.find(v => v.version === targetVersion);
-  if (!version) {
-    throw new Error(`Version ${targetVersion} not found for prompt: ${promptId}`);
-  }
-
-  logger.debug(`Resolved managed prompt ${promptId} to version ${targetVersion}`);
-
-  return [{
-    ...prompt,
-    raw: version.content,
-    label: prompt.label || `${managedPrompt.name} v${targetVersion}`,
-    display: `${managedPrompt.name} (v${targetVersion})`,
-    // Preserve any config from the prompt reference
-    config: prompt.config,
-  } as Prompt];
 } 

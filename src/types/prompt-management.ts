@@ -17,6 +17,15 @@ export interface PromptVersion {
   author?: string;
   createdAt: Date;
   notes?: string;
+
+  // New fields to support all prompt features
+  config?: Record<string, any>; // Prompt-specific configuration
+  contentType?: 'string' | 'json' | 'function' | 'file'; // Type of content
+  functionSource?: string; // Source code for function prompts
+  functionName?: string; // Function name for multi-function files
+  fileFormat?: string; // Original file format (.txt, .json, .yaml, etc.)
+  transform?: string; // Prompt-level transform
+  label?: string; // Custom label for the prompt
 }
 
 export interface PromptDeployment {
@@ -43,6 +52,14 @@ export interface PromptYaml {
     createdAt: string;
     content: string;
     notes?: string;
+    // New fields
+    config?: Record<string, any>;
+    contentType?: 'string' | 'json' | 'function' | 'file';
+    functionSource?: string;
+    functionName?: string;
+    fileFormat?: string;
+    transform?: string;
+    label?: string;
   }>;
   deployments?: Record<string, number>;
 }
@@ -65,4 +82,11 @@ export interface PromptDiffOptions {
   promptId: string;
   versionA?: number;
   versionB?: number;
+}
+
+// New interface for auto-tracking configuration
+export interface AutoTrackingConfig {
+  enabled: boolean;
+  excludePatterns?: string[]; // Patterns to exclude from auto-tracking
+  includeMetadata?: boolean; // Whether to include metadata in tracked prompts
 }

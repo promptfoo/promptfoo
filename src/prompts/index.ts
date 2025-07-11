@@ -25,6 +25,7 @@ import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
+import { autoTrackPrompts } from './management/autoTracker';
 
 export * from './grading';
 
@@ -208,7 +209,7 @@ export async function readPrompts(
 export async function processPrompts(
   prompts: EvaluateTestSuite['prompts'],
 ): Promise<TestSuite['prompts']> {
-  return (
+  const processedPrompts = (
     await Promise.all(
       prompts.map(async (promptInput: EvaluateTestSuite['prompts'][number]) => {
         if (typeof promptInput === 'function') {
@@ -234,6 +235,15 @@ export async function processPrompts(
       }),
     )
   ).flat();
+
+  // Auto-track prompts if enabled
+  try {
+    await autoTrackPrompts(processedPrompts);
+  } catch (error) {
+    logger.debug(`Failed to auto-track prompts: ${error}`);
+  }
+
+  return processedPrompts;
 }
 
 export const GEVAL_PROMPT_STEPS = `

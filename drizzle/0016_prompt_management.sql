@@ -20,7 +20,15 @@ CREATE TABLE `prompt_versions` (
   `author` text,
   `created_at` integer DEFAULT (unixepoch()) NOT NULL,
   `notes` text,
-  FOREIGN KEY (`prompt_id`) REFERENCES `managed_prompts`(`id`) ON DELETE CASCADE
+  `config` text, -- JSON: Prompt-specific configuration
+  `content_type` text CHECK (content_type IN ('string', 'json', 'function', 'file')),
+  `function_source` text, -- Source code for function prompts
+  `function_name` text, -- Function name for multi-function files
+  `file_format` text, -- Original file format (.txt, .json, .yaml, etc.)
+  `transform` text, -- Prompt-level transform
+  `label` text, -- Custom label for the prompt
+  FOREIGN KEY (`prompt_id`) REFERENCES `managed_prompts`(`id`) ON DELETE CASCADE,
+  UNIQUE(prompt_id, version)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `prompt_version_idx` ON `prompt_versions` (`prompt_id`, `version`);--> statement-breakpoint

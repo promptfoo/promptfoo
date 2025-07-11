@@ -37,4 +37,4 @@ examples/redteam-medical-agent/redteam.yaml
 **/.claude/settings.local.json
 
 # Prompt management - local prompt files
-prompts/
+/prompts/

@@ -120,6 +120,13 @@
       "when": 1752159120000,
       "tag": "0016_prompt_management",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1752216000000,
+      "tag": "0017_prompt_features",
+      "breakpoints": true
     }
   ]
 }

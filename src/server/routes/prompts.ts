@@ -1,7 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm';
-import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import express from 'express';
 import { getDb } from '../../database';
 import {
   managedPromptsTable,
@@ -10,6 +9,8 @@ import {
 } from '../../database/tables';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { PromptManager } from '../../prompts/management/PromptManager';
+import telemetry from '../../telemetry';
 import type { ManagedPromptWithVersions } from '../../types/prompt-management';
 
 const VALID_ID_REGEX = /^[a-zA-Z0-9-_]+$/;
@@ -73,7 +74,7 @@ async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWit
   };
 }
 
-export const promptsRouter = Router();
+export const promptsRouter = express.Router();
 
 // List all prompts
 promptsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
@@ -103,64 +104,72 @@ promptsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 // Create a new prompt
 promptsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id, description, content, notes } = req.body;
-    const author = getUserEmail() || 'unknown';
-    const db = getDb();
+    const {
+      id,
+      description,
+      content,
+      notes,
+      config,
+      contentType,
+      functionSource,
+      functionName,
+      fileFormat,
+      transform,
+      label,
+    } = req.body;
 
-    // Validate prompt ID
-    if (!id || !VALID_ID_REGEX.test(id)) {
-      res.status(400).json({
-        error: 'Invalid prompt ID. Must contain only letters, numbers, hyphens, and underscores.',
-      });
-      return;
+    if (!id) {
+      return res.status(400).json({ error: 'Prompt ID is required' });
     }
+
+    // Validate prompt ID format
+    if (!/^[a-zA-Z0-9-_]+$/.test(id)) {
+      return res.status(400).json({
+        error: 'Invalid prompt ID. Use only letters, numbers, hyphens, and underscores.',
+      });
+    }
+
+    const manager = new PromptManager();
 
     // Check if prompt already exists
-    const existing = await db
-      .select()
-      .from(managedPromptsTable)
-      .where(eq(managedPromptsTable.name, id))
-      .limit(1);
-
-    if (existing.length > 0) {
-      res.status(409).json({ error: `Prompt with id "${id}" already exists` });
-      return;
+    const existing = await manager.getPrompt(id);
+    if (existing) {
+      return res.status(409).json({ error: 'Prompt with this ID already exists' });
     }
 
-    const promptId = uuidv4();
-    const versionId = uuidv4();
+    const additionalFields = {
+      config,
+      contentType,
+      functionSource,
+      functionName,
+      fileFormat,
+      transform,
+      label,
+    };
 
-    db.transaction(() => {
-      // Create prompt
-      db.insert(managedPromptsTable)
-        .values({
-          id: promptId,
-          name: id,
-          description,
-          currentVersion: 1,
-          author,
-        })
-        .run();
-
-      // Create first version
-      db.insert(promptVersionsTable)
-        .values({
-          id: versionId,
-          promptId,
-          version: 1,
-          content: content || '',
-          author,
-          notes: notes || 'Initial version',
-        })
-        .run();
+    // Remove undefined fields
+    Object.keys(additionalFields).forEach((key) => {
+      if (additionalFields[key] === undefined) {
+        delete additionalFields[key];
+      }
     });
 
-    // Fetch and return the created prompt with versions
-    const result = await getPromptWithVersions(promptId);
-    res.status(201).json(result);
+    const prompt = await manager.createPrompt(
+      id,
+      description,
+      content || '',
+      Object.keys(additionalFields).length > 0 ? additionalFields : undefined,
+    );
+
+    telemetry.record('feature_used', {
+      feature: 'prompt_management_create_api',
+      contentType: contentType || 'string',
+    });
+
+    res.json(prompt);
   } catch (error) {
-    logger.error(`Error creating prompt: ${error}`);
-    res.status(500).json({ error: 'Failed to create prompt' });
+    logger.error('Failed to create prompt:', error);
+    res.status(500).json({ error: error.message || 'Failed to create prompt' });
   }
 });
 
@@ -231,55 +240,64 @@ promptsRouter.put('/:id', async (req: Request, res: Response): Promise<void> => 
 promptsRouter.post('/:id/versions', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { content, notes } = req.body;
-    const author = getUserEmail() || 'unknown';
-    const db = getDb();
+    const {
+      content,
+      notes,
+      config,
+      contentType,
+      functionSource,
+      functionName,
+      fileFormat,
+      transform,
+      label,
+    } = req.body;
 
-    // Get prompt
-    const promptRows = await db
-      .select()
-      .from(managedPromptsTable)
-      .where(eq(managedPromptsTable.id, id))
-      .limit(1);
-
-    if (promptRows.length === 0) {
-      res.status(404).json({ error: 'Prompt not found' });
-      return;
+    if (!content) {
+      return res.status(400).json({ error: 'Content is required' });
     }
 
-    const prompt = promptRows[0];
-    const newVersion = prompt.currentVersion + 1;
-    const versionId = uuidv4();
+    const manager = new PromptManager();
 
-    db.transaction(() => {
-      // Create new version
-      db.insert(promptVersionsTable)
-        .values({
-          id: versionId,
-          promptId: id,
-          version: newVersion,
-          content,
-          author,
-          notes,
-        })
-        .run();
+    // Check if prompt exists
+    const existing = await manager.getPrompt(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Prompt not found' });
+    }
 
-      // Update prompt
-      db.update(managedPromptsTable)
-        .set({
-          currentVersion: newVersion,
-          updatedAt: Date.now(),
-        })
-        .where(eq(managedPromptsTable.id, id))
-        .run();
+    const additionalFields = {
+      config,
+      contentType,
+      functionSource,
+      functionName,
+      fileFormat,
+      transform,
+      label,
+    };
+
+    // Remove undefined fields
+    Object.keys(additionalFields).forEach((key) => {
+      if (additionalFields[key] === undefined) {
+        delete additionalFields[key];
+      }
     });
 
-    // Return updated prompt
-    const result = await getPromptWithVersions(id);
-    res.json(result);
+    const prompt = await manager.updatePrompt(
+      id,
+      content,
+      notes,
+      Object.keys(additionalFields).length > 0 ? additionalFields : undefined,
+    );
+
+    telemetry.record('feature_used', {
+      feature: 'prompt_management_update_api',
+      versionNumber: prompt.currentVersion,
+      contentType: contentType || 'string',
+    });
+
+    res.json(prompt);
   } catch (error) {
-    logger.error(`Error creating version: ${error}`);
-    res.status(500).json({ error: 'Failed to create version' });
+    logger.error('Failed to create version:', error);
+    res.status(500).json({ error: error.message || 'Failed to create version' });
   }
 });
 

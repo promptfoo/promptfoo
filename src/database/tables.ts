@@ -7,6 +7,7 @@ import {
   index,
   uniqueIndex,
   real,
+  unique,
 } from 'drizzle-orm/sqlite-core';
 import {
   type Prompt,
@@ -304,15 +305,25 @@ export const promptVersionsTable = sqliteTable(
     version: integer('version').notNull(),
     content: text('content').notNull(),
     author: text('author'),
-    createdAt: integer('created_at')
+    createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
       .default(sql`(unixepoch())`),
     notes: text('notes'),
+    // New columns for prompt features
+    config: text('config'), // JSON stored as text
+    contentType: text('content_type'), // 'string' | 'json' | 'function' | 'file'
+    functionSource: text('function_source'),
+    functionName: text('function_name'),
+    fileFormat: text('file_format'),
+    transform: text('transform'),
+    label: text('label'),
   },
-  (table) => ({
-    promptVersionIdx: uniqueIndex('prompt_version_idx').on(table.promptId, table.version),
-    createdAtIdx: index('prompt_versions_created_at_idx').on(table.createdAt),
-  }),
+  (table) => {
+    return {
+      promptVersionIdx: index('prompt_version_idx').on(table.promptId, table.version),
+      uniquePromptVersion: unique().on(table.promptId, table.version),
+    };
+  },
 );
 
 export const promptDeploymentsTable = sqliteTable(
