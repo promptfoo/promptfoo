@@ -1,12 +1,12 @@
 .banner {
   position: relative;
   background:
-    radial-gradient(ellipse at top left, rgba(229, 58, 58, 0.3) 0%, transparent 40%),
-    radial-gradient(ellipse at bottom right, rgba(179, 46, 46, 0.2) 0%, transparent 40%),
+    radial-gradient(ellipse at top left, rgba(179, 46, 46, 0.2) 0%, transparent 45%),
+    radial-gradient(ellipse at bottom right, rgba(203, 52, 52, 0.15) 0%, transparent 45%),
     linear-gradient(135deg, #10191c 0%, #17252b 35%, #2e3c46 70%, #17252b 100%);
   overflow: hidden;
   animation: bannerGlow 4s ease-in-out infinite alternate;
-  border-bottom: 2px solid rgba(229, 58, 58, 0.3);
+  border-bottom: 2px solid rgba(179, 46, 46, 0.3);
 }
 
 .banner::before {
@@ -16,7 +16,7 @@
   left: -100%;
   width: 200%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(229, 58, 58, 0.1), transparent);
+  background: linear-gradient(90deg, transparent, rgba(179, 46, 46, 0.08), transparent);
   animation: sweep 8s linear infinite;
 }
 
@@ -32,13 +32,13 @@
 @keyframes bannerGlow {
   0% {
     box-shadow:
-      0 1px 15px rgba(229, 58, 58, 0.3),
-      inset 0 1px 0 rgba(255, 122, 122, 0.1);
+      0 1px 15px rgba(179, 46, 46, 0.25),
+      inset 0 1px 0 rgba(229, 58, 58, 0.1);
   }
   100% {
     box-shadow:
-      0 1px 25px rgba(229, 58, 58, 0.4),
-      inset 0 1px 0 rgba(255, 122, 122, 0.2);
+      0 1px 25px rgba(179, 46, 46, 0.35),
+      inset 0 1px 0 rgba(229, 58, 58, 0.15);
   }
 }
 
@@ -57,10 +57,10 @@
   position: absolute;
   width: 3px;
   height: 3px;
-  background: linear-gradient(135deg, #ff7a7a, #ffa0a0);
+  background: linear-gradient(135deg, #e53a3a, #cb3434);
   border-radius: 50%;
-  opacity: 0.4;
-  box-shadow: 0 0 6px rgba(255, 122, 122, 0.5);
+  opacity: 0.3;
+  box-shadow: 0 0 4px rgba(229, 58, 58, 0.4);
 }
 
 .particle1 {
@@ -137,13 +137,13 @@
 }
 
 .heading {
-  color: #ffc6c6;
+  color: #ffffff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  opacity: 0.95;
-  text-shadow: 0 1px 3px rgba(229, 58, 58, 0.4);
+  opacity: 0.9;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .eventsContainer {
@@ -174,7 +174,7 @@
   left: -2px;
   right: -2px;
   bottom: -2px;
-  background: linear-gradient(45deg, #b32e2e, #e53a3a, #ff7a7a, #ffa0a0);
+  background: linear-gradient(45deg, #991515, #b32e2e, #cb3434, #e53a3a);
   border-radius: 10px;
   opacity: 0;
   transition: opacity 0.3s ease;
@@ -194,13 +194,13 @@
 }
 
 .eventBadge {
-  color: #ffc6c6;
+  color: #ffffff;
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   white-space: nowrap;
-  text-shadow: 0 1px 2px rgba(229, 58, 58, 0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .eventDetails {
@@ -210,35 +210,35 @@
 }
 
 .eventDate {
-  color: #ffd9d9;
+  color: #ff7a7a;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  text-shadow: 0 0 4px rgba(255, 122, 122, 0.5);
+  text-shadow: 0 0 4px rgba(229, 58, 58, 0.5);
 }
 
 .eventLocation {
-  color: rgba(255, 198, 198, 0.8);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .eventCta {
-  color: #ffa0a0;
+  color: #ffffff;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
-  opacity: 0.9;
+  opacity: 0.8;
   transition: all 0.3s ease;
 }
 
 .eventCard:hover .eventCta {
   opacity: 1;
-  color: #ffffff;
-  text-shadow: 0 0 6px rgba(255, 122, 122, 0.8);
+  color: #ff7a7a;
+  text-shadow: 0 0 6px rgba(229, 58, 58, 0.6);
 }
 
 .divider {
@@ -248,11 +248,11 @@
 }
 
 .plus {
-  color: rgba(255, 160, 160, 0.6);
+  color: rgba(255, 255, 255, 0.5);
   font-size: 16px;
   font-weight: 400;
   animation: rotate 10s linear infinite;
-  text-shadow: 0 0 6px rgba(229, 58, 58, 0.4);
+  text-shadow: 0 0 4px rgba(229, 58, 58, 0.3);
 }
 
 @keyframes rotate {
@@ -271,7 +271,7 @@
   transform: translateY(-50%);
   background: none;
   border: 1px solid transparent;
-  color: rgba(255, 198, 198, 0.7);
+  color: rgba(255, 255, 255, 0.6);
   font-size: 20px;
   cursor: pointer;
   padding: 4px 8px;
@@ -281,11 +281,11 @@
 }
 
 .closeButton:hover {
-  color: #ffa0a0;
-  background: rgba(229, 58, 58, 0.1);
-  border-color: rgba(229, 58, 58, 0.3);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-50%) scale(1.1);
-  box-shadow: 0 0 10px rgba(229, 58, 58, 0.3);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
 }
 
 .progressBar {
@@ -299,12 +299,12 @@
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #b32e2e, #e53a3a, #ff7a7a, #ffa0a0, #ff7a7a, #e53a3a, #b32e2e);
+  background: linear-gradient(90deg, #991515, #b32e2e, #cb3434, #e53a3a, #cb3434, #b32e2e, #991515);
   background-size: 200% 100%;
   animation:
     progress 30s linear infinite,
     shimmer 3s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(229, 58, 58, 0.6);
+  box-shadow: 0 0 6px rgba(179, 46, 46, 0.5);
 }
 
 @keyframes shimmer {
