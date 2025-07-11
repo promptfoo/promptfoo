@@ -592,22 +592,35 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
-  const handleMetricFilter = React.useCallback(
+  const handleMetricFilterClick = React.useCallback(
     (metric: string | null) => {
-      // TODO(Will): Handle this state; clicking a metric disables the filter?
       if (!metric) {
         return;
       }
 
-      console.log('handleMetricFilter', metric);
-
-      addFilter({
-        type: 'metric',
-        operator: 'equals',
+      const filter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
         value: metric,
-      });
+        logicOperator: 'or' as const,
+      };
+
+      // If this filter is already applied, do not re-apply it.
+      if (
+        Object.values(filters.values).find(
+          (f) =>
+            f.type === filter.type &&
+            f.value === filter.value &&
+            f.operator === filter.operator &&
+            f.logicOperator === filter.logicOperator,
+        )
+      ) {
+        return;
+      }
+
+      addFilter(filter);
     },
-    [addFilter],
+    [addFilter, filters.values],
   );
 
   const promptColumns = React.useMemo(() => {
@@ -754,7 +767,7 @@ function ResultsTable({
                         counts={prompt.metrics.namedScoresCount}
                         metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
-                        onMetricFilter={handleMetricFilter}
+                        onMetricFilter={handleMetricFilterClick}
                       />
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
@@ -845,7 +858,7 @@ function ResultsTable({
     debouncedSearchText,
     showStats,
     filters.appliedCount,
-    handleMetricFilter,
+    handleMetricFilterClick,
   ]);
 
   const descriptionColumn = React.useMemo(() => {

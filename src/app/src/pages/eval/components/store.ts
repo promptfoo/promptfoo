@@ -104,7 +104,12 @@ interface TableState {
    * Adds a new filter to the filters array.
    * @param filter - The filter to add.
    */
-  addFilter: (filter: Omit<ResultsFilter, 'id' | 'logicOperator'>) => void;
+  addFilter: (filter: {
+    type: ResultsFilterType;
+    operator: ResultsFilter['operator'];
+    value: string;
+    logicOperator?: ResultsFilter['logicOperator'];
+  }) => void;
 
   /**
    * Removes a filter from the filters array.
@@ -370,7 +375,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     },
   },
 
-  addFilter: (filter: Omit<ResultsFilter, 'id' | 'logicOperator'>) => {
+  addFilter: (filter) => {
     const filterId = uuidv4();
 
     set((prevState) => {
@@ -384,8 +389,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
             [filterId]: {
               ...filter,
               id: filterId,
-              // Default to 'and' logic operator.
-              logicOperator: 'and',
+              // Default to 'and' logic operator if not provided.
+              logicOperator: filter.logicOperator ?? 'and',
             },
           },
           appliedCount,
