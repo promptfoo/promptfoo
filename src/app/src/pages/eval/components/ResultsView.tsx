@@ -625,22 +625,23 @@ export default function ResultsView({
           />
         ))}
       </ResponsiveStack>
-      <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
-        <Box>
-          <FilterModeSelector
-            filterMode={filterMode}
-            onChange={handleFilterModeChange}
-            showDifferentOption={visiblePromptCount > 1}
-          />
-        </Box>
-        <Box>
-          <SearchInputField
-            value={searchText}
-            onChange={handleSearchTextChange}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Text or regex"
-          />
-        </Box>
+      <ResponsiveStack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        sx={{ gap: 1, flexWrap: 'wrap' }}
+      >
+        <FilterModeSelector
+          filterMode={filterMode}
+          onChange={handleFilterModeChange}
+          showDifferentOption={visiblePromptCount > 1}
+        />
+        <SearchInputField
+          value={searchText}
+          onChange={handleSearchTextChange}
+          onKeyDown={handleSearchKeyDown}
+          placeholder="Text or regex"
+        />
         <MetricFilterSelector
           selectedMetric={selectedMetric}
           availableMetrics={availableMetrics}
@@ -696,16 +697,21 @@ export default function ResultsView({
                 />
               )}
               {selectedMetadata && (
-                <Chip
-                  size="small"
-                  label={
+                <Tooltip
+                  title={
                     selectedMetadata.includes(':')
-                      ? `Metadata: ${selectedMetadata}`
-                      : `Metadata: ${selectedMetadata} (any value)`
+                      ? `Filtering by metadata: ${selectedMetadata}`
+                      : `Filtering by metadata key: ${selectedMetadata} (any value)`
                   }
-                  onDelete={() => handleMetadataFilterChange(null)}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                />
+                  arrow
+                >
+                  <Chip
+                    size="small"
+                    label={selectedMetadata.includes(':') ? selectedMetadata : selectedMetadata}
+                    onDelete={() => handleMetadataFilterChange(null)}
+                    sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                  />
+                </Tooltip>
               )}
             </>
           ) : (

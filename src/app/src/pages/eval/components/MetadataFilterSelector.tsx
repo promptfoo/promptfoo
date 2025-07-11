@@ -179,14 +179,14 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
   if (isLoading && availableMetadata.length === 0) {
     return (
       <Box sx={{ minWidth: 180 }}>
-        <Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} />
+        <Skeleton variant="rectangular" height={38} sx={{ borderRadius: 1 }} />
       </Box>
     );
   }
 
   // Group the filter components visually
   const filterContent = (
-    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'flex-start' }}>
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
       <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }} error={!!keyError}>
         <InputLabel id="metadata-filter-label">
           {isLoading ? 'Loading...' : 'Filter by Metadata'}
@@ -217,33 +217,28 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
       </FormControl>
 
       {showValueInput && (
-        <Paper
-          elevation={0}
+        <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
             gap: 0.5,
-            px: 1,
-            py: 0.5,
-            backgroundColor: 'action.hover',
-            borderRadius: 1,
           }}
         >
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mx: 0.5 }}>
             =
           </Typography>
           <TextField
             size="small"
-            placeholder="Enter value (optional)"
+            placeholder="Any value"
             value={filterValue}
             onChange={handleValueChange}
             onKeyPress={handleValueKeyPress}
             error={!!valueError}
             helperText={valueError}
             sx={{
-              minWidth: 150,
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: 'background.paper',
+              minWidth: 120,
+              '& .MuiInputBase-input': {
+                paddingY: '6px',
               },
             }}
             aria-label="Filter by metadata value"
@@ -256,6 +251,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
                     onClick={handleClearValue}
                     edge="end"
                     aria-label="Clear value"
+                    sx={{ padding: '4px' }}
                   >
                     <ClearIcon fontSize="small" />
                   </IconButton>
@@ -281,16 +277,13 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
               </Box>
             }
             arrow
+            placement="bottom"
           >
-            <IconButton
-              size="small"
-              sx={{ ml: 0.5, p: 0.5 }}
-              aria-label="Metadata filter help. Use wildcards: exact match (gpt-4), starts with (gpt-*), ends with (*-4), or contains (*gpt*)"
-            >
+            <IconButton size="small" sx={{ p: 0.5 }} aria-label="Metadata filter help">
               <InfoOutlinedIcon fontSize="small" color="action" />
             </IconButton>
           </Tooltip>
-        </Paper>
+        </Box>
       )}
 
       <Typography
