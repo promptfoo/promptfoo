@@ -11,7 +11,7 @@ authors: [vanessa]
 
 We’re proud to announce that Promptfoo is now SOC 2 Type II compliant and ISO 27001 certified — two globally recognized milestones that affirm our commitment to the highest standards in information security, privacy, and risk management.
 
-At Promptfoo, we help organizations secure their generative AI applications by proactively identifying and fixing vulnerabilities through adverserial emulation and red teaming. These new certifications reflect our continued investment in building secure, trustworthy AI systems — not only in our technology, but across our entire organization.
+At Promptfoo, we help organizations secure their generative AI applications by proactively identifying and fixing vulnerabilities through adversarial emulation and red teaming. These new certifications reflect our continued investment in building secure, trustworthy AI systems — not only in our technology, but across our entire organization.
 
 ## Why This Matters
 
