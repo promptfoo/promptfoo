@@ -1,0 +1,62 @@
+{
+  "version": "optimized",
+  "date": "2025-07-12T18:30:53.181Z",
+  "results": [
+    {
+      "cmd": "generate --help",
+      "description": "Generate help",
+      "avg": 137.4818588000002,
+      "min": 133.2814589999998,
+      "max": 140.66449999999986
+    },
+    {
+      "cmd": "share --help",
+      "description": "Share help",
+      "avg": 138.63899999999995,
+      "min": 132.9449999999997,
+      "max": 146.5531659999997
+    },
+    {
+      "cmd": "eval --help",
+      "description": "Eval help",
+      "avg": 140.06208340000003,
+      "min": 135.0947500000002,
+      "max": 148.82941699999992
+    },
+    {
+      "cmd": "view --help",
+      "description": "View help",
+      "avg": 144.92769200000004,
+      "min": 143.30316700000003,
+      "max": 145.69791700000042
+    },
+    {
+      "cmd": "redteam --help",
+      "description": "Redteam help",
+      "avg": 146.2201164000001,
+      "min": 134.80570799999987,
+      "max": 164.38108300000022
+    },
+    {
+      "cmd": "--version",
+      "description": "Version command",
+      "avg": 154.76598320000002,
+      "min": 141.54558399999996,
+      "max": 174.25241600000004
+    },
+    {
+      "cmd": "init --help",
+      "description": "Init help",
+      "avg": 154.87698319999998,
+      "min": 147.57658300000003,
+      "max": 169.45650000000023
+    },
+    {
+      "cmd": "--help",
+      "description": "Help command (should be fastest)",
+      "avg": 183.19675840000002,
+      "min": 138.292167,
+      "max": 298.067
+    }
+  ]
+}
