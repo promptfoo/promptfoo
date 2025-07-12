@@ -117,7 +117,7 @@ tests:
       topic: 'the ocean'
 ```
 
-Run the evaluation:
+Run the eval:
 
 ```bash
 promptfoo eval
@@ -779,3 +779,10 @@ promptfoo init --example google-live-audio
 - Maximum of 4M tokens per minute
 
 For more details, see the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+
+## See Also
+
+- [Vertex AI Provider](/docs/providers/vertex) - For enterprise features and advanced Google AI capabilities
+- [Google Examples](https://github.com/promptfoo/promptfoo/tree/main/examples) - Browse working examples for Google AI Studio
+- [Gemini API Documentation](https://ai.google.dev/docs) - Official Google AI documentation
+- [Configuration Reference](/docs/configuration/reference) - Complete configuration options for promptfoo

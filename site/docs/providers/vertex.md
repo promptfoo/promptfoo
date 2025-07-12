@@ -34,7 +34,9 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
 - `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
 
-**Important:** Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
+:::important
+Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
+:::
 
 Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
 
@@ -120,9 +122,10 @@ Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)]
 
 ### Language Support
 
-- Gemini models support a wide range of languages including:
-  - Core languages: Arabic, Bengali, Chinese (simplified/traditional), English, French, German, Hindi, Indonesian, Italian, Japanese, Korean, Portuguese, Russian, Spanish, Thai, Turkish, Vietnamese
-  - Gemini 1.5 adds support for 50+ additional languages including regional and less common languages
+Gemini models support a wide range of languages including:
+
+- Core languages: Arabic, Bengali, Chinese (simplified/traditional), English, French, German, Hindi, Indonesian, Italian, Japanese, Korean, Portuguese, Russian, Spanish, Thai, Turkish, Vietnamese
+- Gemini 1.5 adds support for 50+ additional languages including regional and less common languages
 
 If you're using Google AI Studio directly, see the [`google` provider](/docs/providers/google) documentation instead.
 
@@ -273,7 +276,7 @@ tests:
         value: 'negative'
 ```
 
-Run the evaluation:
+Run the eval:
 
 ```bash
 promptfoo eval
@@ -478,7 +481,9 @@ defaultTest:
 | `toolConfig`                       | Tool/function calling config                     | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}` and `file://`) | None                                 |
 
-**Note:** Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
+:::note
+Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
+:::
 
 ## Troubleshooting
 
@@ -719,3 +724,10 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 
 For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+## See Also
+
+- [Google AI Studio Provider](/docs/providers/google) - For direct Google AI Studio integration
+- [Vertex AI Examples](https://github.com/promptfoo/promptfoo/tree/main/examples) - Browse working examples for Vertex AI
+- [Google Cloud Documentation](https://cloud.google.com/vertex-ai/generative-ai/docs) - Official Vertex AI documentation
+- [Model Garden](https://console.cloud.google.com/vertex-ai/publishers) - Access and enable additional models
