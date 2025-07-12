@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Start LiteLLM proxy server for promptfoo example
 

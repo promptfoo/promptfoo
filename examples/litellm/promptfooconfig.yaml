@@ -8,15 +8,15 @@ description: LiteLLM provider example - unified interface for multiple LLMs
 # 1. LiteLLM proxy server must be running (use ./start-proxy.sh)
 # 2. Set API keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY
 
+prompts:
+  - 'Translate this to {{language}}: {{text}}'
+  - 'Write a haiku about {{topic}}'
+
 providers:
   # All providers use the litellm: prefix and connect through the proxy
   - litellm:gpt-4.1
   - litellm:claude-sonnet-4-20250514
   - litellm:gemini-2.5-pro
-
-prompts:
-  - 'Translate this to {{language}}: {{text}}'
-  - 'Write a haiku about {{topic}}'
 
 # Configure embedding provider for similarity assertions
 # This also goes through the LiteLLM proxy

@@ -31,7 +31,7 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 
    # Or manually:
    pip install litellm[proxy]
-   litellm --model gpt-4.1 --model claude-sonnet-4-20250514 --model text-embedding-3-large
+   litellm --model gpt-4.1 --model claude-sonnet-4-20250514 --model gemini-2.5-pro --model text-embedding-3-large
    ```
 
 3. **Run the evaluation**:

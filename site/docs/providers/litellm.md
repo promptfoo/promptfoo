@@ -136,7 +136,7 @@ The LiteLLM provider respects standard environment variables:
 
 LiteLLM supports embedding models that can be used for similarity metrics and other tasks. You can specify an embedding provider globally or for individual assertions.
 
-**1. Set a default embedding provider for all tests**
+### 1. Set a default embedding provider for all tests
 
 ```yaml
 defaultTest:
@@ -146,7 +146,7 @@ defaultTest:
         id: litellm:embedding:text-embedding-3-large
 ```
 
-**2. Override the embedding provider for a specific assertion**
+### 2. Override the embedding provider for a specific assertion
 
 ```yaml
 assert:
