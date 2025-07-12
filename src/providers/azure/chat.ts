@@ -54,7 +54,30 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     };
 
     // Parse chat prompt
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+    // Inject system prompt if configured
+    if (config.systemPrompt) {
+      // Check if there's already a system message
+      const existingSystemMessageIndex = messages.findIndex((msg: any) => msg.role === 'system');
+
+      if (existingSystemMessageIndex >= 0) {
+        // Replace existing system message
+        messages[existingSystemMessageIndex] = {
+          role: 'system',
+          content: config.systemPrompt,
+        };
+      } else {
+        // Prepend new system message
+        messages = [
+          {
+            role: 'system',
+            content: config.systemPrompt,
+          },
+          ...messages,
+        ];
+      }
+    }
 
     // Response format with variable rendering
     const responseFormat = config.response_format

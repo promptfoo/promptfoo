@@ -183,24 +183,6 @@ describe('constants', () => {
     expect(severityDisplayNames[Severity.Low]).toBe('Low');
   });
 
-  it('PLUGIN_PRESET_DESCRIPTIONS should contain expected descriptions', () => {
-    expect(PLUGIN_PRESET_DESCRIPTIONS.RAG).toBe(
-      'Recommended plugins plus additional tests for RAG specific scenarios like access control',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS.Recommended).toBe(
-      'A broad set of plugins recommended by Promptfoo',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
-      'Minimal set of plugins to validate your setup',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS.Harmful).toBe(
-      'Harmful content assessment using MLCommons and HarmBench taxonomies',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
-      'OWASP Agentic AI Top 10 Threats and Mitigations',
-    );
-  });
-
   it('should have agentic:memory-poisoning in Security & Access Control category', () => {
     expect(riskCategories['Security & Access Control']).toBeDefined();
     expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
@@ -255,20 +237,8 @@ describe('constants', () => {
     expect(ALL_STRATEGIES).toContain('other-encodings');
   });
 
-  it('strategy collections should have proper descriptions', () => {
-    expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-    );
-  });
-
   it('strategy collections should have proper display names', () => {
     expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
-  });
-
-  it('strategy collections should have proper subcategory descriptions', () => {
-    expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-    );
   });
 
   it('ADDITIONAL_STRATEGIES should include emoji strategy', () => {

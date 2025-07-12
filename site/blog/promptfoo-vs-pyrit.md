@@ -184,15 +184,15 @@ The enterprise version also includes a web-based dashboard where teams can:
 
 In general, Promptfoo is a good choice if you:
 
-✅ Want comprehensive coverage without heavy custom code  
-✅ Need continuous security testing in CI/CD  
-✅ Prefer automated scanning with reporting
-✅ Need compliance reporting (OWASP, NIST)
+- Want comprehensive coverage without heavy custom code
+- Need continuous security testing in CI/CD
+- Prefer automated scanning with reporting
+- Need compliance reporting (OWASP, NIST)
 
 PyRIT is a good choice if you:
 
-✅ Have dedicated security researchers  
-✅ Prefer programmatic control
-✅ Enjoy writing Python and building tools
+- Have dedicated security researchers
+- Prefer programmatic control
+- Enjoy writing Python and building tools
 
 The tools are ultimately quite different. Promptfoo's adversarial models remove the need to manually come up with hundreds of test cases yourself. PyRIT provides a lot of scripting power, whereas Promptfoo is extensible but easier to integrate up-front.

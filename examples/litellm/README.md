@@ -8,220 +8,117 @@ npx promptfoo@latest init --example litellm
 
 This example demonstrates how to use the LiteLLM provider with promptfoo to evaluate multiple models through a unified interface.
 
+## What is LiteLLM?
+
+LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different APIs and authentication methods for each provider, you can use a single interface to access models from OpenAI, Anthropic, Google, and many more.
+
+## Quick Start
+
+1. **Set your API keys**:
+
+   ```bash
+   export OPENAI_API_KEY=your-openai-key
+   # Optional: Add other providers
+   export ANTHROPIC_API_KEY=your-anthropic-key
+   export GOOGLE_AI_API_KEY=your-google-key
+   ```
+
+2. **Start the LiteLLM proxy**:
+
+   ```bash
+   # Use the provided script
+   ./start-proxy.sh
+
+   # Or manually:
+   pip install litellm[proxy]
+   litellm --model gpt-4.1 --model claude-sonnet-4-20250514 --model gemini-2.5-pro --model text-embedding-3-large
+   ```
+
+3. **Run the evaluation**:
+   ```bash
+   npx promptfoo@latest eval
+   ```
+
 ## Features
 
-- Chat models (GPT-4, Claude 4, Gemini)
-- Embedding models for similarity assertions
-- Direct LiteLLM provider usage
-- LiteLLM proxy server configuration
+- **Unified Interface**: Access OpenAI, Anthropic, Google, and 400+ other models through one API
+- **Chat Models**: GPT-4.1, Claude Sonnet 4, Gemini 2.5
+- **Embedding Models**: Support for similarity assertions via embedding models
+- **Simple Configuration**: One provider syntax for all models
+- **Cost Tracking**: LiteLLM proxy can track usage across providers
+- **Load Balancing**: Distribute requests across multiple instances
 
-## Prerequisites
+## How It Works
 
-LiteLLM provides a unified interface to 400+ LLMs. You can use it in several ways:
+The LiteLLM provider in promptfoo connects to a LiteLLM proxy server (default port 4000). The proxy handles:
 
-### Option 1: Direct Provider Usage (No Proxy)
-
-When using LiteLLM directly, promptfoo will make API calls directly to the underlying providers (OpenAI, Anthropic, etc.). You'll need the appropriate API keys for each provider.
-
-### Option 2: LiteLLM Proxy Server
-
-Run a LiteLLM proxy server that handles authentication and routing to various providers. This is useful for:
-
-- Centralized API key management
-- Load balancing and fallbacks
-- Cost tracking and rate limiting
-- Using models that require special authentication
-
-## Environment Variables
-
-Set up the required API keys based on your usage method:
-
-### For Direct Usage:
-
-```bash
-export OPENAI_API_KEY=your-openai-key      # For GPT models
-export ANTHROPIC_API_KEY=your-anthropic-key # For Claude models
-export GOOGLE_AI_API_KEY=your-google-key    # For Gemini models
-```
-
-### For Proxy Server:
-
-```bash
-export LITELLM_API_KEY=your-litellm-key     # If your proxy requires authentication
-```
-
-## Connection Methods
-
-### Method 1: Direct Provider Usage (Default)
-
-This is the simplest method - promptfoo connects directly to LiteLLM which then routes to the appropriate provider:
-
-```yaml
-providers:
-  - id: litellm:gpt-4.1-mini
-  - id: litellm:claude-4-sonnet
-  - id: litellm:embedding:text-embedding-3-large
-```
-
-Run evaluation:
-
-```bash
-npx promptfoo@latest eval
-```
-
-### Method 2: LiteLLM Proxy Server
-
-Start a LiteLLM proxy server to centralize model access:
-
-#### Using Docker:
-
-```bash
-docker run -p 4000:4000 \
-  -e OPENAI_API_KEY=$OPENAI_API_KEY \
-  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  ghcr.io/berriai/litellm:main-latest \
-  --model gpt-4.1-mini \
-  --model claude-4-sonnet \
-  --model text-embedding-3-large
-```
-
-#### Using Python:
-
-```bash
-pip install litellm
-litellm --model gpt-4.1-mini --model claude-4-sonnet
-```
-
-#### Using Config File:
-
-```bash
-litellm --config litellm_config.yaml
-```
-
-Then configure promptfoo to use the proxy:
-
-```yaml
-providers:
-  - id: litellm:gpt-4.1-mini
-    config:
-      apiBaseUrl: http://localhost:4000
-      apiKey: ${LITELLM_API_KEY} # Optional, if proxy requires auth
-```
-
-### Method 3: Custom LiteLLM Server URL
-
-If you have LiteLLM running on a different host or port:
-
-```yaml
-providers:
-  - id: litellm:gpt-4.1-mini
-    config:
-      apiBaseUrl: https://your-litellm-server.com
-      apiKey: ${LITELLM_API_KEY}
-```
-
-### Method 4: Using OpenAI Provider (Alternative)
-
-Since LiteLLM is OpenAI-compatible, you can also use the OpenAI provider:
-
-```yaml
-providers:
-  - id: openai:chat:gpt-4.1-mini
-    config:
-      apiBaseUrl: http://localhost:4000
-      apiKey: ${LITELLM_API_KEY}
-```
+- Authentication and routing to various providers
+- Standardizing request/response formats
+- Error handling and retries
+- Optional features like caching and rate limiting
 
 ## Configuration Files
 
-- `promptfooconfig.yaml` - Example configuration for direct LiteLLM usage
+- `promptfooconfig.yaml` - Main evaluation configuration
 - `litellm_config.yaml` - LiteLLM proxy server configuration
+- `start-proxy.sh` - Helper script to start the proxy
 
-## Supported Models
+## Example Configuration
 
-This example uses:
+The example evaluates translation and creative writing tasks across three different providers:
 
-- OpenAI GPT-4.1 Mini (chat)
-- Anthropic Claude 4 Sonnet (chat)
-- Google Gemini 1.5 Flash (chat)
-- OpenAI Text Embedding 3 Large (embeddings)
+```yaml
+providers:
+  - litellm:gpt-4.1
+  - litellm:claude-sonnet-4-20250514
+  - litellm:gemini-2.5-pro
 
-See [LiteLLM docs](https://docs.litellm.ai/docs/providers) for all 400+ supported models.
-
-## What This Example Shows
-
-- **Chat Completions**: Compares translations across multiple models
-- **Embeddings**: Uses LiteLLM's embedding support for similarity assertions
-- **Model Comparison**: Evaluates different providers through a unified interface
-- **Advanced Assertions**: Demonstrates similarity checks, contains assertions, and custom validation
-
-## Expected Output
-
-The evaluation will show:
-
-- Translation quality comparisons between models
-- Similarity scores for translations using embeddings
-- Pass/fail results for each assertion
-- Performance metrics for each model
+defaultTest:
+  options:
+    provider:
+      embedding: litellm:embedding:text-embedding-3-large
+```
 
 ## Troubleshooting
 
-### Connection Issues
+### Common Errors
 
-1. **Direct usage**: Ensure API keys are set correctly:
+- **"Connection refused 0.0.0.0:4000"**: The LiteLLM proxy server is not running. Start it first with `./start-proxy.sh`
+- **"API key not found"**: Set the appropriate environment variables before starting the proxy
+- **"Model not found"**: Ensure the model is included when starting the proxy server
 
-   ```bash
-   echo $OPENAI_API_KEY
-   echo $ANTHROPIC_API_KEY
-   ```
+### Verify Setup
 
-2. **Proxy server**: Verify the server is running:
+1. **Check proxy is running**:
 
    ```bash
    curl http://localhost:4000/health
    ```
 
-3. **Check model availability**: Some models may require specific API keys or permissions
-
-### Common Errors
-
-- **"API key not found"**: Set the appropriate environment variables
-- **"Model not found"**: Check the model name matches LiteLLM's supported models
-- **"Connection refused"**: Ensure the LiteLLM proxy is running if using proxy mode
+2. **Verify API keys**:
+   ```bash
+   echo $OPENAI_API_KEY
+   ```
 
 ## Advanced Usage
 
-### Load Balancing
+### Custom Server URL
 
-Configure multiple instances of the same model for load balancing:
-
-```yaml
-# litellm_config.yaml
-model_list:
-  - model_name: gpt-4.1-mini
-    litellm_params:
-      model: openai/gpt-4.1-mini
-      api_key: ${OPENAI_API_KEY}
-
-  - model_name: gpt-4.1-mini # Same name for load balancing
-    litellm_params:
-      model: azure/gpt-4-mini
-      api_key: ${AZURE_API_KEY}
-      api_base: ${AZURE_ENDPOINT}
-```
-
-### Custom Parameters
-
-Pass provider-specific parameters:
+If your LiteLLM proxy runs on a different host or port:
 
 ```yaml
 providers:
-  - id: litellm:claude-4-sonnet
+  - id: litellm:gpt-4.1
     config:
-      temperature: 0.7
-      max_tokens: 2000
-      top_p: 0.9
-      # Any LiteLLM-supported parameter
+      apiBaseUrl: https://your-litellm-server.com
+```
+
+### Using Config File
+
+For more complex setups, use the config file:
+
+```bash
+litellm --config litellm_config.yaml
 ```
 
 ## Learn More
