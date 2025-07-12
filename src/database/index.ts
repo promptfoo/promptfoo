@@ -14,8 +14,8 @@ export class DrizzleLogWriter implements LogWriter {
   }
 }
 
-export let dbInstance: ReturnType<typeof drizzle> | null = null;
-export let sqliteInstance: Database.Database | null = null;
+let dbInstance: ReturnType<typeof drizzle> | null = null;
+let sqliteInstance: Database.Database | null = null;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');

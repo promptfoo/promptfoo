@@ -364,7 +364,7 @@ type HookContextMap = {
   afterAll: AfterAllExtensionHookContext;
 };
 
-export type ExtensionHookContext =
+type ExtensionHookContext =
   | BeforeAllExtensionHookContext
   | BeforeEachExtensionHookContext
   | AfterEachExtensionHookContext
