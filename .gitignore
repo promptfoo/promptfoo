@@ -35,3 +35,5 @@ examples/redteam-dalle/images
 examples/redteam-medical-agent/redteam.yaml
 
 **/.claude/settings.local.json
+
+src/generated-constants.ts
