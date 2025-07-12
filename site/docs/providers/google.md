@@ -6,6 +6,16 @@ sidebar_label: Google AI / Gemini
 
 The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
 
+To use the Google AI Studio API, set the `GOOGLE_API_KEY` environment variable or specify it via the `apiKey` field in your provider config.
+
+Example:
+
+```sh
+export GOOGLE_API_KEY=your_google_api_key
+```
+
+Promptfoo automatically loads environment variables from your shell or a `.env` file.
+
 You can use it by specifying one of the [available models](https://ai.google.dev/models). Currently, the following models are supported:
 
 ## Available Models

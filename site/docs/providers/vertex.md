@@ -180,6 +180,8 @@ Choose one of these authentication methods:
 
 ### Environment Variables
 
+Promptfoo automatically loads environment variables from your shell or a `.env` file, so the provider will pick up these variables without any additional configuration:
+
 - `VERTEX_API_KEY` - GCloud API token (get via `gcloud auth print-access-token`)
 - `VERTEX_PROJECT_ID` - GCloud project ID
 - `VERTEX_REGION` - Region (defaults to `us-central1`)
