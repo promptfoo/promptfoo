@@ -1,8 +1,5 @@
 import * as fetchModule from '../../../src/fetch';
-import {
-  HarmbenchGrader,
-  HarmbenchPlugin,
-} from '../../../src/redteam/plugins/harmbench';
+import { HarmbenchGrader, HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
 import type { AtomicTestCase, ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({

@@ -1,9 +1,6 @@
 import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
-import {
-  DoNotAnswerPlugin,
-  fetchDataset,
-} from '../../../src/redteam/plugins/donotanswer';
+import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/donotanswer';
 
 jest.mock('fs');
 jest.mock('../../../src/fetch');

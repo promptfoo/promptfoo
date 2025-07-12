@@ -94,7 +94,7 @@ jest.mock('../src/envars', () => {
     }),
     getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => {
       if (key === 'REQUEST_TIMEOUT_MS') {
-        return parseInt(process.env.REQUEST_TIMEOUT_MS || '300000', 10);
+        return Number.parseInt(process.env.REQUEST_TIMEOUT_MS || '300000', 10);
       }
       return defaultValue;
     }),

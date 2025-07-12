@@ -50,7 +50,9 @@ describe('ContractPlugin', () => {
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
 
-    expect(tests[0].assert).toEqual([{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }]);
+    expect(tests[0].assert).toEqual([
+      { type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' },
+    ]);
     expect(tests[0].assert?.[0].type).toBe('promptfoo:redteam:contracts');
   });
 
