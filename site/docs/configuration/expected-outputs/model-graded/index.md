@@ -27,6 +27,15 @@ Context-based:
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
+## Requirements
+
+Model-graded metrics require access to an LLM. Promptfoo automatically selects a
+grading provider based on the API keys available in your environment. If
+`OPENAI_API_KEY` is set, OpenAI models are used by default. If that is missing
+but `ANTHROPIC_API_KEY` is present, Claude will be used instead. You can override
+the provider with the `--grader` option or the `options.provider` property in
+your config. See the [providers documentation](/docs/providers) for details.
+
 ## Examples (output-based)
 
 Example of `llm-rubric` and/or `model-graded-closedqa`:
