@@ -25,7 +25,12 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [react(), nodePolyfills()] as PluginOption[],
+  plugins: [
+    react(), 
+    nodePolyfills({
+      exclude: ['vm'], // Exclude vm module to avoid eval warning
+    })
+  ] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -35,6 +40,30 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
+    // Enable source maps for production debugging
+    sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
+    // Minification settings
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: process.env.NODE_ENV === 'production',
+        drop_debugger: process.env.NODE_ENV === 'production',
+      },
+    },
+    rollupOptions: {
+      output: {
+        // Manual chunking to split vendor libraries
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-mui': ['@mui/material', '@mui/icons-material', '@mui/x-data-grid', '@mui/x-charts'],
+          'vendor-charts': ['recharts', 'chart.js'],
+          'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
+          'vendor-syntax': ['prismjs', 'react-syntax-highlighter'],
+        },
+      },
+    },
+    // Increase chunk size warning limit slightly since we're splitting properly
+    chunkSizeWarningLimit: 600,
   },
   test: {
     environment: 'jsdom',
