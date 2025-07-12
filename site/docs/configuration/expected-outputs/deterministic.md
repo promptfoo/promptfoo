@@ -554,15 +554,12 @@ tests:
 
 Perplexity measures how "surprised" or "confused" a language model is by the text it's generating. Think of it as the model's confidence score - but inverted. Lower perplexity means the model is more confident in its predictions.
 
-**In practical terms:**
-- **Low perplexity (1-10)**: The model thinks this text is very natural and expected
-- **Medium perplexity (10-100)**: The model finds the text somewhat unusual but plausible
-- **High perplexity (100+)**: The model thinks this text is very unusual or unlikely
-
 **When to use perplexity:**
-- **Quality control**: Detect when the model generates nonsensical or highly unusual text
-- **Style consistency**: Ensure outputs match expected patterns (e.g., formal writing should have consistent perplexity)
+- **Quality control**: Set a maximum perplexity threshold to reject outputs where the model seems uncertain or confused
+- **Style consistency**: Ensure outputs match expected patterns (e.g., formal writing should have consistently low perplexity)
 - **Prompt debugging**: High perplexity might indicate your prompt is causing confusion
+
+The assertion passes when perplexity is **below** the threshold, ensuring the model is confident in its output.
 
 See the [Wikipedia article on perplexity](https://en.wikipedia.org/wiki/Perplexity) for mathematical details.
 
@@ -574,7 +571,7 @@ To specify a perplexity threshold, use the `perplexity` assertion type:
 
 ```yaml
 assert:
-  # Fail if the LLM is below perplexity threshold
+  # Fail if the LLM perplexity is above threshold (i.e., model is too confused)
   - type: perplexity
     threshold: 1.5
 ```
@@ -809,11 +806,6 @@ ROUGE-N is a **recall-oriented** metric that measures how much of the reference 
 - **Information extraction**: Verify that important facts are captured
 - **Content coverage**: Check if the output mentions all required elements
 
-**Score interpretation:**
-- **0.7-1.0**: Excellent coverage - most key content is included
-- **0.4-0.7**: Good coverage - main points are there but some details missing
-- **0.0-0.4**: Poor coverage - significant content is missing
-
 ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
 
 Example:
@@ -855,11 +847,6 @@ BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric origin
 **BLEU vs ROUGE-N:**
 - **ROUGE-N**: "Did you mention everything important?" (good for summaries)
 - **BLEU**: "Is what you said actually correct?" (good for translations)
-
-**Score interpretation:**
-- **0.6-1.0**: Excellent - very accurate translation/generation
-- **0.3-0.6**: Good - mostly accurate with some differences
-- **0.0-0.3**: Poor - significant inaccuracies or differences
 
 BLEU also includes a brevity penalty to discourage overly short outputs. [See Wikipedia](https://en.wikipedia.org/wiki/BLEU) for more background.
 
@@ -907,10 +894,6 @@ GLEU (Google-BLEU) is designed specifically for evaluating **individual sentence
 - **Single response evaluation**: Evaluating individual chatbot or model responses
 - **Short text comparison**: When comparing headlines, titles, or short answers
 - **Balanced accuracy needs**: When both precision and recall matter equally
-
-**Score interpretation:**
-- Same as BLEU (0-1 scale), but more reliable for individual sentences
-- Generally produces slightly lower scores than BLEU due to the min(precision, recall) calculation
 
 ```yaml
 assert:
@@ -986,13 +969,7 @@ assert:
     value: hello world # Reference text to compare against
 ```
 
-By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match), with typical interpretations:
-
-- 0.0-0.2: Poor match
-- 0.2-0.4: Fair match
-- 0.4-0.6: Good match
-- 0.6-0.8: Very good match
-- 0.8-1.0: Excellent match
+By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match).
 
 #### Custom Threshold
 
@@ -1050,10 +1027,10 @@ tests:
   - description: 'Testing various outputs'
     vars:
       outputs:
-        - 'The weather is beautiful today' # Score: 1.0 (exact match)
-        - "Today's weather is beautiful" # Score: ~0.85 (reordered)
-        - 'The weather is nice today' # Score: ~0.7 (synonym)
-        - 'It is sunny outside' # Score: ~0.3 (different words)
+        - 'The weather is beautiful today' # Exact match
+        - "Today's weather is beautiful" # Reordered words
+        - 'The weather is nice today' # Uses synonym
+        - 'It is sunny outside' # Different phrasing
     assert:
       - type: meteor
         value: '{{reference}}'
@@ -1075,11 +1052,6 @@ F-score (also F1 score) is used for measuring classification accuracy when you n
 - **Classification tasks**: Sentiment analysis, intent detection, category assignment
 - **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
 - **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
-
-**Example scenario:** In sentiment analysis:
-- High precision, low recall = Only labels obvious cases as positive (misses subtle ones)
-- Low precision, high recall = Labels everything as positive (many false positives)
-- Good F-score = Correctly identifies most positive cases without too many false alarms
 
 See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 
