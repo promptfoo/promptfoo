@@ -1,6 +1,9 @@
 import React from 'react';
-import { Security as SecurityIcon } from '@mui/icons-material';
-import { Button, Container, Paper, Typography } from '@mui/material';
+import SecurityIcon from '@mui/icons-material/Security';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
 
 export default function InstallationCheck() {
   return (

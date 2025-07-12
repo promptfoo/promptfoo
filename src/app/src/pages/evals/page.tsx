@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { Container } from '@mui/material';
+import Container from '@mui/material/Container';
 import EvalsDataGrid from './components/EvalsDataGrid';
 
 export default function EvalsIndexPage() {
