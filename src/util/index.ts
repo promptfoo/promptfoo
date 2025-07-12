@@ -6,7 +6,8 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import { TERMINAL_MAX_WIDTH } from '../constants';
+import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
+import * as os from 'os';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
@@ -96,6 +97,16 @@ export async function writeOutput(
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  const metadata = {
+    promptfooVersion: VERSION,
+    nodeVersion: process.version,
+    platform: os.platform(),
+    arch: os.arch(),
+    exportedAt: new Date().toISOString(),
+    evaluationCreatedAt: new Date(evalRecord.createdAt).toISOString(),
+    author: evalRecord.author,
+  };
+
   if (outputExtension === 'csv') {
     // Write headers first
     const headers = getHeaderForTable(evalRecord);
@@ -133,6 +144,7 @@ export async function writeOutput(
           results: summary,
           config: evalRecord.config,
           shareableUrl,
+          metadata,
         } satisfies OutputFile,
         null,
         2,
@@ -147,6 +159,7 @@ export async function writeOutput(
         results: summary,
         config: evalRecord.config,
         shareableUrl,
+        metadata,
       } as OutputFile),
     );
   } else if (outputExtension === 'html') {

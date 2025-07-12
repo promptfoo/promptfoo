@@ -48,6 +48,15 @@ interface OutputFile {
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: {
+    promptfooVersion: string;
+    nodeVersion: string;
+    platform: string;
+    arch: string;
+    exportedAt: string;
+    evaluationCreatedAt?: string;
+    author?: string;
+  };
 }
 ```
 

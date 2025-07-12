@@ -3,6 +3,8 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { writeOutput } from '../util';
+import * as os from 'os';
+import { VERSION } from '../constants';
 
 export function exportCommand(program: Command) {
   program
@@ -23,7 +25,26 @@ export function exportCommand(program: Command) {
           process.exit(1);
         }
         const summary = await result.toEvaluateSummary();
-        const jsonData = JSON.stringify(summary, null, 2);
+        const metadata = {
+          promptfooVersion: VERSION,
+          nodeVersion: process.version,
+          platform: os.platform(),
+          arch: os.arch(),
+          exportedAt: new Date().toISOString(),
+          evaluationCreatedAt: new Date(result.createdAt).toISOString(),
+          author: result.author,
+        };
+        const jsonData = JSON.stringify(
+          {
+            evalId: result.id,
+            results: summary,
+            config: result.config,
+            shareableUrl: null,
+            metadata,
+          },
+          null,
+          2,
+        );
         if (cmdObj.output) {
           await writeOutput(cmdObj.output, result, null);
 
