@@ -143,7 +143,7 @@ const commandLoaders: Record<string, (program: Command) => Promise<void>> = {
     const { listCommand } = await import('./commands/list');
     listCommand(program);
   },
-  'model-scan': async (program: Command) => {
+  'scan-model': async (program: Command) => {
     const { modelScanCommand } = await import('./commands/modelScan');
     modelScanCommand(program);
   },
@@ -285,24 +285,26 @@ async function main() {
   // For simple help/version, skip all command registration
   if (isHelpOrVersion) {
     // Register command stubs for help display
-    program.command('eval').description('Evaluate prompts and models');
-    program.command('init').description('Initialize a new promptfoo project');
-    program.command('view').description('View evaluation results');
+    program.command('eval').description('Evaluate prompts');
+    program.command('init [directory]').description('Initialize project with dummy files or download an example');
+    program.command('view [directory]').description('Start browser UI');
     program.command('redteam').description('Red team LLM applications');
-    program.command('share').description('Share evaluation results');
-    program.command('auth').description('Authenticate with promptfoo');
+    program.command('share [evalId]').description('Create a shareable URL of an eval (defaults to most recent)');
+    
+    // Alphabetical order commands
+    program.command('auth').description('Manage authentication');
     program.command('cache').description('Manage cache');
-    program.command('config').description('Manage configuration');
-    program.command('debug').description('Debug promptfoo');
-    program.command('delete').description('Delete resources');
-    program.command('export').description('Export evaluation results');
+    program.command('config').description('Edit configuration settings');
+    program.command('debug').description('Display debug information for troubleshooting');
+    program.command('delete <id>').description('Delete various resources');
+    program.command('export <evalId>').description('Export an eval record to a JSON file');
     program.command('generate').description('Generate synthetic data');
-    program.command('feedback').description('Provide feedback');
-    program.command('import').description('Import data');
-    program.command('list').description('List resources');
-    program.command('model-scan').description('Scan models');
-    program.command('validate').description('Validate configuration');
-    program.command('show').description('Show resources');
+    program.command('feedback [message]').description('Send feedback to the promptfoo developers');
+    program.command('import <file>').description('Import an eval record from a JSON file');
+    program.command('list').description('List various resources');
+    program.command('scan-model [paths...]').description('Scan ML models for security vulnerabilities');
+    program.command('validate').description('Validate a promptfoo configuration file');
+    program.command('show [id]').description('Show details of a specific resource (defaults to most recent)');
     
     addCommonOptionsRecursively(program);
     program.parse();
