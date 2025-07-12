@@ -188,7 +188,7 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
 }
 
 // Wrapper enforces strict single-string argument logging
-export const logger: StrictLogger = Object.assign({}, winstonLogger, {
+const logger: StrictLogger = Object.assign({}, winstonLogger, {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   info: createLogMethod('info'),

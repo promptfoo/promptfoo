@@ -10,19 +10,31 @@
   ],
   "ignore": [
     "dist/**/*.{js,ts,tsx}",
-    "examples/**/*.{js,ts,tsx,mjs}"
+    "examples/**/*.{js,ts,tsx,mjs}",
+    "src/server/index.ts"
   ],
   "workspaces": {
     "site": {
       "entry": [
         "site/src/**/*.{js,ts,tsx}",
-        "site/blog/**/*.{js,ts,tsx}"
+        "site/blog/**/*.{js,ts,tsx}",
+        "site/docusaurus.config.ts"
       ],
       "project": [
         "site/**/*.{js,ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "@docusaurus/types",
+        "@docusaurus/theme-common",
+        "@theme/*",
+        "@mui/*"
       ]
     }
   },
+  "ignoreBinaries": [
+    "dist/src/main.js",
+    "gh"
+  ],
   "paths": {
     "@promptfoo/*": [
       "./src/*"
