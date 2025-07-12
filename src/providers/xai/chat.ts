@@ -94,10 +94,24 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
-export const GROK_3_MINI_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
+export const GROK_3_MINI_MODELS = [
+  'grok-3-mini-beta',
+  'grok-3-mini',
+  'grok-3-mini-latest',
+  'grok-3-mini-fast-beta',
+  'grok-3-mini-fast',
+  'grok-3-mini-fast-latest',
+];
 
 // Models that support reasoning_effort parameter (only Grok-3 mini models)
-export const GROK_REASONING_EFFORT_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
+export const GROK_REASONING_EFFORT_MODELS = [
+  'grok-3-mini-beta',
+  'grok-3-mini',
+  'grok-3-mini-latest',
+  'grok-3-mini-fast-beta',
+  'grok-3-mini-fast',
+  'grok-3-mini-fast-latest',
+];
 
 // All reasoning models (including Grok-4 which doesn't support reasoning_effort)
 export const GROK_REASONING_MODELS = [
@@ -105,8 +119,15 @@ export const GROK_REASONING_MODELS = [
   'grok-4',
   'grok-4-latest',
   'grok-3-mini-beta',
+  'grok-3-mini',
+  'grok-3-mini-latest',
   'grok-3-mini-fast-beta',
+  'grok-3-mini-fast',
+  'grok-3-mini-fast-latest',
 ];
+
+// Grok-4 models that have specific parameter restrictions
+export const GROK_4_MODELS = ['grok-4-0709', 'grok-4', 'grok-4-latest'];
 
 /**
  * Calculate xAI Grok cost based on model name and token usage
@@ -173,7 +194,7 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
     }
 
     // Filter out unsupported parameters for Grok-4
-    if (this.modelName?.startsWith('grok-4')) {
+    if (this.modelName && GROK_4_MODELS.includes(this.modelName)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
