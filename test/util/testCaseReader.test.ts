@@ -348,7 +348,10 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read CSV file with default delimiter', async () => {
-    jest.mocked(getEnvString).mockReturnValue(',');
+    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => {
+      if (key === 'PROMPTFOO_CSV_DELIMITER') return ',';
+      return defaultValue || '';
+    });
     jest
       .mocked(fs.readFileSync)
       .mockReturnValue('var1,var2,__expected\nvalue1,value2,expected1\nvalue3,value4,expected2');
@@ -374,7 +377,10 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read CSV file with custom delimiter', async () => {
-    jest.mocked(getEnvString).mockReturnValue(';');
+    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => {
+      if (key === 'PROMPTFOO_CSV_DELIMITER') return ';';
+      return defaultValue || '';
+    });
     jest
       .mocked(fs.readFileSync)
       .mockReturnValue('var1;var2;__expected\nvalue1;value2;expected1\nvalue3;value4;expected2');
@@ -397,6 +403,24 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it('should use system locale encoding when reading CSV', async () => {
+    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => {
+      if (key === 'PROMPTFOO_CSV_DELIMITER') return ',';
+      return defaultValue || '';
+    });
+    jest.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2');
+    
+    // Set system locale to use latin1
+    process.env.LANG = 'en_US.ISO-8859-1';
+
+    await readStandaloneTestsFile('test.csv');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'latin1');
+    
+    // Clean up
+    delete process.env.LANG;
   });
 
   it('should handle Python files with default function name', async () => {

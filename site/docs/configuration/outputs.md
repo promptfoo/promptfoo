@@ -305,12 +305,23 @@ sharing:
 
 ### Encoding Issues
 
-Ensure proper encoding for international content:
+Control CSV encoding for international content using these methods:
 
-```bash
-# Explicitly set encoding
-LANG=en_US.UTF-8 promptfoo eval --output results.csv
-```
+1. **File-specific encoding**
+   ```bash
+   promptfoo eval --output results.csv#encoding=utf16le
+   ```
+
+2. **System locale** (automatic)
+   ```bash
+   # Uses system locale to determine encoding
+   LANG=en_US.UTF-8 promptfoo eval --output results.csv
+   ```
+
+**Common scenarios:**
+- Windows Excel: Use `utf16le` encoding
+- European languages: Try `latin1` if UTF-8 doesn't work
+- Modern applications: Use `utf-8` (default)
 
 ### Performance Tips
 

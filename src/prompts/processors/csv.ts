@@ -1,7 +1,7 @@
 import { parse } from 'csv-parse/sync';
-import fs from 'fs';
 import { getEnvBool, getEnvString } from '../../envars';
 import type { Prompt } from '../../types';
+import { readCsvFile } from '../../util/csvIO';
 
 /**
  * Process a CSV file containing prompts
@@ -18,7 +18,7 @@ export async function processCsvPrompts(
   filePath: string,
   basePrompt: Partial<Prompt>,
 ): Promise<Prompt[]> {
-  const content = fs.readFileSync(filePath, 'utf8');
+  const content = readCsvFile(filePath);
 
   const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
   const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);

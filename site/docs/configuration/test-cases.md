@@ -98,6 +98,97 @@ question,expectedAnswer
 
 Variables are automatically mapped from column headers.
 
+### Customizing CSV Encoding
+
+There are two ways to control CSV encoding:
+
+1. **File-specific encoding** (highest priority)
+   ```yaml
+   tests: file://test_cases.csv#encoding=utf16le
+   ```
+
+2. **System locale** (automatic detection)
+   ```bash
+   # Automatically uses UTF-8
+   LANG=en_US.UTF-8 promptfoo eval
+   
+   # Automatically uses Latin-1
+   LANG=en_US.ISO-8859-1 promptfoo eval
+   ```
+
+The `PROMPTFOO_CSV_DELIMITER` and `PROMPTFOO_CSV_STRICT` environment variables are supported for controlling CSV parsing behavior.
+
+#### Common Encoding Scenarios
+
+##### Windows Excel Files
+```yaml
+# File-specific encoding for Excel exports
+tests: file://excel_export.csv#encoding=utf16le
+
+# For older Windows applications or Latin characters
+tests: file://legacy_data.csv#encoding=latin1
+```
+
+##### International Content
+```yaml
+# Japanese, Chinese, Korean content (UTF-8 usually works)
+tests: file://japanese_tests.csv  # Default UTF-8
+
+# European languages with accents (if UTF-8 doesn't work)
+tests: file://european_tests.csv#encoding=latin1
+```
+
+##### Mixed Delimiter and Encoding
+```bash
+# Use environment variable for delimiter with specific encoding
+PROMPTFOO_CSV_DELIMITER=';' promptfoo eval --config config_with_encoding.yaml
+
+# Or combine both in the file path
+tests: file://european_data.csv#encoding=latin1
+# with PROMPTFOO_CSV_DELIMITER=';' environment variable
+```
+
+#### Supported Encodings
+
+The following encodings are supported:
+
+- `utf-8` (default) - Universal, handles most languages
+- `utf16le` - Windows Unicode, Excel default for some regions
+- `latin1` - Western European languages
+- `ascii` - Basic English characters only
+- `utf8` - Alias for utf-8
+- `ucs2`, `ucs-2` - Aliases for utf16le
+- `binary` - Raw binary data
+- `base64`, `base64url` - Base64 encoded data
+- `hex` - Hexadecimal encoded data
+
+#### Troubleshooting Encoding Issues
+
+If you see garbled characters or errors:
+
+1. **Check the source encoding:**
+
+   ```bash
+   # On Unix/Linux/Mac
+   file -I your_file.csv
+
+   # On Windows (PowerShell)
+   Get-Content your_file.csv -Encoding Byte -First 4
+   ```
+
+2. **Try common encodings in order:**
+   - `utf-8` (default)
+   - `utf16le` (Windows Excel)
+   - `latin1` (Western European)
+3. **For Excel files:**
+   - Save as "CSV UTF-8" in Excel when possible
+   - Or use `PROMPTFOO_CSV_ENCODING=utf16le` for standard Excel CSV
+
+4. **Error messages:**
+   - "Invalid CSV encoding" - The specified encoding is not supported
+   - "Failed to read CSV file" - File not found or permission issue
+   - Garbled text - Wrong encoding selected
+
 ### CSV with Assertions
 
 Use special `__expected` columns for assertions:

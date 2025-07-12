@@ -28,6 +28,7 @@ import {
   ResultFailureReason,
 } from '../types';
 import invariant from '../util/invariant';
+import { appendCsvFile, writeCsvFile } from './csvIO';
 import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
@@ -103,7 +104,7 @@ export async function writeOutput(
     const headerCsv = stringify([
       [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
     ]);
-    fs.writeFileSync(outputPath, headerCsv);
+    writeCsvFile(outputPath, headerCsv);
 
     // Write body rows in batches
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
@@ -121,7 +122,7 @@ export async function writeOutput(
           return [...row.vars, ...row.outputs.map(outputToSimpleString)];
         }),
       );
-      fs.appendFileSync(outputPath, batchCsv);
+      appendCsvFile(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
     const summary = await evalRecord.toEvaluateSummary();

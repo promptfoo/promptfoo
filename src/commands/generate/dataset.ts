@@ -10,6 +10,7 @@ import { synthesizeFromTestSuite } from '../../testCase/synthesis';
 import { type TestSuite, type UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
+import { writeCsvFile } from '../../util/csvIO';
 
 interface DatasetGenerateOptions {
   cache: boolean;
@@ -65,7 +66,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
   if (options.output) {
     // Should the output be written as a YAML or CSV?
     if (options.output.endsWith('.csv')) {
-      fs.writeFileSync(options.output, serializeObjectArrayAsCSV(results));
+      writeCsvFile(options.output, serializeObjectArrayAsCSV(results));
     } else if (options.output.endsWith('.yaml')) {
       fs.writeFileSync(options.output, yamlString);
     } else {

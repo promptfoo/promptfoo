@@ -192,6 +192,18 @@ describe('processCsvPrompts', () => {
     delete process.env.PROMPTFOO_CSV_DELIMITER;
   });
 
+  it('should respect system locale encoding when reading', async () => {
+    const csvContent = 'prompt\nHello';
+    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    process.env.LANG = 'en_US.ISO-8859-1';
+
+    await processCsvPrompts('prompts.csv', {});
+
+    expect(fs.readFileSync).toHaveBeenCalledWith('prompts.csv', 'latin1');
+
+    delete process.env.LANG;
+  });
+
   it('should handle empty files', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('');
 

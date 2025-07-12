@@ -99,7 +99,7 @@ describe('dataset generation', () => {
       });
 
       const expectedCsv = 'var1\n"value1"\n"value2"\n';
-      expect(fs.writeFileSync).toHaveBeenCalledWith('output.csv', expectedCsv);
+      expect(fs.writeFileSync).toHaveBeenCalledWith('output.csv', expectedCsv, 'utf-8');
     });
 
     it('should throw error for unsupported file type', async () => {

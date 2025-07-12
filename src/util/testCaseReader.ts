@@ -22,6 +22,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
+import { readCsvFile } from './csvIO';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 
@@ -136,7 +137,7 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - local',
     });
     const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = readCsvFile(resolvedVarsPath);
     const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
     try {

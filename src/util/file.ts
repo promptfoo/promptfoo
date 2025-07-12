@@ -5,6 +5,7 @@ import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
+import { readCsvFile } from './csvIO';
 
 /**
  * Simple Nunjucks engine specifically for file paths
@@ -75,7 +76,9 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     // Load all matched files and combine their contents
     const allContents: any[] = [];
     for (const matchedFile of matchedFiles) {
-      const contents = fs.readFileSync(matchedFile, 'utf8');
+      const contents = matchedFile.endsWith('.csv')
+        ? readCsvFile(matchedFile)
+        : fs.readFileSync(matchedFile, 'utf8');
       if (matchedFile.endsWith('.json')) {
         const parsed = JSON.parse(contents);
         if (Array.isArray(parsed)) {
@@ -117,7 +120,9 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     throw new Error(`File does not exist: ${finalPath}`);
   }
 
-  const contents = fs.readFileSync(finalPath, 'utf8');
+  const contents = finalPath.endsWith('.csv')
+    ? readCsvFile(finalPath)
+    : fs.readFileSync(finalPath, 'utf8');
   if (finalPath.endsWith('.json')) {
     return JSON.parse(contents);
   }

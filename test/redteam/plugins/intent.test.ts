@@ -116,7 +116,7 @@ describe('IntentPlugin', () => {
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[1].vars).toHaveProperty('prompt', 'intent2');
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('intents.csv'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('intents.csv'), 'utf-8');
   });
 
   it('should load intents from a JSON file', async () => {
