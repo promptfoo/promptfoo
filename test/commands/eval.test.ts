@@ -76,7 +76,7 @@ describe('evalCommand', () => {
   });
 
   it('should create eval command with correct options', () => {
-    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const cmd = evalCommand(program);
     expect(cmd.name()).toBe('eval');
     expect(cmd.description()).toBe('Evaluate prompts');
   });

@@ -176,11 +176,9 @@ async function main() {
     .description('Evaluate prompts')
     .allowUnknownOption()
     .action(async () => {
-      const { loadDefaultConfig } = await import('./util/config/default');
       const { evalCommand } = await import('./commands/eval');
-      const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
       
-      evalCommand(program, defaultConfig, defaultConfigPath);
+      evalCommand(program);
       // Clear the action to prevent double execution
       const evalCmd = program.commands.find(cmd => cmd.name() === 'eval');
       if (evalCmd) {
@@ -379,10 +377,8 @@ async function main() {
     .description('Validate configuration')
     .allowUnknownOption()
     .action(async () => {
-      const { loadDefaultConfig } = await import('./util/config/default');
       const { validateCommand } = await import('./commands/validate');
-      const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
-      validateCommand(program, defaultConfig, defaultConfigPath);
+      validateCommand(program);
       const validateCmd = program.commands.find(cmd => cmd.name() === 'validate');
       if (validateCmd) {
         validateCmd.action(() => {});
@@ -407,12 +403,12 @@ async function main() {
   // Generate and redteam need special handling
   const generateCommand = program.command('generate').description('Generate synthetic data');
   generateCommand.allowUnknownOption().action(async () => {
-    const { loadDefaultConfig } = await import('./util/config/default');
     const [{ generateDatasetCommand }, { generateAssertionsCommand }, { redteamGenerateCommand }] = await Promise.all([
       import('./commands/generate/dataset'),
       import('./commands/generate/assertions'),
       import('./redteam/commands/generate'),
     ]);
+    const { loadDefaultConfig } = await import('./util/config/default');
     const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
     
     generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
@@ -426,15 +422,6 @@ async function main() {
 
   const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
   redteamBaseCommand.allowUnknownOption().action(async () => {
-    const { loadDefaultConfig } = await import('./util/config/default');
-    
-    // Load main config first
-    const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
-    
-    // Load redteam config
-    const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } = 
-      await loadDefaultConfig(undefined, 'redteam');
-    
     // Load all redteam commands
     const [
       { initCommand: redteamInitCommand },
@@ -456,12 +443,13 @@ async function main() {
       import('./redteam/commands/plugins'),
     ]);
     
+    const { loadDefaultConfig } = await import('./util/config/default');
+    
+    // Load main config first
+    const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+    
     redteamInitCommand(redteamBaseCommand);
-    evalCommand(
-      redteamBaseCommand,
-      redteamConfig ?? defaultConfig,
-      redteamConfigPath ?? defaultConfigPath,
-    );
+    evalCommand(redteamBaseCommand);
     redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
     redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
     redteamRunCommand(redteamBaseCommand);

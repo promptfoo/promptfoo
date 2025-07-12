@@ -685,18 +685,7 @@ export async function doEval(
   return await runEvaluation(true /* initialization */);
 }
 
-export function evalCommand(
-  program: Command,
-  defaultConfig: Partial<UnifiedConfig>,
-  defaultConfigPath: string | undefined,
-) {
-  const evaluateOptions: EvaluateOptions = {};
-  if (defaultConfig.evaluateOptions) {
-    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
-    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
-    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
-  }
-
+export function evalCommand(program: Command) {
   const evalCmd = program
     .command('eval')
     .description('Evaluate prompts')
@@ -718,7 +707,6 @@ export function evalCommand(
     .option(
       '-v, --vars <path>',
       'Path to CSV with test cases (alias for --tests)',
-      defaultConfig?.commandLineOptions?.vars,
     )
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
 
@@ -726,16 +714,10 @@ export function evalCommand(
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      typeof defaultConfig.defaultTest === 'object'
-        ? defaultConfig.defaultTest?.options?.prefix
-        : undefined,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is appended to every prompt.',
-      typeof defaultConfig.defaultTest === 'object'
-        ? defaultConfig.defaultTest?.options?.suffix
-        : undefined,
     )
     .option(
       '--var <key=value>',
@@ -754,24 +736,21 @@ export function evalCommand(
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
-      defaultConfig.evaluateOptions?.maxConcurrency
-        ? String(defaultConfig.evaluateOptions.maxConcurrency)
-        : `${DEFAULT_MAX_CONCURRENCY}`,
+      `${DEFAULT_MAX_CONCURRENCY}`,
     )
     .option(
       '--repeat <number>',
       'Number of times to run each test',
-      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
+      '1',
     )
     .option(
       '--delay <number>',
       'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
+      '0',
     )
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
-      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
     )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
 
@@ -804,25 +783,23 @@ export function evalCommand(
       '-o, --output <paths...>',
       'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
     )
-    .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
-    .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
+    .option('--table', 'Output table in CLI', true)
+    .option('--no-table', 'Do not output table in CLI')
     .option(
       '--table-cell-max-length <number>',
       'Truncate console table cells to this length',
       '250',
     )
-    .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--share', 'Create a shareable URL')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
-      defaultConfig?.commandLineOptions?.write,
     )
 
     // Additional features
     .option(
       '--grader <provider>',
       'Model that will grade outputs',
-      defaultConfig?.commandLineOptions?.grader,
     )
     .option(
       '--suggest-prompts <number>',
@@ -881,6 +858,16 @@ export function evalCommand(
           extension,
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
+      }
+
+      // Load default config only when needed
+      const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+      
+      const evaluateOptions: EvaluateOptions = {};
+      if (defaultConfig.evaluateOptions) {
+        evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+        evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
+        evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
       }
 
       doEval(

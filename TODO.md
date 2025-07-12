@@ -223,6 +223,35 @@ const loadConfigForCommand = async (command: string) => {
 };
 ```
 
+## Phase 3 Results (Deferred Config Loading)
+
+After deferring default config loading inside command modules:
+
+| Command         | Average (ms) | Min (ms) | Max (ms) | vs Baseline    |
+| --------------- | ------------ | -------- | -------- | -------------- |
+| --version       | 608.07       | 439.81   | 1005.05  | **42% faster** |
+| --help          | 521.99       | 387.27   | 769.18   | **56% faster** |
+| eval --help     | 335.15       | 321.20   | 352.77   | **65% faster** |
+| init --help     | 362.83       | 334.52   | 380.98   | **58% faster** |
+| view --help     | 405.77       | 376.75   | 475.38   | **54% faster** |
+| share --help    | 374.71       | 363.81   | 389.33   | **64% faster** |
+| cache --help    | 404.95       | 358.02   | 573.05   | **61% faster** |
+| config --help   | 451.91       | 377.18   | 513.98   | **57% faster** |
+| list --help     | 653.05       | 379.85   | 847.15   | **22% faster** |
+| show --help     | 451.46       | 351.46   | 588.05   | **52% faster** |
+| delete --help   | 386.10       | 368.09   | 415.48   | **61% faster** |
+| import --help   | 387.24       | 365.93   | 398.98   | **78% faster** |
+| export --help   | 357.38       | 341.50   | 378.01   | **59% faster** |
+| generate --help | 412.55       | 348.30   | 632.87   | **55% faster** |
+| redteam --help  | 441.68       | 367.69   | 712.06   | **48% faster** |
+| eval (no args)  | 883.53       | 561.71   | 1408.81  | **27% faster** |
+| list evals      | 520.53       | 405.83   | 719.02   | **23% faster** |
+
+### Notes:
+- Phase 3 showed some variance in --version/--help times, but still maintains significant improvements over baseline
+- Most commands now execute in under 500ms
+- Further optimizations would require more aggressive changes (barrel file elimination, etc.)
+
 ## Phase 3: Module Optimization (1 week)
 
 ### 3.1 Lighter Dependencies

@@ -7,6 +7,7 @@ import telemetry from '../telemetry';
 import type { UnifiedConfig } from '../types';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types';
 import { setupEnv } from '../util';
+import { loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 
 interface ValidateOptions {
@@ -49,11 +50,7 @@ ${fromError(configParse.error).message}`,
   }
 }
 
-export function validateCommand(
-  program: Command,
-  defaultConfig: Partial<UnifiedConfig>,
-  defaultConfigPath: string | undefined,
-) {
+export function validateCommand(program: Command) {
   program
     .command('validate')
     .description('Validate a promptfoo configuration file')
@@ -63,6 +60,10 @@ export function validateCommand(
     )
     .action(async (opts: ValidateOptions) => {
       telemetry.record('command_used', { name: 'validate' });
+      
+      // Load default config only when needed
+      const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+      
       await doValidate(opts, defaultConfig, defaultConfigPath);
     });
 }
