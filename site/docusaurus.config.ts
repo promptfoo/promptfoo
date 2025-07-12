@@ -370,7 +370,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `© ${new Date().getFullYear()} promptfoo`,
+      copyright: `© ${new Date().getFullYear()} Promptfoo, Inc.`,
     },
     prism: {
       theme: lightCodeTheme,
