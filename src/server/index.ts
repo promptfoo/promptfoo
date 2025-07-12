@@ -1,6 +1,18 @@
 import { getDefaultPort } from '../constants';
-import { BrowserBehavior } from '../util/server';
+import logger from '../logger';
+import { BrowserBehavior, checkServerRunning } from '../util/server';
 import { startServer } from './server';
 
-// start server
-startServer(getDefaultPort(), BrowserBehavior.SKIP);
+async function main() {
+  const port = getDefaultPort();
+  const isRunning = await checkServerRunning(port);
+  if (isRunning) {
+    logger.info(`Promptfoo server already running at http://localhost:${port}`);
+    return;
+  }
+  await startServer(port, BrowserBehavior.SKIP);
+}
+
+main().catch((err) => {
+  logger.error(`Failed to start server: ${String(err)}`);
+});
