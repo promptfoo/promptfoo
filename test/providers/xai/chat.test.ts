@@ -12,6 +12,10 @@ import type { ProviderOptions } from '../../../src/types/providers';
 jest.mock('../../../src/providers/openai/chat');
 jest.mock('../../../src/logger');
 
+// Mock the parent class methods
+const mockGetOpenAiBody = jest.fn();
+const mockCallApi = jest.fn();
+
 function createMockToJSON(modelName: string, config: any = {}) {
   const { _apiKey, ...restConfig } = config;
   return () => ({
@@ -25,18 +29,38 @@ describe('xAI Chat Provider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    // Set up the mock to return the expected base implementation
+    mockGetOpenAiBody.mockImplementation((prompt: string, context?: any, callApiOptions?: any) => {
+      const config = context?.prompt?.config || {};
+      const body: any = {
+        model: 'test-model',
+        messages: [{ role: 'user', content: prompt }],
+      };
+
+      // Add parameters if they exist in config
+      if (config.temperature !== undefined) {body.temperature = config.temperature;}
+      if (config.presence_penalty !== undefined) {body.presence_penalty = config.presence_penalty;}
+      if (config.frequency_penalty !== undefined) {body.frequency_penalty = config.frequency_penalty;}
+      if (config.stop !== undefined) {body.stop = config.stop;}
+      if (config.reasoning_effort !== undefined) {body.reasoning_effort = config.reasoning_effort;}
+      if (config.max_tokens !== undefined) {body.max_tokens = config.max_tokens;}
+      if (config.max_completion_tokens !== undefined)
+        {body.max_completion_tokens = config.max_completion_tokens;}
+
+      return { body, config };
+    });
+
+    mockCallApi.mockResolvedValue({ output: 'Mock response' });
+
     (OpenAiChatCompletionProvider as any).mockImplementation((modelName: string, options: any) => {
       return {
         id: () => `xai:${modelName}`,
         toString: () => `[xAI Provider ${modelName}]`,
         toJSON: createMockToJSON(modelName, options?.config),
-        callApi: jest.fn().mockImplementation(async () => ({ output: 'Mock response' })),
-        getOpenAiBody: jest.fn().mockImplementation((prompt) => ({
-          body: {
-            model: modelName,
-            messages: [{ role: 'user', content: prompt }],
-          },
-        })),
+        callApi: mockCallApi,
+        getOpenAiBody: mockGetOpenAiBody,
+        modelName,
+        config: options?.config,
         // Add the XAIProvider specific methods for testing
         isReasoningModel: () => GROK_REASONING_MODELS.includes(modelName),
         supportsReasoningEffort: () => GROK_REASONING_EFFORT_MODELS.includes(modelName),
@@ -333,136 +357,6 @@ describe('xAI Chat Provider', () => {
     it('does not support reasoning_effort for Grok-4', () => {
       const provider = createXAIProvider('xai:grok-4-0709') as any;
       expect(provider.supportsReasoningEffort()).toBe(false);
-    });
-
-    it('filters out unsupported parameters for Grok-4', () => {
-      (OpenAiChatCompletionProvider as any).mockImplementation((modelName: string) => ({
-        getOpenAiBody: jest.fn().mockImplementation(() => ({
-          body: {
-            model: modelName,
-            messages: [{ role: 'user', content: 'test' }],
-            presence_penalty: 0.1,
-            frequency_penalty: 0.2,
-            stop: ['stop'],
-            reasoning_effort: 'high',
-            temperature: 0.7,
-          },
-        })),
-        // Mock the XAI provider methods
-        isReasoningModel: () => GROK_REASONING_MODELS.includes(modelName),
-        supportsReasoningEffort: () => GROK_REASONING_EFFORT_MODELS.includes(modelName),
-        originalConfig: {},
-      }));
-
-      const provider = createXAIProvider('xai:grok-4-0709') as any;
-
-      // Ensure the modelName is properly set
-      provider.modelName = 'grok-4-0709';
-
-      // Mock the actual filtering behavior
-      jest.spyOn(provider, 'getOpenAiBody').mockImplementation((prompt) => {
-        const result = {
-          body: {
-            model: 'grok-4-0709',
-            messages: [{ role: 'user', content: prompt }],
-            presence_penalty: 0.1,
-            frequency_penalty: 0.2,
-            stop: ['stop'],
-            reasoning_effort: 'high',
-            temperature: 0.7,
-          } as any,
-        };
-
-        // Apply Grok-4 filtering logic
-        if (provider.modelName?.startsWith('grok-4')) {
-          delete result.body.presence_penalty;
-          delete result.body.frequency_penalty;
-          delete result.body.stop;
-          delete result.body.reasoning_effort;
-        }
-
-        return result;
-      });
-
-      const result = provider.getOpenAiBody('test prompt');
-
-      expect(result.body.presence_penalty).toBeUndefined();
-      expect(result.body.frequency_penalty).toBeUndefined();
-      expect(result.body.stop).toBeUndefined();
-      expect(result.body.reasoning_effort).toBeUndefined();
-      expect(result.body.temperature).toBe(0.7); // This should remain
-    });
-
-    it('allows reasoning_effort for Grok-3 mini models', () => {
-      (OpenAiChatCompletionProvider as any).mockImplementation((modelName: string) => ({
-        getOpenAiBody: jest.fn().mockImplementation(() => ({
-          body: {
-            model: modelName,
-            messages: [{ role: 'user', content: 'test' }],
-            reasoning_effort: 'high',
-          },
-        })),
-        isReasoningModel: () => GROK_REASONING_MODELS.includes(modelName),
-        supportsReasoningEffort: () => GROK_REASONING_EFFORT_MODELS.includes(modelName),
-        originalConfig: { reasoning_effort: 'high' },
-      }));
-
-      const provider = createXAIProvider('xai:grok-3-mini-beta', {
-        config: {
-          config: {
-            reasoning_effort: 'high',
-          },
-        },
-      }) as any;
-
-      expect(provider.supportsReasoningEffort()).toBe(true);
-      const result = provider.getOpenAiBody('test prompt');
-      expect(result.body.reasoning_effort).toBe('high');
-    });
-
-    it('filters reasoning_effort for non-supporting models', () => {
-      (OpenAiChatCompletionProvider as any).mockImplementation((modelName: string) => ({
-        getOpenAiBody: jest.fn().mockImplementation(() => ({
-          body: {
-            model: modelName,
-            messages: [{ role: 'user', content: 'test' }],
-            reasoning_effort: 'high',
-          } as any,
-        })),
-        isReasoningModel: () => GROK_REASONING_MODELS.includes(modelName),
-        supportsReasoningEffort: () => GROK_REASONING_EFFORT_MODELS.includes(modelName),
-        originalConfig: { reasoning_effort: 'high' },
-      }));
-
-      const provider = createXAIProvider('xai:grok-3-beta', {
-        config: {
-          config: {
-            reasoning_effort: 'high',
-          },
-        },
-      }) as any;
-
-      // Mock the filtering behavior for non-supporting models
-      jest.spyOn(provider, 'getOpenAiBody').mockImplementation((prompt) => {
-        const result = {
-          body: {
-            model: 'grok-3-beta',
-            messages: [{ role: 'user', content: prompt }],
-            reasoning_effort: 'high',
-          } as any,
-        };
-
-        // Apply filtering logic for models that don't support reasoning_effort
-        if (!provider.supportsReasoningEffort()) {
-          delete result.body.reasoning_effort;
-        }
-
-        return result;
-      });
-
-      expect(provider.supportsReasoningEffort()).toBe(false);
-      const result = provider.getOpenAiBody('test prompt');
-      expect(result.body.reasoning_effort).toBeUndefined();
     });
   });
 

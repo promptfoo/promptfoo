@@ -167,6 +167,25 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
   getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
     const result = super.getOpenAiBody(prompt, context, callApiOptions);
 
+    // Ensure we have a valid result
+    if (!result || !result.body) {
+      return result;
+    }
+
+    // Filter out unsupported parameters for Grok-4
+    if (this.modelName?.startsWith('grok-4')) {
+      delete result.body.presence_penalty;
+      delete result.body.frequency_penalty;
+      delete result.body.stop;
+      // Grok-4 doesn't support reasoning_effort parameter
+      delete result.body.reasoning_effort;
+    }
+
+    // Filter reasoning_effort for models that don't support it
+    if (!this.supportsReasoningEffort() && result.body.reasoning_effort) {
+      delete result.body.reasoning_effort;
+    }
+
     // Handle search parameters
     const searchParams = this.originalConfig?.search_parameters;
     if (searchParams) {
@@ -177,19 +196,23 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   constructor(modelName: string, providerOptions: XAIProviderOptions) {
+    // Extract the nested config
+    const xaiConfig = providerOptions.config?.config;
+
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
+        ...xaiConfig, // Merge the nested config into the main config
         apiKeyEnvar: 'XAI_API_KEY',
-        apiBaseUrl: providerOptions.config?.config?.region
-          ? `https://${providerOptions.config.config.region}.api.x.ai/v1`
+        apiBaseUrl: xaiConfig?.region
+          ? `https://${xaiConfig.region}.api.x.ai/v1`
           : 'https://api.x.ai/v1',
       },
     });
 
     // Store the original config for later use
-    this.originalConfig = providerOptions.config?.config;
+    this.originalConfig = xaiConfig;
   }
 
   id(): string {

@@ -16,7 +16,7 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-## Provider Format
+## Supported Models
 
 The xAI provider includes support for the following model formats:
 
@@ -29,9 +29,17 @@ The xAI provider includes support for the following model formats:
 ### Grok-3 Models
 
 - `xai:grok-3-beta` - Latest flagship model for enterprise tasks (131K context)
-- `xai:grok-3-fast-beta` - Faster variant of grok-3-beta (131K context)
-- `xai:grok-3-mini-beta` - Lightweight reasoning model (131K context)
-- `xai:grok-3-mini-fast-beta` - Faster variant of grok-3-mini with reasoning (131K context)
+- `xai:grok-3-fast-beta` - Fastest flagship model (131K context)
+- `xai:grok-3-mini-beta` - Smaller model for basic tasks, supports reasoning effort (32K context)
+- `xai:grok-3-mini-fast-beta` - Faster mini model, supports reasoning effort (32K context)
+- `xai:grok-3` - Alias for grok-3-beta
+- `xai:grok-3-latest` - Alias for grok-3-beta
+- `xai:grok-3-fast` - Alias for grok-3-fast-beta
+- `xai:grok-3-fast-latest` - Alias for grok-3-fast-beta
+- `xai:grok-3-mini` - Alias for grok-3-mini-beta
+- `xai:grok-3-mini-latest` - Alias for grok-3-mini-beta
+- `xai:grok-3-mini-fast` - Alias for grok-3-mini-fast-beta
+- `xai:grok-3-mini-fast-latest` - Alias for grok-3-mini-fast-beta
 
 ### Grok-2 and previous Models
 
@@ -78,13 +86,14 @@ Reasoning is only available for the mini variants. The standard `grok-3-beta` an
 
 Grok-4 introduces significant changes compared to previous Grok models:
 
-- **Always uses reasoning**: Grok-4 is a reasoning model with no non-reasoning mode
+- **Always uses reasoning**: Grok-4 is a reasoning model that always operates at maximum reasoning capacity
 - **No `reasoning_effort` parameter**: Unlike Grok-3 mini models, Grok-4 does not support the `reasoning_effort` parameter
-- **Unsupported parameters**: The following parameters are not supported and will cause errors:
+- **Unsupported parameters**: The following parameters are not supported and will be automatically filtered out:
   - `presencePenalty` / `presence_penalty`
   - `frequencyPenalty` / `frequency_penalty`
   - `stop`
 - **Larger context window**: 256,000 tokens compared to 131,072 for Grok-3 models
+- **Uses `max_completion_tokens`**: As a reasoning model, Grok-4 uses `max_completion_tokens` instead of `max_tokens`
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -92,8 +101,7 @@ providers:
   - id: xai:grok-4
     config:
       temperature: 0.7
-      # Note: reasoning_effort is NOT supported for Grok-4
-      # presence_penalty, frequency_penalty, and stop are also not supported
+      max_completion_tokens: 4096
 ```
 
 ### Region Support
