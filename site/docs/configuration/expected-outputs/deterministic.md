@@ -30,6 +30,8 @@ These metrics are created by logical tests that are run on LLM output.
 
 | Assertion Type                                                  | Returns true if...                                                 |
 | --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                |
+| [classifier](#classifier)                                       | HuggingFace classifier returns expected class above threshold      |
 | [contains](#contains)                                           | output contains substring                                          |
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
@@ -54,9 +56,12 @@ These metrics are created by logical tests that are run on LLM output.
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
+| [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                       |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
+| [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
+| [similar](#similar)                                             | Embedding similarity is above threshold                            |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -1298,6 +1303,187 @@ tests:
       prompt: 'What is 2+2?'
     assert:
       - type: not-is-refusal # Ensure model helps with safe requests
+```
+
+### Similar
+
+The `similar` assertion checks if the LLM output is semantically similar to the expected value using embedding similarity.
+
+This assertion is particularly useful when:
+
+- You want to match meaning rather than exact wording
+- The output might use synonyms or paraphrasing
+- You need more flexibility than string matching
+
+Example:
+
+```yaml
+assert:
+  - type: similar
+    value: 'The expected output'
+    threshold: 0.8 # Default is 0.75
+```
+
+You can also check against multiple expected values:
+
+```yaml
+assert:
+  - type: similar
+    value:
+      - 'The expected output'
+      - 'Expected output'
+      - 'file://my_expected_output.txt'
+    threshold: 0.8
+```
+
+By default, the assertion uses OpenAI's `text-embedding-3-large` model. You can specify a different embedding provider:
+
+```yaml
+assert:
+  - type: similar
+    value: 'Hello world'
+    provider: huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
+```
+
+### Pi
+
+The `pi` assertion uses Pi Labs' preference scoring model as an alternative to LLM-as-a-judge for evaluation. It provides consistent numeric scores for the same inputs.
+
+:::note
+Requires `WITHPI_API_KEY` environment variable to be set.
+:::
+
+Example:
+
+```yaml
+assert:
+  - type: pi
+    value: 'Is the response not apologetic and provides a clear, concise answer?'
+    threshold: 0.8 # Optional, defaults to 0.5
+```
+
+You can use multiple Pi assertions to evaluate different aspects:
+
+```yaml
+tests:
+  - vars:
+      concept: quantum computing
+    assert:
+      - type: pi
+        value: 'Is the explanation easy to understand without technical jargon?'
+        threshold: 0.7
+      - type: pi
+        value: 'Does the response correctly explain the fundamental principles?'
+        threshold: 0.8
+```
+
+### Classifier
+
+The `classifier` assertion runs the LLM output through any HuggingFace text classification model. This is useful for:
+
+- Sentiment analysis
+- Toxicity detection
+- Bias detection
+- PII detection
+- Prompt injection detection
+
+Example for hate speech detection:
+
+```yaml
+assert:
+  - type: classifier
+    provider: huggingface:text-classification:facebook/roberta-hate-speech-dynabench-r4-target
+    value: nothate # The expected class name
+    threshold: 0.5
+```
+
+Example for PII detection (using negation):
+
+```yaml
+assert:
+  - type: not-classifier
+    provider: huggingface:token-classification:bigcode/starpii
+    threshold: 0.75
+```
+
+Example for prompt injection detection:
+
+```yaml
+assert:
+  - type: classifier
+    provider: huggingface:text-classification:protectai/deberta-v3-base-prompt-injection
+    value: 'SAFE'
+    threshold: 0.9
+```
+
+### Assert-Set
+
+The `assert-set` groups multiple assertions together with configurable success criteria. This is useful when you want to apply multiple checks but don't need all of them to pass.
+
+Example with threshold:
+
+```yaml
+tests:
+  - assert:
+      - type: assert-set
+        threshold: 0.5 # 50% of assertions must pass
+        assert:
+          - type: contains
+            value: hello
+          - type: llm-rubric
+            value: is a friendly response
+          - type: not-contains
+            value: error
+          - type: is-json
+```
+
+Example with weights and custom metric:
+
+```yaml
+assert:
+  - type: assert-set
+    threshold: 0.25 # 1 out of 4 equal weight assertions need to pass
+    weight: 2.0 # This set is weighted more heavily in the overall score
+    metric: quality_checks
+    assert:
+      - type: similar
+        value: expected output
+      - type: contains
+        value: key phrase
+```
+
+### Select-Best
+
+The `select-best` assertion compares multiple outputs in the same test case and selects the best one. This requires generating multiple outputs using different prompts or providers.
+
+:::note
+This assertion type has special handling - it returns pass=true for the winning output and pass=false for others.
+:::
+
+Example comparing different prompts:
+
+```yaml
+prompts:
+  - 'Write a tweet about {{topic}}'
+  - 'Write a very concise, funny tweet about {{topic}}'
+  - 'Compose a tweet about {{topic}} that will go viral'
+providers:
+  - openai:gpt-4
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+    assert:
+      - type: select-best
+        value: 'choose the tweet that is most likely to get high engagement'
+```
+
+Example with custom grader:
+
+```yaml
+assert:
+  - type: select-best
+    value: 'choose the most engaging response'
+    provider: openai:gpt-4o-mini
 ```
 
 ## See Also
