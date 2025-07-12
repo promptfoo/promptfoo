@@ -39,7 +39,7 @@ providers:
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform                | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`    |
 | [Cloudera](./cloudera.md)                           | Cloudera AI Inference Service                             | `cloudera:llama-2-13b-chat`                                     |
 | [Cohere](./cohere.md)                               | Cohere's language models                                  | `cohere:command`                                                |
-| [Databricks](./databricks.md)                       | Databricks Mosaic AI serving endpoints                    | `databricks:llama-2-70b`                                        |
+| [Databricks](./databricks.md)                       | Databricks Foundation Model APIs                          | `databricks:databricks-meta-llama-3-3-70b-instruct`             |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                                | `deepseek:deepseek-r1`                                          |
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface                    | `f5:path-name`                                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                                 | `fal:image:fal-ai/fast-sdxl`                                    |
