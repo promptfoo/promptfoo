@@ -168,4 +168,21 @@ describe('addCommonOptionsRecursively', () => {
     expect(setLogLevel).toHaveBeenCalledWith('debug');
     expect(setupEnv).toHaveBeenCalledWith('.env.combined');
   });
+
+  it('should add common options to upgradeCommand', () => {
+    const upgradeCommand = program.command('upgrade');
+    upgradeCommand.action(() => {});
+
+    addCommonOptionsRecursively(program);
+
+    const hasVerboseOption = upgradeCommand.options.some(
+      (option) => option.short === '-v' || option.long === '--verbose',
+    );
+    const hasEnvFileOption = upgradeCommand.options.some(
+      (option) => option.long === '--env-file' || option.long === '--env-path',
+    );
+
+    expect(hasVerboseOption).toBe(true);
+    expect(hasEnvFileOption).toBe(true);
+  });
 });
