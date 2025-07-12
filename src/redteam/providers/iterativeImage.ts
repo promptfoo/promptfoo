@@ -256,7 +256,6 @@ async function runRedteamConversation({
       }
 
       if (redteamResp.tokenUsage) {
-        totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
         accumulateTokenUsage(totalTokenUsage, redteamResp.tokenUsage);
       } else {
         totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;

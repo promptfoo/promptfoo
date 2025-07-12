@@ -49,7 +49,7 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
-import { accumulateTokenUsage } from './util/tokenUsageUtils';
+import { accumulateTokenUsage, createEmptyTokenUsage } from './util/tokenUsageUtils';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -127,29 +127,7 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
 }
 
 export function newTokenUsage(): Required<TokenUsage> {
-  return {
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    total: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-    assertions: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    },
-  };
+  return createEmptyTokenUsage();
 }
 
 /**

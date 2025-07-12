@@ -188,12 +188,12 @@ export class BAMProvider implements ApiProvider {
       const result = await client.text.generation.create(params, { signal });
 
       const response = convertResponse(result);
-      
+
       // Cache the response if caching is enabled
       if (isCacheEnabled()) {
         await cache.set(cacheKey, JSON.stringify(response));
       }
-      
+
       return response;
     } catch (err) {
       logger.error(`BAM API call error: ${String(err)}`);

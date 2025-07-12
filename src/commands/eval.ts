@@ -38,7 +38,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage } from '../util/tokenUsageUtils';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
@@ -306,29 +306,7 @@ export async function doEval(
     let successes = 0;
     let failures = 0;
     let errors = 0;
-    const tokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-      assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
-    };
+    const tokenUsage = createEmptyTokenUsage();
 
     // Calculate our total successes and failures
     for (const prompt of evalRecord.prompts) {

@@ -18,6 +18,7 @@ import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
@@ -289,13 +290,7 @@ export class CustomProvider implements ApiProvider {
       | 'Max rounds reached'
       | 'Max backtracks reached' = 'Max rounds reached';
 
-    const totalTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 0,
-      cached: 0,
-    };
+    const totalTokenUsage = createEmptyTokenUsage();
 
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     const { getGraderById } = await import('../../graders');
@@ -340,11 +335,7 @@ export class CustomProvider implements ApiProvider {
             objectiveScore,
           );
         if (attackTokenUsage) {
-          totalTokenUsage.total += attackTokenUsage.total || 0;
-          totalTokenUsage.prompt += attackTokenUsage.prompt || 0;
-          totalTokenUsage.completion += attackTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += attackTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += attackTokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, attackTokenUsage);
         }
 
         if (!attackPrompt) {
@@ -366,11 +357,7 @@ export class CustomProvider implements ApiProvider {
         );
         lastResponse = response;
         if (lastResponse.tokenUsage) {
-          totalTokenUsage.total += lastResponse.tokenUsage.total || 0;
-          totalTokenUsage.prompt += lastResponse.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += lastResponse.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += lastResponse.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += lastResponse.tokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, lastResponse.tokenUsage);
         }
 
         if (lastResponse.sessionId && this.stateful) {
@@ -392,11 +379,7 @@ export class CustomProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
         });
         if (unblockingResult.tokenUsage) {
-          totalTokenUsage.total += unblockingResult.tokenUsage.total || 0;
-          totalTokenUsage.prompt += unblockingResult.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += unblockingResult.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += unblockingResult.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += unblockingResult.tokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, unblockingResult.tokenUsage);
         }
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -417,11 +400,7 @@ export class CustomProvider implements ApiProvider {
           );
 
           if (unblockingResponse.tokenUsage) {
-            totalTokenUsage.total += unblockingResponse.tokenUsage.total || 0;
-            totalTokenUsage.prompt += unblockingResponse.tokenUsage.prompt || 0;
-            totalTokenUsage.completion += unblockingResponse.tokenUsage.completion || 0;
-            totalTokenUsage.numRequests += unblockingResponse.tokenUsage.numRequests ?? 1;
-            totalTokenUsage.cached += unblockingResponse.tokenUsage.cached || 0;
+            accumulateTokenUsage(totalTokenUsage, unblockingResponse.tokenUsage);
           }
 
           // Update lastResponse to the unblocking response and continue
@@ -484,10 +463,7 @@ export class CustomProvider implements ApiProvider {
             );
             graderPassed = grade.pass;
             if (grade.tokensUsed) {
-              totalTokenUsage.total += grade.tokensUsed.total || 0;
-              totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
-              totalTokenUsage.completion += grade.tokensUsed.completion || 0;
-              totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+              accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
             } else {
               totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
             }
@@ -498,11 +474,7 @@ export class CustomProvider implements ApiProvider {
 
         const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output);
         if (evalTokenUsage) {
-          totalTokenUsage.total += evalTokenUsage.total || 0;
-          totalTokenUsage.prompt += evalTokenUsage.prompt || 0;
-          totalTokenUsage.completion += evalTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += evalTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += evalTokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, evalTokenUsage);
         }
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
