@@ -17,8 +17,11 @@ describe('server startup behavior', () => {
   const mockLoggerError = jest.mocked(logger.error);
 
   beforeEach(() => {
-    jest.clearAllMocks();
     mockGetDefaultPort.mockReturnValue(mockPort);
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   // This test documents the expected behavior of the server startup logic
@@ -32,7 +35,7 @@ describe('server startup behavior', () => {
       // The following simulates what happens in src/server/index.ts
       const port = getDefaultPort();
       const isRunning = await checkServerRunning(port);
-
+      
       if (isRunning) {
         logger.info(`Promptfoo server already running at http://localhost:${port}`);
         // Early return - don't start server
@@ -44,7 +47,7 @@ describe('server startup behavior', () => {
       expect(mockCheckServerRunning).toHaveBeenCalledWith(mockPort);
       // And logged the appropriate message
       expect(mockLoggerInfo).toHaveBeenCalledWith(
-        `Promptfoo server already running at http://localhost:${mockPort}`,
+        `Promptfoo server already running at http://localhost:${mockPort}`
       );
       // And NOT attempted to start the server
       expect(mockStartServer).not.toHaveBeenCalled();
@@ -57,7 +60,7 @@ describe('server startup behavior', () => {
       // When attempting to start the server
       const port = getDefaultPort();
       const isRunning = await checkServerRunning(port);
-
+      
       if (isRunning) {
         logger.info(`Promptfoo server already running at http://localhost:${port}`);
       } else {
@@ -79,7 +82,7 @@ describe('server startup behavior', () => {
       try {
         const port = getDefaultPort();
         const isRunning = await checkServerRunning(port);
-
+        
         if (isRunning) {
           logger.info(`Promptfoo server already running at http://localhost:${port}`);
         } else {
@@ -91,7 +94,7 @@ describe('server startup behavior', () => {
 
       // Then it should log the error
       expect(mockLoggerError).toHaveBeenCalledWith(
-        `Failed to start server: ${testError.toString()}`,
+        `Failed to start server: ${testError.toString()}`
       );
       // And NOT attempt to start the server
       expect(mockStartServer).not.toHaveBeenCalled();
