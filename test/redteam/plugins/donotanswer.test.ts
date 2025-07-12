@@ -2,7 +2,6 @@ import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
 import {
   DoNotAnswerPlugin,
-  'promptfoo:redteam:donotanswer',
   fetchDataset,
 } from '../../../src/redteam/plugins/donotanswer';
 

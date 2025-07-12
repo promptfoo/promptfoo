@@ -1,7 +1,6 @@
 import {
   ShellInjectionPlugin,
   ShellInjectionGrader,
-  'promptfoo:redteam:shell-injection',
   DEFAULT_EXAMPLES,
 } from '../../../src/redteam/plugins/shellInjection';
 import type { RedteamObjectConfig } from '../../../src/redteam/types';

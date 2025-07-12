@@ -3,7 +3,6 @@ import {
   ToxicChatPlugin,
   ToxicChatGrader,
   fetchDataset,
-  'promptfoo:redteam:toxic-chat',
 } from '../../../src/redteam/plugins/toxicChat';
 import type { TestCase } from '../../../src/types';
 

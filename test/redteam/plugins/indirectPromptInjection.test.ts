@@ -1,6 +1,5 @@
 import {
   IndirectPromptInjectionGrader,
-  'promptfoo:redteam:indirect-prompt-injection',
 } from '../../../src/redteam/plugins/indirectPromptInjection';
 
 describe('IndirectPromptInjectionGrader', () => {

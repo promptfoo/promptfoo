@@ -3,7 +3,6 @@ import {
   fetchAllDatasets,
   BeavertailsGrader,
   BeavertailsPlugin,
-  'promptfoo:redteam:beavertails',
 } from '../../../src/redteam/plugins/beavertails';
 import type { TestCase } from '../../../src/types';
 

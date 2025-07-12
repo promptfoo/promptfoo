@@ -2,7 +2,6 @@ import * as fetchModule from '../../../src/fetch';
 import {
   HarmbenchGrader,
   HarmbenchPlugin,
-  'promptfoo:redteam:harmbench',
 } from '../../../src/redteam/plugins/harmbench';
 import type { AtomicTestCase, ApiProvider } from '../../../src/types';
 
