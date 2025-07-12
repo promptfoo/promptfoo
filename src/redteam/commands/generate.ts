@@ -36,6 +36,7 @@ import {
   REDTEAM_MODEL,
 } from '../constants/plugins';
 import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../constants/strategies';
+import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,
@@ -300,6 +301,24 @@ export async function doGenerateRedteam(
     .map((provider: ApiProvider) => provider?.label)
     .filter(Boolean);
 
+  // Extract MCP tools information and add to purpose
+  let enhancedPurpose = parsedConfig.data.purpose || '';
+  let augmentedTestGenerationInstructions = config.testGenerationInstructions || '';
+  try {
+    const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
+    if (mcpToolsInfo) {
+      enhancedPurpose = enhancedPurpose
+        ? `${enhancedPurpose}\n\n${mcpToolsInfo}\n\n`
+        : mcpToolsInfo;
+      logger.info('Added MCP tools information to red team purpose');
+      augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
+    }
+  } catch (error) {
+    logger.warn(
+      `Failed to extract MCP tools information: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   const {
     testCases: redteamTests,
     purpose,
@@ -307,6 +326,7 @@ export async function doGenerateRedteam(
     injectVar: finalInjectVar,
   } = await synthesize({
     ...parsedConfig.data,
+    purpose: enhancedPurpose,
     language: config.language,
     numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
@@ -315,7 +335,7 @@ export async function doGenerateRedteam(
     abortSignal: options.abortSignal,
     targetLabels,
     showProgressBar: options.progressBar !== false,
-    testGenerationInstructions: config.testGenerationInstructions,
+    testGenerationInstructions: augmentedTestGenerationInstructions,
   } as SynthesizeOptions);
 
   if (redteamTests.length === 0) {
@@ -354,12 +374,14 @@ export async function doGenerateRedteam(
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};
+    const existingDefaultTest =
+      typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
       defaultTest: {
-        ...(existingYaml.defaultTest || {}),
+        ...existingDefaultTest,
         metadata: {
-          ...(existingYaml.defaultTest?.metadata || {}),
+          ...(existingDefaultTest?.metadata || {}),
           purpose,
           entities,
         },
@@ -427,10 +449,12 @@ export async function doGenerateRedteam(
     } else if (existingTests) {
       testsArray = [existingTests];
     }
+    const existingConfigDefaultTest =
+      typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
     existingConfig.defaultTest = {
-      ...(existingConfig.defaultTest || {}),
+      ...existingConfigDefaultTest,
       metadata: {
-        ...(existingConfig.defaultTest?.metadata || {}),
+        ...(existingConfigDefaultTest?.metadata || {}),
         purpose,
         entities,
       },

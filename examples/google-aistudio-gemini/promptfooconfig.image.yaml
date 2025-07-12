@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Image captioning with Gemini
+
+prompts: |
+  {{imageFile}}
+  Describe what you see.
+
+providers:
+  - id: google:gemini-2.5-flash
+
+tests:
+  - vars:
+      imageFile: file://assets/red-panda.jpg
+    assert:
+      - type: contains
+        value: red panda

@@ -261,7 +261,9 @@ async function applyStrategies(
       const loadedStrategy = await loadStrategy(strategy.id);
       strategyAction = loadedStrategy.action;
     } else {
-      const builtinStrategy = Strategies.find((s) => s.id === strategy.id);
+      // Handle custom strategy variants (e.g., custom:aggressive)
+      const baseStrategyId = strategy.id.includes(':') ? strategy.id.split(':')[0] : strategy.id;
+      const builtinStrategy = Strategies.find((s) => s.id === baseStrategyId);
       if (!builtinStrategy) {
         logger.warn(`Strategy ${strategy.id} not registered, skipping`);
         continue;
@@ -274,10 +276,15 @@ async function applyStrategies(
       pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
     );
 
-    const strategyTestCases: TestCase[] = await strategyAction(applicableTestCases, injectVar, {
-      ...(strategy.config || {}),
-      excludeTargetOutputFromAgenticAttackGeneration,
-    });
+    const strategyTestCases: TestCase[] = await strategyAction(
+      applicableTestCases,
+      injectVar,
+      {
+        ...(strategy.config || {}),
+        excludeTargetOutputFromAgenticAttackGeneration,
+      },
+      strategy.id,
+    );
 
     newTestCases.push(
       ...strategyTestCases

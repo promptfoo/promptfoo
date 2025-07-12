@@ -1,12 +1,13 @@
 import {
-  FRAMEWORK_COMPLIANCE_IDS,
-  DEFAULT_STRATEGIES,
-  MULTI_TURN_STRATEGIES,
-  AGENTIC_STRATEGIES,
   ADDITIONAL_STRATEGIES,
-  STRATEGY_COLLECTIONS,
-  STRATEGY_COLLECTION_MAPPINGS,
+  AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
+  DEFAULT_STRATEGIES,
+  FRAMEWORK_COMPLIANCE_IDS,
+  MULTI_TURN_STRATEGIES,
+  STRATEGY_COLLECTION_MAPPINGS,
+  STRATEGY_COLLECTIONS,
+  isCustomStrategy,
 } from '../../../src/redteam/constants/strategies';
 
 describe('strategies constants', () => {
@@ -25,15 +26,17 @@ describe('strategies constants', () => {
   });
 
   it('should have correct multi-turn strategies', () => {
-    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat']);
+    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'custom', 'mischievous-user']);
   });
 
   it('should have correct agentic strategies', () => {
     expect(AGENTIC_STRATEGIES).toEqual([
       'crescendo',
       'goat',
+      'custom',
       'jailbreak',
       'jailbreak:tree',
+      'mischievous-user',
       'pandamonium',
     ]);
   });
@@ -46,6 +49,7 @@ describe('strategies constants', () => {
       'camelcase',
       'citation',
       'crescendo',
+      'custom',
       'gcg',
       'goat',
       'hex',
@@ -56,6 +60,7 @@ describe('strategies constants', () => {
       'jailbreak:tree',
       'leetspeak',
       'math-prompt',
+      'mischievous-user',
       'morse',
       'multilingual',
       'pandamonium',
@@ -88,5 +93,11 @@ describe('strategies constants', () => {
     ].sort();
 
     expect(ALL_STRATEGIES).toEqual(expectedStrategies);
+  });
+
+  it('should correctly identify custom strategies', () => {
+    expect(isCustomStrategy('custom')).toBe(true);
+    expect(isCustomStrategy('custom:test')).toBe(true);
+    expect(isCustomStrategy('other')).toBe(false);
   });
 });
