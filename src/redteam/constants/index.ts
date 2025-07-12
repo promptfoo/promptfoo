@@ -2,4 +2,4 @@
 export * from './metadata';
 export * from './plugins';
 export * from './strategies';
-export * from './frameworks'; 
+export * from './frameworks';
