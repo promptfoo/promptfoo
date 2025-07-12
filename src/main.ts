@@ -2,36 +2,33 @@
 import { Command } from 'commander';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
-import { authCommand } from './commands/auth';
-import { cacheCommand } from './commands/cache';
-import { configCommand } from './commands/config';
-import { debugCommand } from './commands/debug';
-import { deleteCommand } from './commands/delete';
-import { evalCommand } from './commands/eval';
-import { exportCommand } from './commands/export';
-import { feedbackCommand } from './commands/feedback';
-import { generateAssertionsCommand } from './commands/generate/assertions';
-import { generateDatasetCommand } from './commands/generate/dataset';
-import { importCommand } from './commands/import';
-import { initCommand } from './commands/init';
-import { listCommand } from './commands/list';
-import { modelScanCommand } from './commands/modelScan';
-import { shareCommand } from './commands/share';
-import { showCommand } from './commands/show';
-import { validateCommand } from './commands/validate';
-import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
-import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
-import { redteamGenerateCommand } from './redteam/commands/generate';
-import { initCommand as redteamInitCommand } from './redteam/commands/init';
-import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
-import { redteamReportCommand } from './redteam/commands/report';
-import { redteamRunCommand } from './redteam/commands/run';
-import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
-import { loadDefaultConfig } from './util/config/default';
+
+// Commands that require database access
+const COMMANDS_REQUIRING_DB = new Set([
+  'eval',
+  'view',
+  'list',
+  'show',
+  'delete',
+  'import',
+  'export',
+  'share',
+]);
+
+// Commands that should skip update checking
+const COMMANDS_SKIP_UPDATE_CHECK = new Set([
+  'init',
+  'cache',
+  'config',
+  'debug',
+  'feedback',
+  'auth',
+  'validate',
+]);
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -69,64 +66,413 @@ export function addCommonOptionsRecursively(command: Command) {
   });
 }
 
-async function main() {
-  await checkForUpdates();
-  await runDbMigrations();
+/**
+ * Check if we should run database migrations based on the command
+ */
+function shouldRunMigrations(args: string[]): boolean {
+  if (args.length === 0) {
+    return false;
+  }
+  
+  // Check if it's a help command
+  if (args.includes('--help') || args.includes('-h')) {
+    return false;
+  }
+  
+  // Get the main command
+  const mainCommand = args[0];
+  
+  // Check if it's a subcommand that needs DB
+  if (mainCommand === 'redteam' && args.length > 1) {
+    const subCommand = args[1];
+    return ['run', 'report'].includes(subCommand);
+  }
+  
+  return COMMANDS_REQUIRING_DB.has(mainCommand);
+}
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+/**
+ * Check if we should check for updates based on the command
+ */
+function shouldCheckUpdates(args: string[]): boolean {
+  if (args.length === 0) {
+    return false;
+  }
+  
+  // Never check for help commands
+  if (args.includes('--help') || args.includes('-h')) {
+    return false;
+  }
+  
+  // Check if --skip-update-check flag is present
+  if (args.includes('--skip-update-check')) {
+    return false;
+  }
+  
+  const mainCommand = args[0];
+  return !COMMANDS_SKIP_UPDATE_CHECK.has(mainCommand);
+}
+
+async function main() {
+  // Early exit for version and help - before any heavy operations
+  const args = process.argv.slice(2);
+  
+  // Check for --version or -V
+  if (args.includes('--version') || args.includes('-V')) {
+    console.log(version);
+    process.exit(0);
+  }
+  
+  // Check for --help or -h (and no other arguments)
+  if ((args.includes('--help') || args.includes('-h')) && args.length === 1) {
+    // Print basic help without loading commander
+    console.log(`promptfoo v${version} - LLM evaluation framework`);
+    console.log('\nUsage: promptfoo [command] [options]');
+    console.log('\nCommands:');
+    console.log('  eval          Evaluate prompts and models');
+    console.log('  init          Initialize a new promptfoo project');
+    console.log('  view          Start the web UI');
+    console.log('  cache         Manage cache');
+    console.log('  config        Manage configuration');
+    console.log('  list          List various resources');
+    console.log('  show          Show details of a resource');
+    console.log('  share         Create a shareable URL');
+    console.log('  generate      Generate synthetic data');
+    console.log('  redteam       Red team LLM applications');
+    console.log('  export        Export an eval to JSON');
+    console.log('  import        Import an eval from JSON');
+    console.log('\nFor more help, run: promptfoo [command] --help');
+    process.exit(0);
+  }
+
+  // Conditional update checking
+  if (shouldCheckUpdates(args)) {
+    // Fire and forget - don't block on update check
+    checkForUpdates().catch(() => {
+      // Silently ignore update check failures
+    });
+  }
+  
+  // Conditional database migrations
+  if (shouldRunMigrations(args)) {
+    await runDbMigrations();
+  }
 
   const program = new Command('promptfoo');
   program
     .version(version)
     .showHelpAfterError()
     .showSuggestionAfterError()
+    .option('--skip-update-check', 'Skip checking for updates')
     .on('option:*', function () {
       logger.error('Invalid option(s)');
       program.help();
       process.exitCode = 1;
     });
 
-  // Main commands
-  evalCommand(program, defaultConfig, defaultConfigPath);
-  initCommand(program);
-  viewCommand(program);
-  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
-  shareCommand(program);
+  // Main commands - use placeholders and load on demand
+  program
+    .command('eval')
+    .description('Evaluate prompts')
+    .allowUnknownOption()
+    .action(async () => {
+      const { loadDefaultConfig } = await import('./util/config/default');
+      const { evalCommand } = await import('./commands/eval');
+      const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+      
+      evalCommand(program, defaultConfig, defaultConfigPath);
+      // Clear the action to prevent double execution
+      const evalCmd = program.commands.find(cmd => cmd.name() === 'eval');
+      if (evalCmd) {
+        evalCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('init')
+    .description('Initialize project with dummy files or download an example')
+    .allowUnknownOption()
+    .action(async () => {
+      const { initCommand } = await import('./commands/init');
+      initCommand(program);
+      const initCmd = program.commands.find(cmd => cmd.name() === 'init');
+      if (initCmd) {
+        initCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('view')
+    .description('Start browser UI')
+    .allowUnknownOption()
+    .action(async () => {
+      const { viewCommand } = await import('./commands/view');
+      viewCommand(program);
+      const viewCmd = program.commands.find(cmd => cmd.name() === 'view');
+      if (viewCmd) {
+        viewCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+  
+  program
+    .command('share')
+    .description('Create a shareable URL')
+    .allowUnknownOption()
+    .action(async () => {
+      const { shareCommand } = await import('./commands/share');
+      shareCommand(program);
+      const shareCmd = program.commands.find(cmd => cmd.name() === 'share');
+      if (shareCmd) {
+        shareCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
 
   // Alphabetical order
-  authCommand(program);
-  cacheCommand(program);
-  configCommand(program);
-  debugCommand(program, defaultConfig, defaultConfigPath);
-  deleteCommand(program);
-  exportCommand(program);
+  program
+    .command('auth')
+    .description('Authenticate with Promptfoo')
+    .allowUnknownOption()
+    .action(async () => {
+      const { authCommand } = await import('./commands/auth');
+      authCommand(program);
+      const authCmd = program.commands.find(cmd => cmd.name() === 'auth');
+      if (authCmd) {
+        authCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('cache')
+    .description('Manage cache')
+    .allowUnknownOption()
+    .action(async () => {
+      const { cacheCommand } = await import('./commands/cache');
+      cacheCommand(program);
+      const cacheCmd = program.commands.find(cmd => cmd.name() === 'cache');
+      if (cacheCmd) {
+        cacheCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('config')
+    .description('Manage configuration')
+    .allowUnknownOption()
+    .action(async () => {
+      const { configCommand } = await import('./commands/config');
+      configCommand(program);
+      const configCmd = program.commands.find(cmd => cmd.name() === 'config');
+      if (configCmd) {
+        configCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('debug')
+    .description('Display debug information')
+    .allowUnknownOption()
+    .action(async () => {
+      const { loadDefaultConfig } = await import('./util/config/default');
+      const { debugCommand } = await import('./commands/debug');
+      const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+      debugCommand(program, defaultConfig, defaultConfigPath);
+      const debugCmd = program.commands.find(cmd => cmd.name() === 'debug');
+      if (debugCmd) {
+        debugCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('delete')
+    .description('Delete various resources')
+    .allowUnknownOption()
+    .action(async () => {
+      const { deleteCommand } = await import('./commands/delete');
+      deleteCommand(program);
+      const deleteCmd = program.commands.find(cmd => cmd.name() === 'delete');
+      if (deleteCmd) {
+        deleteCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('export')
+    .description('Export an eval record to a JSON file')
+    .allowUnknownOption()
+    .action(async () => {
+      const { exportCommand } = await import('./commands/export');
+      exportCommand(program);
+      const exportCmd = program.commands.find(cmd => cmd.name() === 'export');
+      if (exportCmd) {
+        exportCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('feedback')
+    .description('Send feedback to the promptfoo developers')
+    .allowUnknownOption()
+    .action(async () => {
+      const { feedbackCommand } = await import('./commands/feedback');
+      feedbackCommand(program);
+      const feedbackCmd = program.commands.find(cmd => cmd.name() === 'feedback');
+      if (feedbackCmd) {
+        feedbackCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('import')
+    .description('Import an eval record from a JSON file')
+    .allowUnknownOption()
+    .action(async () => {
+      const { importCommand } = await import('./commands/import');
+      importCommand(program);
+      const importCmd = program.commands.find(cmd => cmd.name() === 'import');
+      if (importCmd) {
+        importCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('list')
+    .description('List various resources')
+    .allowUnknownOption()
+    .action(async () => {
+      const { listCommand } = await import('./commands/list');
+      listCommand(program);
+      const listCmd = program.commands.find(cmd => cmd.name() === 'list');
+      if (listCmd) {
+        listCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('scan-model')
+    .description('Scan ML models for vulnerabilities')
+    .allowUnknownOption()
+    .action(async () => {
+      const { modelScanCommand } = await import('./commands/modelScan');
+      modelScanCommand(program);
+      const modelScanCmd = program.commands.find(cmd => cmd.name() === 'scan-model');
+      if (modelScanCmd) {
+        modelScanCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('validate')
+    .description('Validate configuration')
+    .allowUnknownOption()
+    .action(async () => {
+      const { loadDefaultConfig } = await import('./util/config/default');
+      const { validateCommand } = await import('./commands/validate');
+      const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+      validateCommand(program, defaultConfig, defaultConfigPath);
+      const validateCmd = program.commands.find(cmd => cmd.name() === 'validate');
+      if (validateCmd) {
+        validateCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+    
+  program
+    .command('show')
+    .description('Show details of a specific resource')
+    .allowUnknownOption()
+    .action(async () => {
+      const { showCommand } = await import('./commands/show');
+      showCommand(program);
+      const showCmd = program.commands.find(cmd => cmd.name() === 'show');
+      if (showCmd) {
+        showCmd.action(() => {});
+      }
+      program.parse(process.argv);
+    });
+
+  // Generate and redteam need special handling
   const generateCommand = program.command('generate').description('Generate synthetic data');
-  feedbackCommand(program);
-  importCommand(program);
-  listCommand(program);
-  modelScanCommand(program);
-  validateCommand(program, defaultConfig, defaultConfigPath);
-  showCommand(program);
+  generateCommand.allowUnknownOption().action(async () => {
+    const { loadDefaultConfig } = await import('./util/config/default');
+    const [{ generateDatasetCommand }, { generateAssertionsCommand }, { redteamGenerateCommand }] = await Promise.all([
+      import('./commands/generate/dataset'),
+      import('./commands/generate/assertions'),
+      import('./redteam/commands/generate'),
+    ]);
+    const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+    
+    generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+    generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
+    redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
+    
+    // Clear the parent action
+    generateCommand.action(() => {});
+    program.parse(process.argv);
+  });
 
-  generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
-  generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
-  redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
-
-  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
-    await loadDefaultConfig(undefined, 'redteam');
-
-  redteamInitCommand(redteamBaseCommand);
-  evalCommand(
-    redteamBaseCommand,
-    redteamConfig ?? defaultConfig,
-    redteamConfigPath ?? defaultConfigPath,
-  );
-  redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
-  redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
-  redteamRunCommand(redteamBaseCommand);
-  redteamReportCommand(redteamBaseCommand);
-  redteamSetupCommand(redteamBaseCommand);
-  redteamPluginsCommand(redteamBaseCommand);
+  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  redteamBaseCommand.allowUnknownOption().action(async () => {
+    const { loadDefaultConfig } = await import('./util/config/default');
+    
+    // Load main config first
+    const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+    
+    // Load redteam config
+    const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } = 
+      await loadDefaultConfig(undefined, 'redteam');
+    
+    // Load all redteam commands
+    const [
+      { initCommand: redteamInitCommand },
+      { evalCommand },
+      { discoverCommand: redteamDiscoverCommand },
+      { redteamGenerateCommand },
+      { redteamRunCommand },
+      { redteamReportCommand },
+      { redteamSetupCommand },
+      { pluginsCommand: redteamPluginsCommand },
+    ] = await Promise.all([
+      import('./redteam/commands/init'),
+      import('./commands/eval'),
+      import('./redteam/commands/discover'),
+      import('./redteam/commands/generate'),
+      import('./redteam/commands/run'),
+      import('./redteam/commands/report'),
+      import('./redteam/commands/setup'),
+      import('./redteam/commands/plugins'),
+    ]);
+    
+    redteamInitCommand(redteamBaseCommand);
+    evalCommand(
+      redteamBaseCommand,
+      redteamConfig ?? defaultConfig,
+      redteamConfigPath ?? defaultConfigPath,
+    );
+    redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
+    redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+    redteamRunCommand(redteamBaseCommand);
+    redteamReportCommand(redteamBaseCommand);
+    redteamSetupCommand(redteamBaseCommand);
+    redteamPluginsCommand(redteamBaseCommand);
+    
+    // Clear the parent action
+    redteamBaseCommand.action(() => {});
+    program.parse(process.argv);
+  });
 
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
