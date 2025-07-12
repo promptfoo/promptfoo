@@ -56,3 +56,38 @@ The remaining knip findings are mostly false positives:
 2. Configured site workspace properly in knip.json
 3. Added ignoreBinaries for dist/src/main.js and gh
 4. Added ignoreDependencies for Docusaurus theme imports 
+
+6. **Test Updates**
+   - Updated rbac.test.ts to use `plugin.id` instead of imported PLUGIN_ID
+   - Updated competitors.test.ts similarly
+
+## Merge with Main Branch
+
+Successfully merged the latest changes from main branch:
+- Resolved conflicts in package.json and src/app/package.json
+- Updated dependency versions to match main
+- Removed additional unused dependencies introduced by the merge:
+  - rouge
+  - @swc/cli
+  - @typescript-eslint/parser
+  - Several unused devDependencies in src/app/package.json
+- Regenerated package-lock.json
+
+## Results
+
+**Before cleanup:**
+- Numerous unused files, dependencies, exports, and duplicate exports
+- Configuration issues
+
+**After cleanup:**
+- ✅ 0 unused files
+- ✅ 0 duplicate exports  
+- ✅ Reduced unused exports from 23 → 11
+- ✅ Reduced unused exported types from 36 → 33
+- ✅ Better configured for the project structure
+
+### Remaining Items
+The remaining knip findings are mostly false positives:
+- **Site devDependencies** - Actually used in blog components
+- **Unlisted dependencies** - Mostly Docusaurus theme imports provided by the framework
+- **Unused exports** - Many are part of the public API or used dynamically 
