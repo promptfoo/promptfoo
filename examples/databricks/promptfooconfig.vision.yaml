@@ -1,0 +1,47 @@
+# Example Databricks Foundation Model APIs - Vision Models
+# Demonstrates how to use vision capabilities with Databricks
+
+prompts:
+  # Vision models require structured JSON prompts
+  - file://vision-prompt.json
+
+providers:
+  # Claude 3.7 Sonnet supports vision
+  - id: databricks:databricks-claude-3-7-sonnet
+    label: "Claude 3.7 Sonnet (Vision)"
+    config:
+      isPayPerToken: true
+      workspaceUrl: https://your-workspace.cloud.databricks.com
+      temperature: 0.1
+      max_tokens: 500
+
+tests:
+  - description: "Analyze image from URL"
+    vars:
+      question: "What do you see in this image?"
+      image_url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/320px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+    assert:
+      - type: contains
+        value: "boardwalk"
+      - type: contains-any
+        value: ["nature", "trees", "path", "wooden"]
+
+  - description: "Describe landmark"
+    vars:
+      question: "What famous landmark is shown in this image?"
+      image_url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/af/Tour_eiffel_at_sunrise_from_the_trocadero.jpg/320px-Tour_eiffel_at_sunrise_from_the_trocadero.jpg"
+    assert:
+      - type: contains
+        value: "Eiffel Tower"
+      - type: contains-any
+        value: ["Paris", "France"]
+
+# Note: For local images, you can use file:// paths which will be automatically converted to base64
+# For base64 images, use the format: data:image/jpeg;base64,YOUR_BASE64_STRING
+
+defaultTest:
+  options:
+    provider:
+      env:
+        DATABRICKS_WORKSPACE_URL: https://your-workspace.cloud.databricks.com
+        DATABRICKS_TOKEN: "{{DATABRICKS_TOKEN}}" 

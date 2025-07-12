@@ -1,0 +1,91 @@
+# Example Databricks Foundation Model APIs configuration
+# Demonstrates various deployment modes and features available in 2025
+
+prompts:
+  - "You are a helpful AI assistant. Answer the following question: {{question}}"
+
+providers:
+  # Pay-per-token endpoint (pre-configured Foundation Model)
+  - id: databricks:databricks-meta-llama-3-3-70b-instruct
+    label: "Llama 3.3 70B (Pay-per-token)"
+    config:
+      isPayPerToken: true
+      workspaceUrl: https://your-workspace.cloud.databricks.com
+      temperature: 0.7
+      max_tokens: 1000
+      # Track usage for cost attribution
+      usageContext:
+        project: "customer-support"
+        team: "engineering"
+        environment: "production"
+
+  # Claude with AI Gateway features
+  - id: databricks:databricks-claude-3-7-sonnet
+    label: "Claude 3.7 Sonnet"
+    config:
+      isPayPerToken: true
+      workspaceUrl: https://your-workspace.cloud.databricks.com
+      # AI Gateway features (if enabled on endpoint)
+      aiGatewayConfig:
+        enableSafety: true
+        piiHandling: "mask"
+
+  # Custom provisioned throughput endpoint
+  - id: databricks:my-finetuned-llama
+    label: "Fine-tuned Llama (Provisioned)"
+    config:
+      workspaceUrl: https://your-workspace.cloud.databricks.com
+      temperature: 0.5
+      max_tokens: 2000
+      # Custom endpoint deployed via Unity Catalog
+      # No isPayPerToken flag needed (defaults to false)
+
+  # External model endpoint (proxies to OpenAI, Anthropic, etc.)
+  - id: databricks:my-gpt4-endpoint
+    label: "GPT-4 via Databricks"
+    config:
+      workspaceUrl: https://your-workspace.cloud.databricks.com
+      temperature: 0.7
+
+tests:
+  - description: "Test general knowledge"
+    vars:
+      question: "What are the main benefits of using Databricks Lakehouse architecture?"
+    assert:
+      - type: contains
+        value: "unified"
+      - type: contains
+        value: "data"
+      - type: llm-rubric
+        value: "Response should mention both batch and streaming capabilities"
+
+  - description: "Test PII handling"
+    vars:
+      question: "My SSN is 123-45-6789 and I live at 123 Main St. What should I know about data privacy?"
+    providers:
+      - databricks:databricks-claude-3-7-sonnet
+    assert:
+      - type: not-contains
+        value: "123-45-6789"
+      - type: not-contains
+        value: "123 Main St"
+      - type: contains
+        value: "privacy"
+
+  - description: "Test knowledge synthesis"
+    vars:
+      question: "Compare Apache Spark and traditional databases for big data processing"
+    assert:
+      - type: llm-rubric
+        value: "Response should compare scalability, processing paradigms, and use cases"
+      - type: contains-any
+        value: ["distributed", "parallel", "MapReduce"]
+
+# Optional: Set default environment variables
+# Can be overridden at runtime
+defaultTest:
+  options:
+    provider:
+      env:
+        DATABRICKS_WORKSPACE_URL: https://your-workspace.cloud.databricks.com
+        DATABRICKS_TOKEN: "{{DATABRICKS_TOKEN}}" 
