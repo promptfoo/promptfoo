@@ -169,9 +169,7 @@ export default function SecurityFindings({
                     <Typography variant="body1" fontWeight={600}>
                       {issue.message}
                     </Typography>
-                    <SeverityBadge severity={issue.severity}>
-                      {issue.severity}
-                    </SeverityBadge>
+                    <SeverityBadge severity={issue.severity}>{issue.severity}</SeverityBadge>
                   </Stack>
                   {(issue.location || (issue.details && issue.details.path)) && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
