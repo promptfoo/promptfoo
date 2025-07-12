@@ -1,6 +1,4 @@
-import chalk from 'chalk';
 import { engines } from '../package.json';
-import logger from './logger';
 
 /**
  * Function to check the current Node version against the required version
@@ -11,10 +9,9 @@ export const checkNodeVersion = (): void => {
 
   const versionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
   if (!versionMatch) {
-    logger.warn(
-      chalk.yellow(
-        `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
-      ),
+    // Version mismatch is rare, so we can skip logger and use console.error
+    console.error(
+      `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
     );
     return;
   }
@@ -30,11 +27,11 @@ export const checkNodeVersion = (): void => {
     (major === requiredMajor && minor < requiredMinor) ||
     (major === requiredMajor && minor === requiredMinor && patch < requiredPatch)
   ) {
+    // Version mismatch is rare, so we can skip logger and use console.error
+    const errorMessage = `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`;
+    console.error(errorMessage);
+    
     process.exitCode = 1;
-    throw new Error(
-      chalk.yellow(
-        `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`,
-      ),
-    );
+    throw new Error(errorMessage);
   }
 };
