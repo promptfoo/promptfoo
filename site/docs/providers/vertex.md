@@ -10,15 +10,14 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 ### Latest Gemini Models
 
-- `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
+- `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding (2M context)
 - `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
 - `vertex:gemini-2.5-flash-preview-04-17` - Previous Flash preview with thinking capabilities for enhanced reasoning
-- `vertex:gemini-2.5-pro-exp-03-25` - Previous thinking model for complex reasoning (2M context)
+- `vertex:gemini-2.0-pro` - Strongest model quality, especially for code & world knowledge with 2M context window
+- `vertex:gemini-2.0-flash-thinking-exp` - Enhanced reasoning capabilities with thinking process in responses
 - `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
-- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge with 2M context window
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
-- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning capabilities with thinking process in responses
 - `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, quality, cost-effective applications
 - `vertex:gemini-1.5-pro` - Strong performance for text/chat with long-context understanding
 - `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
