@@ -252,6 +252,22 @@ After deferring default config loading inside command modules:
 - Most commands now execute in under 500ms
 - Further optimizations would require more aggressive changes (barrel file elimination, etc.)
 
+## Phase 4 Results (Barrel File Elimination)
+
+After converting types/index.ts from wildcard exports to explicit exports:
+
+| Command     | Average (ms) | Min (ms) | Max (ms) | vs Baseline    | vs Phase 3     |
+| ----------- | ------------ | -------- | -------- | -------------- | -------------- |
+| --version   | 340.74       | 316.46   | 390.34   | **68% faster** | **44% faster** |
+| --help      | 360.25       | 320.46   | 431.22   | **70% faster** | **31% faster** |
+| eval --help | 328.89       | 315.63   | 343.04   | **66% faster** | **2% faster**  |
+
+### Key Improvements:
+- Eliminating barrel file wildcard exports provides significant additional improvements
+- Most commands now execute in ~330-360ms range
+- **We've achieved our target of < 500ms for all simple commands**
+- Total improvement from baseline: **68-70% faster**
+
 ## Phase 3: Module Optimization (1 week)
 
 ### 3.1 Lighter Dependencies

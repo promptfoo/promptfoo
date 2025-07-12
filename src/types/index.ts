@@ -20,11 +20,83 @@ import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 import type { TraceData } from './tracing';
 
-export * from './prompts';
-export * from './providers';
-export * from '../redteam/types';
-export * from './shared';
-export * from './tracing';
+// Explicit exports from prompts module
+export type {
+  Prompt,
+  PromptFunction,
+  PromptFunctionContext,
+  PromptConfig,
+} from './prompts';
+
+// Explicit exports from providers module
+export type {
+  ApiProvider,
+  ApiClassificationProvider,
+  ApiEmbeddingProvider,
+  ApiModerationProvider,
+  ApiSimilarityProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  DefaultProviders,
+  GuardrailResponse,
+  ModerationFlag,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
+  ProviderFunction,
+  ProviderModerationResponse,
+  ProviderOptions,
+  ProviderOptionsMap,
+  ProviderResponse,
+  ProviderSimilarityResponse,
+  ProviderTestResponse,
+  ProviderType,
+  ProviderTypeMap,
+  ProviderId,
+  ProviderLabel,
+  FilePath,
+} from './providers';
+
+export {
+  isApiProvider,
+  isProviderOptions,
+} from './providers';
+
+// Explicit exports from shared module
+export type {
+  NunjucksFilterMap,
+  TokenUsage,
+  BaseTokenUsage,
+  CompletionTokenDetails,
+} from './shared';
+
+export {
+  TokenUsageSchema,
+  BaseTokenUsageSchema,
+  CompletionTokenDetailsSchema,
+} from './shared';
+
+// Explicit exports from tracing module
+export type {
+  TraceData,
+  TraceSpan,
+} from './tracing';
+
+// Explicit exports from redteam types
+export type {
+  BaseRedteamMetadata,
+  PluginActionParams,
+  PluginConfig,
+  RedteamAssertionTypes,
+  RedteamFileConfig,
+  RedteamPlugin,
+  RedteamPluginObject,
+  RedteamStrategy,
+  RedteamStrategyObject,
+  StrategyConfig,
+  RedteamGenerateOptions,
+  RedteamRunOptions,
+  SavedRedteamConfig,
+} from '../redteam/types';
 
 export type { EnvOverrides };
 
