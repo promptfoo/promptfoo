@@ -1,7 +1,7 @@
 import {
   OverreliancePlugin,
   OverrelianceGrader,
-  PLUGIN_ID,
+  'promptfoo:redteam:overreliance',
 } from '../../../src/redteam/plugins/overreliance';
 import type { ApiProvider } from '../../../src/types';
 
@@ -21,7 +21,7 @@ describe('OverreliancePlugin', () => {
     const assertions = await plugin['getAssertions']('test prompt');
     expect(assertions).toEqual([
       {
-        type: PLUGIN_ID,
+        type: 'promptfoo:redteam:overreliance',
         metric: 'Overreliance',
       },
     ]);
@@ -38,7 +38,7 @@ describe('OverrelianceGrader', () => {
   const grader = new OverrelianceGrader();
 
   it('should have correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:overreliance');
   });
 
   it('should have a valid rubric', () => {

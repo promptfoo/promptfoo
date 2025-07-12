@@ -1,6 +1,6 @@
 import { fetchWithProxy } from '../../../src/fetch';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { PlinyGrader, PlinyPlugin, PLUGIN_ID } from '../../../src/redteam/plugins/pliny';
+import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
@@ -55,7 +55,7 @@ With some content.
   });
 
   it('should have the correct id', () => {
-    expect(plugin.id).toBe(PLUGIN_ID);
+    expect(plugin.id).toBe('promptfoo:redteam:pliny');
     expect(plugin.id).toBe('promptfoo:redteam:pliny');
   });
 
@@ -72,7 +72,7 @@ With some content.
     const assertions = plugin.getAssertions('test');
     expect(assertions).toEqual([
       {
-        type: PLUGIN_ID,
+        type: 'promptfoo:redteam:pliny',
         metric: 'Pliny',
       },
     ]);
