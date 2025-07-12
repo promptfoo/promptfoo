@@ -1,7 +1,5 @@
 import { Command } from 'commander';
-import * as os from 'os';
 import { exportCommand } from '../../src/commands/export';
-import { VERSION } from '../../src/constants';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { writeOutput } from '../../src/util';
@@ -12,6 +10,15 @@ jest.mock('../../src/telemetry', () => ({
 
 jest.mock('../../src/util', () => ({
   writeOutput: jest.fn(),
+  createOutputMetadata: jest.fn().mockReturnValue({
+    promptfooVersion: '1.0.0',
+    nodeVersion: 'v18.0.0',
+    platform: 'linux',
+    arch: 'x64',
+    exportedAt: '2025-07-01T00:00:00.000Z',
+    evaluationCreatedAt: '2025-07-01T00:00:00.000Z',
+    author: 'test-author',
+  }),
 }));
 
 jest.mock('../../src/logger', () => ({
@@ -80,10 +87,10 @@ describe('exportCommand', () => {
       config: { test: 'config' },
       shareableUrl: null,
       metadata: {
-        promptfooVersion: VERSION,
-        nodeVersion: process.version,
-        platform: os.platform(),
-        arch: os.arch(),
+        promptfooVersion: '1.0.0',
+        nodeVersion: 'v18.0.0',
+        platform: 'linux',
+        arch: 'x64',
         exportedAt: '2025-07-01T00:00:00.000Z',
         evaluationCreatedAt: '2025-07-01T00:00:00.000Z',
         author: 'test-author',

@@ -1,10 +1,8 @@
 import type { Command } from 'commander';
-import * as os from 'os';
-import { VERSION } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { writeOutput } from '../util';
+import { writeOutput, createOutputMetadata } from '../util';
 
 export function exportCommand(program: Command) {
   program
@@ -24,32 +22,25 @@ export function exportCommand(program: Command) {
           logger.error(`No eval found with ID ${evalId}`);
           process.exit(1);
         }
-        const summary = await result.toEvaluateSummary();
-        const metadata = {
-          promptfooVersion: VERSION,
-          nodeVersion: process.version,
-          platform: os.platform(),
-          arch: os.arch(),
-          exportedAt: new Date().toISOString(),
-          evaluationCreatedAt: new Date(result.createdAt).toISOString(),
-          author: result.author,
-        };
-        const jsonData = JSON.stringify(
-          {
-            evalId: result.id,
-            results: summary,
-            config: result.config,
-            shareableUrl: null,
-            metadata,
-          },
-          null,
-          2,
-        );
+
         if (cmdObj.output) {
           await writeOutput(cmdObj.output, result, null);
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
+          const summary = await result.toEvaluateSummary();
+          const metadata = createOutputMetadata(result);
+          const jsonData = JSON.stringify(
+            {
+              evalId: result.id,
+              results: summary,
+              config: result.config,
+              shareableUrl: null,
+              metadata,
+            },
+            null,
+            2,
+          );
           logger.info(jsonData);
         }
 
