@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, TextField } from '@mui/material';
+import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
+import TextField from '@mui/material/TextField';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
+import Typography from '@mui/material/Typography';
 import type { ProviderOptions } from '../../types';
 
 interface CustomTargetConfigurationProps {
