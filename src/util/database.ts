@@ -1,5 +1,6 @@
 import { desc, eq, and, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
+import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
   datasetsTable,
@@ -28,8 +29,6 @@ import {
 } from '../types';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-
-const DEFAULT_QUERY_LIMIT = 100;
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,

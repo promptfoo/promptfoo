@@ -6,7 +6,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
-class DrizzleLogWriter implements LogWriter {
+export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
     if (getEnvBool('PROMPTFOO_ENABLE_DATABASE_LOGS', false)) {
       logger.debug(`Drizzle: ${message}`);
@@ -14,8 +14,8 @@ class DrizzleLogWriter implements LogWriter {
   }
 }
 
-let dbInstance: ReturnType<typeof drizzle> | null = null;
-let sqliteInstance: Database.Database | null = null;
+export let dbInstance: ReturnType<typeof drizzle> | null = null;
+export let sqliteInstance: Database.Database | null = null;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
@@ -104,5 +104,3 @@ export function closeDb() {
 export function isDbOpen(): boolean {
   return sqliteInstance !== null && dbInstance !== null;
 }
-
-export { DrizzleLogWriter, dbInstance, sqliteInstance };

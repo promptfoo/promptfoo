@@ -50,7 +50,7 @@ import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
-interface PluginFactory {
+export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
   action: (params: PluginActionParams) => Promise<TestCase[]>;
@@ -340,5 +340,3 @@ export const Plugins: PluginFactory[] = [
   ...biasPlugins,
   ...remotePlugins,
 ];
-
-export { PluginFactory };

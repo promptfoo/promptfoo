@@ -8,7 +8,7 @@ import logger from '../../logger';
 import type { Assertion, TestCase } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:pliny';
+const PLUGIN_ID = 'promptfoo:redteam:pliny';
 
 const URLS = [
   'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/GOOGLE.mkd',

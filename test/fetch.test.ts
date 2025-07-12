@@ -81,6 +81,9 @@ jest.mock('../src/envars', () => {
       return defaultValue;
     }),
     getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
+        return process.env.PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
+      }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return process.env.PROMPTFOO_INSECURE_SSL === 'true' || false;
       }
@@ -89,9 +92,6 @@ jest.mock('../src/envars', () => {
       }
       return defaultValue;
     }),
-    getEnvInt: jest
-      .fn()
-      .mockImplementation((key: string, defaultValue: number = 0) => defaultValue),
   };
 });
 

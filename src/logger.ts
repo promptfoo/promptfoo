@@ -20,9 +20,9 @@ export const LOG_LEVELS = {
 type LogLevel = keyof typeof LOG_LEVELS;
 
 // Lazy source map support - only loaded when debug is enabled
-let sourceMapSupportInitialized = false;
+export let sourceMapSupportInitialized = false;
 
-async function initializeSourceMapSupport(): Promise<void> {
+export async function initializeSourceMapSupport(): Promise<void> {
   if (!sourceMapSupportInitialized) {
     try {
       const sourceMapSupport = await import('source-map-support');
@@ -38,7 +38,7 @@ async function initializeSourceMapSupport(): Promise<void> {
  * Gets the caller location (filename and line number)
  * @returns String with file location information
  */
-function getCallerLocation(): string {
+export function getCallerLocation(): string {
   try {
     const error = new Error();
     const stack = error.stack?.split('\n') || [];
@@ -208,5 +208,3 @@ if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
 }
 
 export default logger;
-
-export { sourceMapSupportInitialized, initializeSourceMapSupport, getCallerLocation };

@@ -12,7 +12,7 @@ export interface ScanOptions {
   verbose: boolean;
 }
 
-interface ScanIssue {
+export interface ScanIssue {
   severity: 'error' | 'warning' | 'info' | 'debug';
   message: string;
   location?: string | null;

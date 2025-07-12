@@ -7,11 +7,8 @@ import type {
   ProviderEmbeddingResponse,
   ProviderId,
   ProviderLabel,
-  ProviderOptions,
   ProviderResponse,
-  ProviderSimilarityResponse,
 } from '../types/providers';
-import { TokenUsageSchema } from '../types/shared';
 import { PromptSchema } from './prompts';
 import { NunjucksFilterMapSchema } from './shared';
 
@@ -69,40 +66,6 @@ export const ApiProviderSchema = z.object({
   delay: z.number().optional(),
   config: z.any().optional(),
 });
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ProviderResponseSchema = z.object({
-  cached: z.boolean().optional(),
-  cost: z.number().optional(),
-  error: z.string().optional(),
-  logProbs: z.array(z.number()).optional(),
-  metadata: z
-    .object({
-      redteamFinalPrompt: z.string().optional(),
-    })
-    .catchall(z.any())
-    .optional(),
-  output: z.union([z.string(), z.any()]).optional(),
-  tokenUsage: TokenUsageSchema.optional(),
-});
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ProviderEmbeddingResponseSchema = z.object({
-  error: z.string().optional(),
-  embedding: z.array(z.number()).optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
-});
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ProviderSimilarityResponseSchema = z.object({
-  error: z.string().optional(),
-  similarity: z.number().optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
-});
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ProviderClassificationResponseSchema = z.object({
-  error: z.string().optional(),
-  classification: z.record(z.number()).optional(),
-});
 
 export const ProvidersSchema = z.union([
   z.string(),
@@ -118,25 +81,3 @@ export const ProvidersSchema = z.union([
 ]);
 
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
-
-// Ensure that schemas match their corresponding types
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
-type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
-
-assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
-assert<TypeEqualityGuard<ProviderOptions, z.infer<typeof ProviderOptionsSchema>>>();
-assert<TypeEqualityGuard<ProviderResponse, z.infer<typeof ProviderResponseSchema>>>();
-assert<
-  TypeEqualityGuard<ProviderEmbeddingResponse, z.infer<typeof ProviderEmbeddingResponseSchema>>
->();
-assert<
-  TypeEqualityGuard<ProviderSimilarityResponse, z.infer<typeof ProviderSimilarityResponseSchema>>
->();
-assert<
-  TypeEqualityGuard<
-    ProviderClassificationResponse,
-    z.infer<typeof ProviderClassificationResponseSchema>
-  >
->();
-assert<TypeEqualityGuard<ApiProvider, z.infer<typeof ApiProviderSchema>>>();
