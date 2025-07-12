@@ -1142,12 +1142,23 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
 export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
 
+export interface OutputMetadata {
+  promptfooVersion: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  exportedAt: string;
+  evaluationCreatedAt?: string;
+  author?: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: OutputMetadata;
 }
 
 // Live eval job state
