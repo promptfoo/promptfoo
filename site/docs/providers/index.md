@@ -16,14 +16,12 @@ providers:
   - openai:gpt-4.1
   - openai:o4-mini
   - google:gemini-2.5-pro
-  - vertex:gemini-2.5-pro-exp-03-25
-  - mistral:magistral-medium-latest
-  - mistral:magistral-small-latest
+  - vertex:gemini-2.5-pro
 ```
 
 ## Available Providers
 
-| Api Providers                                       | Description                                               | Syntax & Example                                                |
+| API Providers                                       | Description                                               | Syntax & Example                                                |
 | --------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
 | [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models         | `openai:gpt-4.1` or `openai:o4-mini`                            |
 | [Anthropic](./anthropic.md)                         | Claude models                                             | `anthropic:messages:claude-sonnet-4-20250514`                   |
