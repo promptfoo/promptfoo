@@ -42,9 +42,11 @@ describe('upgrade command', () => {
   let mockCommand: any;
   let mockAction: jest.Mock;
   let originalExecPath: string;
+  let originalArgv: string[];
 
   beforeEach(() => {
     originalExecPath = process.execPath;
+    originalArgv = process.argv;
     mockAction = jest.fn();
     mockCommand = {
       description: jest.fn().mockReturnThis(),
@@ -61,7 +63,6 @@ describe('upgrade command', () => {
     process.exitCode = undefined;
     jest.clearAllMocks();
 
-    // Reset all mocks to their initial state
     mockedExecAsync.mockReset();
     mockedGetLatestVersion.mockReset();
     mockedIsRunningUnderNpx.mockReset();
@@ -73,12 +74,8 @@ describe('upgrade command', () => {
     consoleErrorSpy.mockRestore();
     processExitSpy.mockRestore();
     process.exitCode = undefined;
-    // Restore original execPath
-    Object.defineProperty(process, 'execPath', {
-      value: originalExecPath,
-      writable: true,
-      configurable: true,
-    });
+    process.execPath = originalExecPath;
+    process.argv = originalArgv;
   });
 
   it('should register the upgrade command', () => {
@@ -245,7 +242,9 @@ describe('upgrade command', () => {
       const action = mockAction.mock.calls[0][0];
       await action({ version: '1.5.0' });
 
-      expect(mockedExecSync).toHaveBeenCalledWith('npm install -g promptfoo@1.5.0', { stdio: 'inherit' });
+      expect(mockedExecSync).toHaveBeenCalledWith('npm install -g promptfoo@1.5.0', {
+        stdio: 'inherit',
+      });
     });
 
     it('should handle dry-run mode', async () => {
@@ -341,13 +340,9 @@ describe('upgrade command', () => {
 
     it('should handle binary installation error', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(false);
-      mockedExecAsync.mockRejectedValue(new Error('Not found'));
+      mockedExecAsync.mockRejectedValueOnce(new Error('Not found'));
+      process.argv = ['/usr/local/bin/node', '/usr/local/bin/promptfoo'];
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-
-      Object.defineProperty(process, 'argv', {
-        value: ['/usr/local/bin/node', '/usr/local/bin/promptfoo'],
-        writable: true,
-      });
 
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
@@ -361,14 +356,10 @@ describe('upgrade command', () => {
 
     it('should handle homebrew specific version error', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(false);
-      mockedExecAsync.mockRejectedValue(new Error('Not found'));
-
-      // Mock homebrew detection
-      const originalExecPath = process.execPath;
-      Object.defineProperty(process, 'execPath', {
-        value: '/opt/homebrew/Cellar/node/20.0.0/bin/node',
-        writable: true,
-        configurable: true,
+      process.execPath = '/opt/homebrew/Cellar/node/20.0.0/bin/node';
+      mockedExecAsync.mockResolvedValueOnce({
+        stdout: '1.5.0',
+        stderr: '',
       });
 
       upgradeCommand(program);
@@ -379,63 +370,33 @@ describe('upgrade command', () => {
         expect.stringContaining('Homebrew does not support installing specific versions'),
       );
       expect(process.exitCode).toBe(1);
-
-      // Restore original
-      Object.defineProperty(process, 'execPath', {
-        value: originalExecPath,
-        writable: true,
-        configurable: true,
-      });
     });
 
     it('should allow homebrew upgrade with version latest', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(false);
+      process.execPath = '/opt/homebrew/Cellar/node/20.0.0/bin/node';
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
       mockedExecSync.mockImplementation(() => Buffer.from(''));
-
-      // Mock homebrew detection
-      const originalExecPath = process.execPath;
-      Object.defineProperty(process, 'execPath', {
-        value: '/opt/homebrew/Cellar/node/20.0.0/bin/node',
-        writable: true,
-        configurable: true,
+      mockedExecAsync.mockResolvedValueOnce({
+        stdout: '2.0.0',
+        stderr: '',
       });
-
-      // Setup mock to fail other detections but succeed for homebrew path check
-      mockedExecAsync
-        .mockRejectedValueOnce(new Error('Not found')) // npm check
-        .mockRejectedValueOnce(new Error('Not found')) // yarn check
-        .mockRejectedValueOnce(new Error('Not found')) // pnpm check
-        .mockResolvedValueOnce({
-          stdout: '2.0.0',
-          stderr: '',
-        });
 
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
-
       await action({ version: 'latest' });
 
       expect(mockedExecSync).toHaveBeenCalledWith('brew upgrade promptfoo', { stdio: 'inherit' });
-
-      // Restore original
-      Object.defineProperty(process, 'execPath', {
-        value: originalExecPath,
-        writable: true,
-        configurable: true,
-      });
     });
 
     it('should handle unknown installation method', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(false);
-      mockedExecAsync.mockRejectedValue(new Error('Not found'));
+      mockedExecAsync
+        .mockRejectedValueOnce(new Error('npm not found'))
+        .mockRejectedValueOnce(new Error('yarn not found'))
+        .mockRejectedValueOnce(new Error('pnpm not found'));
+      process.argv = ['/usr/local/bin/node', '/usr/local/bin/node_modules/promptfoo/bin/cli.js'];
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
-
-      // Mock unknown installation
-      Object.defineProperty(process, 'argv', {
-        value: ['/unknown/path/node', '/unknown/path/promptfoo'],
-        writable: true,
-      });
 
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
@@ -457,7 +418,6 @@ describe('upgrade command', () => {
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
 
-      // Set up mocks in the correct order
       mockedExecAsync
         .mockResolvedValueOnce({
           stdout: JSON.stringify({ dependencies: { promptfoo: { version: '1.0.0' } } }),
