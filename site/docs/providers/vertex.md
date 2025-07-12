@@ -34,7 +34,7 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
 - `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
 
-:::important
+:::info
 Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
 :::
 
@@ -196,7 +196,7 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 **Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
 
-### 4. Environment Variables
+#### 4. Environment Variables
 
 Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 

@@ -6,7 +6,7 @@ sidebar_label: Google AI / Gemini
 
 The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
 
-If you are using Google Vertex instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
+If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
 ## Authentication
 
@@ -238,12 +238,12 @@ export GOOGLE_API_KEY="your_api_key_here"
 
 If you need more advanced features or enterprise capabilities, you can migrate to Vertex AI:
 
-| Google AI Studio          | Vertex AI                  | Notes                                 |
-| ------------------------- | -------------------------- | ------------------------------------- |
-| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`  | Same model, different endpoint        |
-| `GOOGLE_API_KEY`          | `VERTEX_PROJECT_ID` + auth | Vertex uses GCloud authentication     |
-| Simple API key            | Multiple auth methods      | Vertex supports ADC, service accounts |
-| Global endpoint           | Regional endpoints         | Vertex requires region selection      |
+| Google AI Studio          | Vertex AI                  | Notes                                   |
+| ------------------------- | -------------------------- | --------------------------------------- |
+| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`  | Same model, different endpoint          |
+| `GOOGLE_API_KEY`          | `VERTEX_PROJECT_ID` + auth | Vertex uses Google Cloud authentication |
+| Simple API key            | Multiple auth methods      | Vertex supports ADC, service accounts   |
+| Global endpoint           | Regional endpoints         | Vertex requires region selection        |
 
 Example migration:
 
