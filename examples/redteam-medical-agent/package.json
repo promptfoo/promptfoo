@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "body-parser": "^1.20.3",
     "openai": "^5.9.0",
     "dotenv": "^17.2.0",
     "cors": "^2.8.5"
