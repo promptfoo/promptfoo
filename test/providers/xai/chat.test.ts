@@ -38,14 +38,27 @@ describe('xAI Chat Provider', () => {
       };
 
       // Add parameters if they exist in config
-      if (config.temperature !== undefined) {body.temperature = config.temperature;}
-      if (config.presence_penalty !== undefined) {body.presence_penalty = config.presence_penalty;}
-      if (config.frequency_penalty !== undefined) {body.frequency_penalty = config.frequency_penalty;}
-      if (config.stop !== undefined) {body.stop = config.stop;}
-      if (config.reasoning_effort !== undefined) {body.reasoning_effort = config.reasoning_effort;}
-      if (config.max_tokens !== undefined) {body.max_tokens = config.max_tokens;}
-      if (config.max_completion_tokens !== undefined)
-        {body.max_completion_tokens = config.max_completion_tokens;}
+      if (config.temperature !== undefined) {
+        body.temperature = config.temperature;
+      }
+      if (config.presence_penalty !== undefined) {
+        body.presence_penalty = config.presence_penalty;
+      }
+      if (config.frequency_penalty !== undefined) {
+        body.frequency_penalty = config.frequency_penalty;
+      }
+      if (config.stop !== undefined) {
+        body.stop = config.stop;
+      }
+      if (config.reasoning_effort !== undefined) {
+        body.reasoning_effort = config.reasoning_effort;
+      }
+      if (config.max_tokens !== undefined) {
+        body.max_tokens = config.max_tokens;
+      }
+      if (config.max_completion_tokens !== undefined) {
+        body.max_completion_tokens = config.max_completion_tokens;
+      }
 
       return { body, config };
     });
