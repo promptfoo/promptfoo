@@ -299,10 +299,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
         '../../src/providers/databricks'
       );
 
-      const provider = new UnmockedProvider(
-        'my-custom-endpoint',
-        defaultOptions,
-      );
+      const provider = new UnmockedProvider('my-custom-endpoint', defaultOptions);
 
       // Since we're extending OpenAI provider, it should use the OpenAI URL pattern
       const url = (provider as any).getApiUrl();

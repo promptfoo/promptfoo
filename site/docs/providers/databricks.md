@@ -42,6 +42,7 @@ providers:
 ```
 
 Available pay-per-token models include:
+
 - `databricks-meta-llama-3-3-70b-instruct` - Meta's latest Llama model
 - `databricks-claude-3-7-sonnet` - Anthropic Claude with reasoning capabilities
 - `databricks-gte-large-en` - Text embeddings model
@@ -91,18 +92,18 @@ providers:
     config:
       isPayPerToken: true
       workspaceUrl: https://your-workspace.cloud.databricks.com
-      
+
       # Standard OpenAI parameters
       temperature: 0.7
       max_tokens: 2000
       top_p: 0.9
-      
+
       # Usage tracking for cost attribution
       usageContext:
         project: 'customer-support'
         team: 'engineering'
         environment: 'production'
-      
+
       # AI Gateway features (if enabled on endpoint)
       aiGatewayConfig:
         enableSafety: true
@@ -134,7 +135,7 @@ providers:
 tests:
   - vars:
       question: "What's in this image?"
-      image_url: "https://example.com/image.jpg"
+      image_url: 'https://example.com/image.jpg'
 ```
 
 Create a `vision-prompt.json` file with the proper format:
@@ -199,6 +200,7 @@ providers:
 ```
 
 Usage data is available through Databricks system tables:
+
 - `system.serving.endpoint_usage` - Token usage and request metrics
 - `system.serving.served_entities` - Endpoint metadata
 
@@ -231,12 +233,12 @@ providers:
     config:
       isPayPerToken: true
       temperature: 0.7
-      
+
   # External model via Databricks
   - id: databricks:my-gpt4-endpoint
     config:
       temperature: 0.7
-      
+
   # Custom deployed model
   - id: databricks:my-finetuned-llama
     config:
@@ -253,7 +255,7 @@ tests:
 Common issues and solutions:
 
 1. **Authentication errors**: Verify your `DATABRICKS_TOKEN` has the necessary permissions
-2. **Endpoint not found**: 
+2. **Endpoint not found**:
    - For pay-per-token: Ensure you're using the exact endpoint name (e.g., `databricks-meta-llama-3-3-70b-instruct`)
    - For custom endpoints: Verify the endpoint exists and is running
 3. **Rate limiting**: Pay-per-token endpoints have usage limits; consider provisioned throughput for high-volume use
