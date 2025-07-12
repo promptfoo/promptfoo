@@ -18,7 +18,7 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-2.5-pro-preview-06-05` - Previous Gemini 2.5 Pro preview with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
 - `google:gemini-2.5-flash-preview-05-20` - Previous Flash preview with enhanced reasoning and thinking capabilities
-- `google:gemini-2.0-pro-exp-02-05` - Multimodal model with next-gen features, 1M token context window
+- `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
