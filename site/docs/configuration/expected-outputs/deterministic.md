@@ -37,7 +37,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
-| rouge-n                                                         | Rouge-N score is above a given threshold                           |
+| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -521,6 +521,8 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 
 The `levenshtein` assertion checks if the LLM output is within a given edit distance from an expected value.
 
+Levenshtein distance measures the number of single-character edits required to change one string into another. [Learn more on Wikipedia](https://en.wikipedia.org/wiki/Levenshtein_distance).
+
 Example:
 
 ```yaml
@@ -546,6 +548,8 @@ tests:
 ### Perplexity
 
 Perplexity is a measurement used in natural language processing to quantify how well a language model predicts a sample of text. It's essentially a measure of the model's uncertainty.
+
+See the [Wikipedia article on perplexity](https://en.wikipedia.org/wiki/Perplexity) for a more detailed explanation of the concept.
 
 **High perplexity** suggests it is less certain about its predictions, often because the text is very diverse or the model is not well-tuned to the task at hand.
 
@@ -783,6 +787,8 @@ The `rouge-n` assertion checks if the Rouge-N score between the LLM output and e
 
 Rouge-N is a recall-oriented metric that measures the overlap of n-grams between the LLM output and the expected text. The score ranges from 0 (no overlap) to 1 (perfect match).
 
+ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**, a family of metrics commonly used for summarization quality. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
+
 Example:
 
 ```yaml
@@ -810,7 +816,7 @@ tests:
 
 ### BLEU
 
-BLEU (Bilingual Evaluation Understudy) is a precision-oriented metric that measures the quality of text by comparing it to one or more reference texts. The score ranges from 0 (no match) to 1 (perfect match). It considers exact matches of words and phrases (n-grams) between the output and reference text.
+BLEU (Bilingual Evaluation Understudy) is a precision-oriented metric that measures the quality of text by comparing it to one or more reference texts. The score ranges from 0 (no match) to 1 (perfect match). It considers exact matches of words and phrases (n-grams) between the output and reference text. [See Wikipedia](https://en.wikipedia.org/wiki/BLEU) for more background on the metric.
 
 While Rouge-N focuses on recall (how much of the reference text is captured), BLEU focuses on precision (how accurate the generated text is).
 
@@ -842,6 +848,8 @@ tests:
 ### GLEU
 
 The BLEU score has some undesirable properties when used for single sentences, as it was designed to be a corpus measure. To address these concerns, the 'GLEU (Google-BLEU) score' was introduced as a variant that better correlates with human judgments on sentence-level evaluation.
+
+GLEU was introduced to address BLEU's limitations for sentence-level evaluation, particularly in reinforcement learning experiments for neural machine translation.
 
 For the GLEU score, we record all sub-sequences of 1, 2, 3 or 4 tokens in output and target sequence (n-grams). We then compute:
 
@@ -887,6 +895,8 @@ assert:
 ### METEOR
 
 METEOR (Metric for Evaluation of Translation with Explicit ORdering) is an automatic metric for evaluating machine-generated text against reference text. It's particularly useful for assessing translation quality and text generation accuracy.
+
+For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
 > **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
 
@@ -990,6 +1000,8 @@ Note: Actual scores may vary based on the specific METEOR implementation and par
 ### F-Score
 
 F-score (also F1 score) is a measure of accuracy that considers both precision and recall. It is the harmonic mean of precision and recall, providing a single score that balances both metrics. The score ranges from 0 (worst) to 1 (best).
+
+You can read more about the F-score on [Wikipedia](https://en.wikipedia.org/wiki/F1_score).
 
 F-score uses the [named metrics](/docs/configuration/expected-outputs/#defining-named-metrics) and [derived metrics](/docs/configuration/expected-outputs/#creating-derived-metrics) features.
 
