@@ -371,7 +371,13 @@ export class VertexChatProvider extends VertexGenericProvider {
             const finishReason = 'Content was blocked due to safety settings.';
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.
-              return { output: finishReason };
+              // Calculate token usage even for safety-blocked responses
+              const tokenUsage = {
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                prompt: datum.usageMetadata?.promptTokenCount || 0,
+                completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              };
+              return { output: finishReason, tokenUsage };
             }
             return { error: finishReason };
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
@@ -383,7 +389,13 @@ export class VertexChatProvider extends VertexGenericProvider {
             const blockReason = `Content was blocked due to safety settings: ${datum.promptFeedback.blockReason}`;
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.
-              return { output: blockReason };
+              // Calculate token usage even for safety-blocked responses
+              const tokenUsage = {
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                prompt: datum.usageMetadata?.promptTokenCount || 0,
+                completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              };
+              return { output: blockReason, tokenUsage };
             }
             return { error: blockReason };
           } else if (candidate.content?.parts) {

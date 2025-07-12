@@ -43,6 +43,7 @@ import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';
+import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -177,33 +178,8 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
   };
 }
 
-function accumulateTokens(target: Partial<TokenUsage>, update?: Partial<TokenUsage>) {
-  if (!update || !target) {
-    return;
-  }
-
-  target.total = (target.total || 0) + (update.total || 0);
-  target.prompt = (target.prompt || 0) + (update.prompt || 0);
-  target.completion = (target.completion || 0) + (update.completion || 0);
-  target.cached = (target.cached || 0) + (update.cached || 0);
-
-  if (update.completionDetails) {
-    if (!target.completionDetails) {
-      target.completionDetails = {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      };
-    }
-    target.completionDetails.reasoning =
-      (target.completionDetails.reasoning || 0) + (update.completionDetails.reasoning || 0);
-    target.completionDetails.acceptedPrediction =
-      (target.completionDetails.acceptedPrediction || 0) +
-      (update.completionDetails.acceptedPrediction || 0);
-    target.completionDetails.rejectedPrediction =
-      (target.completionDetails.rejectedPrediction || 0) +
-      (update.completionDetails.rejectedPrediction || 0);
-  }
+function accumulateTokens(target: TokenUsage, update?: Partial<TokenUsage>) {
+  accumulateTokenUsage(target, update);
 }
 
 export async function matchesSimilarity(

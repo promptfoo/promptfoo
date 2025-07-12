@@ -38,6 +38,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
 import { TokenUsageTracker } from '../util/tokenUsage';
+import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
@@ -340,34 +341,7 @@ export async function doEval(
       if (prompt.metrics?.testErrorCount) {
         errors += prompt.metrics.testErrorCount;
       }
-      tokenUsage.total += prompt.metrics?.tokenUsage?.total || 0;
-      tokenUsage.prompt += prompt.metrics?.tokenUsage?.prompt || 0;
-      tokenUsage.completion += prompt.metrics?.tokenUsage?.completion || 0;
-      tokenUsage.cached += prompt.metrics?.tokenUsage?.cached || 0;
-      tokenUsage.numRequests += prompt.metrics?.tokenUsage?.numRequests || 0;
-      if (prompt.metrics?.tokenUsage?.completionDetails) {
-        tokenUsage.completionDetails.reasoning +=
-          prompt.metrics.tokenUsage.completionDetails.reasoning || 0;
-        tokenUsage.completionDetails.acceptedPrediction +=
-          prompt.metrics.tokenUsage.completionDetails.acceptedPrediction || 0;
-        tokenUsage.completionDetails.rejectedPrediction +=
-          prompt.metrics.tokenUsage.completionDetails.rejectedPrediction || 0;
-      }
-      if (prompt.metrics?.tokenUsage?.assertions) {
-        tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
-        tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
-        tokenUsage.assertions.completion += prompt.metrics.tokenUsage.assertions.completion || 0;
-        tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
-
-        if (prompt.metrics.tokenUsage.assertions.completionDetails) {
-          tokenUsage.assertions.completionDetails.reasoning +=
-            prompt.metrics.tokenUsage.assertions.completionDetails.reasoning || 0;
-          tokenUsage.assertions.completionDetails.acceptedPrediction +=
-            prompt.metrics.tokenUsage.assertions.completionDetails.acceptedPrediction || 0;
-          tokenUsage.assertions.completionDetails.rejectedPrediction +=
-            prompt.metrics.tokenUsage.assertions.completionDetails.rejectedPrediction || 0;
-        }
-      }
+      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
     }
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;

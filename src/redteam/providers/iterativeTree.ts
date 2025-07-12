@@ -34,6 +34,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import {
@@ -484,13 +485,7 @@ export async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
 
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
   let bestResponse = '';
 
@@ -526,11 +521,7 @@ export async function runRedteamConversation({
         ]);
 
         if (redteamTokenUsage) {
-          totalTokenUsage.total += redteamTokenUsage.total || 0;
-          totalTokenUsage.prompt += redteamTokenUsage.prompt || 0;
-          totalTokenUsage.completion += redteamTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += redteamTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += redteamTokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, redteamTokenUsage);
         }
 
         attempts++;
@@ -554,11 +545,7 @@ export async function runRedteamConversation({
           targetPrompt,
         );
         if (isOnTopicTokenUsage) {
-          totalTokenUsage.total += isOnTopicTokenUsage.total || 0;
-          totalTokenUsage.prompt += isOnTopicTokenUsage.prompt || 0;
-          totalTokenUsage.completion += isOnTopicTokenUsage.completion || 0;
-          totalTokenUsage.cached += isOnTopicTokenUsage.cached || 0;
-          totalTokenUsage.numRequests += isOnTopicTokenUsage.numRequests ?? 1;
+          accumulateTokenUsage(totalTokenUsage, isOnTopicTokenUsage);
         }
 
         const targetResponse = await getTargetResponse(
@@ -572,11 +559,7 @@ export async function runRedteamConversation({
         }
         invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
         if (targetResponse.tokenUsage) {
-          totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-          totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, targetResponse.tokenUsage);
         }
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
@@ -633,12 +616,9 @@ export async function runRedteamConversation({
             graderPassed = grade.pass;
 
             if (grade.tokensUsed) {
-              totalTokenUsage.total += grade.tokensUsed.total || 0;
-              totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
-              totalTokenUsage.completion += grade.tokensUsed.completion || 0;
-              totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+              accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
             } else {
-              totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+              totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
             }
           }
         }
@@ -794,11 +774,7 @@ export async function runRedteamConversation({
     options,
   );
   if (finalTargetResponse.tokenUsage) {
-    totalTokenUsage.total += finalTargetResponse.tokenUsage.total || 0;
-    totalTokenUsage.prompt += finalTargetResponse.tokenUsage.prompt || 0;
-    totalTokenUsage.completion += finalTargetResponse.tokenUsage.completion || 0;
-    totalTokenUsage.numRequests += finalTargetResponse.tokenUsage.numRequests ?? 1;
-    totalTokenUsage.cached += finalTargetResponse.tokenUsage.cached || 0;
+    accumulateTokenUsage(totalTokenUsage, finalTargetResponse.tokenUsage);
   }
 
   logger.debug(

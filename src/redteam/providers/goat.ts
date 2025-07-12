@@ -11,10 +11,12 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  TokenUsage,
 } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
@@ -114,13 +116,7 @@ export default class GoatProvider implements ApiProvider {
     invariant(targetProvider, 'Expected originalProvider to be set');
 
     const messages: Message[] = [];
-    const totalTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 0,
-      cached: 0,
-    };
+    const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
 
@@ -149,11 +145,7 @@ export default class GoatProvider implements ApiProvider {
           });
 
           if (unblockingResult.tokenUsage) {
-            totalTokenUsage.total += unblockingResult.tokenUsage.total || 0;
-            totalTokenUsage.prompt += unblockingResult.tokenUsage.prompt || 0;
-            totalTokenUsage.completion += unblockingResult.tokenUsage.completion || 0;
-            totalTokenUsage.numRequests += unblockingResult.tokenUsage.numRequests ?? 1;
-            totalTokenUsage.cached += unblockingResult.tokenUsage.cached || 0;
+            accumulateTokenUsage(totalTokenUsage, unblockingResult.tokenUsage);
           }
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -179,11 +171,7 @@ export default class GoatProvider implements ApiProvider {
             }
 
             if (unblockingResponse.tokenUsage) {
-              totalTokenUsage.total += unblockingResponse.tokenUsage.total || 0;
-              totalTokenUsage.prompt += unblockingResponse.tokenUsage.prompt || 0;
-              totalTokenUsage.completion += unblockingResponse.tokenUsage.completion || 0;
-              totalTokenUsage.numRequests += unblockingResponse.tokenUsage.numRequests ?? 1;
-              totalTokenUsage.cached += unblockingResponse.tokenUsage.cached || 0;
+              accumulateTokenUsage(totalTokenUsage, unblockingResponse.tokenUsage);
             } else {
               totalTokenUsage.numRequests += 1;
             }
@@ -282,11 +270,7 @@ export default class GoatProvider implements ApiProvider {
         });
 
         if (data.tokenUsage) {
-          totalTokenUsage.total += data.tokenUsage.total || 0;
-          totalTokenUsage.prompt += data.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += data.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += data.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += data.tokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, data.tokenUsage);
         }
         logger.debug(
           dedent`
@@ -343,11 +327,7 @@ export default class GoatProvider implements ApiProvider {
         previousTargetOutput = stringifiedOutput;
 
         if (targetResponse.tokenUsage) {
-          totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-          totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, targetResponse.tokenUsage);
         } else {
           totalTokenUsage.numRequests += 1;
         }
@@ -365,12 +345,9 @@ export default class GoatProvider implements ApiProvider {
           );
           graderPassed = grade.pass;
           if (grade.tokensUsed) {
-            totalTokenUsage.total += grade.tokensUsed.total || 0;
-            totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
-            totalTokenUsage.completion += grade.tokensUsed.completion || 0;
-            totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+            accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
           } else {
-            totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+            totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
           }
         }
 
