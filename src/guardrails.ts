@@ -4,7 +4,7 @@ import logger from './logger';
 
 const API_BASE_URL = `${getShareApiBaseUrl()}/v1`;
 
-export interface GuardResult {
+interface GuardResult {
   model: string;
   results: Array<{
     categories: Record<string, boolean>;
@@ -26,7 +26,7 @@ export interface AdaptiveRequest {
   policies?: string[];
 }
 
-export interface AdaptiveResult {
+interface AdaptiveResult {
   model: string;
   adaptedPrompt: string;
   modifications: Array<{
@@ -111,3 +111,5 @@ const guardrails = {
 };
 
 export default guardrails;
+
+export { GuardResult, AdaptiveResult };

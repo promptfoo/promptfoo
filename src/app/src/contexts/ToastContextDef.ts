@@ -2,7 +2,7 @@ import { createContext } from 'react';
 import type { PropsWithChildren } from 'react';
 import type { AlertColor } from '@mui/material/Alert';
 
-export interface ToastContextType {
+interface ToastContextType {
   showToast: (message: string, severity?: AlertColor) => void;
 }
 

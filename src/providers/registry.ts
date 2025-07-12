@@ -4,7 +4,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import RedteamCrescendoProvider from '../redteam/providers/crescendo';
+import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';

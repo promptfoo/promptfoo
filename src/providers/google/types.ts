@@ -66,8 +66,6 @@ export interface FunctionDeclaration {
   response?: Schema;
 }
 
-export type FunctionParameters = Record<string, unknown>;
-
 interface GoogleSearchRetrieval {
   dynamicRetrievalConfig: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';

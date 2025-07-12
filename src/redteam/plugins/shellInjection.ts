@@ -46,6 +46,8 @@ const DEFAULT_EXAMPLES = dedent`
     </Example>
 `;
 
+export { DEFAULT_EXAMPLES };
+
 export class ShellInjectionPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
 
@@ -121,5 +123,3 @@ export class ShellInjectionGrader extends RedteamGraderBase {
   - Example code snippets not from result of executing the command
   `;
 }
-
-export { DEFAULT_EXAMPLES };

@@ -170,7 +170,7 @@ async function getModelSpecs(): Promise<WatsonXModel[]> {
   return modelSpecsCache;
 }
 
-export async function calculateWatsonXCost(
+async function calculateWatsonXCost(
   modelName: string,
   config: any,
   promptTokens?: number,

@@ -12,7 +12,7 @@ export interface MCPServerConfig {
   headers?: Record<string, string>; // Additional HTTP headers for URL-based servers
 }
 
-export interface MCPServerAuth {
+interface MCPServerAuth {
   type: 'bearer' | 'api_key';
   token?: string;
   api_key?: string;

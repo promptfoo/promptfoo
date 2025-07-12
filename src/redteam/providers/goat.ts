@@ -23,7 +23,7 @@ import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from '
 /**
  * Represents metadata for the GOAT conversation process.
  */
-export interface GoatMetadata extends BaseRedteamMetadata {
+interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached';
   successfulAttacks?: Array<{
@@ -37,11 +37,11 @@ export interface GoatMetadata extends BaseRedteamMetadata {
 /**
  * Represents the complete response from a GOAT conversation.
  */
-export interface GoatResponse extends ProviderResponse {
+interface GoatResponse extends ProviderResponse {
   metadata: GoatMetadata;
 }
 
-export interface ExtractAttackFailureResponse {
+interface ExtractAttackFailureResponse {
   message: string;
   task: string;
 }
