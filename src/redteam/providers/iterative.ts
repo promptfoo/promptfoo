@@ -12,11 +12,17 @@ import {
   type NunjucksFilterMap,
   type Prompt,
   type RedteamFileConfig,
+  type TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -41,14 +47,6 @@ interface IterativeMetadata {
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[];
-}
-
-interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  numRequests: number;
-  cached: number;
 }
 
 export async function runRedteamConversation({
@@ -109,13 +107,7 @@ export async function runRedteamConversation({
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
 
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  const totalTokenUsage = createEmptyTokenUsage();
 
   const previousOutputs: {
     prompt: string;
@@ -276,12 +268,9 @@ export async function runRedteamConversation({
         );
         graderPassed = grade.pass;
         if (grade.tokensUsed) {
-          totalTokenUsage.total += grade.tokensUsed.total || 0;
-          totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
-          totalTokenUsage.completion += grade.tokensUsed.completion || 0;
-          totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
         } else {
-          totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+          totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
         }
       }
     }
@@ -395,49 +384,11 @@ export async function runRedteamConversation({
       guardrails: targetResponse.guardrails,
     });
 
-    if (redteamResp.tokenUsage) {
-      totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (redteamResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += redteamResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (isOnTopicResp.tokenUsage) {
-      totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (isOnTopicResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += isOnTopicResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (judgeResp.tokenUsage) {
-      totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (judgeResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += judgeResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (targetResponse.tokenUsage) {
-      totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-      totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (targetResponse.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
+    // Update all the token usage accumulation patterns
+    accumulateResponseTokenUsage(totalTokenUsage, redteamResp);
+    accumulateResponseTokenUsage(totalTokenUsage, isOnTopicResp);
+    accumulateResponseTokenUsage(totalTokenUsage, judgeResp);
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     if (currentScore >= 10 || graderPassed === false) {
       finalIteration = i + 1;

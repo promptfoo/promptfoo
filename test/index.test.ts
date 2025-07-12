@@ -107,7 +107,6 @@ describe('index.ts exports', () => {
     'TestGeneratorConfigSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
-    'TokenUsageSchema',
     'UnifiedConfigSchema',
     'VarsSchema',
   ];

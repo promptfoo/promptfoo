@@ -10,6 +10,7 @@ import type {
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
+import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type Message = {
@@ -114,13 +115,7 @@ export class SimulatedUser implements ApiProvider {
     const messages: Message[] = [];
     const maxTurns = this.maxTurns;
 
-    const totalTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 0,
-      cached: 0,
-    };
+    const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
 
@@ -150,18 +145,11 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
 
-      if (agentResponse.tokenUsage) {
-        totalTokenUsage.total += agentResponse.tokenUsage.total ?? 0;
-        totalTokenUsage.prompt += agentResponse.tokenUsage.prompt ?? 0;
-        totalTokenUsage.completion += agentResponse.tokenUsage.completion ?? 0;
-        totalTokenUsage.numRequests += agentResponse.tokenUsage.numRequests ?? 1;
-        totalTokenUsage.cached += agentResponse.tokenUsage.cached ?? 0;
-      } else {
-        totalTokenUsage.numRequests += 1;
-      }
+      // Track token usage
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
-    return this.serializeOutput(messages, totalTokenUsage, agentResponse as ProviderResponse);
+    return this.serializeOutput(messages, tokenUsage, agentResponse as ProviderResponse);
   }
 
   toString() {

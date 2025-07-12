@@ -52,6 +52,7 @@ describe('AssertionsResult', () => {
         prompt: 50,
         completion: 50,
         cached: 0,
+        numRequests: 0,
       });
       expect(assertionsResult['namedScores']).toEqual({
         accuracy: 0.8,
