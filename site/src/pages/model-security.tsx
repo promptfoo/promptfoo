@@ -24,7 +24,7 @@ function HeroSection() {
         />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer className={styles.heroLogos} noBackground noBorder />
         </div>
         <h2>Secure your AI model ecosystem</h2>
         <p>
