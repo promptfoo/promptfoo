@@ -1,8 +1,27 @@
 ---
 sidebar_position: 6
 title: Deterministic Metrics for LLM Output Validation
-description: Learn about logical tests that validate LLM outputs with exact matching, pattern recognition, and structural validation
-keywords: [metrics, assertions, testing, validation, contains, regex, json, levenshtein]
+description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
+keywords:
+  [
+    metrics,
+    assertions,
+    testing,
+    validation,
+    contains,
+    regex,
+    json,
+    levenshtein,
+    LLM testing,
+    output validation,
+    deterministic tests,
+    rouge,
+    bleu,
+    perplexity,
+    webhook,
+    sql validation,
+    xml validation,
+  ]
 ---
 
 # Deterministic metrics
@@ -37,7 +56,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
-| rouge-n                                                         | Rouge-N score is above a given threshold                           |
+| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -521,6 +540,14 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 
 The `levenshtein` assertion checks if the LLM output is within a given edit distance from an expected value.
 
+Levenshtein distance measures the number of single-character edits (insertions, deletions, or substitutions) required to change one string into another. This metric is useful for:
+
+- **Fuzzy matching**: When you want to allow minor typos or variations (e.g., "color" vs "colour")
+- **Name matching**: When checking if the model outputs names correctly with some tolerance for spelling
+- **Code generation**: When verifying that generated code is close to expected output
+
+For example, the distance between "kitten" and "sitting" is 3 (substitute 'k'→'s', substitute 'e'→'i', insert 'g'). [Learn more on Wikipedia](https://en.wikipedia.org/wiki/Levenshtein_distance).
+
 Example:
 
 ```yaml
@@ -545,17 +572,21 @@ tests:
 
 ### Perplexity
 
-Perplexity is a measurement used in natural language processing to quantify how well a language model predicts a sample of text. It's essentially a measure of the model's uncertainty.
+Perplexity measures how "surprised" a language model is by its own output. It's calculated from the log probabilities of tokens, where lower values indicate higher model confidence.
 
-**High perplexity** suggests it is less certain about its predictions, often because the text is very diverse or the model is not well-tuned to the task at hand.
+**Key points:**
 
-**Low perplexity** means the model predicts the text with greater confidence, implying it's better at understanding and generating text similar to its training data.
+- **Low perplexity** = high confidence (model thinks its output is likely)
+- **High perplexity** = low confidence (often correlates with hallucination or confusion)
+- Useful for quality control and detecting when the model is uncertain
+
+The assertion passes when perplexity is **below** the threshold.
 
 To specify a perplexity threshold, use the `perplexity` assertion type:
 
 ```yaml
 assert:
-  # Fail if the LLM is below perplexity threshold
+  # Fail if the LLM perplexity is above threshold (i.e., model is too confused)
   - type: perplexity
     threshold: 1.5
 ```
@@ -781,7 +812,17 @@ You may also return a score:
 
 The `rouge-n` assertion checks if the Rouge-N score between the LLM output and expected value is above a given threshold.
 
-Rouge-N is a recall-oriented metric that measures the overlap of n-grams between the LLM output and the expected text. The score ranges from 0 (no overlap) to 1 (perfect match).
+ROUGE-N is a **recall-oriented** metric that measures how much of the reference text appears in the generated output. It counts overlapping n-grams (word sequences) between the two texts.
+
+**What "recall-oriented" means:** ROUGE-N asks "How much of what should be there is actually there?" - perfect for summarization tasks where you want to ensure key information isn't missed.
+
+**When to use ROUGE-N:**
+
+- **Summarization**: Ensure summaries include key points from source text
+- **Information extraction**: Verify that important facts are captured
+- **Content coverage**: Check if the output mentions all required elements
+
+ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
 
 Example:
 
@@ -810,9 +851,22 @@ tests:
 
 ### BLEU
 
-BLEU (Bilingual Evaluation Understudy) is a precision-oriented metric that measures the quality of text by comparing it to one or more reference texts. The score ranges from 0 (no match) to 1 (perfect match). It considers exact matches of words and phrases (n-grams) between the output and reference text.
+BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric originally designed for evaluating machine translation. Unlike ROUGE-N which asks "is everything included?", BLEU asks "is everything correct?"
 
-While Rouge-N focuses on recall (how much of the reference text is captured), BLEU focuses on precision (how accurate the generated text is).
+**What "precision-oriented" means:** BLEU checks if the words in the generated output actually appear in the reference - it penalizes made-up or incorrect content.
+
+**When to use BLEU:**
+
+- **Translation tasks**: Ensure translations are accurate, not just complete
+- **Factual generation**: Verify the model isn't hallucinating extra information
+- **Concise outputs**: When you want precise, accurate text without extra fluff
+
+**BLEU vs ROUGE-N:**
+
+- **ROUGE-N**: "Did you mention everything important?" (good for summaries)
+- **BLEU**: "Is what you said actually correct?" (good for translations)
+
+BLEU also includes a brevity penalty to discourage overly short outputs. [See Wikipedia](https://en.wikipedia.org/wiki/BLEU) for more background.
 
 Example:
 
@@ -841,14 +895,26 @@ tests:
 
 ### GLEU
 
-The BLEU score has some undesirable properties when used for single sentences, as it was designed to be a corpus measure. To address these concerns, the 'GLEU (Google-BLEU) score' was introduced as a variant that better correlates with human judgments on sentence-level evaluation.
+GLEU (Google-BLEU) is designed specifically for evaluating **individual sentences**, fixing a major limitation of BLEU which was designed for large documents.
 
-For the GLEU score, we record all sub-sequences of 1, 2, 3 or 4 tokens in output and target sequence (n-grams). We then compute:
+**Why GLEU instead of BLEU for sentences:**
 
-- A recall: the ratio of matching n-grams to total n-grams in the target (ground truth) sequence
-- A precision: the ratio of matching n-grams to total n-grams in the generated output sequence
+- **No weird edge cases**: BLEU can give misleading scores for short sentences due to its brevity penalty
+- **Balanced evaluation**: GLEU considers both precision AND recall, taking the minimum of both
+- **Symmetrical**: Swapping reference and output gives the same score (unlike BLEU)
+- **Better for real-time evaluation**: More reliable for evaluating single responses in chatbots or QA systems
 
-The GLEU score is the minimum of recall and precision. The score's range is always between 0 (no matches) and 1 (all match) and it is symmetrical when switching output and target.
+**How GLEU works differently:**
+
+- Records all n-grams (1-4 word sequences) from both texts
+- Calculates both precision (like BLEU) AND recall (like ROUGE)
+- Final score = minimum(precision, recall)
+
+**When to use GLEU:**
+
+- **Single response evaluation**: Evaluating individual chatbot or model responses
+- **Short text comparison**: When comparing headlines, titles, or short answers
+- **Balanced accuracy needs**: When both precision and recall matter equally
 
 ```yaml
 assert:
@@ -886,7 +952,22 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is an automatic metric for evaluating machine-generated text against reference text. It's particularly useful for assessing translation quality and text generation accuracy.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
+
+**What makes METEOR special:**
+
+- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
+- **Handles word forms**: Knows that "running" and "ran" are the same verb
+- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
+- **Balanced scoring**: Combines precision, recall, AND word order into a single score
+
+**When to use METEOR:**
+
+- **High-quality translation**: When semantic accuracy matters more than exact wording
+- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
+- **Flexible matching**: When there are many valid ways to express the same idea
+
+For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
 > **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
 
@@ -911,13 +992,7 @@ assert:
     value: hello world # Reference text to compare against
 ```
 
-By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match), with typical interpretations:
-
-- 0.0-0.2: Poor match
-- 0.2-0.4: Fair match
-- 0.4-0.6: Good match
-- 0.6-0.8: Very good match
-- 0.8-1.0: Excellent match
+By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match).
 
 #### Custom Threshold
 
@@ -975,10 +1050,10 @@ tests:
   - description: 'Testing various outputs'
     vars:
       outputs:
-        - 'The weather is beautiful today' # Score: 1.0 (exact match)
-        - "Today's weather is beautiful" # Score: ~0.85 (reordered)
-        - 'The weather is nice today' # Score: ~0.7 (synonym)
-        - 'It is sunny outside' # Score: ~0.3 (different words)
+        - 'The weather is beautiful today' # Exact match
+        - "Today's weather is beautiful" # Reordered words
+        - 'The weather is nice today' # Uses synonym
+        - 'It is sunny outside' # Different phrasing
     assert:
       - type: meteor
         value: '{{reference}}'
@@ -989,7 +1064,21 @@ Note: Actual scores may vary based on the specific METEOR implementation and par
 
 ### F-Score
 
-F-score (also F1 score) is a measure of accuracy that considers both precision and recall. It is the harmonic mean of precision and recall, providing a single score that balances both metrics. The score ranges from 0 (worst) to 1 (best).
+F-score (also F1 score) is used for measuring classification accuracy when you need to balance between being correct and being complete.
+
+**Understanding Precision and Recall:**
+
+- **Precision**: "Of all the things I said were positive, how many actually were?" (avoiding false alarms)
+- **Recall**: "Of all the things that were positive, how many did I catch?" (avoiding missed cases)
+- **F-score**: The harmonic mean that balances both - high only when BOTH are good
+
+**When to use F-score:**
+
+- **Classification tasks**: Sentiment analysis, intent detection, category assignment
+- **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
+- **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
+
+See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 
 F-score uses the [named metrics](/docs/configuration/expected-outputs/#defining-named-metrics) and [derived metrics](/docs/configuration/expected-outputs/#creating-derived-metrics) features.
 

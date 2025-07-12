@@ -64,7 +64,7 @@ export default function EventsBanner(): JSX.Element | null {
               <span className={styles.eventDate}>AUG 9</span>
               <span className={styles.eventLocation}>PARTY</span>
             </div>
-            <span className={styles.eventCta}>RSVP FREE →</span>
+            <span className={styles.eventCta}>RSVP →</span>
           </Link>
         </div>
 
