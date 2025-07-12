@@ -186,7 +186,7 @@ export async function initAction(
   telemetry.record('command_used', {
     name: 'init - started',
   });
-  
+
   if (directory === 'redteam' && cmdObj.interactive) {
     const useRedteam = await confirm({
       message:

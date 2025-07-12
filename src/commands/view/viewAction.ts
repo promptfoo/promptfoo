@@ -33,7 +33,7 @@ export async function viewAction(
   if (directory) {
     setConfigDirectoryPath(directory);
   }
-  
+
   // Block indefinitely on server
   const browserBehavior = cmdObj.yes
     ? BrowserBehavior.OPEN

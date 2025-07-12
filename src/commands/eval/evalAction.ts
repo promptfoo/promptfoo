@@ -33,10 +33,10 @@ import { resolveConfigs } from '../../util/config/load';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { formatDuration } from '../../util/formatDuration';
 import { TokenUsageTracker } from '../../util/tokenUsage';
+import { notCloudEnabledShareInstructions } from '../share';
 import { filterProviders } from './filterProviders';
 import type { FilterOptions } from './filterTests';
 import { filterTests } from './filterTests';
-import { notCloudEnabledShareInstructions } from '../share';
 
 export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);

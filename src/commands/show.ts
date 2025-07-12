@@ -22,7 +22,7 @@ export async function showCommand(program: Command) {
         import('../models/eval'),
         import('../logger'),
       ]);
-      
+
       if (!id) {
         const latestEval = await Eval.latest();
         if (latestEval) {

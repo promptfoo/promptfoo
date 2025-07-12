@@ -30,7 +30,7 @@ export const checkNodeVersion = (): void => {
     // Version mismatch is rare, so we can skip logger and use console.error
     const errorMessage = `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`;
     console.error(errorMessage);
-    
+
     process.exitCode = 1;
     throw new Error(errorMessage);
   }

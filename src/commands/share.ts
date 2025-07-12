@@ -1,7 +1,10 @@
 import type { Command } from 'commander';
 
 // Re-export functions for backward compatibility
-export { notCloudEnabledShareInstructions, createAndDisplayShareableUrl } from './share/shareAction';
+export {
+  notCloudEnabledShareInstructions,
+  createAndDisplayShareableUrl,
+} from './share/shareAction';
 
 export function shareCommand(program: Command) {
   program

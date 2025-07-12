@@ -53,7 +53,11 @@ export async function listEvalsAction(cmdObj: { envPath?: string; n?: string; id
   );
 }
 
-export async function listPromptsAction(cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) {
+export async function listPromptsAction(cmdObj: {
+  envPath?: string;
+  n?: string;
+  idsOnly?: boolean;
+}) {
   setupEnv(cmdObj.envPath);
   telemetry.record('command_used', {
     name: 'list prompts',
@@ -92,7 +96,11 @@ export async function listPromptsAction(cmdObj: { envPath?: string; n?: string; 
   );
 }
 
-export async function listDatasetsAction(cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) {
+export async function listDatasetsAction(cmdObj: {
+  envPath?: string;
+  n?: string;
+  idsOnly?: boolean;
+}) {
   setupEnv(cmdObj.envPath);
   telemetry.record('command_used', {
     name: 'list datasets',

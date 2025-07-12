@@ -42,27 +42,27 @@ console.log('Benchmarking checkNodeVersion implementations...\n');
 function benchmark(name, file) {
   const times = [];
   const runs = 10;
-  
+
   // Warm up
   execSync(`node ${file}`, { stdio: 'ignore' });
-  
+
   for (let i = 0; i < runs; i++) {
     const start = Date.now();
     execSync(`node ${file}`, { stdio: 'ignore' });
     const end = Date.now();
     times.push(end - start);
   }
-  
+
   const avg = times.reduce((a, b) => a + b, 0) / times.length;
   const min = Math.min(...times);
   const max = Math.max(...times);
-  
+
   console.log(`${name}:`);
   console.log(`  Average: ${avg.toFixed(1)}ms`);
   console.log(`  Min: ${min}ms, Max: ${max}ms`);
   console.log(`  Times: ${times.join(', ')}`);
   console.log();
-  
+
   return avg;
 }
 
@@ -74,8 +74,12 @@ const simplestTime = benchmark('Simplest (no logger)', path.join(testDir, 'test-
 // Summary
 console.log('Summary:');
 console.log(`  Original: ${originalTime.toFixed(1)}ms (baseline)`);
-console.log(`  Lazy-loaded: ${lazyTime.toFixed(1)}ms (${((originalTime - lazyTime) / originalTime * 100).toFixed(1)}% faster)`);
-console.log(`  Simplest: ${simplestTime.toFixed(1)}ms (${((originalTime - simplestTime) / originalTime * 100).toFixed(1)}% faster)`);
+console.log(
+  `  Lazy-loaded: ${lazyTime.toFixed(1)}ms (${(((originalTime - lazyTime) / originalTime) * 100).toFixed(1)}% faster)`,
+);
+console.log(
+  `  Simplest: ${simplestTime.toFixed(1)}ms (${(((originalTime - simplestTime) / originalTime) * 100).toFixed(1)}% faster)`,
+);
 
 // Cleanup
-fs.rmSync(testDir, { recursive: true }); 
+fs.rmSync(testDir, { recursive: true });

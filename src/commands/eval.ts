@@ -1,8 +1,8 @@
 import type { Command } from 'commander';
 import { z } from 'zod';
+import { DEFAULT_MAX_CONCURRENCY } from '../evaluator';
 import { CommandLineOptionsSchema } from '../types';
 import type { EvaluateOptions, UnifiedConfig } from '../types';
-import { DEFAULT_MAX_CONCURRENCY } from '../evaluator';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -13,7 +13,11 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
 // Re-export functions for backward compatibility
-export { showRedteamProviderLabelMissingWarning, formatTokenUsage, doEval } from './eval/evalAction';
+export {
+  showRedteamProviderLabelMissingWarning,
+  formatTokenUsage,
+  doEval,
+} from './eval/evalAction';
 
 export function evalCommand(
   program: Command,
@@ -192,7 +196,7 @@ export function evalCommand(
         process.exitCode = 1;
         return;
       }
-      
+
       if (command.args.length > 0) {
         logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
@@ -223,16 +227,13 @@ ${chalk.green(`${runCommand} -j 1`)}`),
           maybeFilePath.split('.').pop()?.toLowerCase(),
         );
         if (!extension) {
-          throw new Error(`Unsupported output file format: ${maybeFilePath}. Please use one of: ${(OutputFileExtension as any).options.join(', ')}.`);
+          throw new Error(
+            `Unsupported output file format: ${maybeFilePath}. Please use one of: ${(OutputFileExtension as any).options.join(', ')}.`,
+          );
         }
       }
 
-      doEval(
-        validatedOpts as any,
-        defaultConfig,
-        defaultConfigPath,
-        evaluateOptions,
-      );
+      doEval(validatedOpts as any, defaultConfig, defaultConfigPath, evaluateOptions);
     });
 
   return evalCmd;

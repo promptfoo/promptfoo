@@ -61,6 +61,15 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   );
 
   if (options.output) {
+    // Validate output file extension
+    if (
+      !options.output.endsWith('.yaml') &&
+      !options.output.endsWith('.yml') &&
+      !options.output.endsWith('.json') &&
+      !options.output.endsWith('.jsonl')
+    ) {
+      throw new Error(`Unsupported output file type: ${options.output}`);
+    }
     logger.info('Writing output...');
     // Currently, we always write YAML.
     const yamlOutput = yaml.dump(assertions);
@@ -75,9 +84,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   logger.info(
     chalk.green(
       '\n✅ Assertion generation complete.' +
-        (options.write
-          ? `\n\n${isRunningUnderNpx() ? 'npx ' : ''}promptfoo eval`
-          : ''),
+        (options.write ? `\n\n${isRunningUnderNpx() ? 'npx ' : ''}promptfoo eval` : ''),
     ),
   );
 

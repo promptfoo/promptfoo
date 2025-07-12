@@ -1,5 +1,4 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import { generateTable, wrapTable } from '../../table';

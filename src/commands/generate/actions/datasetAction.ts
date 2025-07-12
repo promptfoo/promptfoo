@@ -71,37 +71,30 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
       options.output.endsWith('.json') ||
       options.output.endsWith('.jsonl') ||
       options.output.endsWith('.yaml') ||
-      options.output.endsWith('.yml') ||
-      options.output.endsWith('.txt')
+      options.output.endsWith('.yml')
     ) {
       outputFormat = 'yaml';
+    } else {
+      // Throw error for unsupported file types
+      const ext = options.output.includes('.') ? options.output.split('.').pop() : 'no extension';
+      throw new Error(`Unsupported output file type: ${options.output}`);
     }
 
     if (outputFormat === 'csv') {
       logger.info('Writing CSV output...');
-      const csvOutput = serializeObjectArrayAsCSV(
-        results.map((testCase) => testCase.vars || {}),
-      );
+      const csvOutput = serializeObjectArrayAsCSV(results);
       fs.writeFileSync(options.output, csvOutput);
     } else {
       logger.info('Writing YAML output...');
-      const yamlOutput = yaml.dump(results.map((testCase) => testCase.vars));
+      const yamlOutput = yaml.dump(results);
       fs.writeFileSync(options.output, yamlOutput);
     }
   } else {
     printBorder();
     logger.info('Generated test cases:\n');
-    results.forEach((testCase, index) => {
+    results.forEach((vars, index) => {
       logger.info(`Test Case ${index + 1}:`);
-      logger.info(yaml.dump(testCase.vars));
-      if (testCase.assert) {
-        logger.info(`Assertions:`);
-        if (Array.isArray(testCase.assert)) {
-          logger.info(yaml.dump(testCase.assert.map((assertion: any) => assertion.value)));
-        } else {
-          logger.info(yaml.dump(testCase.assert));
-        }
-      }
+      logger.info(yaml.dump(vars));
       logger.info('---');
     });
     printBorder();
@@ -118,7 +111,8 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
 
   if (options.write && testSuite) {
     logger.info('Updating config file...');
-    testSuite.tests = results;
+    // Convert VarMapping[] to test cases
+    testSuite.tests = results.map((vars) => ({ vars }));
     const configPath = options.config || options.defaultConfigPath;
     const yamlOutput = yaml.dump(testSuite as any);
     fs.writeFileSync(configPath!, yamlOutput);
