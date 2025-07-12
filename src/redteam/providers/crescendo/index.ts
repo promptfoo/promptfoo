@@ -32,8 +32,8 @@ import {
 } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
-export const DEFAULT_MAX_TURNS = 10;
-export const DEFAULT_MAX_BACKTRACKS = 10;
+const DEFAULT_MAX_TURNS = 10;
+const DEFAULT_MAX_BACKTRACKS = 10;
 
 /**
  * Represents metadata for the Crescendo conversation process.

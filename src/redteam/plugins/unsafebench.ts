@@ -6,7 +6,7 @@ import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../ty
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
-export const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';
+const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';
 
 // Valid categories in the UnsafeBench dataset
 export const VALID_CATEGORIES = [

@@ -202,7 +202,7 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   return sections.join('\n\n');
 };
 
-export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
+const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   purpose:
     'Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments, manage prescriptions, provide general medical advice, maintain HIPAA compliance and patient confidentiality.',
   features:
