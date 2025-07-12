@@ -1,22 +1,27 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Comparison of xAI Grok Models'
+description: Example configuration for testing xAI models
 
 prompts:
+  - What are the key differences between machine learning and deep learning?
   - file://./prompt.yaml
 
 providers:
-  # Grok-3 Models (New)
+  # Grok-4 Models (Latest)
+  - id: xai:grok-4
+    config:
+      temperature: 0.7
+      max_completion_tokens: 4096
+      # Note: Grok-4 does NOT support: presence_penalty, frequency_penalty, stop, reasoning_effort
+
+  # Grok-3 Models
   - xai:grok-3-fast
   - id: xai:grok-3-mini-fast
     config:
-      reasoning_effort: 'high'
-  # Grok-3 Mini with low reasoning (for comparison)
-  # - id: xai:grok-3-mini
-  #   config:
-  #     reasoning_effort: 'low'
-  # Older Grok-2 Models (for comparison)
-  # - xai:grok-2
-  # - xai:grok-2-vision
+      reasoning_effort: high
+
+  # Grok-2 Models
+  - xai:grok-2
+  - xai:grok-2-vision
 
 defaultTest:
   assert:
