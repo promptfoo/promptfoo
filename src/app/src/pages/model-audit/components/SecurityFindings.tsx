@@ -169,7 +169,7 @@ export default function SecurityFindings({
                     <Typography variant="body1" fontWeight={600}>
                       {issue.message}
                     </Typography>
-                    <SeverityBadge severity={issue.severity as 'error' | 'warning' | 'info'}>
+                    <SeverityBadge severity={issue.severity}>
                       {issue.severity}
                     </SeverityBadge>
                   </Stack>
