@@ -10,7 +10,7 @@
     "build:watch": "tsc -b --watch",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest",
+    "test": "vitest run",
     "test:ci": "vitest run"
   },
   "devDependencies": {

@@ -10,6 +10,7 @@ import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
 import Skeleton from '@mui/material/Skeleton';
@@ -216,11 +217,15 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
       </FormControl>
 
       {showValueInput && (
-        <Box
+        <Paper
+          elevation={0}
           sx={{
             display: 'flex',
             alignItems: 'center',
             gap: 0.5,
+            p: 0.5,
+            border: '1px solid',
+            borderColor: 'divider',
           }}
         >
           <Typography variant="body2" color="text.secondary" sx={{ mx: 0.5 }}>
@@ -228,7 +233,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
           </Typography>
           <TextField
             size="small"
-            placeholder="Any value"
+            placeholder="Enter value (optional)"
             value={filterValue}
             onChange={handleValueChange}
             onKeyPress={handleValueKeyPress}
@@ -282,7 +287,7 @@ export const MetadataFilterSelector: React.FC<MetadataFilterSelectorProps> = ({
               <InfoOutlinedIcon fontSize="small" color="action" />
             </IconButton>
           </Tooltip>
-        </Box>
+        </Paper>
       )}
 
       <Typography

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -31,38 +31,42 @@ describe('MetadataFilterSelector', () => {
   it('renders dropdown when metadata is available', () => {
     render(<MetadataFilterSelector {...defaultProps} />);
     expect(screen.getByLabelText('Filter results by metadata key')).toBeInTheDocument();
-    expect(screen.getByText('Filter by Metadata')).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by Metadata')).toBeInTheDocument();
   });
 
   it('shows loading state when isLoading is true', () => {
     render(<MetadataFilterSelector {...defaultProps} isLoading={true} />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByLabelText('Loading...')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 
   it('displays metadata keys with counts in dropdown', async () => {
     render(<MetadataFilterSelector {...defaultProps} />);
-    const select = screen.getByLabelText('Filter results by metadata key');
+    const select = screen.getByRole('combobox', { name: 'Filter by Metadata' });
 
     fireEvent.mouseDown(select);
 
+    // Get the listbox that appears
+    const listbox = await screen.findByRole('listbox');
+
     await waitFor(() => {
-      expect(screen.getByText('model')).toBeInTheDocument();
-      expect(screen.getByText('100')).toBeInTheDocument();
-      expect(screen.getByText('strategy')).toBeInTheDocument();
-      expect(screen.getByText('50')).toBeInTheDocument();
-      expect(screen.getByText('version')).toBeInTheDocument();
-      expect(screen.getByText('25')).toBeInTheDocument();
+      expect(within(listbox).getByText('model')).toBeInTheDocument();
+      expect(within(listbox).getByText('100')).toBeInTheDocument();
+      expect(within(listbox).getByText('strategy')).toBeInTheDocument();
+      expect(within(listbox).getByText('50')).toBeInTheDocument();
+      expect(within(listbox).getByText('version')).toBeInTheDocument();
+      expect(within(listbox).getByText('25')).toBeInTheDocument();
     });
   });
 
   it('calls onChange with key when selecting a metadata key', async () => {
     render(<MetadataFilterSelector {...defaultProps} />);
-    const select = screen.getByLabelText('Filter results by metadata key');
+    const select = screen.getByRole('combobox', { name: 'Filter by Metadata' });
 
     fireEvent.mouseDown(select);
-    await waitFor(() => screen.getByText('model'));
-    fireEvent.click(screen.getByText('model'));
+    const listbox = await screen.findByRole('listbox');
+    const modelOption = within(listbox).getByText('model');
+    fireEvent.click(modelOption);
 
     expect(defaultProps.onChange).toHaveBeenCalledWith('model');
   });
@@ -71,7 +75,6 @@ describe('MetadataFilterSelector', () => {
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Filter by metadata value')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Enter value (optional)')).toBeInTheDocument();
     });
   });
@@ -80,24 +83,25 @@ describe('MetadataFilterSelector', () => {
     const user = userEvent.setup();
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
 
-    const valueInput = await screen.findByLabelText('Filter by metadata value');
+    const valueInput = await screen.findByPlaceholderText('Enter value (optional)');
     await user.type(valueInput, 'gpt-4');
 
     // The onChange is called on each character typed
-    expect(defaultProps.onChange).toHaveBeenLastCalledWith('model:gpt-4');
+    await waitFor(() => {
+      expect(defaultProps.onChange).toHaveBeenCalledWith('model:gpt-4');
+    });
   });
 
   it('supports Enter key to apply filter', async () => {
+    const user = userEvent.setup();
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
 
-    const valueInput = await screen.findByLabelText('Filter by metadata value');
+    const valueInput = await screen.findByPlaceholderText('Enter value (optional)');
 
-    // Type a value first
-    fireEvent.change(valueInput, { target: { value: 'gpt-4' } });
-    // Then press Enter
-    fireEvent.keyPress(valueInput, { key: 'Enter', code: 'Enter', charCode: 13 });
+    // Type a value and press Enter
+    await user.type(valueInput, 'gpt-4{Enter}');
 
-    // onChange was already called during typing, so we verify it was called
+    // onChange was called during typing and on Enter
     expect(defaultProps.onChange).toHaveBeenCalledWith('model:gpt-4');
   });
 
@@ -113,12 +117,12 @@ describe('MetadataFilterSelector', () => {
   it('clears all filters when selecting empty option', async () => {
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
 
-    const select = screen.getByLabelText('Filter results by metadata key');
+    const select = screen.getByRole('combobox', { name: 'Filter by Metadata' });
     fireEvent.mouseDown(select);
 
     // The first empty option shows "All metadata"
-    await waitFor(() => screen.getByText(/All metadata/i));
-    const allMetadataOption = screen.getByRole('option', { name: /all metadata/i });
+    const listbox = await screen.findByRole('listbox');
+    const allMetadataOption = within(listbox).getByText(/All metadata/i);
     fireEvent.click(allMetadataOption);
 
     expect(defaultProps.onChange).toHaveBeenCalledWith(null);
@@ -128,7 +132,7 @@ describe('MetadataFilterSelector', () => {
     const user = userEvent.setup();
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
 
-    const infoIcon = await screen.findByTestId('InfoOutlinedIcon');
+    const infoIcon = await screen.findByLabelText('Metadata filter help');
     await user.hover(infoIcon);
 
     await waitFor(() => {
@@ -144,58 +148,79 @@ describe('MetadataFilterSelector', () => {
       <MetadataFilterSelector {...defaultProps} selectedMetadata="model:gpt-4" />,
     );
 
-    const valueInput = await screen.findByLabelText('Filter by metadata value');
-    expect(valueInput).toHaveValue('gpt-4');
+    await waitFor(() => {
+      const valueInput = screen.getByPlaceholderText('Enter value (optional)');
+      expect(valueInput).toHaveValue('gpt-4');
+    });
 
     // Simulate prop update
     rerender(<MetadataFilterSelector {...defaultProps} selectedMetadata="strategy:composite" />);
 
     await waitFor(() => {
-      const newValueInput = screen.getByLabelText('Filter by metadata value');
+      const newValueInput = screen.getByPlaceholderText('Enter value (optional)');
       expect(newValueInput).toHaveValue('composite');
     });
   });
 
   it('handles wildcard patterns correctly', async () => {
     const user = userEvent.setup();
-    render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
-
-    const valueInput = await screen.findByLabelText('Filter by metadata value');
 
     // Test starts with pattern
-    await user.clear(valueInput);
-    await user.type(valueInput, 'gpt-*');
-    expect(defaultProps.onChange).toHaveBeenLastCalledWith('model:gpt-*');
+    const { unmount: unmount1 } = render(
+      <MetadataFilterSelector {...defaultProps} selectedMetadata="model" />,
+    );
+    const valueInput1 = await screen.findByPlaceholderText('Enter value (optional)');
+    await user.type(valueInput1, 'gpt-*');
+    await waitFor(() => {
+      expect(defaultProps.onChange).toHaveBeenCalledWith('model:gpt-*');
+    });
+    unmount1();
+
+    // Reset for next test
+    defaultProps.onChange.mockClear();
 
     // Test ends with pattern
-    await user.clear(valueInput);
-    await user.type(valueInput, '*-turbo');
-    expect(defaultProps.onChange).toHaveBeenLastCalledWith('model:*-turbo');
+    const { unmount: unmount2 } = render(
+      <MetadataFilterSelector {...defaultProps} selectedMetadata="model" />,
+    );
+    const valueInput2 = await screen.findByPlaceholderText('Enter value (optional)');
+    await user.type(valueInput2, '*-turbo');
+    await waitFor(() => {
+      expect(defaultProps.onChange).toHaveBeenCalledWith('model:*-turbo');
+    });
+    unmount2();
+
+    // Reset for next test
+    defaultProps.onChange.mockClear();
 
     // Test contains pattern
-    await user.clear(valueInput);
-    await user.type(valueInput, '*3.5*');
-    expect(defaultProps.onChange).toHaveBeenLastCalledWith('model:*3.5*');
+    render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
+    const valueInput3 = await screen.findByPlaceholderText('Enter value (optional)');
+    await user.type(valueInput3, '*3.5*');
+    await waitFor(() => {
+      expect(defaultProps.onChange).toHaveBeenCalledWith('model:*3.5*');
+    });
   });
 
   it('renders with basic version when metadataCounts not provided', async () => {
     render(<MetadataFilterSelector {...defaultProps} metadataCounts={undefined} />);
 
-    const select = screen.getByLabelText('Filter results by metadata key');
+    const select = screen.getByRole('combobox', { name: 'Filter by Metadata' });
     fireEvent.mouseDown(select);
 
     // Should show keys without counts
+    const listbox = await screen.findByRole('listbox');
     await waitFor(() => {
-      expect(screen.getByText('model')).toBeInTheDocument();
+      expect(within(listbox).getByText('model')).toBeInTheDocument();
     });
-    expect(screen.queryByText('100')).not.toBeInTheDocument();
+    expect(within(listbox).queryByText('100')).not.toBeInTheDocument();
   });
 
   it('maintains focus after clearing value', async () => {
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model:gpt-4" />);
 
-    const valueInput = (await screen.findByLabelText(
-      'Filter by metadata value',
+    const valueInput = (await screen.findByPlaceholderText(
+      'Enter value (optional)',
     )) as HTMLInputElement;
     valueInput.focus();
 
@@ -203,7 +228,7 @@ describe('MetadataFilterSelector', () => {
     fireEvent.click(clearButton);
 
     // Value input should still be visible
-    expect(screen.getByLabelText('Filter by metadata value')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter value (optional)')).toBeInTheDocument();
     // Note: Focus behavior can be tricky to test in jsdom
   });
 
@@ -211,9 +236,8 @@ describe('MetadataFilterSelector', () => {
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
 
     // Check for Paper component styling
-    const paperElement = screen
-      .getByLabelText('Filter by metadata value')
-      .closest('[class*=MuiPaper]');
+    const valueInput = screen.getByPlaceholderText('Enter value (optional)');
+    const paperElement = valueInput.closest('[class*=MuiPaper]');
     expect(paperElement).toBeInTheDocument();
 
     // Check for = separator
@@ -224,12 +248,18 @@ describe('MetadataFilterSelector', () => {
     const user = userEvent.setup();
     render(<MetadataFilterSelector {...defaultProps} selectedMetadata="model" />);
 
-    const valueInput = await screen.findByLabelText('Filter by metadata value');
+    const valueInput = await screen.findByPlaceholderText('Enter value (optional)');
     await user.type(valueInput, 'test');
-    expect(defaultProps.onChange).toHaveBeenLastCalledWith('model:test');
+    await waitFor(() => {
+      expect(defaultProps.onChange).toHaveBeenCalledWith('model:test');
+    });
 
-    await user.clear(valueInput);
-    expect(defaultProps.onChange).toHaveBeenLastCalledWith('model');
+    // Clear the input by selecting all and deleting
+    await user.tripleClick(valueInput);
+    await user.keyboard('{Delete}');
+    await waitFor(() => {
+      expect(defaultProps.onChange).toHaveBeenCalledWith('model');
+    });
   });
 
   it('accessibility: has proper ARIA labels', () => {

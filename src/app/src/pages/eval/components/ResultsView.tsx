@@ -177,6 +177,7 @@ export default function ResultsView({
     metadataCounts,
     fetchMetadataKeys,
     isLoadingMetadata,
+    metadataAbortController,
   } = useTableStore();
 
   const {
@@ -535,12 +536,11 @@ export default function ResultsView({
 
     // Cleanup function to cancel pending requests when component unmounts
     return () => {
-      const { metadataAbortController } = useTableStore.getState();
       if (metadataAbortController) {
         metadataAbortController.abort();
       }
     };
-  }, [evalId, fetchMetadataKeys, searchParams]);
+  }, [evalId, fetchMetadataKeys, searchParams, metadataAbortController]);
 
   // Make the function a callback that can be passed to CustomMetrics
   const handleMetricFilterChange = React.useCallback((metric: string | null) => {
