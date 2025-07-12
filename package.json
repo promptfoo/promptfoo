@@ -183,6 +183,7 @@
     "nock": "^14.0.5",
     "node-sql-parser": "^5.3.10",
     "nodemon": "^3.1.10",
+    "pdf-parse": "^1.1.1",
     "playwright": "^1.54.1",
     "playwright-extra": "^4.3.6",
     "prettier": "^3.6.2",
