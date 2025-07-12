@@ -130,7 +130,11 @@ export function accumulateTokenUsage(
 
     if (update.assertions.completionDetails) {
       if (!target.assertions.completionDetails) {
-        target.assertions.completionDetails = { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 };
+        target.assertions.completionDetails = {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        };
       }
       target.assertions.completionDetails.reasoning =
         (target.assertions.completionDetails.reasoning ?? 0) +
