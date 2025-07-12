@@ -32,9 +32,15 @@ export default defineConfig({
       '@promptfoo': path.resolve(__dirname, '../'),
     },
   },
+  optimizeDeps: {
+    exclude: ['react-syntax-highlighter'],
+  },
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
+    rollupOptions: {
+      external: ['react-syntax-highlighter'],
+    },
   },
   test: {
     environment: 'jsdom',
