@@ -60,28 +60,6 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
     `.trim();
 };
 
-export function createOutputMetadata(evalRecord: Eval) {
-  let evaluationCreatedAt: string | undefined;
-  if (evalRecord.createdAt) {
-    try {
-      const date = new Date(evalRecord.createdAt);
-      evaluationCreatedAt = Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-    } catch {
-      evaluationCreatedAt = undefined;
-    }
-  }
-
-  return {
-    promptfooVersion: VERSION,
-    nodeVersion: process.version,
-    platform: os.platform(),
-    arch: os.arch(),
-    exportedAt: new Date().toISOString(),
-    evaluationCreatedAt,
-    author: evalRecord.author,
-  };
-}
-
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -119,7 +97,15 @@ export async function writeOutput(
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const metadata = createOutputMetadata(evalRecord);
+  const metadata = {
+    promptfooVersion: VERSION,
+    nodeVersion: process.version,
+    platform: os.platform(),
+    arch: os.arch(),
+    exportedAt: new Date().toISOString(),
+    evaluationCreatedAt: new Date(evalRecord.createdAt).toISOString(),
+    author: evalRecord.author,
+  };
 
   if (outputExtension === 'csv') {
     // Write headers first
@@ -399,3 +385,5 @@ export function maybeLoadToolsFromExternalFile(
 ): any {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }
+
+export { outputToSimpleString };
