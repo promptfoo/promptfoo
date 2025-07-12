@@ -18,7 +18,7 @@ function HeroSection() {
         <img src="/img/guardrails-framed.png" alt="AI Guardrails" className={styles.heroImage} />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer className={styles.heroLogos} noBackground noBorder />
         </div>
         {/*
         <h2>Guardrails that evolve with emerging threats</h2>
