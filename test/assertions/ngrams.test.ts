@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { getNGrams } from '../../src/assertions/ngrams';
 
 describe('getNGrams', () => {

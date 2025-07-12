@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';

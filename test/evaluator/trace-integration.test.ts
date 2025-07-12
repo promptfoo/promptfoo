@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { evaluate } from '../../src/evaluator';
 import type Eval from '../../src/models/eval';
 import { getTraceStore } from '../../src/tracing/store';

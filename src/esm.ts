@@ -1,19 +1,13 @@
 import { pathToFileURL } from 'node:url';
 import logger from './logger';
 import { safeResolve } from './util/file.node';
+import { getDirnameCompat } from './util/paths';
 
 // esm-specific crap that needs to get mocked out in tests
 
-//import path from 'path';
-//import { fileURLToPath } from 'url';
-
 export function getDirectory(): string {
-  /*
-  // @ts-ignore: Jest chokes on this
-  const __filename = fileURLToPath(import.meta.url);
-  return path.dirname(__filename);
- */
-  return __dirname;
+  // @ts-ignore: import.meta.url is not available in CommonJS
+  return getDirnameCompat(typeof import.meta === 'undefined' ? undefined : import.meta.url);
 }
 
 export async function importModule(modulePath: string, functionName?: string) {
@@ -41,24 +35,15 @@ export async function importModule(modulePath: string, functionName?: string) {
     }
     return mod;
   } catch (err) {
-    // If ESM import fails, try CommonJS require as fallback
+    // In ESM build, we only support ESM imports
+    // The CommonJS fallback is handled by a separate build
     logger.debug(`ESM import failed: ${err}`);
-    logger.debug('Attempting CommonJS require fallback...');
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const importedModule = require(safeResolve(modulePath));
-      const mod = importedModule?.default?.default || importedModule?.default || importedModule;
-      logger.debug(
-        `Successfully required module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
-      );
-      if (functionName) {
-        logger.debug(`Returning named export: ${functionName}`);
-        return mod[functionName];
-      }
-      return mod;
-    } catch (requireErr) {
-      logger.debug(`CommonJS require also failed: ${requireErr}`);
-      throw requireErr;
+    
+    // Check if this is a CommonJS module being imported in ESM
+    if (err instanceof Error && err.message.includes('require')) {
+      throw new Error(`Cannot import CommonJS module '${modulePath}' in ESM mode. Please use an ESM-compatible module.`);
     }
+    
+    throw err;
   }
 }

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import * as fs from 'fs';
 import { globSync } from 'glob';

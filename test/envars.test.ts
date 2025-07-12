@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterAll, it, expect } from '@jest/globals';
 import cliState from '../src/cliState';
 import type { EnvVarKey } from '../src/envars';
 import {

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { Command } from 'commander';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';

@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { addBestOfNTestCases } from '../../../src/redteam/strategies/bestOfN';
 import type { TestCaseWithPlugin } from '../../../src/types';
 

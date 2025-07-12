@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fetchWithCache } from '../../../src/cache';

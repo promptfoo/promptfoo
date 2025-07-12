@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { matchesAnswerRelevance } from '../../src/matchers';
 import type { AssertionValueFunctionContext } from '../../src/types';

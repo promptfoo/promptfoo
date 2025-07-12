@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { ImitationGrader, PLUGIN_ID } from '../../../src/redteam/plugins/imitation';
 import type { AtomicTestCase } from '../../../src/types';

@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { MCPPluginGrader } from '../../../src/redteam/plugins/mcp';
 
 describe('MCPPluginGrader', () => {

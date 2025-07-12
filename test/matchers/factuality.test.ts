@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { matchesFactuality } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import type { GradingConfig } from '../../src/types';

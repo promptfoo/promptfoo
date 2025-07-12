@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';

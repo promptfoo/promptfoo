@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { Command } from 'commander';
 import fs from 'fs/promises';
 import * as init from '../../src/commands/init';

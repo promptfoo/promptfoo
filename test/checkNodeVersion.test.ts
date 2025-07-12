@@ -1,9 +1,10 @@
+import { jest, describe, afterEach, it, expect } from '@jest/globals';
 import chalk from 'chalk';
 import { checkNodeVersion } from '../src/checkNodeVersion';
 import logger from '../src/logger';
 
 jest.mock('../package.json', () => ({
-  engines: { node: '>=18.0.1' },
+  engines: { node: '>=18.0.0' },
 }));
 
 const setNodeVersion = (version: string) => {
@@ -21,15 +22,15 @@ describe('checkNodeVersion', () => {
   });
 
   it('should handle version strings correctly and throw if required version is not met', () => {
-    setNodeVersion('v18.0.0');
+    setNodeVersion('v17.9.9');
 
     expect(() => checkNodeVersion()).toThrow(
-      'You are using Node.js 18.0.0. This version is not supported. Please use Node.js >=18.0.1.',
+      'You are using Node.js 17.9.9. This version is not supported. Please use Node.js >=18.0.0.',
     );
   });
 
   it('should not throw if Node.js version is supported', () => {
-    setNodeVersion('v18.0.1');
+    setNodeVersion('v18.0.0');
 
     expect(() => checkNodeVersion()).not.toThrow();
   });
@@ -39,7 +40,7 @@ describe('checkNodeVersion', () => {
 
     checkNodeVersion();
     expect(logger.warn).toHaveBeenCalledWith(
-      chalk.yellow('Unexpected Node.js version format: v18. Please use Node.js >=18.0.1.'),
+      chalk.yellow('Unexpected Node.js version format: v18. Please use Node.js >=18.0.0.'),
     );
   });
 });

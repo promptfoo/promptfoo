@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import type { FetchWithCacheResult } from '../../../src/cache';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';

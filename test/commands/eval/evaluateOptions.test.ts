@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, beforeAll, afterAll, it, expect } from '@jest/globals';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';

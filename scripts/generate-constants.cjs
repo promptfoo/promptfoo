@@ -19,6 +19,13 @@ try {
   }
 
   fs.writeFileSync(outputPath, constantsTemplate, 'utf8');
+  
+  // Also generate version file
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+  const versionCode = `// This file is auto-generated during build to include the current version
+export const version = '${packageJson.version}';`;
+  fs.writeFileSync(path.join(__dirname, '../src/version.ts'), versionCode, 'utf8');
+  
   console.log('Generated constants file');
 } catch (error) {
   console.error('✗ Failed to generate constants file:', error);

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';

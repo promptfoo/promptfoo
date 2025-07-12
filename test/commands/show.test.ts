@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { Command } from 'commander';
 import { showCommand, handlePrompt, handleEval, handleDataset } from '../../src/commands/show';
 import logger from '../../src/logger';

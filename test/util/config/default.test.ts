@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import path from 'path';
 import { loadDefaultConfig, configCache } from '../../../src/util/config/default';
 import { maybeReadConfig } from '../../../src/util/config/load';

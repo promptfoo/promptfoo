@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { handleGEval } from '../../src/assertions/geval';
 import { matchesGEval } from '../../src/matchers';
 

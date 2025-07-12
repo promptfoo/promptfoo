@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { Command } from 'commander';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';

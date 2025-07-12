@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { sanitizeMarkdown } from '../../site/src/utils/markdown';
 
 describe('sanitizeMarkdown', () => {

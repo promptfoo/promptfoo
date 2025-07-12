@@ -1,3 +1,4 @@
+import { jest, describe, afterEach, it, expect } from '@jest/globals';
 import { clearCache, disableCache, enableCache } from '../../../src/cache';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 

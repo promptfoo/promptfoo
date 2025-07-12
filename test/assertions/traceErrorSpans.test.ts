@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans';
 import type { AssertionParams, AtomicTestCase, ApiProvider } from '../../src/types';
 import type { TraceData } from '../../src/types/tracing';

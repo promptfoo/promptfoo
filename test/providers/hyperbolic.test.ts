@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { HyperbolicAudioProvider } from '../../src/providers/hyperbolic/audio';
 import { HyperbolicProvider, calculateHyperbolicCost } from '../../src/providers/hyperbolic/chat';
 import { HyperbolicImageProvider } from '../../src/providers/hyperbolic/image';

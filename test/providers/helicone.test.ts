@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { HeliconeGatewayProvider } from '../../src/providers/helicone';
 
 describe('HeliconeGatewayProvider', () => {

@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import {
   CRESCENDO_SYSTEM_PROMPT,
   REFUSAL_SYSTEM_PROMPT,

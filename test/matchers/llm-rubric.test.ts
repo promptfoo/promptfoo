@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, beforeAll, it, expect } from '@jest/globals';
 import fs from 'fs';
 import path from 'path';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';

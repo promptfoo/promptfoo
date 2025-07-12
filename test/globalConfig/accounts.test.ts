@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';

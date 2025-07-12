@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import {

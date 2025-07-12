@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, test, expect } from '@jest/globals';
 import path from 'path';
 import { providerMap } from '../../src/providers/registry';
 import type { LoadApiProviderContext } from '../../src/types';

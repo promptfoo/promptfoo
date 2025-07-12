@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { Command } from 'commander';
 import { authCommand } from '../../src/commands/auth';
 import { fetchWithProxy } from '../../src/fetch';

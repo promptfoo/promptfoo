@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 /**
  * Test file for simpleVideo strategy
  *

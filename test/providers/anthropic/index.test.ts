@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 import {
   DEFAULT_ANTHROPIC_MODEL,

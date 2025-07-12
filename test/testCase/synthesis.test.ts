@@ -1,3 +1,4 @@
+import { jest, describe, it, expect } from '@jest/globals';
 import dedent from 'dedent';
 import { loadApiProvider } from '../../src/providers';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';

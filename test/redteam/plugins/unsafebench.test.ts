@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers';

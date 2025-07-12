@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { fetchWithCache } from '../src/cache';
 import guardrails, { type AdaptiveRequest } from '../src/guardrails';
 

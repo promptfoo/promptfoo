@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import type { ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';

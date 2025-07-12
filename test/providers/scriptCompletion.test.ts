@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { importModule } from '../../../src/esm';
 import { processJsFile, transformContext } from '../../../src/prompts/processors/javascript';
 import invariant from '../../../src/util/invariant';

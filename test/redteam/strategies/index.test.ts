@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';

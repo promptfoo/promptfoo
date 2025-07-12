@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import crypto from 'crypto';
 import dedent from 'dedent';
 import fs from 'fs';

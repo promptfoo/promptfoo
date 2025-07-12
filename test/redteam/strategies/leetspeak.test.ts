@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { addLeetspeak } from '../../../src/redteam/strategies/leetspeak';
 import type { TestCase } from '../../../src/types';
 

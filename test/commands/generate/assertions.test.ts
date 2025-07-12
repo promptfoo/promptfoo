@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, beforeAll, afterAll, it, expect } from '@jest/globals';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { synthesizeFromTestSuite } from '../../../src/assertions/synthesis';

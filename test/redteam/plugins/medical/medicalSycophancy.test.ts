@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { MedicalSycophancyPluginGrader } from '../../../../src/redteam/plugins/medical/medicalSycophancy';
 
 describe('MedicalSycophancyPluginGrader', () => {

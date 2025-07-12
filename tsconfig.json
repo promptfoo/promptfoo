@@ -1,23 +1,9 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "declaration": true,
-    "declarationMap": true,
-    "esModuleInterop": true,
     "target": "es2020",
     "module": "CommonJS",
     "moduleResolution": "node",
-    "outDir": "dist",
-    "skipLibCheck": true,
-    "sourceMap": true,
-    "strict": true,
-    "resolveJsonModule": true,
-    "composite": true,
-    "rootDir": ".",
-    "baseUrl": "./"
-  },
-  "ts-node": {
-    "swc": true
-  },
-  "include": ["src/", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
-  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]
+    "outDir": "dist"
+  }
 }

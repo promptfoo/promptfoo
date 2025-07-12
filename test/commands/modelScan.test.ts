@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { spawn, type ChildProcess } from 'child_process';
 import { exec } from 'child_process';
 import { Command } from 'commander';

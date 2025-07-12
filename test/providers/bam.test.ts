@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import type { TextGenerationCreateOutput } from '@ibm-generative-ai/node-sdk';
 import { convertResponse } from '../../src/providers/bam';
 

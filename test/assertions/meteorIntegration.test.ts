@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 // Special test for METEOR assertion integration
 describe('METEOR assertion', () => {
   beforeEach(() => {

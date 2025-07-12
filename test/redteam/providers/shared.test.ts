@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import cliState from '../../../src/cliState';
 import { loadApiProviders } from '../../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';

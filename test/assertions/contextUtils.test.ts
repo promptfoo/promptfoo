@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { resolveContext } from '../../src/assertions/contextUtils';
 import type { Assertion, AtomicTestCase } from '../../src/types';
 import * as transformUtil from '../../src/util/transform';

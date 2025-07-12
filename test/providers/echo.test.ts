@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { EchoProvider } from '../../src/providers/echo';
 
 describe('EchoProvider', () => {

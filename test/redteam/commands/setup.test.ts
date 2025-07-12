@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { Command } from 'commander';
 import { getDefaultPort } from '../../../src/constants';
 import { redteamSetupCommand } from '../../../src/redteam/commands/setup';

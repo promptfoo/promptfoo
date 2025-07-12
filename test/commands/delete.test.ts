@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
 import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';

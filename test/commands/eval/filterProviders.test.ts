@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { filterProviders } from '../../../src/commands/eval/filterProviders';
 import type { ApiProvider } from '../../../src/types';
 

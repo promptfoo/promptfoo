@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { validateAssertions, AssertValidationError } from '../../src/assertions/validateAssertions';
 import type { TestCase } from '../../src/types';
 

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';

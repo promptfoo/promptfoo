@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { MedicalAnchoringBiasPluginGrader } from '../../../../src/redteam/plugins/medical/medicalAnchoringBias';
 
 describe('MedicalAnchoringBiasPluginGrader', () => {

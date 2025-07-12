@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, expect, it } from '@jest/globals';
 import { addGoatTestCases } from '../../../src/redteam/strategies/goat';
 import type { TestCaseWithPlugin, AssertionType } from '../../../src/types';
 

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, beforeAll, it, expect } from '@jest/globals';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';

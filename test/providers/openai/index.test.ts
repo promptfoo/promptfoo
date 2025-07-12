@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { OpenAiGenericProvider } from '../../../src/providers/openai';
 
 describe('OpenAI Provider', () => {

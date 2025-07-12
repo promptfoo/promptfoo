@@ -1,3 +1,4 @@
+import { describe, beforeAll, it, expect } from '@jest/globals';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';

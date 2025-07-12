@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, beforeAll, it, expect } from '@jest/globals';
 import { clearCache, enableCache } from '../../src/cache';
 import {
   CloudflareAiChatCompletionProvider,

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import packageJson from '../package.json';
 import { fetchWithTimeout } from '../src/fetch';
 import { getLatestVersion, checkForUpdates } from '../src/updates';

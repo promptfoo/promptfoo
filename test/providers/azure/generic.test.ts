@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 
 describe('AzureGenericProvider', () => {

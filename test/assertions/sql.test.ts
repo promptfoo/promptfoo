@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { handleIsSql } from '../../src/assertions/sql';
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types';
 

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';

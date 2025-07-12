@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { fetchWithCache } from '../../../src/cache';
 import { logger } from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';

@@ -1,3 +1,4 @@
+import { jest, describe, afterEach, it, expect } from '@jest/globals';
 import {
   addHomoglyphs,
   homoglyphMap,

@@ -4,24 +4,32 @@
   "author": "Ian Webster",
   "version": "0.116.7",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "dist/src/index.js",
+  "main": "./dist/cjs/src/index.js",
+  "module": "./dist/esm/src/index.js",
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js"
-    }
+      "import": {
+        "types": "./dist/types/src/index.d.ts",
+        "default": "./dist/esm/src/index.js"
+      },
+      "require": {
+        "types": "./dist/types/src/index.d.ts",
+        "default": "./dist/cjs/src/index.js"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "workspaces": [
     "src/app",
     "site"
   ],
-  "types": "dist/src/index.d.ts",
-  "typings": "dist/src/index.d.ts",
+  "types": "dist/types/src/index.d.ts",
+  "typings": "dist/types/src/index.d.ts",
   "files": [
     "dist",
     "!dist/test",
@@ -31,16 +39,20 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "promptfoo": "dist/src/main.js",
-    "pf": "dist/src/main.js"
+    "promptfoo": "dist/main-wrapper.cjs",
+    "pf": "dist/main-wrapper.cjs"
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "bin": "dist/src/main.js",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
+    "build:esm": "tsc -p tsconfig.esm.json && node scripts/add-js-extensions.mjs && node scripts/fix-esm-node-imports.mjs && node scripts/fix-known-package-imports.mjs && node scripts/fix-esm-require-main.mjs",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/fix-cjs-imports.cjs",
+    "build:types": "tsc -p tsconfig.types.json",
+    "build:copy-files": "shx mkdir -p dist/esm/src && shx mkdir -p dist/cjs/src && shx cp src/*.html dist/esm/src && shx cp src/*.html dist/cjs/src && shx cp -r src/python dist/esm/src && shx cp -r src/python dist/cjs/src && shx mkdir -p dist/esm/src/golang && shx mkdir -p dist/cjs/src/golang && shx cp src/golang/wrapper.go dist/esm/src/golang && shx cp src/golang/wrapper.go dist/cjs/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/ && shx cp src/main-wrapper.cjs dist/ && node scripts/generate-cjs-package.cjs",
     "build:watch": "tsc --watch",
-    "build": "npm run generate-constants && tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && shx chmod +x dist/src/main.js",
+    "build": "npm run generate-constants && npm run build:clean && npm run build:types && npm run build:esm && npm run build:cjs && npm run build:copy-files && npm run build:app && shx chmod +x dist/esm/src/main.js && shx chmod +x dist/cjs/src/main.js && shx chmod +x dist/main-wrapper.cjs",
     "postbuild": "git checkout -- src/generated-constants.ts 2>/dev/null || true",
     "citation:generate": "ts-node scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
@@ -52,7 +64,7 @@
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(j2|js|jsx|mjs|cjs|ts|tsx|json|css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "prettier --check .",
     "format": "prettier -w .",
-    "generate-constants": "node scripts/generate-constants.js",
+    "generate-constants": "node scripts/generate-constants.cjs",
     "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json | npx prettier --write site/static/config-schema.json",
     "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs eslint --max-warnings=0 --fix --no-warn-ignored",
     "lint:site": "eslint site --max-warnings=0",
@@ -69,6 +81,7 @@
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
+    "test:esm": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.esm.ts",
     "tsc": "tsc"
   },
   "overrides": {
@@ -191,6 +204,7 @@
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.1.1",
+    "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.35.0",

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 // We are mocking the dynamic import of runEval inside callTarget.
 import { runEval } from '../../../src/evaluator';
 import { fetchWithRetries } from '../../../src/fetch';

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
 import type { TestSuite, TestCase } from '../../../src/types';

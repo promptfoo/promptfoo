@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, afterAll, it, expect } from '@jest/globals';
 import { fetchWithRetries } from '../src/fetch';
 
 const mockedFetch = jest.spyOn(global, 'fetch');

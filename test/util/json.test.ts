@@ -1,3 +1,4 @@
+import { describe, beforeEach, afterEach, beforeAll, it, expect } from '@jest/globals';
 import dedent from 'dedent';
 import {
   convertSlashCommentsToHash,

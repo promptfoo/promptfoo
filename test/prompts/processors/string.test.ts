@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { processString } from '../../../src/prompts/processors/string';
 import type { Prompt } from '../../../src/types';
 

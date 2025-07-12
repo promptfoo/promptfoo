@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 

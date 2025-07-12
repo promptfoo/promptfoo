@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { AssertionsResult, DEFAULT_TOKENS_USED } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
 import type { GradingResult, AssertionSet } from '../../src/types';

@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { MedicalIncorrectKnowledgePluginGrader } from '../../../../src/redteam/plugins/medical/medicalIncorrectKnowledge';
 
 describe('MedicalIncorrectKnowledgePluginGrader', () => {

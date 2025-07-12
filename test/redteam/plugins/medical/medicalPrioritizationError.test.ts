@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { MedicalPrioritizationErrorPluginGrader } from '../../../../src/redteam/plugins/medical/medicalPrioritizationError';
 
 describe('MedicalPrioritizationErrorPluginGrader', () => {

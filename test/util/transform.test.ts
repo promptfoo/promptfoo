@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import * as path from 'path';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';

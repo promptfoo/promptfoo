@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers';
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types';

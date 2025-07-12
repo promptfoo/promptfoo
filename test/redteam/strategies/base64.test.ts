@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { addBase64Encoding } from '../../../src/redteam/strategies/base64';
 import type { TestCase } from '../../../src/types';
 

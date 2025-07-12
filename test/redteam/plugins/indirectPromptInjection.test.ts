@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import {
   IndirectPromptInjectionGrader,
   PLUGIN_ID,

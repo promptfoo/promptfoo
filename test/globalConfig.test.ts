@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, test, expect } from '@jest/globals';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import type {

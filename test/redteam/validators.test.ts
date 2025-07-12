@@ -1,3 +1,4 @@
+import { jest, describe, it, expect } from '@jest/globals';
 import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,

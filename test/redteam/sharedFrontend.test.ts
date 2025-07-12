@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import type { Plugin } from '../../src/redteam/constants';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';

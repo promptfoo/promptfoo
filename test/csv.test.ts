@@ -1,3 +1,4 @@
+import { jest, describe, afterEach, it, expect } from '@jest/globals';
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';

@@ -1,3 +1,4 @@
+import { jest, describe, it, expect } from '@jest/globals';
 import { PythonShell } from 'python-shell';
 import logger from '../../../src/logger';
 import {

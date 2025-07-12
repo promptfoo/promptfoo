@@ -1,3 +1,4 @@
+import { jest, describe, it, expect } from '@jest/globals';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import {

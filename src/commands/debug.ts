@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import * as fs from 'fs';
 import * as os from 'os';
-import { version } from '../../package.json';
+import { version } from '../version';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { UnifiedConfig } from '../types';

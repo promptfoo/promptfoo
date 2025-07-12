@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { getGraderById } from '../../src/redteam/graders';
 import { AegisGrader } from '../../src/redteam/plugins/aegis';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';

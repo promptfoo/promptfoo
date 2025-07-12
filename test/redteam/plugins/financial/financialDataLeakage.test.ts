@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { FinancialDataLeakagePluginGrader } from '../../../../src/redteam/plugins/financial/financialDataLeakage';
 
 describe('FinancialDataLeakagePluginGrader', () => {

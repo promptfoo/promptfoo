@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { FinancialHallucinationPluginGrader } from '../../../../src/redteam/plugins/financial/financialHallucination';
 
 describe('FinancialHallucinationPluginGrader', () => {

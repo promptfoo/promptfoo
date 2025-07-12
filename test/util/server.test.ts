@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import opener from 'opener';
 import * as cache from '../../src/cache';
 import { getDefaultPort, VERSION } from '../../src/constants';

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import { getCache, isCacheEnabled, fetchWithCache } from '../../src/cache';

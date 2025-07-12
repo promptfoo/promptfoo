@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import type nunjucks from 'nunjucks';
 import { handlePiScorer } from '../../src/assertions/pi';
 import { matchesClosedQa, matchesPiScore } from '../../src/matchers';

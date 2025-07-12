@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import type Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import {

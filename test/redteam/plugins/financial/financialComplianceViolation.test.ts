@@ -1,3 +1,4 @@
+import { describe, beforeEach, it, expect } from '@jest/globals';
 import { FinancialComplianceViolationPluginGrader } from '../../../../src/redteam/plugins/financial/financialComplianceViolation';
 
 describe('FinancialComplianceViolationPluginGrader', () => {

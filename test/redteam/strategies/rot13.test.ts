@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { addRot13 } from '../../../src/redteam/strategies/rot13';
 import type { TestCase } from '../../../src/types';
 

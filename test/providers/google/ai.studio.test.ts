@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';

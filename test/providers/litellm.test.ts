@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
 
 describe('LiteLLM Provider', () => {

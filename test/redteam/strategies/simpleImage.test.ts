@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { SingleBar } from 'cli-progress';
 import logger from '../../../src/logger';
 import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';

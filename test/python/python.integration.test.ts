@@ -1,3 +1,4 @@
+import { jest, describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { exec } from 'child_process';
 import dedent from 'dedent';
 import fs from 'fs';

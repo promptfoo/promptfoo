@@ -1,3 +1,4 @@
+import { jest, describe, it, expect } from '@jest/globals';
 import { matchesClassification } from '../../src/matchers';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
 import type {

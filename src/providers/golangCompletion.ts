@@ -16,6 +16,7 @@ import type {
 import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
+import { getDirnameCompat } from '../util/paths';
 
 const execAsync = util.promisify(exec);
 
@@ -126,7 +127,9 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        // @ts-ignore: import.meta.url is not available in CommonJS
+        const currentDir = getDirnameCompat(typeof import.meta === 'undefined' ? undefined : import.meta.url);
+        fs.copyFileSync(path.join(currentDir, '../golang/wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);

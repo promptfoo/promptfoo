@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
 import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';

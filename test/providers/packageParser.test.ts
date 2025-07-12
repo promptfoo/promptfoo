@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import { createRequire } from 'node:module';
 import path from 'path';
 import { importModule } from '../../src/esm';

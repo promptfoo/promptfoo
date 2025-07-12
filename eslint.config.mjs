@@ -9,6 +9,9 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default [
+  {
+    ignores: ['dist/**', 'node_modules/**', 'examples/**', 'src/main-wrapper.cjs', 'scripts/**', '*.cjs', '*.mjs'],
+  },
   ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommendedTypeChecked),
   {
     ...jest.configs['flat/recommended'],

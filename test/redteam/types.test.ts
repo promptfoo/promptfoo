@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { Severity } from '../../src/redteam/constants';
 import type {
   RedteamPluginObject,

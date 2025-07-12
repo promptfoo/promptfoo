@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { ellipsize } from '../../src/util/text';
 
 describe('ellipsize', () => {

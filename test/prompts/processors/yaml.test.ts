@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import logger from '../../../src/logger';

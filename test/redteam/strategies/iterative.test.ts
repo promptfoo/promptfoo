@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { addIterativeJailbreaks } from '../../../src/redteam/strategies/iterative';
 import type { TestCase } from '../../../src/types';
 

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';

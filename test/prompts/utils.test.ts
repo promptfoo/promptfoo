@@ -1,3 +1,4 @@
+import { jest, describe, it, expect } from '@jest/globals';
 import { maybeFilePath, normalizeInput } from '../../src/prompts/utils';
 
 jest.mock('fs', () => ({

@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, afterEach, it, expect } from '@jest/globals';
 import type { Request, Response, NextFunction } from 'express';
 import cliState from '../../../src/cliState';
 import { doRedteamRun } from '../../../src/redteam/shared';

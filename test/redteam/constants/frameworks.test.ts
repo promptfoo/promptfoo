@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import {
   FRAMEWORK_NAMES,
   OWASP_LLM_TOP_10_NAMES,

@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import dedent from 'dedent';
 import { validateXml, containsXml } from '../../src/assertions/xml';
 

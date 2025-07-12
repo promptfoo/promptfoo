@@ -1,3 +1,4 @@
+import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import fs from 'fs';
 import path from 'path';
 import { runAssertion } from '../../src/assertions';
