@@ -404,18 +404,6 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'vertex:gemini-2.5-pro-exp-03-25',
-      label: 'Vertex: Gemini 2.5 Pro (Exp)',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
-    {
       id: 'vertex:gemini-2.5-pro',
       label: 'Vertex: Gemini 2.5 Pro',
       config: {

@@ -16,7 +16,7 @@ providers:
   - openai:gpt-4.1
   - openai:o4-mini
   - google:gemini-2.5-pro-preview-06-05
-  - vertex:gemini-2.5-pro-exp-03-25
+  - vertex:gemini-2.5-pro
   - mistral:magistral-medium-latest
   - mistral:magistral-small-latest
 ```
