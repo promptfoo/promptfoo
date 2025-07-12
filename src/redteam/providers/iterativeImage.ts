@@ -16,7 +16,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../../util/tokenUsageUtils';
 import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
 
 interface ImageGenerationOutput {
@@ -255,11 +255,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      if (redteamResp.tokenUsage) {
-        accumulateTokenUsage(totalTokenUsage, redteamResp.tokenUsage);
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, redteamResp);
 
       if (redteamResp.error) {
         logger.warn(`Iteration ${i + 1}: Redteam provider error: ${redteamResp.error}`);
@@ -308,11 +304,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      if (isOnTopicResp.tokenUsage) {
-        accumulateTokenUsage(totalTokenUsage, isOnTopicResp.tokenUsage);
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, isOnTopicResp);
 
       let isOnTopic = false;
       try {
@@ -335,11 +327,7 @@ async function runRedteamConversation({
         continue;
       }
 
-      if (targetResponse.tokenUsage) {
-        accumulateTokenUsage(totalTokenUsage, targetResponse.tokenUsage);
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
       const urlRegex = /(https?:\/\/[^\s)]+)/g;
       const url = targetResponse.output.match(urlRegex);
@@ -376,11 +364,7 @@ async function runRedteamConversation({
             await sleep(visionProvider.delay);
           }
 
-          if (visionResponse.tokenUsage) {
-            accumulateTokenUsage(totalTokenUsage, visionResponse.tokenUsage);
-          } else {
-            totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-          }
+          accumulateResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionResponse.error) {
             logger.warn(`Iteration ${i + 1}: Vision API error: ${visionResponse.error}`);
@@ -436,11 +420,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      if (judgeResp.tokenUsage) {
-        accumulateTokenUsage(totalTokenUsage, judgeResp.tokenUsage);
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, judgeResp);
 
       let score: number;
       let scoreComponents: JudgeResponse['currentResponse']['components'];

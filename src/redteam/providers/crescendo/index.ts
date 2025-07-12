@@ -18,7 +18,12 @@ import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+  accumulateGraderTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
@@ -303,9 +308,7 @@ export class CrescendoProvider implements ApiProvider {
           options,
         );
         lastResponse = response;
-        if (lastResponse.tokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, lastResponse.tokenUsage);
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
 
         if (lastResponse.sessionId && this.stateful) {
           vars['sessionId'] = lastResponse.sessionId;
@@ -325,9 +328,7 @@ export class CrescendoProvider implements ApiProvider {
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
         });
-        if (unblockingResult.tokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, unblockingResult.tokenUsage);
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, unblockingResult);
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -346,9 +347,7 @@ export class CrescendoProvider implements ApiProvider {
             options,
           );
 
-          if (unblockingResponse.tokenUsage) {
-            accumulateTokenUsage(totalTokenUsage, unblockingResponse.tokenUsage);
-          }
+          accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
           // Update lastResponse to the unblocking response and continue
           lastResponse = unblockingResponse;
@@ -411,11 +410,7 @@ export class CrescendoProvider implements ApiProvider {
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             );
             graderPassed = grade.pass;
-            if (grade.tokensUsed) {
-              accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
-            } else {
-              totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-            }
+            accumulateGraderTokenUsage(totalTokenUsage, grade);
           }
         }
 

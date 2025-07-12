@@ -18,7 +18,11 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -380,29 +384,11 @@ export async function runRedteamConversation({
       guardrails: targetResponse.guardrails,
     });
 
-    if (redteamResp.tokenUsage) {
-      accumulateTokenUsage(totalTokenUsage, redteamResp.tokenUsage);
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-    }
-
-    if (isOnTopicResp.tokenUsage) {
-      accumulateTokenUsage(totalTokenUsage, isOnTopicResp.tokenUsage);
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-    }
-
-    if (judgeResp.tokenUsage) {
-      accumulateTokenUsage(totalTokenUsage, judgeResp.tokenUsage);
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-    }
-
-    if (targetResponse.tokenUsage) {
-      accumulateTokenUsage(totalTokenUsage, targetResponse.tokenUsage);
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-    }
+    // Update all the token usage accumulation patterns
+    accumulateResponseTokenUsage(totalTokenUsage, redteamResp);
+    accumulateResponseTokenUsage(totalTokenUsage, isOnTopicResp);
+    accumulateResponseTokenUsage(totalTokenUsage, judgeResp);
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     if (currentScore >= 10 || graderPassed === false) {
       finalIteration = i + 1;

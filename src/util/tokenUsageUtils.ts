@@ -1,4 +1,15 @@
-import type { TokenUsage } from '../types/shared';
+import type { TokenUsage, CompletionTokenDetails } from '../types/shared';
+
+/**
+ * Helper to create empty completion details
+ */
+function createEmptyCompletionDetails(): Required<CompletionTokenDetails> {
+  return {
+    reasoning: 0,
+    acceptedPrediction: 0,
+    rejectedPrediction: 0,
+  };
+}
 
 /**
  * Create an empty token usage object with all fields initialized to zero.
@@ -10,68 +21,39 @@ export function createEmptyTokenUsage(): Required<TokenUsage> {
     cached: 0,
     total: 0,
     numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
+    completionDetails: createEmptyCompletionDetails(),
     assertions: {
       total: 0,
       prompt: 0,
       completion: 0,
       cached: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
+      completionDetails: createEmptyCompletionDetails(),
     },
-  } as Required<TokenUsage>;
+  };
 }
 
 /**
- * Merge two token usage objects immutably.
- * @param current Existing usage
- * @param update Usage to merge in
- * @returns A new {@link TokenUsage} containing the sum of both usages
+ * Helper to accumulate numeric values
  */
-export function mergeTokenUsage(
-  current: Partial<TokenUsage>,
-  update: Partial<TokenUsage>,
-): TokenUsage {
+function addNumbers(a: number | undefined, b: number | undefined): number {
+  return (a ?? 0) + (b ?? 0);
+}
+
+/**
+ * Helper to accumulate completion details
+ */
+function accumulateCompletionDetails(
+  target: CompletionTokenDetails | undefined,
+  update: CompletionTokenDetails | undefined,
+): CompletionTokenDetails | undefined {
+  if (!update) {
+    return target;
+  }
+
   return {
-    prompt: (current.prompt ?? 0) + (update.prompt ?? 0),
-    completion: (current.completion ?? 0) + (update.completion ?? 0),
-    cached: (current.cached ?? 0) + (update.cached ?? 0),
-    total: (current.total ?? 0) + (update.total ?? 0),
-    numRequests: (current.numRequests ?? 0) + (update.numRequests ?? 0),
-    completionDetails: {
-      reasoning:
-        (current.completionDetails?.reasoning ?? 0) + (update.completionDetails?.reasoning ?? 0),
-      acceptedPrediction:
-        (current.completionDetails?.acceptedPrediction ?? 0) +
-        (update.completionDetails?.acceptedPrediction ?? 0),
-      rejectedPrediction:
-        (current.completionDetails?.rejectedPrediction ?? 0) +
-        (update.completionDetails?.rejectedPrediction ?? 0),
-    },
-    assertions: {
-      total: (current.assertions?.total ?? 0) + (update.assertions?.total ?? 0),
-      prompt: (current.assertions?.prompt ?? 0) + (update.assertions?.prompt ?? 0),
-      completion: (current.assertions?.completion ?? 0) + (update.assertions?.completion ?? 0),
-      cached: (current.assertions?.cached ?? 0) + (update.assertions?.cached ?? 0),
-      completionDetails: {
-        reasoning:
-          (current.assertions?.completionDetails?.reasoning ?? 0) +
-          (update.assertions?.completionDetails?.reasoning ?? 0),
-        acceptedPrediction:
-          (current.assertions?.completionDetails?.acceptedPrediction ?? 0) +
-          (update.assertions?.completionDetails?.acceptedPrediction ?? 0),
-        rejectedPrediction:
-          (current.assertions?.completionDetails?.rejectedPrediction ?? 0) +
-          (update.assertions?.completionDetails?.rejectedPrediction ?? 0),
-      },
-    },
+    reasoning: addNumbers(target?.reasoning, update.reasoning),
+    acceptedPrediction: addNumbers(target?.acceptedPrediction, update.acceptedPrediction),
+    rejectedPrediction: addNumbers(target?.rejectedPrediction, update.rejectedPrediction),
   };
 }
 
@@ -79,39 +61,39 @@ export function mergeTokenUsage(
  * Accumulate token usage into a target object. Mutates {@code target}.
  * @param target Object to update
  * @param update Usage to add
+ * @param incrementRequests Whether to increment numRequests when update is provided but doesn't specify numRequests
  */
 export function accumulateTokenUsage(
   target: TokenUsage,
   update: Partial<TokenUsage> | undefined,
+  incrementRequests = false,
 ): void {
   if (!update) {
     return;
   }
 
-  target.prompt = (target.prompt ?? 0) + (update.prompt ?? 0);
-  target.completion = (target.completion ?? 0) + (update.completion ?? 0);
-  target.cached = (target.cached ?? 0) + (update.cached ?? 0);
-  target.total = (target.total ?? 0) + (update.total ?? 0);
+  // Accumulate basic fields
+  target.prompt = addNumbers(target.prompt, update.prompt);
+  target.completion = addNumbers(target.completion, update.completion);
+  target.cached = addNumbers(target.cached, update.cached);
+  target.total = addNumbers(target.total, update.total);
+
+  // Handle numRequests
   if (update.numRequests !== undefined) {
-    target.numRequests = (target.numRequests ?? 0) + update.numRequests;
-  } else if (target.numRequests !== undefined) {
-    target.numRequests += 1;
+    target.numRequests = addNumbers(target.numRequests, update.numRequests);
+  } else if (incrementRequests) {
+    target.numRequests = (target.numRequests ?? 0) + 1;
   }
 
+  // Handle completion details
   if (update.completionDetails) {
-    if (!target.completionDetails) {
-      target.completionDetails = { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 };
-    }
-    target.completionDetails.reasoning =
-      (target.completionDetails.reasoning ?? 0) + (update.completionDetails.reasoning ?? 0);
-    target.completionDetails.acceptedPrediction =
-      (target.completionDetails.acceptedPrediction ?? 0) +
-      (update.completionDetails.acceptedPrediction ?? 0);
-    target.completionDetails.rejectedPrediction =
-      (target.completionDetails.rejectedPrediction ?? 0) +
-      (update.completionDetails.rejectedPrediction ?? 0);
+    target.completionDetails = accumulateCompletionDetails(
+      target.completionDetails,
+      update.completionDetails,
+    );
   }
 
+  // Handle assertions
   if (update.assertions) {
     if (!target.assertions) {
       target.assertions = {
@@ -119,32 +101,58 @@ export function accumulateTokenUsage(
         prompt: 0,
         completion: 0,
         cached: 0,
-        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       };
     }
-    target.assertions.total = (target.assertions.total ?? 0) + (update.assertions.total ?? 0);
-    target.assertions.prompt = (target.assertions.prompt ?? 0) + (update.assertions.prompt ?? 0);
-    target.assertions.completion =
-      (target.assertions.completion ?? 0) + (update.assertions.completion ?? 0);
-    target.assertions.cached = (target.assertions.cached ?? 0) + (update.assertions.cached ?? 0);
+
+    target.assertions.total = addNumbers(target.assertions.total, update.assertions.total);
+    target.assertions.prompt = addNumbers(target.assertions.prompt, update.assertions.prompt);
+    target.assertions.completion = addNumbers(
+      target.assertions.completion,
+      update.assertions.completion,
+    );
+    target.assertions.cached = addNumbers(target.assertions.cached, update.assertions.cached);
 
     if (update.assertions.completionDetails) {
-      if (!target.assertions.completionDetails) {
-        target.assertions.completionDetails = {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        };
-      }
-      target.assertions.completionDetails.reasoning =
-        (target.assertions.completionDetails.reasoning ?? 0) +
-        (update.assertions.completionDetails.reasoning ?? 0);
-      target.assertions.completionDetails.acceptedPrediction =
-        (target.assertions.completionDetails.acceptedPrediction ?? 0) +
-        (update.assertions.completionDetails.acceptedPrediction ?? 0);
-      target.assertions.completionDetails.rejectedPrediction =
-        (target.assertions.completionDetails.rejectedPrediction ?? 0) +
-        (update.assertions.completionDetails.rejectedPrediction ?? 0);
+      target.assertions.completionDetails = accumulateCompletionDetails(
+        target.assertions.completionDetails,
+        update.assertions.completionDetails,
+      );
     }
+  }
+}
+
+/**
+ * Accumulate token usage from a response, handling the common pattern of
+ * incrementing numRequests when no token usage is provided.
+ * @param target Object to update
+ * @param response Response that may contain token usage
+ */
+export function accumulateResponseTokenUsage(
+  target: TokenUsage,
+  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+): void {
+  if (response?.tokenUsage) {
+    accumulateTokenUsage(target, response.tokenUsage);
+  } else if (response) {
+    // Only increment numRequests if we got a response but no token usage
+    target.numRequests = (target.numRequests ?? 0) + 1;
+  }
+}
+
+/**
+ * Accumulate token usage from a grader result, handling the common pattern of
+ * incrementing numRequests when no token usage is provided.
+ * @param target Object to update
+ * @param graderResult Result that may contain tokensUsed
+ */
+export function accumulateGraderTokenUsage(
+  target: TokenUsage,
+  graderResult: { tokensUsed?: Partial<TokenUsage> } | undefined,
+): void {
+  if (graderResult?.tokensUsed) {
+    accumulateTokenUsage(target, graderResult.tokensUsed);
+  } else if (graderResult) {
+    // Only increment numRequests if we got a grader result but no token usage
+    target.numRequests = (target.numRequests ?? 0) + 1;
   }
 }

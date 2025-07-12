@@ -37,14 +37,8 @@ export const BaseTokenUsageSchema = z.object({
     .optional(),
 });
 
-/**
- * Complete token usage statistics, including assertion data
- * Note: BaseTokenUsageSchema already includes the assertions field
- */
-export const TokenUsageSchema = BaseTokenUsageSchema;
-
 // TypeScript types derived from schemas
 export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;
-export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;

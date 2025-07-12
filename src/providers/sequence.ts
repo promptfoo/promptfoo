@@ -8,7 +8,7 @@ import type {
 } from '../types';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 
 interface SequenceProviderConfig {
   inputs: string[];
@@ -45,7 +45,7 @@ export class SequenceProvider implements ApiProvider {
 
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
-    const totalTokenUsage = createEmptyTokenUsage();
+    const accumulatedTokenUsage = createEmptyTokenUsage();
 
     // Send each input to the original provider
     for (const input of this.inputs) {
@@ -64,17 +64,12 @@ export class SequenceProvider implements ApiProvider {
 
       responses.push(response.output);
 
-      // Accumulate token usage if available
-      if (response.tokenUsage) {
-        accumulateTokenUsage(totalTokenUsage, response.tokenUsage);
-      } else {
-        totalTokenUsage.numRequests += 1;
-      }
+      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
     }
 
     return {
       output: responses.join(this.separator),
-      tokenUsage: totalTokenUsage,
+      tokenUsage: accumulatedTokenUsage,
     };
   }
 

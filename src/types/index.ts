@@ -9,7 +9,7 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
-import { TokenUsageSchema } from '../types/shared';
+import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
@@ -204,7 +204,7 @@ const PromptMetricsSchema = z.object({
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
-  tokenUsage: TokenUsageSchema,
+  tokenUsage: BaseTokenUsageSchema,
   namedScores: z.record(z.string(), z.number()),
   namedScoresCount: z.record(z.string(), z.number()),
   redteam: z

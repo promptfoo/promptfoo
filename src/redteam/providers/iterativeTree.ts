@@ -34,7 +34,12 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+  accumulateGraderTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import {
@@ -558,9 +563,7 @@ export async function runRedteamConversation({
           throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
         }
         invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
-        if (targetResponse.tokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, targetResponse.tokenUsage);
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
@@ -616,9 +619,7 @@ export async function runRedteamConversation({
             graderPassed = grade.pass;
 
             if (grade.tokensUsed) {
-              accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
-            } else {
-              totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
+              accumulateGraderTokenUsage(totalTokenUsage, grade);
             }
           }
         }
@@ -774,7 +775,7 @@ export async function runRedteamConversation({
     options,
   );
   if (finalTargetResponse.tokenUsage) {
-    accumulateTokenUsage(totalTokenUsage, finalTargetResponse.tokenUsage);
+    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
   }
 
   logger.debug(

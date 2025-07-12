@@ -10,7 +10,7 @@ import type {
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type Message = {
@@ -115,7 +115,7 @@ export class SimulatedUser implements ApiProvider {
     const messages: Message[] = [];
     const maxTurns = this.maxTurns;
 
-    const totalTokenUsage = createEmptyTokenUsage();
+    const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
 
@@ -145,14 +145,11 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
 
-      if (agentResponse.tokenUsage) {
-        accumulateTokenUsage(totalTokenUsage, agentResponse.tokenUsage);
-      } else {
-        totalTokenUsage.numRequests += 1;
-      }
+      // Track token usage
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
-    return this.serializeOutput(messages, totalTokenUsage, agentResponse as ProviderResponse);
+    return this.serializeOutput(messages, tokenUsage, agentResponse as ProviderResponse);
   }
 
   toString() {

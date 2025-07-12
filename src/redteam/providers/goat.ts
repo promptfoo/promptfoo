@@ -16,7 +16,11 @@ import type {
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+  accumulateGraderTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
@@ -144,9 +148,7 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
           });
 
-          if (unblockingResult.tokenUsage) {
-            accumulateTokenUsage(totalTokenUsage, unblockingResult.tokenUsage);
-          }
+          accumulateResponseTokenUsage(totalTokenUsage, unblockingResult);
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
@@ -170,11 +172,7 @@ export default class GoatProvider implements ApiProvider {
               await sleep(targetProvider.delay);
             }
 
-            if (unblockingResponse.tokenUsage) {
-              accumulateTokenUsage(totalTokenUsage, unblockingResponse.tokenUsage);
-            } else {
-              totalTokenUsage.numRequests += 1;
-            }
+            accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
             const unblockingOutput =
               typeof unblockingResponse.output === 'string'
@@ -269,9 +267,7 @@ export default class GoatProvider implements ApiProvider {
           content: renderedAttackerPrompt,
         });
 
-        if (data.tokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, data.tokenUsage);
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, data);
         logger.debug(
           dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
@@ -326,11 +322,7 @@ export default class GoatProvider implements ApiProvider {
         // Store the attack response for potential unblocking in next turn
         previousTargetOutput = stringifiedOutput;
 
-        if (targetResponse.tokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, targetResponse.tokenUsage);
-        } else {
-          totalTokenUsage.numRequests += 1;
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         lastTargetResponse = finalResponse;
 
@@ -344,11 +336,7 @@ export default class GoatProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           );
           graderPassed = grade.pass;
-          if (grade.tokensUsed) {
-            accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
-          } else {
-            totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-          }
+          accumulateGraderTokenUsage(totalTokenUsage, grade);
         }
 
         if (graderPassed === false) {

@@ -49,7 +49,11 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from './util/tokenUsageUtils';
+import {
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+  accumulateGraderTokenUsage,
+} from './util/tokenUsageUtils';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -124,10 +128,6 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
     allowedPrompts.includes(prompt.label) ||
     allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
   );
-}
-
-export function newTokenUsage(): Required<TokenUsage> {
-  return createEmptyTokenUsage();
 }
 
 /**
@@ -325,7 +325,7 @@ export async function runEval({
       testIdx,
       testCase: test,
       promptId: prompt.id || '',
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
@@ -399,7 +399,7 @@ export async function runEval({
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
       if (checkResult.tokensUsed) {
-        // Track assertion tokens separately in the assertions field
+        // Track assertion tokens ONLY in the assertions field (not in main totals)
         if (!ret.tokenUsage.assertions) {
           ret.tokenUsage.assertions = {
             total: 0,
@@ -413,7 +413,7 @@ export async function runEval({
             },
           };
         }
-        accumulateTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
+        accumulateGraderTokenUsage(ret.tokenUsage.assertions as TokenUsage, checkResult);
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
@@ -421,7 +421,7 @@ export async function runEval({
 
     // Update token usage stats
     if (response.tokenUsage) {
-      accumulateTokenUsage(ret.tokenUsage, response.tokenUsage);
+      accumulateResponseTokenUsage(ret.tokenUsage, response);
     }
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
@@ -562,7 +562,7 @@ class Evaluator {
       successes: 0,
       failures: 0,
       errors: 0,
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
     this.conversations = {};
     this.registers = {};
@@ -1009,7 +1009,7 @@ class Evaluator {
         }
 
         if (row.tokenUsage) {
-          accumulateTokenUsage(this.stats.tokenUsage, row.tokenUsage);
+          accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
         }
 
         if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
@@ -1087,7 +1087,7 @@ class Evaluator {
         metrics.assertFailCount +=
           row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
         metrics.totalLatencyMs += row.latencyMs || 0;
-        accumulateTokenUsage(metrics.tokenUsage, row.response?.tokenUsage);
+        accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 
         // Add assertion token usage to the metrics
         if (row.gradingResult?.tokensUsed) {

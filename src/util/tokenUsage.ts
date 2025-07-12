@@ -1,6 +1,6 @@
 import logger from '../logger';
 import type { TokenUsage } from '../types/shared';
-import { createEmptyTokenUsage, mergeTokenUsage, accumulateTokenUsage } from './tokenUsageUtils';
+import { createEmptyTokenUsage, accumulateTokenUsage } from './tokenUsageUtils';
 
 /**
  * A utility class for tracking token usage across an evaluation
@@ -32,7 +32,10 @@ export class TokenUsageTracker {
     }
 
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
-    this.providersMap.set(providerId, mergeTokenUsage(current, usage));
+    // Create a copy and accumulate the usage
+    const updated = { ...current };
+    accumulateTokenUsage(updated, usage);
+    this.providersMap.set(providerId, updated);
     logger.debug(
       `Tracked token usage for ${providerId}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
     );

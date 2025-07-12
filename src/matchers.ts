@@ -173,6 +173,7 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
       prompt: tokensUsed?.prompt || 0,
       completion: tokensUsed?.completion || 0,
       cached: tokensUsed?.cached || 0,
+      numRequests: tokensUsed?.numRequests || 0,
       completionDetails: tokensUsed?.completionDetails,
     },
   };
@@ -216,6 +217,7 @@ export async function matchesSimilarity(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -229,6 +231,7 @@ export async function matchesSimilarity(
     tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
     tokensUsed.completion = similarityResp.tokenUsage?.completion || 0;
     tokensUsed.cached = similarityResp.tokenUsage?.cached || 0;
+    tokensUsed.numRequests = similarityResp.tokenUsage?.numRequests || 0;
     tokensUsed.completionDetails = similarityResp.tokenUsage?.completionDetails;
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
@@ -250,6 +253,9 @@ export async function matchesSimilarity(
       (outputEmbedding.tokenUsage?.completion || 0);
     tokensUsed.cached =
       (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0);
+    tokensUsed.numRequests =
+      (expectedEmbedding.tokenUsage?.numRequests || 0) +
+      (outputEmbedding.tokenUsage?.numRequests || 0);
     tokensUsed.completionDetails = {
       reasoning:
         (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
@@ -550,6 +556,7 @@ export async function matchesLlmRubric(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: parsed.tokensUsed?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -674,6 +681,7 @@ export async function matchesFactuality(
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -725,6 +733,7 @@ export async function matchesFactuality(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -786,6 +795,7 @@ export async function matchesClosedQa(
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
         cached: resp.tokenUsage?.cached || 0,
+        numRequests: resp.tokenUsage?.numRequests || 0,
         completionDetails: resp.tokenUsage?.completionDetails || {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -822,6 +832,7 @@ export async function matchesGEval(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -911,6 +922,7 @@ export async function matchesAnswerRelevance(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -1025,6 +1037,7 @@ export async function matchesContextRecall(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -1077,6 +1090,7 @@ export async function matchesContextRelevance(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -1106,6 +1120,7 @@ export async function matchesContextFaithfulness(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -1221,6 +1236,7 @@ export async function matchesSelectBest(
     prompt: resp.tokenUsage?.prompt || 0,
     completion: resp.tokenUsage?.completion || 0,
     cached: resp.tokenUsage?.cached || 0,
+    numRequests: resp.tokenUsage?.numRequests || 0,
     completionDetails: resp.tokenUsage?.completionDetails || {
       reasoning: 0,
       acceptedPrediction: 0,

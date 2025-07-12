@@ -11,7 +11,7 @@ import type {
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../types/providers';
-import { TokenUsageSchema } from '../types/shared';
+import { BaseTokenUsageSchema } from '../types/shared';
 import { PromptSchema } from './prompts';
 import { NunjucksFilterMapSchema } from './shared';
 
@@ -82,19 +82,19 @@ export const ProviderResponseSchema = z.object({
     .catchall(z.any())
     .optional(),
   output: z.union([z.string(), z.any()]).optional(),
-  tokenUsage: TokenUsageSchema.optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const ProviderEmbeddingResponseSchema = z.object({
   error: z.string().optional(),
   embedding: z.array(z.number()).optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
 });
 
 export const ProviderSimilarityResponseSchema = z.object({
   error: z.string().optional(),
   similarity: z.number().optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
 });
 
 export const ProviderClassificationResponseSchema = z.object({
