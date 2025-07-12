@@ -364,12 +364,6 @@ type HookContextMap = {
   afterAll: AfterAllExtensionHookContext;
 };
 
-type ExtensionHookContext =
-  | BeforeAllExtensionHookContext
-  | BeforeEachExtensionHookContext
-  | AfterEachExtensionHookContext
-  | AfterAllExtensionHookContext;
-
 /**
  * Runs extension hooks for the given hook name and context. The hook will be called with the context object,
  * and can update the context object to persist data into provider calls.

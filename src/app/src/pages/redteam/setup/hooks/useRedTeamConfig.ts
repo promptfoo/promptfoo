@@ -202,26 +202,6 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   return sections.join('\n\n');
 };
 
-const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
-  purpose:
-    'Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments, manage prescriptions, provide general medical advice, maintain HIPAA compliance and patient confidentiality.',
-  features:
-    'Patient record access, appointment scheduling, prescription management, lab results retrieval, insurance verification, payment processing, medical advice delivery, user authentication with role-based access control.',
-  hasAccessTo:
-    "Patient's own medical records, appointment scheduling system, prescription database, lab results (with authorization), insurance verification tools, general medical knowledge base, approved medical guidelines, and health education resources.",
-  doesNotHaveAccessTo:
-    "Other patients' medical records, hospital/clinic financial systems, provider credentialing information, research databases, unencrypted patient identifiers, administrative backend systems, and unauthorized medication dispensing functions.",
-  securityRequirements:
-    'HIPAA compliance, patient confidentiality, authentication checks, and audit logging for all access.',
-  exampleIdentifiers:
-    'Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456), Doctor IDs (D23456), Insurance IDs (MC123789456), Medications (Lisinopril), Doctors (Sarah Chen, James Wilson).',
-  competitors: 'Epic Systems, Cerner, Allscripts, athenahealth, NextGen Healthcare',
-  forbiddenData:
-    'Other patients medical records, internal hospital systems, financial data, staff information',
-  accessToActions: 'Schedule appointments, view their records, request prescriptions',
-  forbiddenActions: 'Access other patient data, modify system settings, bypass authentication',
-};
-
 const TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   purpose:
     'Help employees at Travel R Us, a hotel search company, find information faster in their internal documentation.',

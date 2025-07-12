@@ -1,18 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": [
-    "src/index.ts",
-    "src/app/src/index.ts",
-    "src/server/index.ts"
-  ],
-  "project": [
-    "src/**/*.{js,ts,tsx}"
-  ],
-  "ignore": [
-    "dist/**/*.{js,ts,tsx}",
-    "examples/**/*.{js,ts,tsx,mjs}",
-    "src/server/index.ts"
-  ],
+  "entry": ["src/index.ts", "src/app/src/index.ts", "src/server/index.ts"],
+  "project": ["src/**/*.{js,ts,tsx}"],
+  "ignore": ["dist/**/*.{js,ts,tsx}", "examples/**/*.{js,ts,tsx,mjs}", "src/server/index.ts"],
   "workspaces": {
     "site": {
       "entry": [
@@ -20,24 +10,12 @@
         "site/blog/**/*.{js,ts,tsx}",
         "site/docusaurus.config.ts"
       ],
-      "project": [
-        "site/**/*.{js,ts,tsx}"
-      ],
-      "ignoreDependencies": [
-        "@docusaurus/types",
-        "@docusaurus/theme-common",
-        "@theme/*",
-        "@mui/*"
-      ]
+      "project": ["site/**/*.{js,ts,tsx}"],
+      "ignoreDependencies": ["@docusaurus/types", "@docusaurus/theme-common", "@theme/*", "@mui/*"]
     }
   },
-  "ignoreBinaries": [
-    "dist/src/main.js",
-    "gh"
-  ],
+  "ignoreBinaries": ["dist/src/main.js", "gh"],
   "paths": {
-    "@promptfoo/*": [
-      "./src/*"
-    ]
+    "@promptfoo/*": ["./src/*"]
   }
 }

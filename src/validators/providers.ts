@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import type {
-  ApiProvider,
   CallApiFunction,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,

@@ -919,3 +919,4 @@ class CustomProvider implements ApiProvider {
 }
 
 export default CustomProvider;
+export { CustomProvider };
