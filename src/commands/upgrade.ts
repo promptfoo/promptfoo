@@ -147,9 +147,10 @@ async function checkForUpdates(targetVersion?: string): Promise<{
     latestVersion = await getLatestVersion();
   }
 
-  const updateAvailable = targetVersion && targetVersion !== 'latest'
-    ? currentVersion !== targetVersion
-    : semver.gt(latestVersion, currentVersion);
+  const updateAvailable =
+    targetVersion && targetVersion !== 'latest'
+      ? currentVersion !== targetVersion
+      : semver.gt(latestVersion, currentVersion);
 
   return {
     currentVersion,
