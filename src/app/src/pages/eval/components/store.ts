@@ -30,6 +30,7 @@ interface FetchEvalOptions {
   filterMode?: FilterMode;
   searchText?: string;
   selectedMetric?: string | null;
+  selectedMetadata?: string | null;
   skipSettingEvalId?: boolean;
 }
 
@@ -42,6 +43,15 @@ export interface PaginationState {
   pageIndex: number;
   pageSize: number;
 }
+
+interface MetadataCache {
+  keys: string[];
+  counts: Record<string, number>;
+  timestamp: number;
+  evalId: string;
+}
+
+const METADATA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 interface TableState {
   evalId: string | null;
@@ -68,8 +78,20 @@ interface TableState {
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
 
-  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+
+  // Add metadata state
+  availableMetadata: string[];
+  metadataCounts: Record<string, number>;
+  isLoadingMetadata: boolean;
+  metadataCache: MetadataCache | null;
+  metadataAbortController: AbortController | null;
+
+  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
+
+  // Add method to fetch metadata keys
+  fetchMetadataKeys: (id: string) => Promise<void>;
+  clearMetadataCache: () => void;
 }
 
 interface SettingsState {
@@ -194,6 +216,13 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
   isFetching: false,
 
+  // Initialize metadata state
+  availableMetadata: [],
+  metadataCounts: {},
+  isLoadingMetadata: false,
+  metadataCache: null,
+  metadataAbortController: null,
+
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
       pageIndex = 0,
@@ -201,6 +230,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       filterMode = 'all',
       searchText = '',
       selectedMetric = null,
+      selectedMetadata = null,
       skipSettingEvalId = false,
     } = options;
 
@@ -209,15 +239,13 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set({ isFetching: true });
 
     try {
-      console.log(`Fetching data for eval ${id} with options:`, options);
-
       const url = `/eval/${id}/table?offset=${pageIndex * pageSize}&limit=${pageSize}&filter=${filterMode}${
         comparisonEvalIds.length > 0
           ? `&comparisonEvalIds=${comparisonEvalIds.join('&comparisonEvalIds=')}`
           : ''
       }${searchText ? `&search=${encodeURIComponent(searchText)}` : ''}${
         selectedMetric ? `&metric=${encodeURIComponent(selectedMetric)}` : ''
-      }`;
+      }${selectedMetadata ? `&metadata=${encodeURIComponent(selectedMetadata)}` : ''}`;
 
       const resp = await callApi(url);
 
@@ -246,5 +274,84 @@ export const useTableStore = create<TableState>()((set, get) => ({
       set({ isFetching: false });
       return null;
     }
+  },
+
+  fetchMetadataKeys: async (id: string) => {
+    const currentCache = get().metadataCache;
+    const currentAbortController = get().metadataAbortController;
+
+    // Cancel any pending request
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
+
+    // Check if we have a valid cache for this eval
+    if (
+      currentCache &&
+      currentCache.evalId === id &&
+      Date.now() - currentCache.timestamp < METADATA_CACHE_TTL
+    ) {
+      // Use cached data
+      set({
+        availableMetadata: currentCache.keys,
+        metadataCounts: currentCache.counts,
+        isLoadingMetadata: false,
+      });
+      return;
+    }
+
+    // Create new abort controller for this request
+    const abortController = new AbortController();
+    set({ isLoadingMetadata: true, metadataAbortController: abortController });
+
+    try {
+      const resp = await callApi(`/eval/${id}/metadata-keys`, {
+        signal: abortController.signal,
+      });
+
+      if (resp.ok) {
+        const data = (await resp.json()) as { keys: string[]; counts: Record<string, number> };
+
+        // Update cache
+        const cache: MetadataCache = {
+          keys: data.keys,
+          counts: data.counts,
+          timestamp: Date.now(),
+          evalId: id,
+        };
+
+        set({
+          availableMetadata: data.keys,
+          metadataCounts: data.counts,
+          isLoadingMetadata: false,
+          metadataCache: cache,
+          metadataAbortController: null,
+        });
+      } else {
+        console.error('Failed to fetch metadata keys');
+        set({
+          availableMetadata: [],
+          metadataCounts: {},
+          isLoadingMetadata: false,
+          metadataAbortController: null,
+        });
+      }
+    } catch (error) {
+      // Don't log errors for aborted requests
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      console.error('Error fetching metadata keys:', error);
+      set({
+        availableMetadata: [],
+        metadataCounts: {},
+        isLoadingMetadata: false,
+        metadataAbortController: null,
+      });
+    }
+  },
+
+  clearMetadataCache: () => {
+    set({ metadataCache: null });
   },
 }));

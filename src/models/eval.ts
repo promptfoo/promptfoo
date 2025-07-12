@@ -429,6 +429,7 @@ export default class Eval {
     filterMode?: string;
     searchQuery?: string;
     metricFilter?: string;
+    metadataFilter?: string;
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
@@ -449,6 +450,40 @@ export default class Eval {
     if (opts.metricFilter && opts.metricFilter.trim() !== '') {
       const sanitizedMetric = opts.metricFilter.replace(/'/g, "''");
       conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
+    }
+
+    // Add specific metadata filter if provided
+    if (opts.metadataFilter && opts.metadataFilter.trim() !== '') {
+      const filter = opts.metadataFilter.trim();
+
+      // Check if the filter contains a colon for key:value filtering
+      if (filter.includes(':')) {
+        const colonIndex = filter.indexOf(':');
+        const key = filter.substring(0, colonIndex).replace(/'/g, "''");
+        const value = filter.substring(colonIndex + 1).replace(/'/g, "''");
+
+        // Support different matching modes
+        if (value.startsWith('*') && value.endsWith('*')) {
+          // Contains match
+          const searchValue = value.slice(1, -1);
+          conditions.push(`json_extract(metadata, '$.${key}') LIKE '%${searchValue}%'`);
+        } else if (value.startsWith('*')) {
+          // Ends with match
+          const searchValue = value.slice(1);
+          conditions.push(`json_extract(metadata, '$.${key}') LIKE '%${searchValue}'`);
+        } else if (value.endsWith('*')) {
+          // Starts with match
+          const searchValue = value.slice(0, -1);
+          conditions.push(`json_extract(metadata, '$.${key}') LIKE '${searchValue}%'`);
+        } else {
+          // Exact match
+          conditions.push(`json_extract(metadata, '$.${key}') = '${value}'`);
+        }
+      } else {
+        // Original behavior: just check if key exists
+        const sanitizedMetadata = filter.replace(/'/g, "''");
+        conditions.push(`json_extract(metadata, '$.${sanitizedMetadata}') IS NOT NULL`);
+      }
     }
 
     // Add search condition if searchQuery is provided
@@ -507,6 +542,7 @@ export default class Eval {
     testIndices?: number[];
     searchQuery?: string;
     metricFilter?: string;
+    metadataFilter?: string;
   }): Promise<{
     head: { prompts: Prompt[]; vars: string[] };
     body: EvaluateTableRow[];
@@ -533,6 +569,7 @@ export default class Eval {
         filterMode: opts.filterMode,
         searchQuery: opts.searchQuery,
         metricFilter: opts.metricFilter,
+        metadataFilter: opts.metadataFilter,
       });
 
       testIndices = queryResult.testIndices;
@@ -753,6 +790,36 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+  }
+
+  async getAllMetadataKeys(): Promise<{ keys: string[]; counts: Record<string, number> }> {
+    const db = getDb();
+
+    // Query to get all unique metadata keys and their counts for this evaluation
+    const query = sql.raw(`
+      WITH metadata_keys AS (
+        SELECT json_each.key as metadata_key
+        FROM eval_results, json_each(eval_results.metadata)
+        WHERE eval_results.eval_id = '${this.id}'
+      )
+      SELECT metadata_key, COUNT(*) as count
+      FROM metadata_keys
+      GROUP BY metadata_key
+      ORDER BY metadata_key
+    `);
+
+    // @ts-ignore
+    const results: { metadata_key: string; count: number }[] = await db.all(query);
+
+    const keys: string[] = [];
+    const counts: Record<string, number> = {};
+
+    results.forEach((row) => {
+      keys.push(row.metadata_key);
+      counts[row.metadata_key] = row.count;
+    });
+
+    return { keys, counts };
   }
 }
 

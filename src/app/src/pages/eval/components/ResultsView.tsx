@@ -14,6 +14,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -41,6 +42,8 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
+import { MetadataFilterErrorBoundary } from './MetadataFilterErrorBoundary';
+import { MetadataFilterSelector } from './MetadataFilterSelector';
 import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
@@ -163,7 +166,6 @@ export default function ResultsView({
   const {
     author,
     table,
-
     config,
     setConfig,
     evalId,
@@ -171,6 +173,11 @@ export default function ResultsView({
     filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
+    availableMetadata,
+    metadataCounts,
+    fetchMetadataKeys,
+    isLoadingMetadata,
+    metadataAbortController,
   } = useTableStore();
 
   const {
@@ -290,6 +297,61 @@ export default function ResultsView({
     [table.body],
   );
 
+  const hasAnyComments = React.useMemo(
+    () =>
+      table.body?.some((row) =>
+        row.outputs.some(
+          (output) =>
+            !!(output.gradingResult?.componentResults || output.gradingResult?.comment) ||
+            output.gradingResult?.comment?.startsWith('!highlight'),
+        ),
+      ),
+    [table.body],
+  );
+
+  const currentColumnState = columnStates[currentEvalId] || {
+    selectedColumns: [],
+    columnVisibility: {},
+  };
+
+  const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+  const [configModalOpen, setConfigModalOpen] = React.useState(false);
+
+  const allColumns = React.useMemo(() => {
+    const columns = [];
+    if (hasAnyDescriptions) {
+      columns.push('description');
+    }
+    columns.push('vars');
+    for (let i = 0; i < head.prompts.length; i++) {
+      columns.push(`Prompt ${i + 1}`);
+    }
+    if (hasAnyComments) {
+      columns.push('comments');
+    }
+    if (!hasAnyComments) {
+      columns.push('pass/fail');
+    }
+    return columns;
+  }, [head.prompts, hasAnyDescriptions, hasAnyComments]);
+
+  const columnVisibility = React.useMemo(() => {
+    // If we haven't explicitly set columns for this eval, default to showing all
+    if (!currentColumnState.selectedColumns || currentColumnState.selectedColumns.length === 0) {
+      const visibility: VisibilityState = {};
+      allColumns.forEach((col) => {
+        visibility[col] = true;
+      });
+      return visibility;
+    }
+    return currentColumnState.columnVisibility;
+  }, [currentColumnState, allColumns]);
+
+  const visiblePromptCount = React.useMemo(
+    () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
+    [head.prompts, columnVisibility],
+  );
+
   const promptOptions = head.prompts.map((prompt, idx) => {
     const label = prompt.label || prompt.display || prompt.raw;
     const provider = prompt.provider || 'unknown';
@@ -309,43 +371,26 @@ export default function ResultsView({
   });
 
   const columnData = React.useMemo(() => {
-    return [
-      ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
-      ...head.vars.map((_, idx) => ({
-        value: `Variable ${idx + 1}`,
-        label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-        }`,
-        group: 'Variables',
-      })),
-      ...promptOptions,
-    ];
-  }, [head.vars, promptOptions, hasAnyDescriptions]);
+    const columns = [];
 
-  const [configModalOpen, setConfigModalOpen] = React.useState(false);
-  const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+    if (hasAnyDescriptions) {
+      columns.push({ value: 'description', label: 'Description', group: 'General' });
+    }
 
-  const allColumns = React.useMemo(
-    () => [
-      ...(hasAnyDescriptions ? ['description'] : []),
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ],
-    [hasAnyDescriptions, head.vars, head.prompts],
-  );
+    columns.push({ value: 'vars', label: 'Variables', group: 'General' });
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+    columns.push(...promptOptions);
 
-  const visiblePromptCount = React.useMemo(
-    () =>
-      head.prompts.filter(
-        (_, idx) => currentColumnState.columnVisibility[`Prompt ${idx + 1}`] !== false,
-      ).length,
-    [head.prompts, currentColumnState.columnVisibility],
-  );
+    if (hasAnyComments) {
+      columns.push({ value: 'comments', label: 'Comments', group: 'Results' });
+    }
+
+    if (!hasAnyComments) {
+      columns.push({ value: 'pass/fail', label: 'Pass/Fail', group: 'Results' });
+    }
+
+    return columns;
+  }, [promptOptions, hasAnyDescriptions, hasAnyComments]);
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
@@ -461,6 +506,11 @@ export default function ResultsView({
   // Add state for metric filter and available metrics
   const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
 
+  // Add state for metadata filter - Initialize from URL
+  const [selectedMetadata, setSelectedMetadata] = React.useState<string | null>(
+    searchParams.get('metadata'),
+  );
+
   const availableMetrics = React.useMemo(() => {
     if (table && table.head?.prompts) {
       const metrics = new Set<string>();
@@ -474,10 +524,44 @@ export default function ResultsView({
     return [];
   }, [table]);
 
+  // Fetch metadata keys when evalId changes
+  React.useEffect(() => {
+    if (evalId) {
+      fetchMetadataKeys(evalId);
+      // Don't reset metadata filter when eval changes if it's in the URL
+      if (!searchParams.get('metadata')) {
+        setSelectedMetadata(null);
+      }
+    }
+
+    // Cleanup function to cancel pending requests when component unmounts
+    return () => {
+      if (metadataAbortController) {
+        metadataAbortController.abort();
+      }
+    };
+  }, [evalId, fetchMetadataKeys, searchParams, metadataAbortController]);
+
   // Make the function a callback that can be passed to CustomMetrics
   const handleMetricFilterChange = React.useCallback((metric: string | null) => {
     setSelectedMetric(metric);
   }, []);
+
+  const handleMetadataFilterChange = React.useCallback(
+    (key: string | null) => {
+      setSelectedMetadata(key);
+
+      // Update URL params
+      const newSearchParams = new URLSearchParams(searchParams);
+      if (key) {
+        newSearchParams.set('metadata', key);
+      } else {
+        newSearchParams.delete('metadata');
+      }
+      setSearchParams(newSearchParams, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
@@ -540,27 +624,37 @@ export default function ResultsView({
           />
         ))}
       </ResponsiveStack>
-      <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
-        <Box>
-          <FilterModeSelector
-            filterMode={filterMode}
-            onChange={handleFilterModeChange}
-            showDifferentOption={visiblePromptCount > 1}
-          />
-        </Box>
-        <Box>
-          <SearchInputField
-            value={searchText}
-            onChange={handleSearchTextChange}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Text or regex"
-          />
-        </Box>
+      <ResponsiveStack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        sx={{ gap: 1, flexWrap: 'wrap' }}
+      >
+        <FilterModeSelector
+          filterMode={filterMode}
+          onChange={handleFilterModeChange}
+          showDifferentOption={visiblePromptCount > 1}
+        />
+        <SearchInputField
+          value={searchText}
+          onChange={handleSearchTextChange}
+          onKeyDown={handleSearchKeyDown}
+          placeholder="Text or regex"
+        />
         <MetricFilterSelector
           selectedMetric={selectedMetric}
           availableMetrics={availableMetrics}
           onChange={handleMetricFilterChange}
         />
+        <MetadataFilterErrorBoundary onReset={() => setSelectedMetadata(null)}>
+          <MetadataFilterSelector
+            selectedMetadata={selectedMetadata}
+            availableMetadata={availableMetadata}
+            onChange={handleMetadataFilterChange}
+            metadataCounts={metadataCounts}
+            isLoading={isLoadingMetadata}
+          />
+        </MetadataFilterErrorBoundary>
         <Box
           sx={{
             display: 'flex',
@@ -571,7 +665,7 @@ export default function ResultsView({
             fontSize: '0.875rem',
           }}
         >
-          {searchText || filterMode !== 'all' || selectedMetric ? (
+          {searchText || filterMode !== 'all' || selectedMetric || selectedMetadata ? (
             <>
               <strong>{filteredResultsCount}</strong>
               <span style={{ margin: '0 4px' }}>of</span>
@@ -600,6 +694,23 @@ export default function ResultsView({
                   onDelete={() => handleMetricFilterChange(null)}
                   sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                 />
+              )}
+              {selectedMetadata && (
+                <Tooltip
+                  title={
+                    selectedMetadata.includes(':')
+                      ? `Filtering by metadata: ${selectedMetadata}`
+                      : `Filtering by metadata key: ${selectedMetadata} (any value)`
+                  }
+                  arrow
+                >
+                  <Chip
+                    size="small"
+                    label={selectedMetadata.includes(':') ? selectedMetadata : selectedMetadata}
+                    onDelete={() => handleMetadataFilterChange(null)}
+                    sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                  />
+                </Tooltip>
               )}
             </>
           ) : (
@@ -724,6 +835,12 @@ export default function ResultsView({
         columnVisibility={currentColumnState.columnVisibility}
         recentEvals={recentEvals}
       />
+      {selectedMetadata && filteredResultsCount === 0 && (
+        <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+          No results found with metadata key "{selectedMetadata}". Try selecting a different
+          metadata key or clearing the filter.
+        </Alert>
+      )}
       <ResultsTable
         maxTextLength={maxTextLength}
         columnVisibility={currentColumnState.columnVisibility}
@@ -738,6 +855,8 @@ export default function ResultsView({
         setFilterMode={setFilterMode}
         selectedMetric={selectedMetric}
         onMetricFilter={handleMetricFilterChange}
+        selectedMetadata={selectedMetadata}
+        onMetadataFilter={handleMetadataFilterChange}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

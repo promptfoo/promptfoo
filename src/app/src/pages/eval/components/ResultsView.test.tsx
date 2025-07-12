@@ -109,24 +109,41 @@ let mockTableStoreData = {
   filteredResultsCount: 10,
   totalResultsCount: 10,
   highlightedResultsCount: 0,
+  availableMetadata: [],
+  metadataCounts: {},
+  fetchMetadataKeys: vi.fn(),
+  isLoadingMetadata: false,
+  metadataAbortController: null,
 };
 
 vi.mock('./store', () => ({
-  useTableStore: vi.fn(() => mockTableStoreData),
-  useResultsViewSettingsStore: vi.fn(() => ({
-    stickyHeader: true,
-    setStickyHeader: vi.fn(),
-    inComparisonMode: false,
-    setInComparisonMode: vi.fn(),
-    columnStates: { '1': mockColumnState },
-    setColumnState: vi.fn(),
-    maxTextLength: 100,
-    wordBreak: 'break-word',
-    showInferenceDetails: true,
-    comparisonEvalIds: [],
-    setComparisonEvalIds: vi.fn(),
-    renderMarkdown: true,
-  })),
+  useTableStore: Object.assign(
+    vi.fn(() => mockTableStoreData),
+    {
+      getState: vi.fn(() => mockTableStoreData),
+    },
+  ),
+  useResultsViewSettingsStore: Object.assign(
+    vi.fn(() => ({
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+      inComparisonMode: false,
+      setInComparisonMode: vi.fn(),
+      columnStates: { '1': mockColumnState },
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      renderMarkdown: true,
+    })),
+    {
+      getState: vi.fn(() => ({
+        comparisonEvalIds: [],
+      })),
+    },
+  ),
 }));
 
 // Mock the API functions
@@ -197,6 +214,11 @@ describe('ResultsView', () => {
       filteredResultsCount: 10,
       totalResultsCount: 10,
       highlightedResultsCount: 0,
+      availableMetadata: [],
+      metadataCounts: {},
+      fetchMetadataKeys: vi.fn(),
+      isLoadingMetadata: false,
+      metadataAbortController: null,
     };
   });
 

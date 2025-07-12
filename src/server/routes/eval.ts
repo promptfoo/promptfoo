@@ -171,6 +171,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const filter = String(req.query.filter || 'all');
   const searchText = req.query.search ? String(req.query.search) : '';
   const metricFilter = req.query.metric ? String(req.query.metric) : '';
+  const metadataFilter = req.query.metadata ? String(req.query.metadata) : '';
 
   const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
     ? req.query.comparisonEvalIds
@@ -190,6 +191,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     filterMode: filter as any,
     searchQuery: searchText,
     metricFilter,
+    metadataFilter,
   });
 
   const indices = table.body.map((row) => row.testIdx);
@@ -197,7 +199,6 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   let returnTable = { head: table.head, body: table.body };
 
   if (comparisonEvalIds.length > 0) {
-    console.log('comparisonEvalIds', comparisonEvalIds);
     const comparisonEvals = await Promise.all(
       comparisonEvalIds.map(async (comparisonEvalId) => {
         const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
@@ -220,6 +221,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           testIndices: indices,
           searchQuery: searchText,
           metricFilter,
+          metadataFilter,
         });
       }),
     );
@@ -269,6 +271,24 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     author: eval_.author || null,
     version: eval_.version(),
   } as EvalTableDTO);
+});
+
+evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+
+  try {
+    const metadataInfo = await eval_.getAllMetadataKeys();
+    res.json(metadataInfo);
+  } catch (error) {
+    logger.error(`Failed to fetch metadata keys for eval ${id}: ${error}`);
+    res.status(500).json({ error: 'Failed to fetch metadata keys' });
+  }
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
