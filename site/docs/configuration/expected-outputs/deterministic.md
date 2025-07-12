@@ -552,12 +552,23 @@ tests:
 
 ### Perplexity
 
-Perplexity measures how "surprised" or "confused" a language model is by the text it's generating. Think of it as the model's confidence score - but inverted. Lower perplexity means the model is more confident in its predictions.
+Perplexity measures how "surprised" a language model is by its own output. It's calculated from the log probabilities of the tokens the model generated - essentially measuring how likely the model thinks its own output is.
+
+**How it works in promptfoo:**
+- The LLM returns log probabilities for each token it generates
+- Perplexity = exp(-average(log probabilities))
+- Lower perplexity = model assigned higher probabilities to its tokens = more confident
+- Higher perplexity = model assigned lower probabilities to its tokens = less confident
 
 **When to use perplexity:**
-- **Quality control**: Set a maximum perplexity threshold to reject outputs where the model seems uncertain or confused
-- **Style consistency**: Ensure outputs match expected patterns (e.g., formal writing should have consistently low perplexity)
-- **Prompt debugging**: High perplexity might indicate your prompt is causing confusion
+- **Quality control**: Reject outputs where the model seems uncertain (high perplexity often correlates with hallucination or confusion)
+- **Consistency checking**: Ensure the model is confident about its outputs in your domain
+- **Debugging**: Unusually high perplexity can indicate prompt issues or out-of-distribution requests
+
+**Example interpretation:**
+- Perplexity = 1.0: Perfect confidence (model assigned 100% probability to each token)
+- Perplexity = 2.0: Model is choosing between ~2 equally likely options per token
+- Perplexity = 10.0: Model is very uncertain, choosing between ~10 options per token
 
 The assertion passes when perplexity is **below** the threshold, ensuring the model is confident in its output.
 
