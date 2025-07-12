@@ -92,7 +92,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `openai:gpt-4.1` or `anthropic:messages:claude-sonnet-4-20250514`
+   Example: `openai:gpt-4.1` or `anthropic:claude-sonnet-4-20250514`
 
 2. Object format with configuration:
 
