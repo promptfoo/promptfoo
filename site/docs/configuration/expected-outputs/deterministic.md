@@ -1,8 +1,27 @@
 ---
 sidebar_position: 6
 title: Deterministic Metrics for LLM Output Validation
-description: Learn about logical tests that validate LLM outputs with exact matching, pattern recognition, and structural validation
-keywords: [metrics, assertions, testing, validation, contains, regex, json, levenshtein]
+description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
+keywords:
+  [
+    metrics,
+    assertions,
+    testing,
+    validation,
+    contains,
+    regex,
+    json,
+    levenshtein,
+    LLM testing,
+    output validation,
+    deterministic tests,
+    rouge,
+    bleu,
+    perplexity,
+    webhook,
+    sql validation,
+    xml validation,
+  ]
 ---
 
 # Deterministic metrics
@@ -553,34 +572,15 @@ tests:
 
 ### Perplexity
 
-Perplexity measures how "surprised" a language model is by its own output. It's calculated from the log probabilities of the tokens the model generated - essentially measuring how likely the model thinks its own output is.
+Perplexity measures how "surprised" a language model is by its own output. It's calculated from the log probabilities of tokens, where lower values indicate higher model confidence.
 
-**How it works in promptfoo:**
+**Key points:**
 
-- The LLM returns log probabilities for each token it generates
-- Perplexity = exp(-average(log probabilities))
-- Lower perplexity = model assigned higher probabilities to its tokens = more confident
-- Higher perplexity = model assigned lower probabilities to its tokens = less confident
+- **Low perplexity** = high confidence (model thinks its output is likely)
+- **High perplexity** = low confidence (often correlates with hallucination or confusion)
+- Useful for quality control and detecting when the model is uncertain
 
-**When to use perplexity:**
-
-- **Quality control**: Reject outputs where the model seems uncertain (high perplexity often correlates with hallucination or confusion)
-- **Consistency checking**: Ensure the model is confident about its outputs in your domain
-- **Debugging**: Unusually high perplexity can indicate prompt issues or out-of-distribution requests
-
-**Example interpretation:**
-
-- Perplexity = 1.0: Perfect confidence (model assigned 100% probability to each token)
-- Perplexity = 2.0: Model is choosing between ~2 equally likely options per token
-- Perplexity = 10.0: Model is very uncertain, choosing between ~10 options per token
-
-The assertion passes when perplexity is **below** the threshold, ensuring the model is confident in its output.
-
-See the [Wikipedia article on perplexity](https://en.wikipedia.org/wiki/Perplexity) for mathematical details.
-
-**High perplexity** suggests it is less certain about its predictions, often because the text is very diverse or the model is not well-tuned to the task at hand.
-
-**Low perplexity** means the model predicts the text with greater confidence, implying it's better at understanding and generating text similar to its training data.
+The assertion passes when perplexity is **below** the threshold.
 
 To specify a perplexity threshold, use the `perplexity` assertion type:
 
