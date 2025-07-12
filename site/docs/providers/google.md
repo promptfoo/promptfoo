@@ -6,15 +6,261 @@ sidebar_label: Google AI / Gemini
 
 The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
 
-To use the Google AI Studio API, set the `GOOGLE_API_KEY` environment variable or specify it via the `apiKey` field in your provider config.
+If you are using Google Vertex instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
-Example:
+## Authentication
 
-```sh
-export GOOGLE_API_KEY=your_google_api_key
+To use the Google AI Studio API, you need to authenticate using an API key. Follow these steps:
+
+### 1. Get an API Key
+
+1. Visit [Google AI Studio](https://aistudio.google.com/)
+2. Click on "Get API key" in the left sidebar
+3. Create a new API key or use an existing one
+4. Copy your API key
+
+**Security Note:** Never commit API keys to version control. Always use environment variables or a `.env` file that's added to `.gitignore`.
+
+### 2. Configure Authentication
+
+You have three options for providing your API key:
+
+#### Option 1: Environment Variable (Recommended)
+
+Set the `GOOGLE_API_KEY` environment variable:
+
+```bash
+# Using export (Linux/macOS)
+export GOOGLE_API_KEY="your_api_key_here"
+
+# Using set (Windows Command Prompt)
+set GOOGLE_API_KEY=your_api_key_here
+
+# Using $env (Windows PowerShell)
+$env:GOOGLE_API_KEY="your_api_key_here"
 ```
 
-Promptfoo automatically loads environment variables from your shell or a `.env` file.
+#### Option 2: .env File (Recommended for Development)
+
+Create a `.env` file in your project root:
+
+```bash
+# .env
+GOOGLE_API_KEY=your_api_key_here
+```
+
+Promptfoo automatically loads environment variables from `.env` files in your project directory. Make sure to add `.env` to your `.gitignore` file.
+
+#### Option 3: Provider Configuration
+
+Specify the API key directly in your configuration:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      apiKey: your_api_key_here
+```
+
+**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. Use environment variable references instead:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      apiKey: ${GOOGLE_API_KEY}
+```
+
+### 3. Verify Authentication
+
+Test your setup with a simple prompt:
+
+```bash
+promptfoo eval --prompt "Hello, how are you?" --providers google:gemini-2.5-flash
+```
+
+## Configuration Options
+
+In addition to authentication, you can configure:
+
+- `GOOGLE_API_HOST` - Override the Google API host (defaults to `generativelanguage.googleapis.com`)
+- `GOOGLE_API_BASE_URL` - Override the Google API base URL (defaults to `https://generativelanguage.googleapis.com`)
+
+Example with custom host:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      apiHost: custom.googleapis.com
+      apiBaseUrl: https://custom.googleapis.com
+```
+
+## Quick Start
+
+### 1. Basic Evaluation
+
+Create a simple `promptfooconfig.yaml`:
+
+```yaml
+# promptfooconfig.yaml
+providers:
+  - google:gemini-2.5-flash
+
+prompts:
+  - 'Write a haiku about {{topic}}'
+
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'the ocean'
+```
+
+Run the evaluation:
+
+```bash
+promptfoo eval
+```
+
+### 2. Comparing Models
+
+Compare different Gemini models:
+
+```yaml
+providers:
+  - google:gemini-2.5-flash
+  - google:gemini-2.5-pro
+  - google:gemini-1.5-flash
+
+prompts:
+  - 'Explain {{concept}} in simple terms'
+
+tests:
+  - vars:
+      concept: 'quantum computing'
+    assert:
+      - type: contains
+        value: 'qubit'
+      - type: llm-rubric
+        value: 'The explanation should be understandable by a high school student'
+```
+
+### 3. Using Environment Variables
+
+```yaml
+# Reference environment variables in your config
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      apiKey: ${GOOGLE_API_KEY}
+      temperature: ${TEMPERATURE:-0.7} # Default to 0.7 if not set
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. API Key Not Found
+
+**Error**: `API key not found`
+
+**Solution**: Ensure your API key is properly set:
+
+```bash
+# Check if the environment variable is set
+echo $GOOGLE_API_KEY
+
+# If empty, set it again
+export GOOGLE_API_KEY="your_api_key_here"
+```
+
+#### 2. Invalid API Key
+
+**Error**: `API key not valid. Please pass a valid API key`
+
+**Solutions**:
+
+- Verify your API key at [Google AI Studio](https://aistudio.google.com/)
+- Ensure you're using the correct API key (not a project ID or other credential)
+- Check that your API key has the necessary permissions
+
+#### 3. Rate Limiting
+
+**Error**: `Resource has been exhausted`
+
+**Solutions**:
+
+- Add delays between requests:
+  ```yaml
+  # promptfooconfig.yaml
+  evaluateOptions:
+    delay: 1000 # 1 second delay between API calls
+  ```
+- Upgrade your API quota in Google AI Studio
+- Use a lower rate tier model like `gemini-2.5-flash-lite`
+
+#### 4. Model Not Available
+
+**Error**: `Model not found`
+
+**Solutions**:
+
+- Check the model name spelling
+- Ensure the model is available in your region
+- Verify the model is listed in the [available models](https://ai.google.dev/models)
+
+### Debugging Tips
+
+1. **Enable verbose logging**:
+
+   ```bash
+   promptfoo eval --verbose
+   ```
+
+2. **Test your API key directly**:
+
+   ```bash
+   curl -X POST "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=$GOOGLE_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
+   ```
+
+3. **Check your environment**:
+   ```bash
+   # List all GOOGLE_ environment variables
+   env | grep GOOGLE_
+   ```
+
+## Migration Guide
+
+### Migrating from Google AI Studio to Vertex AI
+
+If you need more advanced features or enterprise capabilities, you can migrate to Vertex AI:
+
+| Google AI Studio          | Vertex AI                  | Notes                                 |
+| ------------------------- | -------------------------- | ------------------------------------- |
+| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`  | Same model, different endpoint        |
+| `GOOGLE_API_KEY`          | `VERTEX_PROJECT_ID` + auth | Vertex uses GCloud authentication     |
+| Simple API key            | Multiple auth methods      | Vertex supports ADC, service accounts |
+| Global endpoint           | Regional endpoints         | Vertex requires region selection      |
+
+Example migration:
+
+```yaml
+# Before (Google AI Studio)
+providers:
+  - google:gemini-2.5-pro
+
+# After (Vertex AI)
+providers:
+  - vertex:gemini-2.5-pro
+    config:
+      projectId: my-project-id
+      region: us-central1
+```
+
+See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
 
 You can use it by specifying one of the [available models](https://ai.google.dev/models). Currently, the following models are supported:
 
@@ -43,16 +289,6 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 - `google:embedding:text-embedding-004` - Latest text embedding model (Recommended)
 - `google:embedding:embedding-001` - Legacy embedding model
-
-:::tip
-If you are using Google Vertex, see the [`vertex` provider](/docs/providers/vertex).
-:::
-
-## Configuration
-
-- `GOOGLE_API_KEY` (required) - Google AI Studio API key
-- `GOOGLE_API_HOST` - used to override the Google API host, defaults to `generativelanguage.googleapis.com`
-- `GOOGLE_API_BASE_URL` - used to override the Google API base url, defaults to `https://generativelanguage.googleapis.com`
 
 ### Basic Configuration
 
