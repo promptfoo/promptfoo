@@ -2,7 +2,6 @@ import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
-  DATASET_PLUGINS,
   DEFAULT_STRATEGIES,
   FRAMEWORK_COMPLIANCE_IDS,
   MULTI_TURN_STRATEGIES,
@@ -39,20 +38,6 @@ describe('strategies constants', () => {
       'jailbreak:tree',
       'mischievous-user',
       'pandamonium',
-    ]);
-  });
-
-  it('should have correct dataset plugins', () => {
-    expect(DATASET_PLUGINS).toEqual([
-      'beavertails',
-      'cyberseceval',
-      'donotanswer',
-      'harmbench',
-      'toxic-chat',
-      'aegis',
-      'pliny',
-      'unsafebench',
-      'xstest',
     ]);
   });
 

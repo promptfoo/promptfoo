@@ -20,7 +20,7 @@ import {
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
+import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants/plugins';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';

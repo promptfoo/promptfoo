@@ -10,7 +10,7 @@ import {
   TERMINAL_MAX_WIDTH,
   CLOUD_PROVIDER_PREFIX,
 } from '../src/constants';
-import { REDTEAM_DEFAULTS } from '../src/redteam/constants';
+import { REDTEAM_DEFAULTS } from '../src/redteam/constants/plugins';
 
 describe('constants', () => {
   beforeEach(() => {

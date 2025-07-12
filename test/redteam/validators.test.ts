@@ -1,7 +1,7 @@
 import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
+import { DATASET_PLUGIN_ALIASES } from '../../src/redteam/constants/frameworks';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   COLLECTIONS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   HARM_PLUGINS,
@@ -9,7 +9,8 @@ import {
   FOUNDATION_PLUGINS,
   type BasePlugin,
   type PIIPlugin,
-} from '../../src/redteam/constants';
+} from '../../src/redteam/constants/plugins';
+import { ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES } from '../../src/redteam/constants/strategies';
 import {
   RedteamConfigSchema,
   RedteamGenerateOptionsSchema,
@@ -325,21 +326,29 @@ describe('redteamConfigSchema', () => {
     };
     const result = RedteamConfigSchema.safeParse(input);
 
-    expect(result).toEqual({
-      success: true,
-      data: expect.objectContaining({
-        numTests: undefined,
-        plugins: expect.arrayContaining(
-          REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).map((id) => ({
-            id,
-          })),
-        ),
-        strategies: expect.arrayContaining(strategiesExceptDefault.map((id) => ({ id }))),
-      }),
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+
+    // The validator converts legacy dataset plugin names to the new format
+    const expectedPlugins = REDTEAM_ALL_PLUGINS.filter(
+      (id) => !COLLECTIONS.includes(id as any),
+    ).map((id) => {
+      // Check if this is a legacy dataset plugin that should be converted
+      if (DATASET_PLUGIN_ALIASES[id]) {
+        return { id: DATASET_PLUGIN_ALIASES[id] };
+      }
+      return { id };
     });
 
-    expect(result.data?.plugins).toHaveLength(
-      REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).length,
+    // Remove duplicates (since legacy and new names map to the same plugin)
+    const uniquePluginIds = new Set(expectedPlugins.map((p) => p.id));
+    const uniqueExpectedPlugins = Array.from(uniquePluginIds)
+      .map((id) => ({ id }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    expect(result.data?.plugins).toEqual(uniqueExpectedPlugins);
+    expect(result.data?.strategies).toEqual(
+      expect.arrayContaining(strategiesExceptDefault.map((id) => ({ id }))),
     );
 
     // The schema deduplicates strategies, so we should expect the unique count

@@ -1,31 +1,41 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
+  DATASET_PLUGIN_ALIASES,
+} from '../redteam/constants/frameworks';
+import { Severity } from '../redteam/constants/metadata';
+import {
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  ALL_STRATEGIES,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  DEFAULT_STRATEGIES,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   type Plugin,
-  Severity,
+} from '../redteam/constants/plugins';
+import {
+  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
+  ALL_STRATEGIES,
+  DEFAULT_STRATEGIES,
   type Strategy,
-} from '../redteam/constants';
+} from '../redteam/constants/strategies';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 export const pluginOptions: string[] = [
-  ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
+  ...new Set([
+    ...COLLECTIONS,
+    ...REDTEAM_ALL_PLUGINS,
+    ...ALIASED_PLUGINS,
+    ...Object.keys(DATASET_PLUGIN_ALIASES),
+  ]),
 ].sort();
 /**
  * Schema for individual redteam plugins
@@ -286,6 +296,10 @@ export const RedteamConfigSchema = z
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
+
+      if (DATASET_PLUGIN_ALIASES[pluginObj.id]) {
+        pluginObj.id = DATASET_PLUGIN_ALIASES[pluginObj.id];
+      }
 
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {

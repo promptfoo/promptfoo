@@ -3,7 +3,7 @@ import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo
 import type { PluginActionParams, TestCase } from '../../../types';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
-import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
+import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants/plugins';
 import { createTestCase } from './common';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';

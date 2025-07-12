@@ -1,16 +1,15 @@
 import { z } from 'zod';
+import { ALIASED_PLUGIN_MAPPINGS, ALIASED_PLUGINS } from '../../src/redteam/constants/frameworks';
+import { Severity } from '../../src/redteam/constants/metadata';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
-  ALIASED_PLUGINS,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  Severity,
-} from '../../src/redteam/constants';
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+} from '../../src/redteam/constants/plugins';
 import {
   pluginOptions,
   RedteamConfigSchema,

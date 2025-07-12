@@ -292,7 +292,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
     plugins: [
       'excessive-agency',
       'overreliance',
-      'pliny',
+      'dataset:pliny',
       'competitors',
       'imitation',
       'politics',
@@ -594,3 +594,16 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
     },
   },
 };
+
+// Dataset plugin aliases for backward compatibility
+export const DATASET_PLUGIN_ALIASES: Record<string, string> = {
+  aegis: 'dataset:aegis',
+  beavertails: 'dataset:beavertails',
+  cyberseceval: 'dataset:cyberseceval',
+  donotanswer: 'dataset:donotanswer',
+  harmbench: 'dataset:harmbench',
+  'toxic-chat': 'dataset:toxic-chat',
+  pliny: 'dataset:pliny',
+  unsafebench: 'dataset:unsafebench',
+  xstest: 'dataset:xstest',
+} as const;

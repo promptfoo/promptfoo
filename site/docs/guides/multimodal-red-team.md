@@ -305,7 +305,7 @@ redteam:
   injectVar: image
   numTests: 3
   plugins:
-    - id: unsafebench
+    - id: dataset:unsafebench
       config:
         categories:
           - Violence
@@ -318,7 +318,7 @@ The key elements in this configuration:
 - `defaultTest.vars.format`: Sets the image format
 - `defaultTest.options.transformVars`: Adds image preprocessing that removes the "data:binary/octet-stream;base64," prefix from image data - this is specifically required for Amazon Bedrock Nova models but may not be needed for other providers
 - `redteam.injectVar: image`: Specifies that the image variable will receive unsafe content
-- `redteam.plugins`: Uses the unsafebench plugin with specific categories of unsafe images
+- `redteam.plugins`: Uses the dataset:unsafebench plugin with specific categories of unsafe images
 - `redteam.purpose`: Provides context for the model's role as an assistant with ethical boundaries
 
 ### How the UnsafeBench Plugin Works
@@ -389,7 +389,7 @@ You can customize the configuration by:
 
 ```yaml
 plugins:
-  - id: unsafebench
+  - id: dataset:unsafebench
     config:
       categories:
         - Violence

@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
-import { pluginDescriptions } from './constants';
+import { pluginDescriptions } from './constants/metadata';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
 
 /**
@@ -201,7 +201,7 @@ export function removePrefix(str: string, prefix: string) {
  * @returns The short plugin ID
  */
 export function getShortPluginId(pluginId: string): string {
-  return pluginId.replace(/^promptfoo:redteam:/, '');
+  return pluginId.replace(/^promptfoo:redteam:/, '').replace(/^dataset:/, '');
 }
 
 /**

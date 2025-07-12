@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
-import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
+import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants/plugins';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {

@@ -6,7 +6,7 @@ import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import { Severity } from '../../../src/redteam/constants';
+import { Severity } from '../../../src/redteam/constants/metadata';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
