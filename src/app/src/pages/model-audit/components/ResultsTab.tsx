@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Box } from '@mui/material';
 import type { ScanResult } from '../ModelAudit.types';
 import ScanStatistics from './ScanStatistics';
 import SecurityFindings from './SecurityFindings';
+import Box from '@mui/material/Box';
 
 interface ResultsTabProps {
   scanResults: ScanResult;

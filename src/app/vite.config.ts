@@ -1,7 +1,6 @@
 /// <reference types="vitest" />
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import type { PluginOption } from 'vite';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
@@ -30,7 +29,7 @@ export default defineConfig({
     nodePolyfills({
       exclude: ['vm'], // Exclude vm module to avoid eval warning
     })
-  ] as PluginOption[],
+  ],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -55,10 +54,13 @@ export default defineConfig({
         // Manual chunking to split vendor libraries
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-mui': ['@mui/material', '@mui/icons-material', '@mui/x-data-grid', '@mui/x-charts'],
+          'vendor-mui-core': ['@mui/material', '@mui/system'],
+          'vendor-mui-icons': ['@mui/icons-material'],
+          'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
           'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
           'vendor-syntax': ['prismjs', 'react-syntax-highlighter'],
+          'vendor-markdown': ['react-markdown', 'remark-gfm'],
         },
       },
     },

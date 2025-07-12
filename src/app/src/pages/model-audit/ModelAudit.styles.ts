@@ -1,6 +1,7 @@
-import { Box, Paper, alpha, styled } from '@mui/material';
 
-export const SeverityBadge = styled(Box)<{ severity: string }>(({ theme, severity }) => ({
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import { alpha, styled } from '@mui/material/styles';export const SeverityBadge = styled(Box)<{ severity: string }>(({ theme, severity }) => ({
   display: 'inline-flex',
   alignItems: 'center',
   padding: '4px 12px',

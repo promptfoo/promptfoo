@@ -1,19 +1,16 @@
 import React from 'react';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import {
-  Paper,
-  FormControlLabel,
-  Checkbox,
-  Switch,
-  Typography,
-  Box,
-  Stack,
-  IconButton,
-  Tooltip,
-  useTheme,
-  alpha,
-} from '@mui/material';
 import { tokens } from '../tokens';
+import Paper from '@mui/material/Paper';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import Switch from '@mui/material/Switch';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import { alpha, useTheme } from '@mui/material/styles';
 
 interface SettingItemProps {
   label: string;

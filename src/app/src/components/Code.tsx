@@ -1,6 +1,6 @@
-import { Box, useTheme } from '@mui/material';
 
-export default function Code({ children }: { children: React.ReactNode }) {
+import Box from '@mui/material/Box';
+import { useTheme } from '@mui/material/styles';export default function Code({ children }: { children: React.ReactNode }) {
   const theme = useTheme();
   return (
     <Box

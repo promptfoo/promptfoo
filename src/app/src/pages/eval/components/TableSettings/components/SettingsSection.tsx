@@ -1,6 +1,10 @@
 import React from 'react';
-import { Box, Typography, Stack, useTheme, Paper, alpha } from '@mui/material';
 import { tokens } from '../tokens';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Stack from '@mui/material/Stack';
+import Paper from '@mui/material/Paper';
+import { alpha, useTheme } from '@mui/material/styles';
 
 interface SettingsSectionProps {
   title: string;

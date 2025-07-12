@@ -1,6 +1,8 @@
 import React from 'react';
-import { Box, Typography, TextField } from '@mui/material';
 import type { ProviderOptions } from '../../types';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
 
 interface WebSocketEndpointConfigurationProps {
   selectedTarget: ProviderOptions;

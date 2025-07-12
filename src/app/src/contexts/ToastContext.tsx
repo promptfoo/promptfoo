@@ -1,8 +1,10 @@
-import React, { useState, type ReactNode } from 'react';
-import { Snackbar, Alert, type AlertColor } from '@mui/material';
-import { ToastContext } from './ToastContextDef';
+import React, { useContext, useState } from 'react';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import type { AlertColor } from '@mui/material/Alert';
+import { ToastContext, type ToastProviderProps } from './ToastContextDef';
 
-export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [severity, setSeverity] = useState<AlertColor>('info');

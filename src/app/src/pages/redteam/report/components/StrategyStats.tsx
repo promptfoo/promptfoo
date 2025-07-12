@@ -1,5 +1,4 @@
 import React from 'react';
-import { Tabs, Tab, List, ListItem, Chip } from '@mui/material';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -21,6 +20,11 @@ import { styled } from '@mui/material/styles';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import type { GradingResult, EvaluateResult } from '@promptfoo/types';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import Chip from '@mui/material/Chip';
 
 interface TestWithMetadata {
   prompt: string;

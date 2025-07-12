@@ -1,8 +1,13 @@
 import React from 'react';
 import { PlayArrow as PlayArrowIcon, Settings as SettingsIcon } from '@mui/icons-material';
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import type { ScanPath } from '../ModelAudit.types';
 import PathSelector from './PathSelector';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 
 interface ConfigurationTabProps {
   paths: ScanPath[];

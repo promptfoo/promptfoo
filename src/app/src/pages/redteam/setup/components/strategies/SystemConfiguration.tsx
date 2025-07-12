@@ -1,14 +1,11 @@
 import React from 'react';
-import {
-  Paper,
-  Typography,
-  FormControl,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-  Alert,
-} from '@mui/material';
-
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import Alert from '@mui/material/Alert';
 interface SystemConfigurationProps {
   isStatefulValue: boolean;
   onStatefulChange: (val: boolean) => void;

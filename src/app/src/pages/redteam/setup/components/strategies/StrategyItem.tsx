@@ -1,5 +1,4 @@
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { Box, Checkbox, Chip, IconButton, Paper, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
   AGENTIC_STRATEGIES,
@@ -8,6 +7,12 @@ import {
   MULTI_MODAL_STRATEGIES,
 } from '@promptfoo/redteam/constants';
 import type { StrategyCardData } from './types';
+import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
 
 interface StrategyItemProps {
   strategy: StrategyCardData;

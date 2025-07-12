@@ -5,9 +5,11 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
-import { Grid, Typography, alpha, useTheme } from '@mui/material';
 import { StatCard } from '../ModelAudit.styles';
 import type { ScanResult } from '../ModelAudit.types';
+import Grid from '@mui/material/Grid';
+import Typography from '@mui/material/Typography';
+import { alpha, useTheme } from '@mui/material/styles';
 
 interface ScanStatisticsProps {
   scanResults: ScanResult;

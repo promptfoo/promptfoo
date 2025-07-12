@@ -1,6 +1,5 @@
 import React, { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
 import { callApi } from '@app/utils/api';
-import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
 import {
   DataGrid,
   type GridColDef,
@@ -16,6 +15,12 @@ import {
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Paper from '@mui/material/Paper';
+import CircularProgress from '@mui/material/CircularProgress';
+import Link from '@mui/material/Link';
+import { useTheme } from '@mui/material/styles';
 
 type Eval = {
   createdAt: number;

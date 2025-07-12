@@ -1,19 +1,16 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import {
-  Box,
-  Typography,
-  Slider,
-  TextField,
-  InputAdornment,
-  IconButton,
-  Stack,
-  Tooltip,
-  useTheme,
-  alpha,
-} from '@mui/material';
 import { useDebounce } from 'use-debounce';
 import { tokens } from '../tokens';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Slider from '@mui/material/Slider';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
+import { alpha, useTheme } from '@mui/material/styles';
 
 interface EnhancedRangeSliderProps {
   value: number;
