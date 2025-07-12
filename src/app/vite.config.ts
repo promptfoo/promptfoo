@@ -26,9 +26,7 @@ export default defineConfig({
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
     react(),
-    nodePolyfills({
-      exclude: ['vm'], // Exclude vm module to avoid eval warning
-    }),
+    nodePolyfills(), // Removed vm exclusion - we need it for new Function() calls
   ],
   resolve: {
     alias: {
@@ -45,7 +43,8 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: process.env.NODE_ENV === 'production',
+        // Keep console statements - useful for a local development tool
+        drop_console: false,
         drop_debugger: process.env.NODE_ENV === 'production',
       },
     },
