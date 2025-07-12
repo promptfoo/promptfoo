@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 import type { Command } from 'commander';
+import * as path from 'path';
 import * as semver from 'semver';
 import { VERSION } from '../constants';
 import logger from '../logger';
@@ -129,9 +130,13 @@ async function checkForUpdates(targetVersion?: string): Promise<{
   const currentVersion = VERSION;
 
   let latestVersion: string;
-  if (targetVersion) {
+  if (targetVersion && targetVersion !== 'latest') {
     // Verify the target version exists
     try {
+      // Validate version format first
+      if (!/^[\w.-]+$/.test(targetVersion)) {
+        throw new Error(`Invalid version format: ${targetVersion}`);
+      }
       const { stdout } = await execAsync(`npm view promptfoo@${targetVersion} version`);
       latestVersion = stdout.trim();
     } catch {
@@ -142,7 +147,7 @@ async function checkForUpdates(targetVersion?: string): Promise<{
     latestVersion = await getLatestVersion();
   }
 
-  const updateAvailable = targetVersion
+  const updateAvailable = targetVersion && targetVersion !== 'latest'
     ? currentVersion !== targetVersion
     : semver.gt(latestVersion, currentVersion);
 
@@ -152,6 +157,36 @@ async function checkForUpdates(targetVersion?: string): Promise<{
     updateAvailable,
     targetVersion,
   };
+}
+
+async function resolveBinaryPath(installMethod: InstallMethod): Promise<string> {
+  try {
+    switch (installMethod) {
+      case 'npm-global':
+        const { stdout: npmPrefix } = await execAsync('npm prefix -g');
+        return path.join(npmPrefix.trim(), 'bin', 'promptfoo');
+
+      case 'yarn-global':
+        const { stdout: yarnBin } = await execAsync('yarn global bin');
+        return path.join(yarnBin.trim(), 'promptfoo');
+
+      case 'pnpm-global':
+        const { stdout: pnpmBin } = await execAsync('pnpm bin -g');
+        return path.join(pnpmBin.trim(), 'promptfoo');
+
+      case 'homebrew':
+        const { stdout: brewPrefix } = await execAsync('brew --prefix');
+        return path.join(brewPrefix.trim(), 'bin', 'promptfoo');
+
+      default:
+        // Fall back to PATH lookup
+        const { stdout: which } = await execAsync('which promptfoo');
+        return which.trim();
+    }
+  } catch {
+    // Fall back to generic command if resolution fails
+    return 'promptfoo';
+  }
 }
 
 async function performUpgrade(
@@ -176,11 +211,6 @@ async function performUpgrade(
       break;
 
     case 'homebrew':
-      if (targetVersion && targetVersion !== 'latest') {
-        throw new Error(
-          'Homebrew does not support installing specific versions. Use --force to upgrade to the latest version.',
-        );
-      }
       command = 'brew upgrade promptfoo';
       break;
 
@@ -211,8 +241,9 @@ async function performUpgrade(
     // Show real-time output
     execSync(command, { stdio: 'inherit' });
 
-    // Verify the upgrade
-    const { stdout: newVersionOutput } = await execAsync('promptfoo --version');
+    // Verify the upgrade using method-specific binary path
+    const promptfooCmd = await resolveBinaryPath(installInfo.method);
+    const { stdout: newVersionOutput } = await execAsync(`"${promptfooCmd}" --version`);
     const newVersion = newVersionOutput.trim();
 
     logger.info(chalk.green(`✅ Successfully upgraded to version ${newVersion}`));
@@ -263,6 +294,13 @@ export function upgradeCommand(program: Command) {
           return;
         }
 
+        // For homebrew, check version constraints early
+        if (installInfo.method === 'homebrew' && options.version && options.version !== 'latest') {
+          throw new Error(
+            'Homebrew does not support installing specific versions. Omit the --version flag or use --version latest to upgrade to the latest version.',
+          );
+        }
+
         // Check for updates
         const updateInfo = await checkForUpdates(options.version);
 
@@ -295,7 +333,7 @@ export function upgradeCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'upgrade:completed',
           from_version: updateInfo.currentVersion,
-          to_version: updateInfo.latestVersion,
+          to_version: updateInfo.targetVersion || updateInfo.latestVersion,
           install_method: installInfo.method,
           forced: options.force || false,
         });

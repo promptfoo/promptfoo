@@ -357,17 +357,21 @@ describe('upgrade command', () => {
     it('should handle homebrew specific version error', async () => {
       mockedIsRunningUnderNpx.mockReturnValue(false);
       process.execPath = '/opt/homebrew/Cellar/node/20.0.0/bin/node';
-      mockedExecAsync.mockResolvedValueOnce({
-        stdout: '1.5.0',
-        stderr: '',
-      });
+
+      // Mock execAsync to fail on npm/yarn/pnpm checks
+      mockedExecAsync
+        .mockRejectedValueOnce(new Error('Not found')) // npm check
+        .mockRejectedValueOnce(new Error('Not found')) // yarn check
+        .mockRejectedValueOnce(new Error('Not found')); // pnpm check
 
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
       await action({ version: '1.5.0' });
 
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Homebrew does not support installing specific versions'),
+        expect.stringContaining(
+          'Homebrew does not support installing specific versions. Omit the --version flag or use --version latest',
+        ),
       );
       expect(process.exitCode).toBe(1);
     });
@@ -377,10 +381,20 @@ describe('upgrade command', () => {
       process.execPath = '/opt/homebrew/Cellar/node/20.0.0/bin/node';
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
       mockedExecSync.mockImplementation(() => Buffer.from(''));
-      mockedExecAsync.mockResolvedValueOnce({
-        stdout: '2.0.0',
-        stderr: '',
-      });
+
+      // Setup mock to fail other detections but succeed for homebrew path check
+      mockedExecAsync
+        .mockRejectedValueOnce(new Error('Not found')) // npm check
+        .mockRejectedValueOnce(new Error('Not found')) // yarn check
+        .mockRejectedValueOnce(new Error('Not found')) // pnpm check
+        .mockResolvedValueOnce({
+          stdout: '/opt/homebrew',
+          stderr: '',
+        }) // brew --prefix for resolveBinaryPath
+        .mockResolvedValueOnce({
+          stdout: '2.0.0',
+          stderr: '',
+        }); // promptfoo --version check
 
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
@@ -395,8 +409,10 @@ describe('upgrade command', () => {
         .mockRejectedValueOnce(new Error('npm not found'))
         .mockRejectedValueOnce(new Error('yarn not found'))
         .mockRejectedValueOnce(new Error('pnpm not found'));
-      process.argv = ['/usr/local/bin/node', '/usr/local/bin/node_modules/promptfoo/bin/cli.js'];
       mockedGetLatestVersion.mockResolvedValue('2.0.0');
+
+      // Mock unknown installation - in node_modules to avoid binary detection
+      process.argv = ['/unknown/path/node', '/unknown/path/node_modules/.bin/promptfoo'];
 
       upgradeCommand(program);
       const action = mockAction.mock.calls[0][0];
@@ -422,11 +438,15 @@ describe('upgrade command', () => {
         .mockResolvedValueOnce({
           stdout: JSON.stringify({ dependencies: { promptfoo: { version: '1.0.0' } } }),
           stderr: '',
-        })
+        }) // npm list for detection
+        .mockResolvedValueOnce({
+          stdout: '/usr/local',
+          stderr: '',
+        }) // npm prefix -g for resolveBinaryPath
         .mockResolvedValueOnce({
           stdout: '2.0.0',
           stderr: '',
-        });
+        }); // promptfoo --version check
 
       await action({});
 
