@@ -13,7 +13,10 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "paths": {
+      "@promptfoo/shared/*": ["src/shared/*"]
+    }
   },
   "ts-node": {
     "swc": true

@@ -168,7 +168,7 @@ describe('redteamRouter', () => {
 
       expect(mockJson).toHaveBeenCalledWith({
         hasRunningJob: false,
-        jobId: null,
+        jobId: undefined,
       });
     });
   });

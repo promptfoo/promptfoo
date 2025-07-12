@@ -1,10 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+import { fromZodError } from 'zod-validation-error';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
+import { ApiSchemas } from '../apiSchemas';
 import { evalJobs } from './eval';
 
 export const redteamRouter = Router();
@@ -14,6 +17,8 @@ let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const body = ApiSchemas.Redteam.Run.Request.parse(req.body);
   // If there's a current job running, abort it
   if (currentJobId) {
     if (currentAbortController) {
@@ -26,7 +31,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
   }
 
-  const { config, force, verbose, delay, maxConcurrency } = req.body;
+    const { config, force, verbose, delay, maxConcurrency } = body;
   const id = uuidv4();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -92,7 +97,15 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     });
 
-  res.json({ id });
+    res.json(ApiSchemas.Redteam.Run.Response.parse({ id }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+    } else {
+      logger.error(`Redteam run error: ${error}`);
+      res.status(500).json({ error: 'Failed to start redteam run' });
+    }
+  }
 });
 
 redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void> => {
@@ -121,7 +134,7 @@ redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void>
   // Wait a moment to ensure cleanup
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  res.json({ message: 'Job cancelled' });
+  res.json(ApiSchemas.Redteam.Cancel.Response.parse({ message: 'Job cancelled' }));
 });
 
 // NOTE: This comes last, so the other routes take precedence
@@ -164,8 +177,8 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
 });
 
 redteamRouter.get('/status', async (req: Request, res: Response): Promise<void> => {
-  res.json({
+  res.json(ApiSchemas.Redteam.Status.Response.parse({
     hasRunningJob: currentJobId !== null,
-    jobId: currentJobId,
-  });
+    jobId: currentJobId || undefined,
+  }));
 });

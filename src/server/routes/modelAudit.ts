@@ -6,8 +6,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
+import { z } from 'zod';
+import { fromZodError } from 'zod-validation-error';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { ApiSchemas } from '../apiSchemas';
 
 const execAsync = promisify(exec);
 export const modelAuditRouter = Router();
@@ -16,16 +19,16 @@ export const modelAuditRouter = Router();
 modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Promise<void> => {
   try {
     await execAsync('python -c "import modelaudit"');
-    res.json({ installed: true, cwd: process.cwd() });
+    res.json(ApiSchemas.ModelAudit.CheckInstalled.Response.parse({ installed: true, cwd: process.cwd() }));
   } catch {
-    res.json({ installed: false, cwd: process.cwd() });
+    res.json(ApiSchemas.ModelAudit.CheckInstalled.Response.parse({ installed: false, cwd: process.cwd() }));
   }
 });
 
 // Check path type
 modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { path: inputPath } = req.body;
+    const { path: inputPath } = ApiSchemas.ModelAudit.CheckPath.Request.parse(req.body);
 
     if (!inputPath) {
       res.status(400).json({ error: 'No path provided' });
@@ -52,22 +55,26 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
-    res.json({
+    res.json(ApiSchemas.ModelAudit.CheckPath.Response.parse({
       exists: true,
       type,
       absolutePath,
       name: path.basename(absolutePath),
-    });
+    }));
   } catch (error) {
-    logger.error(`Error checking path: ${error}`);
-    res.status(500).json({ error: String(error) });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+    } else {
+      logger.error(`Error checking path: ${error}`);
+      res.status(500).json({ error: String(error) });
+    }
   }
 });
 
 // Run model scan
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { paths, options } = req.body;
+    const { paths, options = {} } = ApiSchemas.ModelAudit.Scan.Request.parse(req.body);
 
     if (!paths || !Array.isArray(paths) || paths.length === 0) {
       res.status(400).json({ error: 'No paths provided' });
@@ -125,26 +132,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     args.push(...resolvedPaths);
 
     // Add options
-    if (options.blacklist && Array.isArray(options.blacklist)) {
-      options.blacklist.forEach((pattern: string) => {
+    if (options.exclude && Array.isArray(options.exclude)) {
+      options.exclude.forEach((pattern: string) => {
         args.push('--blacklist', pattern);
       });
     }
 
     // Always use JSON format for API responses
     args.push('--format', 'json');
-
-    if (options.timeout) {
-      args.push('--timeout', String(options.timeout));
-    }
-
-    if (options.maxFileSize) {
-      args.push('--max-file-size', String(options.maxFileSize));
-    }
-
-    if (options.maxTotalSize) {
-      args.push('--max-total-size', String(options.maxTotalSize));
-    }
 
     if (options.verbose) {
       args.push('--verbose');
@@ -156,9 +151,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     telemetry.record('webui_api', {
       event: 'model_scan',
       pathCount: paths.length,
-      hasBlacklist: options.blacklist?.length > 0,
-      timeout: options.timeout,
-      verbose: options.verbose,
+      hasExclude: (options.exclude?.length || 0) > 0,
+      verbose: options.verbose || false,
     });
 
     // Run the scan
@@ -205,7 +199,26 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             rawOutput: stdout, // Always include raw output for debugging
           };
 
-          res.json(transformedResults);
+          res.json(ApiSchemas.ModelAudit.Scan.Response.parse({
+            success: true,
+            results: {
+              totalFiles: transformedResults.totalFiles,
+              scannedFiles: transformedResults.scannedFiles,
+              findings: transformedResults.issues.map((issue: any) => ({
+                file: issue.location || transformedResults.path,
+                severity: issue.severity === 'warning' ? 'medium' : issue.severity === 'error' ? 'high' : 'low',
+                type: issue.type || 'security',
+                message: issue.message,
+                details: issue,
+              })),
+              summary: {
+                critical: 0,
+                high: transformedResults.issues.filter((i: any) => i.severity === 'error').length,
+                medium: transformedResults.issues.filter((i: any) => i.severity === 'warning').length,
+                low: transformedResults.issues.filter((i: any) => i.severity === 'info').length,
+              },
+            },
+          }));
         } catch (parseError) {
           logger.debug(`Failed to parse JSON from stdout: ${parseError}`);
           logger.debug(`stdout: ${stdout}`);
@@ -265,13 +278,27 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             (line) => line.includes('Scanning file:') || line.includes('Scanning directory:'),
           ).length;
 
-          res.json({
-            path: resolvedPaths[0],
-            issues,
+          res.json(ApiSchemas.ModelAudit.Scan.Response.parse({
             success: true,
-            scannedFiles: scannedFiles || resolvedPaths.length,
-            rawOutput: stdout,
-          });
+            output: stdout,
+            results: {
+              totalFiles: scannedFiles || resolvedPaths.length,
+              scannedFiles: scannedFiles || resolvedPaths.length,
+              findings: issues.map((issue) => ({
+                file: issue.location || resolvedPaths[0],
+                severity: issue.severity === 'warning' ? 'medium' : issue.severity === 'error' ? 'high' : 'low',
+                type: 'security',
+                message: issue.message,
+                details: issue,
+              })),
+              summary: {
+                critical: 0,
+                high: issues.filter(i => i.severity === 'error').length,
+                medium: issues.filter(i => i.severity === 'warning').length,
+                low: issues.filter(i => i.severity === 'info').length,
+              },
+            },
+          }));
         }
       } else {
         // Only treat codes other than 0 and 1 as actual errors
@@ -283,7 +310,11 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       }
     });
   } catch (error) {
-    logger.error(`Error in model scan: ${error}`);
-    res.status(500).json({ error: String(error) });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+    } else {
+      logger.error(`Error in model scan: ${error}`);
+      res.status(500).json({ error: String(error) });
+    }
   }
 });

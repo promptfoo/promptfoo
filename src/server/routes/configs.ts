@@ -2,16 +2,20 @@ import { eq, and } from 'drizzle-orm';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+import { fromZodError } from 'zod-validation-error';
 import { getDb } from '../../database';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
+import { ApiSchemas } from '../apiSchemas';
 
 export const configsRouter = Router();
 
 configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
   try {
-    const type = req.query.type as string;
+    const parsedQuery = ApiSchemas.Config.List.Query.parse(req.query);
+    const { type } = parsedQuery;
     const query = db
       .select({
         id: configsTable.id,
@@ -30,17 +34,21 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
     const configs = await query;
     logger.info(`Loaded ${configs.length} configs${type ? ` of type ${type}` : ''}`);
 
-    res.json({ configs });
+    res.json(ApiSchemas.Config.List.Response.parse({ configs }));
   } catch (error) {
-    logger.error(`Error fetching configs: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch configs' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+    } else {
+      logger.error(`Error fetching configs: ${error}`);
+      res.status(500).json({ error: 'Failed to fetch configs' });
+    }
   }
 });
 
 configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
   try {
-    const { name, type, config } = req.body;
+    const { name, type, config } = ApiSchemas.Config.Create.Request.parse(req.body);
     const id = uuidv4();
 
     const [result] = await db
@@ -58,16 +66,21 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
     logger.info(`Saved config ${id} of type ${type}`);
 
-    res.json(result);
+    res.json(ApiSchemas.Config.Create.Response.parse(result));
   } catch (error) {
-    logger.error(`Error saving config: ${error}`);
-    res.status(500).json({ error: 'Failed to save config' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+    } else {
+      logger.error(`Error saving config: ${error}`);
+      res.status(500).json({ error: 'Failed to save config' });
+    }
   }
 });
 
 configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
   try {
+    const { type } = ApiSchemas.Config.GetByType.Params.parse(req.params);
     const configs = await db
       .select({
         id: configsTable.id,
@@ -76,37 +89,46 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
         updatedAt: configsTable.updatedAt,
       })
       .from(configsTable)
-      .where(eq(configsTable.type, req.params.type))
+      .where(eq(configsTable.type, type))
       .orderBy(configsTable.updatedAt);
 
-    logger.info(`Loaded ${configs.length} configs of type ${req.params.type}`);
+    logger.info(`Loaded ${configs.length} configs of type ${type}`);
 
-    res.json({ configs });
+    res.json(ApiSchemas.Config.GetByType.Response.parse({ configs }));
   } catch (error) {
-    logger.error(`Error fetching configs: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch configs' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+    } else {
+      logger.error(`Error fetching configs: ${error}`);
+      res.status(500).json({ error: 'Failed to fetch configs' });
+    }
   }
 });
 
 configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
   try {
+    const { type, id } = ApiSchemas.Config.Get.Params.parse(req.params);
     const config = await db
       .select()
       .from(configsTable)
-      .where(and(eq(configsTable.type, req.params.type), eq(configsTable.id, req.params.id)))
+      .where(and(eq(configsTable.type, type), eq(configsTable.id, id)))
       .limit(1);
 
-    logger.info(`Loaded config ${req.params.id} of type ${req.params.type}`);
+    logger.info(`Loaded config ${id} of type ${type}`);
 
     if (!config.length) {
       res.status(404).json({ error: 'Config not found' });
       return;
     }
 
-    res.json(config[0]);
+    res.json(ApiSchemas.Config.Get.Response.parse(config[0].config));
   } catch (error) {
-    logger.error(`Error fetching config: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch config' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+    } else {
+      logger.error(`Error fetching config: ${error}`);
+      res.status(500).json({ error: 'Failed to fetch config' });
+    }
   }
 });

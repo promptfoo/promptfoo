@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import type { ZodError } from 'zod-validation-error';
+import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -15,16 +15,16 @@ import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
+import { ApiSchemas } from '../apiSchemas';
 
 export const providersRouter = Router();
 
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
   let providerOptions: ProviderOptions;
   try {
-    providerOptions = ProviderOptionsSchema.parse(body);
+    providerOptions = ApiSchemas.Provider.Test.Request.parse(req.body);
   } catch (e) {
-    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+    res.status(400).json({ error: fromZodError(e as z.ZodError).toString() });
     return;
   }
   invariant(providerOptions.id, 'id is required');
@@ -127,12 +127,11 @@ providersRouter.post(
     req: Request,
     res: Response<TargetPurposeDiscoveryResult | { error: string }>,
   ): Promise<void> => {
-    const body = req.body;
     let providerOptions: ProviderOptions;
     try {
-      providerOptions = ProviderOptionsSchema.parse(body);
+      providerOptions = ApiSchemas.Provider.Discover.Request.parse(req.body);
     } catch (e) {
-      res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+      res.status(400).json({ error: fromZodError(e as z.ZodError).toString() });
       return;
     }
     invariant(providerOptions.id, 'Provider ID (`id`) is required');
@@ -150,7 +149,7 @@ providersRouter.post(
       const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
 
       if (result) {
-        res.json(result);
+        res.json(ApiSchemas.Provider.Discover.Response.parse(result));
       } else {
         res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
       }

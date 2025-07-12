@@ -1,4 +1,10 @@
 import useApiConfig from '@app/stores/apiConfig';
+import type {
+  UserGetResponse,
+  UserGetIdResponse,
+  EvalUpdateAuthorRequest,
+  EvalUpdateAuthorResponse,
+} from '@promptfoo/shared/dto';
 
 export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
   const { apiBaseUrl } = useApiConfig.getState();
@@ -15,7 +21,7 @@ export async function fetchUserEmail(): Promise<string | null> {
       throw new Error('Failed to fetch user email');
     }
 
-    const data = await response.json();
+    const data: UserGetResponse = await response.json();
     return data.email;
   } catch (error) {
     console.error('Error fetching user email:', error);
@@ -33,7 +39,7 @@ export async function fetchUserId(): Promise<string | null> {
       throw new Error('Failed to fetch user ID');
     }
 
-    const data = await response.json();
+    const data: UserGetIdResponse = await response.json();
     return data.id;
   } catch (error) {
     console.error('Error fetching user ID:', error);
@@ -41,13 +47,17 @@ export async function fetchUserId(): Promise<string | null> {
   }
 }
 
-export async function updateEvalAuthor(evalId: string, author: string) {
+export async function updateEvalAuthor(
+  evalId: string,
+  author: string,
+): Promise<EvalUpdateAuthorResponse> {
+  const body: EvalUpdateAuthorRequest = { author };
   const response = await callApi(`/eval/${evalId}/author`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ author }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
