@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Collapse from '@mui/material/Collapse';
 import Typography from '@mui/material/Typography';
+
 interface Props {
   children: React.ReactNode;
   name?: string; // Name of the component/page being wrapped

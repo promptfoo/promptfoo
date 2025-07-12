@@ -8,13 +8,13 @@ import TableRowsIcon from '@mui/icons-material/TableRows';
 import TextFormatIcon from '@mui/icons-material/TextFormat';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Box from '@mui/material/Box';
+import { alpha } from '@mui/material/styles';
 import { useResultsViewSettingsStore } from '../../store';
 import { tokens } from '../tokens';
 import EnhancedRangeSlider from './EnhancedRangeSlider';
 import SettingItem from './SettingItem';
 import SettingsSection from './SettingsSection';
-import Box from '@mui/material/Box';
-import { alpha } from '@mui/material/styles';
 
 const SettingsPanel: React.FC = () => {
   const {

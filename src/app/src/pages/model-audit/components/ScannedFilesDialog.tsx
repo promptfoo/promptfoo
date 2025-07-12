@@ -1,6 +1,5 @@
 import React from 'react';
 import { InsertDriveFile as FileIcon, Folder as FolderIcon } from '@mui/icons-material';
-import type { ScanPath, ScanResult } from '../ModelAudit.types';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -13,6 +12,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import type { ScanPath, ScanResult } from '../ModelAudit.types';
 
 interface ScannedFilesDialogProps {
   open: boolean;

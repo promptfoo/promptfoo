@@ -1,13 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
 import { Security as SecurityIcon } from '@mui/icons-material';
-import type { ScanPath, ScanOptions, ScanResult } from './ModelAudit.types';
-import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
-import ConfigurationTab from './components/ConfigurationTab';
-import InstallationCheck from './components/InstallationCheck';
-import ResultsTab from './components/ResultsTab';
-import ScannedFilesDialog from './components/ScannedFilesDialog';
-import { useModelAuditStore } from './store';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
@@ -17,6 +10,13 @@ import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import type { ScanPath, ScanOptions, ScanResult } from './ModelAudit.types';
+import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
+import ConfigurationTab from './components/ConfigurationTab';
+import InstallationCheck from './components/InstallationCheck';
+import ResultsTab from './components/ResultsTab';
+import ScannedFilesDialog from './components/ScannedFilesDialog';
+import { useModelAuditStore } from './store';
 
 export default function ModelAudit() {
   const [paths, setPaths] = useState<ScanPath[]>([]);

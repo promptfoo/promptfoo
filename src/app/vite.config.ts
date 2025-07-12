@@ -25,10 +25,10 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
-    react(), 
+    react(),
     nodePolyfills({
       exclude: ['vm'], // Exclude vm module to avoid eval warning
-    })
+    }),
   ],
   resolve: {
     alias: {

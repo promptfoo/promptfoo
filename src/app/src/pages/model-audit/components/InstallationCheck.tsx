@@ -4,6 +4,7 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
+
 export default function InstallationCheck() {
   return (
     <Container maxWidth="md" sx={{ mt: 8 }}>

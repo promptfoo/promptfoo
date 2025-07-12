@@ -1,11 +1,12 @@
-
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import Typography from '@mui/material/Typography';export default function ProviderResponse({ providerResponse }: { providerResponse: any }) {
+import Typography from '@mui/material/Typography';
+
+export default function ProviderResponse({ providerResponse }: { providerResponse: any }) {
   return (
     <>
       <Typography variant="subtitle2" gutterBottom>
