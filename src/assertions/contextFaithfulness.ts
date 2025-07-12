@@ -48,5 +48,8 @@ export async function handleContextFaithfulness({
       assertion.threshold ?? 0,
       test.options,
     )),
+    metadata: {
+      context,
+    },
   };
 }

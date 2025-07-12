@@ -1,3 +1,5 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type {
   DerivedMetric,
   EnvOverrides,
@@ -7,9 +9,7 @@ import type {
   TestCase,
   UnifiedConfig,
   Scenario,
-} from '@promptfoo/types';
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+} from '../../../types';
 
 interface State {
   env: EnvOverrides;
@@ -17,7 +17,7 @@ interface State {
   description: string;
   providers: ProviderOptions[];
   prompts: any[];
-  defaultTest: TestCase;
+  defaultTest: TestCase | string;
   derivedMetrics: DerivedMetric[];
   evaluateOptions: EvaluateOptions;
   scenarios: Scenario[];
@@ -27,7 +27,7 @@ interface State {
   setDescription: (description: string) => void;
   setProviders: (providers: ProviderOptions[]) => void;
   setPrompts: (prompts: any[]) => void;
-  setDefaultTest: (testCase: TestCase) => void;
+  setDefaultTest: (testCase: TestCase | string) => void;
   setDerivedMetrics: (derivedMetrics: DerivedMetric[]) => void;
   setEvaluateOptions: (options: EvaluateOptions) => void;
   setScenarios: (scenarios: Scenario[]) => void;

@@ -43,6 +43,9 @@ export interface AzureCompletionOptions {
   apiVersion?: string;
   headers?: { [key: string]: string };
 
+  // System prompt for chat models
+  systemPrompt?: string;
+
   // OpenAI params
   max_tokens?: number;
   temperature?: number;

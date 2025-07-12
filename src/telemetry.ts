@@ -5,7 +5,7 @@ import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { POSTHOG_KEY } from './generated-constants';
-import { getUserEmail, getUserId } from './globalConfig/accounts';
+import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
 
 export const TelemetryEventSchema = z.object({
@@ -15,6 +15,7 @@ export const TelemetryEventSchema = z.object({
     'eval_ran',
     'feature_used',
     'funnel',
+    'webui_action',
     'webui_api',
     'webui_page_view',
   ]),
@@ -30,14 +31,22 @@ const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
-try {
-  posthogClient = POSTHOG_KEY
-    ? new PostHog(POSTHOG_KEY, {
+
+function getPostHogClient(): PostHog | null {
+  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
+    return null;
+  }
+
+  if (posthogClient === null && POSTHOG_KEY) {
+    try {
+      posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
-      })
-    : null;
-} catch {
-  posthogClient = null;
+      });
+    } catch {
+      posthogClient = null;
+    }
+  }
+  return posthogClient;
 }
 
 const TELEMETRY_TIMEOUT_MS = 1000;
@@ -54,17 +63,26 @@ export class Telemetry {
   }
 
   identify() {
-    // Do not use getEnvBool here - it will be mocked in tests
-    if (this.disabled || process.env.IS_TESTING) {
+    if (this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }
 
-    if (posthogClient) {
-      posthogClient.identify({
-        distinctId: this.id,
-        properties: { email: this.email },
-      });
-      posthogClient.flush();
+    const client = getPostHogClient();
+    if (client) {
+      try {
+        client.identify({
+          distinctId: this.id,
+          properties: {
+            email: this.email,
+            isLoggedIntoCloud: isLoggedIntoCloud(),
+          },
+        });
+        client.flush().catch(() => {
+          // Silently ignore flush errors
+        });
+      } catch (error) {
+        logger.debug(`PostHog identify error: ${error}`);
+      }
     }
 
     fetchWithTimeout(
@@ -108,14 +126,20 @@ export class Telemetry {
       isRunningInCi: isCI(),
     };
 
-    // Do not use getEnvBool here - it will be mocked in tests
-    if (posthogClient && !process.env.IS_TESTING) {
-      posthogClient.capture({
-        distinctId: this.id,
-        event: eventName,
-        properties: propertiesWithMetadata,
-      });
-      posthogClient.flush();
+    const client = getPostHogClient();
+    if (client && !getEnvBool('IS_TESTING')) {
+      try {
+        client.capture({
+          distinctId: this.id,
+          event: eventName,
+          properties: propertiesWithMetadata,
+        });
+        client.flush().catch(() => {
+          // Silently ignore flush errors
+        });
+      } catch (error) {
+        logger.debug(`PostHog capture error: ${error}`);
+      }
     }
 
     const kaBody = {

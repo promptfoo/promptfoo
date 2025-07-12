@@ -19,11 +19,14 @@ import {
   Severity,
   type Strategy,
 } from '../redteam/constants';
+import { isCustomStrategy } from '../redteam/constants/strategies';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-const pluginOptions: string[] = [...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].sort();
+export const pluginOptions: string[] = [
+  ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
+].sort();
 /**
  * Schema for individual redteam plugins
  */
@@ -79,28 +82,34 @@ export const RedteamPluginSchema = z.union([
   RedteamPluginObjectSchema,
 ]);
 
-const strategyIdSchema = z
-  .union([
-    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
-      if (!ALL_STRATEGIES.includes(val as Strategy)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.invalid_enum_value,
-          options: [...ALL_STRATEGIES] as [string, ...string[]],
-          received: val,
-          message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
-        });
-      }
-    }),
-    z.string().refine(
-      (value) => {
-        return value.startsWith('file://') && isJavascriptFile(value);
-      },
-      {
-        message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
-      },
-    ),
-  ])
-  .describe('Name of the strategy');
+export const strategyIdSchema = z.union([
+  z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+    if (!ALL_STRATEGIES.includes(val as Strategy)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.invalid_enum_value,
+        options: [...ALL_STRATEGIES] as [string, ...string[]],
+        received: val,
+        message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+      });
+    }
+  }),
+  z.string().refine(
+    (value) => {
+      return value.startsWith('file://') && isJavascriptFile(value);
+    },
+    {
+      message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
+    },
+  ),
+  z.string().refine(
+    (value) => {
+      return isCustomStrategy(value);
+    },
+    {
+      message: `Strategy must be one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+    },
+  ),
+]);
 /**
  * Schema for individual redteam strategies
  */

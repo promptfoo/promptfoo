@@ -55,6 +55,9 @@ describe('handleContextRelevance', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.9);
     expect(result.reason).toBe('Context is highly relevant');
+    expect(result.metadata).toEqual({
+      context: 'test context',
+    });
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'What is the capital of France?',
       'test context',
@@ -108,6 +111,9 @@ describe('handleContextRelevance', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0.3);
     expect(result.reason).toBe('Context not relevant to query');
+    expect(result.metadata).toEqual({
+      context: 'irrelevant context',
+    });
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'What is the capital of France?',
       'irrelevant context',
@@ -121,7 +127,7 @@ describe('handleContextRelevance', () => {
     jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    await handleContextRelevance({
+    const result = await handleContextRelevance({
       assertion: {
         type: 'context-relevance',
       },
@@ -149,6 +155,9 @@ describe('handleContextRelevance', () => {
     } as any);
 
     expect(matchesContextRelevance).toHaveBeenCalledWith('test query', 'test context', 0, {});
+    expect(result.metadata).toEqual({
+      context: 'test context',
+    });
   });
 
   it('should throw error when test.vars is missing', async () => {
@@ -212,7 +221,7 @@ describe('handleContextRelevance', () => {
     jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     jest.mocked(contextUtils.resolveContext).mockResolvedValue('cx');
 
-    await handleContextRelevance({
+    const result = await handleContextRelevance({
       assertion: {
         type: 'context-relevance',
         contextTransform: 'expr',
@@ -246,5 +255,8 @@ describe('handleContextRelevance', () => {
       { output: 'out', tokenUsage: {} },
     );
     expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {});
+    expect(result.metadata).toEqual({
+      context: 'cx',
+    });
   });
 });

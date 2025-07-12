@@ -20,10 +20,26 @@ import {
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
 
+// Mock fetchWithTimeout before any imports that might use telemetry
+jest.mock('../../src/fetch', () => ({
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+}));
+
 jest.mock('@inquirer/input');
 jest.mock('../../src/envars');
-jest.mock('../../src/fetch');
-jest.mock('../../src/telemetry');
+jest.mock('../../src/telemetry', () => {
+  const mockTelemetry = {
+    record: jest.fn().mockResolvedValue(undefined),
+    identify: jest.fn(),
+    saveConsent: jest.fn().mockResolvedValue(undefined),
+    disabled: false,
+  };
+  return {
+    __esModule: true,
+    default: mockTelemetry,
+    Telemetry: jest.fn().mockImplementation(() => mockTelemetry),
+  };
+});
 jest.mock('../../src/util');
 
 describe('accounts', () => {
