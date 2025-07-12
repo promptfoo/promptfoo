@@ -399,7 +399,21 @@ export async function runEval({
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
       if (checkResult.tokensUsed) {
-        accumulateTokenUsage(ret.tokenUsage, checkResult.tokensUsed);
+        // Track assertion tokens separately in the assertions field
+        if (!ret.tokenUsage.assertions) {
+          ret.tokenUsage.assertions = {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          };
+        }
+        accumulateTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
@@ -966,6 +980,11 @@ class Evaluator {
                   prompt: 0,
                   completion: 0,
                   cached: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
                 };
               }
 

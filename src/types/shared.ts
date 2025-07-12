@@ -32,16 +32,16 @@ export const BaseTokenUsageSchema = z.object({
       prompt: z.number().optional(),
       completion: z.number().optional(),
       cached: z.number().optional(),
+      completionDetails: CompletionTokenDetailsSchema.optional(),
     })
     .optional(),
 });
 
 /**
  * Complete token usage statistics, including assertion data
+ * Note: BaseTokenUsageSchema already includes the assertions field
  */
-export const TokenUsageSchema = BaseTokenUsageSchema.extend({
-  assertions: BaseTokenUsageSchema.optional(),
-});
+export const TokenUsageSchema = BaseTokenUsageSchema;
 
 // TypeScript types derived from schemas
 export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;

@@ -3,7 +3,7 @@ import type { TokenUsage } from '../types/shared';
 /**
  * Create an empty token usage object with all fields initialized to zero.
  */
-export function createEmptyTokenUsage(): TokenUsage {
+export function createEmptyTokenUsage(): Required<TokenUsage> {
   return {
     prompt: 0,
     completion: 0,
@@ -20,8 +20,13 @@ export function createEmptyTokenUsage(): TokenUsage {
       prompt: 0,
       completion: 0,
       cached: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     },
-  };
+  } as Required<TokenUsage>;
 }
 
 /**
@@ -55,6 +60,17 @@ export function mergeTokenUsage(
       prompt: (current.assertions?.prompt ?? 0) + (update.assertions?.prompt ?? 0),
       completion: (current.assertions?.completion ?? 0) + (update.assertions?.completion ?? 0),
       cached: (current.assertions?.cached ?? 0) + (update.assertions?.cached ?? 0),
+      completionDetails: {
+        reasoning:
+          (current.assertions?.completionDetails?.reasoning ?? 0) +
+          (update.assertions?.completionDetails?.reasoning ?? 0),
+        acceptedPrediction:
+          (current.assertions?.completionDetails?.acceptedPrediction ?? 0) +
+          (update.assertions?.completionDetails?.acceptedPrediction ?? 0),
+        rejectedPrediction:
+          (current.assertions?.completionDetails?.rejectedPrediction ?? 0) +
+          (update.assertions?.completionDetails?.rejectedPrediction ?? 0),
+      },
     },
   };
 }
@@ -98,12 +114,33 @@ export function accumulateTokenUsage(
 
   if (update.assertions) {
     if (!target.assertions) {
-      target.assertions = { total: 0, prompt: 0, completion: 0, cached: 0 };
+      target.assertions = {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+      };
     }
     target.assertions.total = (target.assertions.total ?? 0) + (update.assertions.total ?? 0);
     target.assertions.prompt = (target.assertions.prompt ?? 0) + (update.assertions.prompt ?? 0);
     target.assertions.completion =
       (target.assertions.completion ?? 0) + (update.assertions.completion ?? 0);
     target.assertions.cached = (target.assertions.cached ?? 0) + (update.assertions.cached ?? 0);
+
+    if (update.assertions.completionDetails) {
+      if (!target.assertions.completionDetails) {
+        target.assertions.completionDetails = { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 };
+      }
+      target.assertions.completionDetails.reasoning =
+        (target.assertions.completionDetails.reasoning ?? 0) +
+        (update.assertions.completionDetails.reasoning ?? 0);
+      target.assertions.completionDetails.acceptedPrediction =
+        (target.assertions.completionDetails.acceptedPrediction ?? 0) +
+        (update.assertions.completionDetails.acceptedPrediction ?? 0);
+      target.assertions.completionDetails.rejectedPrediction =
+        (target.assertions.completionDetails.rejectedPrediction ?? 0) +
+        (update.assertions.completionDetails.rejectedPrediction ?? 0);
+    }
   }
 }
