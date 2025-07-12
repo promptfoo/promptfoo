@@ -1,10 +1,10 @@
 import type { Command } from 'commander';
+import * as os from 'os';
+import { VERSION } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { writeOutput } from '../util';
-import * as os from 'os';
-import { VERSION } from '../constants';
 
 export function exportCommand(program: Command) {
   program
