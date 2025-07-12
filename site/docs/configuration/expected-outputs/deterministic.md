@@ -522,6 +522,7 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 The `levenshtein` assertion checks if the LLM output is within a given edit distance from an expected value.
 
 Levenshtein distance measures the number of single-character edits (insertions, deletions, or substitutions) required to change one string into another. This metric is useful for:
+
 - **Fuzzy matching**: When you want to allow minor typos or variations (e.g., "color" vs "colour")
 - **Name matching**: When checking if the model outputs names correctly with some tolerance for spelling
 - **Code generation**: When verifying that generated code is close to expected output
@@ -555,17 +556,20 @@ tests:
 Perplexity measures how "surprised" a language model is by its own output. It's calculated from the log probabilities of the tokens the model generated - essentially measuring how likely the model thinks its own output is.
 
 **How it works in promptfoo:**
+
 - The LLM returns log probabilities for each token it generates
 - Perplexity = exp(-average(log probabilities))
 - Lower perplexity = model assigned higher probabilities to its tokens = more confident
 - Higher perplexity = model assigned lower probabilities to its tokens = less confident
 
 **When to use perplexity:**
+
 - **Quality control**: Reject outputs where the model seems uncertain (high perplexity often correlates with hallucination or confusion)
 - **Consistency checking**: Ensure the model is confident about its outputs in your domain
 - **Debugging**: Unusually high perplexity can indicate prompt issues or out-of-distribution requests
 
 **Example interpretation:**
+
 - Perplexity = 1.0: Perfect confidence (model assigned 100% probability to each token)
 - Perplexity = 2.0: Model is choosing between ~2 equally likely options per token
 - Perplexity = 10.0: Model is very uncertain, choosing between ~10 options per token
@@ -813,6 +817,7 @@ ROUGE-N is a **recall-oriented** metric that measures how much of the reference 
 **What "recall-oriented" means:** ROUGE-N asks "How much of what should be there is actually there?" - perfect for summarization tasks where you want to ensure key information isn't missed.
 
 **When to use ROUGE-N:**
+
 - **Summarization**: Ensure summaries include key points from source text
 - **Information extraction**: Verify that important facts are captured
 - **Content coverage**: Check if the output mentions all required elements
@@ -851,11 +856,13 @@ BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric origin
 **What "precision-oriented" means:** BLEU checks if the words in the generated output actually appear in the reference - it penalizes made-up or incorrect content.
 
 **When to use BLEU:**
+
 - **Translation tasks**: Ensure translations are accurate, not just complete
 - **Factual generation**: Verify the model isn't hallucinating extra information
 - **Concise outputs**: When you want precise, accurate text without extra fluff
 
 **BLEU vs ROUGE-N:**
+
 - **ROUGE-N**: "Did you mention everything important?" (good for summaries)
 - **BLEU**: "Is what you said actually correct?" (good for translations)
 
@@ -891,17 +898,20 @@ tests:
 GLEU (Google-BLEU) is designed specifically for evaluating **individual sentences**, fixing a major limitation of BLEU which was designed for large documents.
 
 **Why GLEU instead of BLEU for sentences:**
+
 - **No weird edge cases**: BLEU can give misleading scores for short sentences due to its brevity penalty
 - **Balanced evaluation**: GLEU considers both precision AND recall, taking the minimum of both
 - **Symmetrical**: Swapping reference and output gives the same score (unlike BLEU)
 - **Better for real-time evaluation**: More reliable for evaluating single responses in chatbots or QA systems
 
 **How GLEU works differently:**
+
 - Records all n-grams (1-4 word sequences) from both texts
 - Calculates both precision (like BLEU) AND recall (like ROUGE)
 - Final score = minimum(precision, recall)
 
 **When to use GLEU:**
+
 - **Single response evaluation**: Evaluating individual chatbot or model responses
 - **Short text comparison**: When comparing headlines, titles, or short answers
 - **Balanced accuracy needs**: When both precision and recall matter equally
@@ -945,12 +955,14 @@ assert:
 METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
 
 **What makes METEOR special:**
+
 - **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
 - **Handles word forms**: Knows that "running" and "ran" are the same verb
 - **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
 - **Balanced scoring**: Combines precision, recall, AND word order into a single score
 
 **When to use METEOR:**
+
 - **High-quality translation**: When semantic accuracy matters more than exact wording
 - **Natural language understanding**: Evaluating if the model truly "gets" the meaning
 - **Flexible matching**: When there are many valid ways to express the same idea
@@ -1055,11 +1067,13 @@ Note: Actual scores may vary based on the specific METEOR implementation and par
 F-score (also F1 score) is used for measuring classification accuracy when you need to balance between being correct and being complete.
 
 **Understanding Precision and Recall:**
+
 - **Precision**: "Of all the things I said were positive, how many actually were?" (avoiding false alarms)
 - **Recall**: "Of all the things that were positive, how many did I catch?" (avoiding missed cases)
 - **F-score**: The harmonic mean that balances both - high only when BOTH are good
 
 **When to use F-score:**
+
 - **Classification tasks**: Sentiment analysis, intent detection, category assignment
 - **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
 - **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
