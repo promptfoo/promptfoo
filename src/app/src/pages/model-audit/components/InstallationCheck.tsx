@@ -1,5 +1,5 @@
 import React from 'react';
-import { Security as SecurityIcon } from '@mui/icons-material';
+import SecurityIcon from '@mui/icons-material/Security';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';

@@ -1,5 +1,6 @@
 import React from 'react';
-import { PlayArrow as PlayArrowIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SettingsIcon from '@mui/icons-material/Settings';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';

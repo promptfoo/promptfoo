@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
-import { Security as SecurityIcon } from '@mui/icons-material';
+import SecurityIcon from '@mui/icons-material/Security';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';

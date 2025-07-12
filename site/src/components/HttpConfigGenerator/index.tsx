@@ -92,11 +92,17 @@ Content-Type: application/json
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(config);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    navigator.clipboard
+      .writeText(config)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
+      })
+      .catch(() => {
+        setError('Unable to copy to clipboard');
+      });
   };
 
   return (
