@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+// AWS credential types - using 'any' to avoid @aws-sdk/types dependency
+type AwsCredentialIdentity = any;
+type AwsCredentialIdentityProvider = any;
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../../cache';

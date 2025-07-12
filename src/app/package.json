@@ -14,7 +14,6 @@
     "test:ci": "vitest run"
   },
   "devDependencies": {
-    "@aws-sdk/types": "^3.840.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^6.4.12",
@@ -43,8 +42,6 @@
     "diff": "^7.0.0",
     "eslint": "^9.30.0",
     "fuzzysearch": "^1.0.3",
-    "globals": "^15.15.0",
-    "graphiql": "^3.8.1",
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.0",
     "jsdom": "^26.1.0",

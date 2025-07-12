@@ -1,4 +1,5 @@
-import type { GaxiosError } from 'gaxios';
+// Type for Google API errors - using 'any' to avoid gaxios dependency
+type GaxiosError = any;
 import path from 'path';
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';

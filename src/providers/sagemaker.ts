@@ -28,7 +28,7 @@ const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'c
 /**
  * Zod schema for validating SageMaker options
  */
-export const SageMakerConfigSchema = z
+const SageMakerConfigSchema = z
   .object({
     // AWS credentials options
     accessKeyId: z.string().optional(),
