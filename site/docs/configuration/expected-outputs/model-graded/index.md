@@ -1,8 +1,20 @@
 ---
 sidebar_position: 7
+title: Model-Graded Metrics - LLM Evaluation with AI
+description: Learn how to use model-graded assertions for LLM evaluation including llm-rubric, factuality checks, G-Eval, and RAG metrics. Automatic provider selection based on API keys.
+keywords:
+  - model-graded metrics
+  - llm evaluation
+  - llm-rubric
+  - factuality check
+  - g-eval
+  - answer relevance
+  - context faithfulness
+  - RAG evaluation
+  - AI grading
+  - promptfoo assertions
+sidebar_label: Model-graded
 ---
-
-# Model-graded metrics
 
 promptfoo supports several types of model-graded assertions:
 
@@ -127,7 +139,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
 
 1. Using the `--grader` CLI option:
 
-   ```
+   ```bash
    promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
