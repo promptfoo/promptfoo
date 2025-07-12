@@ -257,6 +257,14 @@
   overflow: hidden;
 }
 
+@media screen and (max-width: 768px) {
+  .walkthroughContainer {
+    margin: 2rem auto;
+    padding: 1.5rem 1rem;
+    border-radius: 16px;
+  }
+}
+
 [data-theme='dark'] .walkthroughContainer {
   /* Use subtle dark overlay instead of gradient */
   background: rgba(23, 37, 43, 0.85);
@@ -276,10 +284,30 @@
   background: rgba(255, 255, 255, 0.5);
   border-radius: 16px;
   backdrop-filter: blur(5px);
+  position: relative;
 }
 
 [data-theme='dark'] .walkthroughTabs {
   background: rgba(16, 25, 28, 0.5);
+}
+
+/* Scroll indicator for mobile */
+@media screen and (max-width: 768px) {
+  .walkthroughTabs.scrollable::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 40px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8));
+    pointer-events: none;
+    border-radius: 0 16px 16px 0;
+  }
+
+  [data-theme='dark'] .walkthroughTabs.scrollable::after {
+    background: linear-gradient(90deg, transparent, rgba(16, 25, 28, 0.8));
+  }
 }
 
 .walkthroughTab {
@@ -467,6 +495,14 @@
   box-shadow: 0 4px 12px rgba(229, 58, 58, 0.2);
 }
 
+/* Mobile-specific enhancements for tab active state */
+@media (hover: none) and (pointer: coarse) {
+  .walkthroughTab:active {
+    background: rgba(229, 58, 58, 0.1);
+    transform: scale(0.98);
+  }
+}
+
 @media screen and (max-width: 768px) {
   .walkthroughContent {
     flex-direction: column;
@@ -508,8 +544,11 @@
     max-width: 300px;
   }
 
-  .walkthroughContainer {
-    flex-direction: column;
+  .walkthroughTabActive {
+    background: linear-gradient(135deg, var(--pf-red-darker) 0%, var(--pf-red-dark) 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(179, 46, 46, 0.3);
+    font-weight: 700;
   }
 
   .walkthroughButtons,
@@ -547,22 +586,41 @@
 
   .walkthroughTabs {
     width: 100%;
-    padding: 0;
-    gap: 0;
+    padding: 0.5rem;
+    gap: 0.5rem;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(229, 58, 58, 0.3) transparent;
+  }
+
+  .walkthroughTabs::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .walkthroughTabs::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+  }
+
+  .walkthroughTabs::-webkit-scrollbar-thumb {
+    background: rgba(229, 58, 58, 0.3);
+    border-radius: 3px;
   }
 
   .walkthroughTab {
-    padding: 0.75rem 0.25rem;
-    font-size: 0.9rem;
-    flex: 1;
-    min-width: 0;
+    padding: 0.875rem 1.25rem;
+    font-size: 1rem;
+    flex: 0 0 auto;
+    min-width: fit-content;
     display: flex;
     justify-content: center;
     align-items: center;
-    word-break: keep-all;
     white-space: nowrap;
+    touch-action: manipulation;
   }
 }
 
