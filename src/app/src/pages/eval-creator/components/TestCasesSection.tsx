@@ -24,7 +24,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase } from '@promptfoo/types';
-import type { GenerationMetadata } from '../types';
+import type { GenerationMetadata, GenerationBatch } from '../types';
 import GenerateTestCasesDialog from './GenerateTestCasesDialog';
 import TestCaseDialog from './TestCaseDialog';
 
@@ -43,6 +43,9 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
+  
+  // Track generation batches
+  const [generationBatches, setGenerationBatches] = React.useState<Map<string, GenerationBatch>>(new Map());
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
@@ -104,10 +107,10 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
     // Update generation metadata for duplicated test case
     const metadata = duplicatedTestCase.metadata as GenerationMetadata | undefined;
-    if (metadata?.isGenerated) {
+    if (metadata?.generationBatchId) {
       duplicatedTestCase.metadata = {
         ...duplicatedTestCase.metadata,
-        isGenerated: false,
+        generationBatchId: undefined, // Remove batch reference
         duplicatedFrom: 'generated',
         duplicatedAt: new Date().toISOString(),
       } as GenerationMetadata;
@@ -116,6 +119,18 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   };
 
   const handleGeneratedTestCases = (newTestCases: TestCase[]) => {
+    // Extract generation batch from the first test case if present
+    if (newTestCases.length > 0) {
+      const firstTestCase = newTestCases[0];
+      const batchInfo = (firstTestCase.metadata as any)?._generationBatch;
+      if (batchInfo) {
+        // Store the batch information
+        setGenerationBatches(prev => new Map(prev).set(batchInfo.id, batchInfo));
+        // Remove the temporary batch info from the test case
+        delete (firstTestCase.metadata as any)._generationBatch;
+      }
+    }
+    
     setTestCases([...testCases, ...newTestCases]);
     setGenerateDialogOpen(false);
   };
@@ -238,13 +253,12 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                       </Typography>
                       {(() => {
                         const metadata = testCase.metadata as GenerationMetadata | undefined;
-                        return metadata?.isGenerated ? (
+                        const batchId = metadata?.generationBatchId;
+                        const batch = batchId ? generationBatches.get(batchId) : null;
+                        
+                        return batch ? (
                           <Tooltip
-                            title={
-                              metadata.generatedAt
-                                ? `Generated on ${new Date(metadata.generatedAt).toLocaleString()}`
-                                : 'Generated test case'
-                            }
+                            title={`Generated on ${new Date(batch.generatedAt).toLocaleString()} by ${batch.generatedBy}`}
                           >
                             <Chip
                               icon={<AutoAwesome />}

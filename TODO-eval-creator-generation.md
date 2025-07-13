@@ -91,10 +91,15 @@ This document outlines the implementation plan for adding dataset and assertion 
 
 ### 3.1 User Experience
 
-- [ ] Add generation templates
-  - [ ] Common testing scenarios (QA, safety, performance)
-  - [ ] Industry-specific templates
+- [x] Add prompt suggestion templates
+  - [x] Common testing scenarios (QA, safety, performance)
+  - [x] Templates organized by category
+  - [x] One-click template selection
+
+- [ ] Add dataset generation templates
+  - [ ] Industry-specific test case patterns
   - [ ] Custom template creation
+  - [ ] Save and share templates
 
 - [ ] Improve generation preview
   - [ ] Show estimated time for generation
@@ -200,10 +205,32 @@ This document outlines the implementation plan for adding dataset and assertion 
   - Maximum cache size of 100 entries with LRU eviction
   - Works for both sync and async generation
 
+### Prompt Suggestions (Completed 2025-07-13)
+
+- [x] Created PromptSuggestions component with 12+ prompt templates
+  - Templates organized by category: general, testing, safety, performance, UX
+  - Each template includes variables and descriptions
+  - Easy one-click selection to populate prompt editor
+- [x] Integrated prompt suggestions into PromptDialog
+  - Added AutoAwesome icon button in dialog title
+  - Opens modal with categorized template selection
+  - Automatically populates the prompt field on selection
+
+### Metadata Storage Optimization (Completed 2025-07-13)
+
+- [x] Optimized metadata storage to reduce verbosity
+  - Replaced repeating metadata (isGenerated, generatedAt, generatedBy) with batch ID reference
+  - Created GenerationBatch type to store generation information once
+  - Test cases now only store generationBatchId in metadata
+  - TestCasesSection tracks generation batches in a Map
+- [x] Updated visual indicators to use batch information
+  - Generated chip tooltip shows batch generation time and provider
+  - Properly handles duplicated test cases by removing batch reference
+
 ### Next Priority Tasks
 
 1. **Generation History Tracking**
-   - Store generation history in evalConfig store
+   - Store generation batches in database (persistent storage)
    - Allow viewing past generations
    - Support regenerating with same settings
 
@@ -213,7 +240,7 @@ This document outlines the implementation plan for adding dataset and assertion 
    - Show progress for each test case
 
 3. **Generation Templates/Presets**
-   - Create preset generation configurations
+   - Create preset generation configurations (beyond prompt suggestions)
    - Allow saving custom templates
    - Quick-apply common patterns
 
@@ -221,6 +248,7 @@ This document outlines the implementation plan for adding dataset and assertion 
    - Add preview/review step before applying generated content
    - Support selective application of generated items
    - Add regeneration capability with modified settings
+   - Add cancellation support for in-progress generation jobs
 
 ## Open Questions
 
