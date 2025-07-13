@@ -9,7 +9,7 @@ export const checkNodeVersion = (): void => {
 
   const versionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
   if (!versionMatch) {
-    // Version mismatch is rare, so we can skip logger and use console.error
+    // Using console.error to avoid loading logger at startup
     console.error(
       `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
     );
@@ -27,8 +27,8 @@ export const checkNodeVersion = (): void => {
     (major === requiredMajor && minor < requiredMinor) ||
     (major === requiredMajor && minor === requiredMinor && patch < requiredPatch)
   ) {
-    // Version mismatch is rare, so we can skip logger and use console.error
     const errorMessage = `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`;
+    // Using console.error to avoid loading logger at startup
     console.error(errorMessage);
 
     process.exitCode = 1;
