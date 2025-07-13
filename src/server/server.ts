@@ -55,9 +55,11 @@ export function setJavaScriptMimeType(
   res: Response,
   next: express.NextFunction,
 ): void {
-  const ext = path.extname(req.path);
+  const ext = path.extname(req.path).toLowerCase();
   if (JS_EXTENSIONS.has(ext)) {
-    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    // Add cross-origin headers for module scripts
+    res.setHeader('X-Content-Type-Options', 'nosniff');
   }
   next();
 }
@@ -244,7 +246,15 @@ export function createApp() {
   // Configure proper MIME types for JavaScript files
   app.use(setJavaScriptMimeType);
 
-  app.use(express.static(staticDir, { dotfiles: 'allow' }));
+  app.use(express.static(staticDir, { 
+    dotfiles: 'allow',
+    setHeaders: (res, path) => {
+      // Ensure proper MIME types for JavaScript modules
+      if (path.endsWith('.js') || path.endsWith('.mjs') || path.endsWith('.cjs')) {
+        res.setHeader('Content-Type', 'application/javascript');
+      }
+    }
+  }));
 
   // Handle client routing, return all requests to the app
   app.get('/*splat', (req: Request, res: Response): void => {
