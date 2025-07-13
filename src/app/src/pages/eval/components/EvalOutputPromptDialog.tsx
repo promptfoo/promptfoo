@@ -366,7 +366,7 @@ export default function EvalOutputPromptDialog({
     setExpandedMetadata((prev: ExpandedMetadataState) => ({
       ...prev,
       [key]: {
-        expanded: isDoubleClick ? false : true,
+        expanded: !isDoubleClick,
         lastClickTime: now,
       },
     }));

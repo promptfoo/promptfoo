@@ -148,19 +148,15 @@ function EvalOutputCell({
         diffResult = diffWords(firstOutputText, text);
       }
     }
-    node = (
-      <>
-        {diffResult.map(
-          (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
-            part.added ? (
-              <ins key={index}>{part.value}</ins>
-            ) : part.removed ? (
-              <del key={index}>{part.value}</del>
-            ) : (
-              <span key={index}>{part.value}</span>
-            ),
-        )}
-      </>
+    node = diffResult.map(
+      (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
+        part.added ? (
+          <ins key={index}>{part.value}</ins>
+        ) : part.removed ? (
+          <del key={index}>{part.value}</del>
+        ) : (
+          <span key={index}>{part.value}</span>
+        ),
     );
   }
 
@@ -176,30 +172,27 @@ function EvalOutputCell({
           end: regex.lastIndex,
         });
       }
-      node = (
-        <>
-          {matches.length > 0 ? (
-            <>
-              <span key="text-before">{text?.substring(0, matches[0].start)}</span>
-              {matches.map((range, index) => (
-                <>
-                  <span className="search-highlight" key={'match-' + index}>
-                    {text?.substring(range.start, range.end)}
-                  </span>
-                  <span key={'text-after-' + index}>
-                    {text?.substring(
-                      range.end,
-                      matches[index + 1] ? matches[index + 1].start : text?.length,
-                    )}
-                  </span>
-                </>
-              ))}
-            </>
-          ) : (
-            <span key="no-match">{text}</span>
-          )}
-        </>
-      );
+      node =
+        matches.length > 0 ? (
+          <>
+            <span key="text-before">{text?.substring(0, matches[0].start)}</span>
+            {matches.map((range, index) => (
+              <>
+                <span className="search-highlight" key={'match-' + index}>
+                  {text?.substring(range.start, range.end)}
+                </span>
+                <span key={'text-after-' + index}>
+                  {text?.substring(
+                    range.end,
+                    matches[index + 1] ? matches[index + 1].start : text?.length,
+                  )}
+                </span>
+              </>
+            ))}
+          </>
+        ) : (
+          <span key="no-match">{text}</span>
+        );
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }

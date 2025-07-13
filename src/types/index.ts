@@ -687,7 +687,7 @@ export const TestCaseSchema = z.object({
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
+export type TestCase<_vars = Record<string, string | string[] | object>> = z.infer<
   typeof TestCaseSchema
 >;
 
@@ -729,7 +729,7 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
 }).strict();
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
+export type AtomicTestCase<_vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 

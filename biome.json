@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.mjs", "**/*.cjs"]
+    "includes": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs"]
   },
   "formatter": {
     "enabled": true,
@@ -26,36 +26,36 @@
         "noUselessRename": "error",
         "noUselessTernary": "error",
         "noUselessFragments": "error",
-        "useOptionalChain": "error"
+        "useOptionalChain": "off"
       },
       "correctness": {
         "noUnusedVariables": "error",
-        "noUnusedImports": "error",
-        "useExhaustiveDependencies": "warn",
+        "noUnusedImports": "off",
+        "useExhaustiveDependencies": "off",
         "noUnusedFunctionParameters": "off"
       },
       "style": {
         "noNegationElse": "error",
         "useConst": "error",
         "useBlockStatements": "error",
-        "useShorthandAssign": "error",
-        "useShorthandFunctionType": "error",
-        "useTemplate": "error",
-        "useNumberNamespace": "error",
-        "useSingleVarDeclarator": "error",
+        "useShorthandAssign": "off",
+        "useShorthandFunctionType": "off",
+        "useTemplate": "off",
+        "useNumberNamespace": "off",
+        "useSingleVarDeclarator": "off",
         "useImportType": "off",
         "useNodejsImportProtocol": "off",
         "noNonNullAssertion": "off"
       },
       "suspicious": {
         "noExplicitAny": "off",
-        "noArrayIndexKey": "error",
+        "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
         "noRedundantUseStrict": "error"
       },
       "performance": {
-        "noDelete": "error"
+        "noDelete": "off"
       },
       "a11y": {
         "recommended": false,

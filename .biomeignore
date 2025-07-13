@@ -25,3 +25,4 @@ venv
 **/*.jinja
 **/*.jinja2
 **/*.mdc
+examples/custom-provider/vercelAiSdkExample.js

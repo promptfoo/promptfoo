@@ -119,7 +119,7 @@ export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiPro
 
 // Ensure that schemas match their corresponding types
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
+function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
