@@ -49,8 +49,8 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     }
     if (Array.isArray(providers)) {
       // Filter out any non-object providers (strings, functions)
-      return providers.filter((p): p is ProviderOptions => 
-        typeof p === 'object' && p !== null && !Array.isArray(p)
+      return providers.filter(
+        (p): p is ProviderOptions => typeof p === 'object' && p !== null && !Array.isArray(p),
       );
     }
     return [];
