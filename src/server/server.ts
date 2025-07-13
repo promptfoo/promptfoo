@@ -192,7 +192,9 @@ export function createApp() {
       logger.debug(`Generated share URL for eval: ${id}`);
       res.json({ url });
     } catch (error) {
-      logger.error(`Failed to generate share URL for eval ${id}: ${error instanceof Error ? error.message : error}`);
+      logger.error(
+        `Failed to generate share URL for eval ${id}: ${error instanceof Error ? error.message : error}`,
+      );
       res.status(500).json({ error: 'Failed to generate share URL' });
     }
   });
@@ -229,7 +231,9 @@ export function createApp() {
       await telemetry.record(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
-      logger.error(`Error processing telemetry request: ${error instanceof Error ? error.message : error}`);
+      logger.error(
+        `Error processing telemetry request: ${error instanceof Error ? error.message : error}`,
+      );
       res.status(500).json({ error: 'Failed to process telemetry request' });
     }
   });
@@ -269,7 +273,7 @@ export async function startServer(
     const results = await latestEval?.getResultsCount();
 
     if (results && results > 0) {
-      logger.info(`Emitting update with eval ID: ${latestEval?.id || 'unknown'}`);
+      logger.info(`Emitting update for eval: ${latestEval?.config?.description || latestEval?.id || 'unknown'}`);
       io.emit('update', latestEval);
       allPrompts = null;
     }
@@ -284,7 +288,9 @@ export async function startServer(
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
       openBrowser(browserBehavior, port).catch((error) => {
-        logger.error(`Failed to handle browser behavior: ${error instanceof Error ? error.message : error}`);
+        logger.error(
+          `Failed to handle browser behavior: ${error instanceof Error ? error.message : error}`,
+        );
       });
     })
     .on('error', (error: NodeJS.ErrnoException) => {
