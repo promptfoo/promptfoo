@@ -205,16 +205,16 @@ This document outlines the implementation plan for adding dataset and assertion 
   - Maximum cache size of 100 entries with LRU eviction
   - Works for both sync and async generation
 
-### Prompt Suggestions (Completed 2025-07-13)
+### Prompt Suggestions (Completed 2025-07-13, Simplified 2025-07-13)
 
-- [x] Created PromptSuggestions component with 12+ prompt templates
-  - Templates organized by category: general, testing, safety, performance, UX
-  - Each template includes variables and descriptions
-  - Easy one-click selection to populate prompt editor
-- [x] Integrated prompt suggestions into PromptDialog
-  - Added AutoAwesome icon button in dialog title
-  - Opens modal with categorized template selection
-  - Automatically populates the prompt field on selection
+- [x] Created simplified PromptSuggestionsSimple component
+  - 6 essential prompt templates with emoji icons
+  - Dark mode compatible dropdown menu
+  - Replaces "Add Example" button with better functionality
+- [x] Integrated into PromptsSection
+  - Shows "Load Example" button when no prompts exist
+  - One-click selection adds prompt to list
+  - Clean, minimal UI that works in all themes
 
 ### Metadata Storage Optimization (Completed 2025-07-13)
 

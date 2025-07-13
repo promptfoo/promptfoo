@@ -4,9 +4,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import PromptSuggestions from './PromptSuggestions';
 
 interface PromptDialogProps {
   open: boolean;
@@ -36,12 +34,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
 
   return (
     <Dialog open={open} onClose={onCancel} fullWidth maxWidth="md">
-      <DialogTitle>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <span>{`Edit Prompt ${index + 1}`}</span>
-          <PromptSuggestions onSelectPrompt={setEditingPrompt} currentPrompt={editingPrompt} />
-        </Stack>
-      </DialogTitle>
+      <DialogTitle>{`Edit Prompt ${index + 1}`}</DialogTitle>
       <DialogContent>
         <TextField
           value={editingPrompt}

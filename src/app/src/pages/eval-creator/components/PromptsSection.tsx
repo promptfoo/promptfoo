@@ -20,6 +20,7 @@ import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import PromptDialog from './PromptDialog';
+import PromptSuggestionsSimple from './PromptSuggestionsSimple';
 import './PromptsSection.css';
 
 const PromptsSection: React.FC = () => {
@@ -112,17 +113,11 @@ const PromptsSection: React.FC = () => {
             </Tooltip>
           </label>
           {prompts.length === 0 && (
-            <Button
-              color="secondary"
-              onClick={() => {
-                const examplePrompt =
-                  'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.';
-                setPrompts([...prompts, examplePrompt]);
+            <PromptSuggestionsSimple
+              onSelectPrompt={(prompt) => {
+                setPrompts([...prompts, prompt]);
               }}
-              sx={{ mr: 1 }}
-            >
-              Add Example
-            </Button>
+            />
           )}
           <Button
             color="primary"
