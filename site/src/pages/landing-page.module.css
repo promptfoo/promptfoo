@@ -70,6 +70,11 @@ section {
   gap: 1rem;
 }
 
+.heroBanner .buttons {
+  position: relative;
+  z-index: 1;
+}
+
 .buttonPrimary {
   background: linear-gradient(135deg, #cb3434 0%, #e53a3a 100%) !important;
   border: none !important;
@@ -136,6 +141,8 @@ section {
     rgba(255, 255, 255, 0.02) 70px
   );
   animation: diagonalMove 20s linear infinite;
+  z-index: 0; /* Ensure overlay is behind content */
+  pointer-events: none; /* Allow clicks to pass through */
 }
 
 @keyframes diagonalMove {
