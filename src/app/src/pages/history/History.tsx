@@ -25,7 +25,6 @@ import {
 } from '@mui/x-data-grid';
 import type { StandaloneEval } from '@promptfoo/util';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   const apiRef = useGridApiContext();
 

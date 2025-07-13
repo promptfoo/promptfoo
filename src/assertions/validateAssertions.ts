@@ -23,7 +23,7 @@ function validateAssertSet(assertion: object, test: TestCase) {
   }
 }
 
-export function validateAssertions(tests: TestCase<Record<string, string | object | string[]>>[]) {
+export function validateAssertions(tests: TestCase[]) {
   for (const test of tests) {
     if (test.assert) {
       for (const assertion of test.assert) {

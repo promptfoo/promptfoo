@@ -70,6 +70,11 @@ section {
   gap: 1rem;
 }
 
+.heroBanner .buttons {
+  position: relative;
+  z-index: 1;
+}
+
 .buttonPrimary {
   background: linear-gradient(135deg, #cb3434 0%, #e53a3a 100%) !important;
   border: none !important;
@@ -136,6 +141,8 @@ section {
     rgba(255, 255, 255, 0.02) 70px
   );
   animation: diagonalMove 20s linear infinite;
+  z-index: 0; /* Ensure overlay is behind content */
+  pointer-events: none; /* Allow clicks to pass through */
 }
 
 @keyframes diagonalMove {
@@ -155,7 +162,6 @@ section {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 2px 10px rgba(255, 255, 255, 0.3);
   position: relative;
   z-index: 1;
   letter-spacing: -0.02em;
@@ -227,6 +233,16 @@ section {
   color: #e0e0e0;
   font-weight: 600;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Make logos always light on hero dark background */
+.heroLogos img {
+  filter: brightness(0) invert(0.9);
+  opacity: 0.8;
+}
+
+.heroLogos img:hover {
+  opacity: 1;
 }
 
 /* Features section */

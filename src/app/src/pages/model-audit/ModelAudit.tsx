@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
-import { Security as SecurityIcon } from '@mui/icons-material';
-import {
-  Box,
-  CircularProgress,
-  Container,
-  Fade,
-  Paper,
-  Stack,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material';
+import SecurityIcon from '@mui/icons-material/Security';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Container from '@mui/material/Container';
+import Fade from '@mui/material/Fade';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import Typography from '@mui/material/Typography';
 import type { ScanPath, ScanOptions, ScanResult } from './ModelAudit.types';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';

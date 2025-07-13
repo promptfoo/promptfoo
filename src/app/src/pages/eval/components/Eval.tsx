@@ -128,7 +128,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      async function handleResultsFile(data: ResultsFile) {
+      const handleResultsFile = async (data: ResultsFile) => {
         setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author ?? null);
@@ -139,7 +139,7 @@ export default function Eval({ fetchId }: EvalOptions) {
           setEvalId(newId);
           loadEvalById(newId);
         }
-      }
+      };
 
       socket
         .on('init', async (data) => {
