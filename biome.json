@@ -98,7 +98,20 @@
   },
   "overrides": [
     {
-      "includes": ["examples/adaline-gateway/**/prompt.json"],
+      "includes": [
+        "examples/adaline-gateway/**/prompt.json",
+        "examples/multiple-turn-conversation/prompt.json",
+        "examples/openai-chat-history/prompt.json"
+      ],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
       "linter": {
         "enabled": false
       },
