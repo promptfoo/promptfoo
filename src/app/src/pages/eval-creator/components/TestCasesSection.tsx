@@ -1,5 +1,6 @@
 import React from 'react';
 import { useStore } from '@app/stores/evalConfig';
+import AutoAwesome from '@mui/icons-material/AutoAwesome';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
@@ -22,6 +23,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase } from '@promptfoo/types';
+import GenerateTestCasesDialog from './GenerateTestCasesDialog';
 import TestCaseDialog from './TestCaseDialog';
 
 interface TestCasesSectionProps {
@@ -31,11 +33,14 @@ interface TestCasesSectionProps {
 const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const { config, updateConfig } = useStore();
   const testCases = (config.tests || []) as TestCase[];
+  const providers = (config.providers || []) as any[];
+  const prompts = (config.prompts || []) as any[];
   const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
@@ -98,6 +103,25 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     setTestCases([...testCases, duplicatedTestCase]);
   };
 
+  const handleGeneratedTestCases = (newTestCases: TestCase[]) => {
+    setTestCases([...testCases, ...newTestCases]);
+    setGenerateDialogOpen(false);
+  };
+
+  // Extract normalized prompts (convert to string array)
+  const normalizedPrompts = React.useMemo(() => {
+    return prompts
+      .map((prompt) => {
+        if (typeof prompt === 'string') {
+          return prompt;
+        } else if (prompt && typeof prompt === 'object' && 'raw' in prompt) {
+          return prompt.raw;
+        }
+        return '';
+      })
+      .filter((p) => p !== '');
+  }, [prompts]);
+
   return (
     <>
       <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
@@ -148,6 +172,16 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
               Add Example
             </Button>
           )}
+          <Button
+            color="primary"
+            onClick={() => setGenerateDialogOpen(true)}
+            variant="outlined"
+            startIcon={<AutoAwesome />}
+            disabled={normalizedPrompts.length === 0}
+            sx={{ mr: 1 }}
+          >
+            Generate Test Cases
+          </Button>
           <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
             Add Test Case
           </Button>
@@ -257,6 +291,16 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Generate Test Cases Dialog */}
+      <GenerateTestCasesDialog
+        open={generateDialogOpen}
+        onClose={() => setGenerateDialogOpen(false)}
+        prompts={normalizedPrompts}
+        existingTests={testCases}
+        providers={providers}
+        onGenerated={handleGeneratedTestCases}
+      />
     </>
   );
 };

@@ -1,0 +1,294 @@
+import React, { useState } from 'react';
+import { callApi } from '@app/utils/api';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import LinearProgress from '@mui/material/LinearProgress';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import Slider from '@mui/material/Slider';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import type { TestCase, ProviderOptions } from '@promptfoo/types';
+
+interface GenerateTestCasesDialogProps {
+  open: boolean;
+  onClose: () => void;
+  prompts: string[];
+  existingTests: TestCase[];
+  providers: ProviderOptions[];
+  onGenerated: (newTestCases: TestCase[]) => void;
+}
+
+interface GenerationOptions {
+  numPersonas: number;
+  numTestCasesPerPersona: number;
+  instructions: string;
+  provider?: string;
+}
+
+const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
+  open,
+  onClose,
+  prompts,
+  existingTests,
+  providers,
+  onGenerated,
+}) => {
+  const [options, setOptions] = useState<GenerationOptions>({
+    numPersonas: 5,
+    numTestCasesPerPersona: 3,
+    instructions: '',
+    provider: undefined,
+  });
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [error, setError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  // Extract variables from prompts
+  const extractedVariables = React.useMemo(() => {
+    const varRegex = /{{\s*(\w+)\s*}}/g;
+    const varsSet = new Set<string>();
+    prompts.forEach((prompt) => {
+      let match;
+      while ((match = varRegex.exec(prompt)) !== null) {
+        varsSet.add(match[1]);
+      }
+    });
+    return Array.from(varsSet);
+  }, [prompts]);
+
+  const totalTestCases = options.numPersonas * options.numTestCasesPerPersona;
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setError(null);
+    setProgress({ current: 0, total: totalTestCases });
+
+    try {
+      // Start generation job
+      const response = await callApi('/generate/dataset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompts: prompts.map((p) => ({ raw: p })),
+          tests: existingTests,
+          options: {
+            ...options,
+            async: true,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Generation failed: ${response.statusText}`);
+      }
+
+      const { id } = await response.json();
+      setJobId(id);
+
+      // Poll for job completion
+      const intervalId = setInterval(async () => {
+        try {
+          const statusResponse = await callApi(`/generate/job/${id}`);
+          if (!statusResponse.ok) {
+            clearInterval(intervalId);
+            throw new Error('Failed to check job status');
+          }
+
+          const jobStatus = await statusResponse.json();
+
+          if (jobStatus.status === 'complete') {
+            clearInterval(intervalId);
+            const { results } = jobStatus.result || {};
+            if (results && Array.isArray(results)) {
+              const newTestCases: TestCase[] = results.map((varMapping) => ({
+                vars: varMapping,
+              }));
+              onGenerated(newTestCases);
+              handleClose();
+            } else {
+              setError('No test cases were generated');
+              setIsGenerating(false);
+            }
+          } else if (jobStatus.status === 'error' || jobStatus.status === 'failed') {
+            clearInterval(intervalId);
+            setError(jobStatus.logs?.join('\n') || 'Generation failed');
+            setIsGenerating(false);
+          } else {
+            // Update progress
+            setProgress({
+              current: jobStatus.progress || 0,
+              total: jobStatus.total || totalTestCases,
+            });
+          }
+        } catch (err) {
+          clearInterval(intervalId);
+          setError(err instanceof Error ? err.message : 'An error occurred');
+          setIsGenerating(false);
+        }
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start generation');
+      setIsGenerating(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!isGenerating) {
+      setOptions({
+        numPersonas: 5,
+        numTestCasesPerPersona: 3,
+        instructions: '',
+        provider: undefined,
+      });
+      setError(null);
+      setJobId(null);
+      onClose();
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <DialogTitle>Generate Test Cases</DialogTitle>
+      <DialogContent>
+        <Stack spacing={3} sx={{ mt: 1 }}>
+          {/* Preview Section */}
+          <div>
+            <Typography variant="subtitle2" gutterBottom>
+              Prompts ({prompts.length})
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {prompts.length === 1 ? prompts[0] : `${prompts.length} prompts configured`}
+            </Typography>
+            {extractedVariables.length > 0 && (
+              <>
+                <Typography variant="subtitle2" gutterBottom>
+                  Variables to Generate
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {extractedVariables.join(', ')}
+                </Typography>
+              </>
+            )}
+          </div>
+
+          {/* Generation Settings */}
+          <div>
+            <Typography variant="subtitle2" gutterBottom>
+              Number of Personas
+            </Typography>
+            <Slider
+              value={options.numPersonas}
+              onChange={(_, value) => setOptions({ ...options, numPersonas: value as number })}
+              min={1}
+              max={20}
+              marks
+              valueLabelDisplay="auto"
+              disabled={isGenerating}
+            />
+          </div>
+
+          <div>
+            <Typography variant="subtitle2" gutterBottom>
+              Test Cases per Persona
+            </Typography>
+            <Slider
+              value={options.numTestCasesPerPersona}
+              onChange={(_, value) =>
+                setOptions({ ...options, numTestCasesPerPersona: value as number })
+              }
+              min={1}
+              max={10}
+              marks
+              valueLabelDisplay="auto"
+              disabled={isGenerating}
+            />
+          </div>
+
+          <Typography variant="body2" color="text.secondary">
+            This will generate {totalTestCases} test cases total
+          </Typography>
+
+          {/* Provider Selection */}
+          {providers.length > 0 && (
+            <FormControl fullWidth>
+              <InputLabel>Provider (Optional)</InputLabel>
+              <Select
+                value={options.provider || ''}
+                onChange={(e) => setOptions({ ...options, provider: e.target.value || undefined })}
+                disabled={isGenerating}
+                label="Provider (Optional)"
+              >
+                <MenuItem value="">
+                  <em>Use default synthesis provider</em>
+                </MenuItem>
+                {providers.map((provider) => (
+                  <MenuItem key={provider.id} value={provider.id}>
+                    {provider.label || provider.id}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
+          {/* Instructions */}
+          <TextField
+            label="Additional Instructions (Optional)"
+            multiline
+            rows={3}
+            value={options.instructions}
+            onChange={(e) => setOptions({ ...options, instructions: e.target.value })}
+            disabled={isGenerating}
+            placeholder="e.g., Focus on edge cases, Include diverse demographics, Test error scenarios..."
+            fullWidth
+          />
+
+          {/* Progress */}
+          {isGenerating && (
+            <div>
+              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+                <CircularProgress size={20} />
+                <Typography variant="body2">
+                  Generating test cases... ({progress.current}/{progress.total})
+                </Typography>
+              </Stack>
+              <LinearProgress
+                variant="determinate"
+                value={progress.total > 0 ? (progress.current / progress.total) * 100 : 0}
+              />
+            </div>
+          )}
+
+          {/* Error Display */}
+          {error && (
+            <Typography color="error" variant="body2">
+              {error}
+            </Typography>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose} disabled={isGenerating}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleGenerate}
+          variant="contained"
+          disabled={isGenerating || prompts.length === 0}
+        >
+          {isGenerating ? 'Generating...' : 'Generate'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+export default GenerateTestCasesDialog; 

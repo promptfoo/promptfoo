@@ -32,6 +32,7 @@ import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { generateRouter } from './routes/generate';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
@@ -197,7 +198,9 @@ export function createApp() {
     }
   });
 
+  // Legacy endpoint - maintained for backward compatibility
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
+    logger.warn('Using deprecated /api/dataset/generate endpoint. Please use /api/generate/dataset instead.');
     const testSuite: TestSuite = {
       prompts: req.body.prompts as Prompt[],
       tests: req.body.tests as TestCase[],
@@ -208,6 +211,7 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
+  app.use('/api/generate', generateRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
