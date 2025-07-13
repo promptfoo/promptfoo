@@ -79,7 +79,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     if (!prompts || !Array.isArray(prompts)) {
       return [];
     }
-    
+
     return prompts
       .map((prompt) => {
         if (typeof prompt === 'string') {
