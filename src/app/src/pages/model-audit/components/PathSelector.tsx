@@ -227,7 +227,16 @@ export default function PathSelector({
 
           <Grid container spacing={3}>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
+                }}
+              >
                 <CloudUploadIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
                   AWS S3
@@ -241,7 +250,16 @@ export default function PathSelector({
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
+                }}
+              >
                 <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
                   Azure Blob
@@ -255,7 +273,16 @@ export default function PathSelector({
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
+                }}
+              >
                 <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
                   Google Cloud
@@ -383,7 +410,10 @@ export default function PathSelector({
                   </IconButton>
                 }
                 sx={{
-                  bgcolor: 'grey.50',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
                   borderRadius: 2,
                   mb: 1,
                 }}

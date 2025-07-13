@@ -143,7 +143,8 @@ export default function ModelAudit() {
             borderBottom: 1,
             borderColor: 'divider',
             px: 3,
-            bgcolor: 'grey.50',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[50],
           }}
         >
           <Tab label="Configuration" />
