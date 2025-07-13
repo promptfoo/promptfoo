@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../../cache';
@@ -19,10 +20,6 @@ import { maybeLoadToolsFromExternalFile } from '../../util';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { novaOutputFromMessage, novaParseMessages } from './util';
-
-// AWS credential types - using 'any' to avoid @aws-sdk/types dependency
-type AwsCredentialIdentity = any;
-type AwsCredentialIdentityProvider = any;
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
