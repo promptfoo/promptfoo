@@ -15,15 +15,18 @@ export async function checkModelAuditInstalled(): Promise<boolean> {
   }
 }
 
-export async function modelScanAction(paths: string[], options: {
-  blacklist?: string[];
-  format?: string;
-  output?: string;
-  timeout?: number;
-  verbose?: boolean;
-  maxFileSize?: string;
-  maxTotalSize?: string;
-}): Promise<void> {
+export async function modelScanAction(
+  paths: string[],
+  options: {
+    blacklist?: string[];
+    format?: string;
+    output?: string;
+    timeout?: number;
+    verbose?: boolean;
+    maxFileSize?: string;
+    maxTotalSize?: string;
+  },
+): Promise<void> {
   if (!paths || paths.length === 0) {
     logger.error(
       'No paths specified. Please provide at least one model file or directory to scan.',

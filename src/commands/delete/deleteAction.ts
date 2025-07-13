@@ -42,7 +42,10 @@ export async function deleteAction(id: string, cmdObj: { envPath?: string }): Pr
   process.exitCode = 1;
 }
 
-export async function deleteEvalAction(evalId: string, cmdObj: { envPath?: string }): Promise<void> {
+export async function deleteEvalAction(
+  evalId: string,
+  cmdObj: { envPath?: string },
+): Promise<void> {
   setupEnv(cmdObj.envPath);
   telemetry.record('command_used', {
     name: 'delete eval',

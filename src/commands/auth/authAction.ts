@@ -6,7 +6,11 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 
-export async function loginAction(cmdObj: { orgId?: string; host?: string; apiKey?: string }): Promise<void> {
+export async function loginAction(cmdObj: {
+  orgId?: string;
+  host?: string;
+  apiKey?: string;
+}): Promise<void> {
   let token: string | undefined;
   const apiHost = cmdObj.host || cloudConfig.getApiHost();
   telemetry.record('command_used', {
@@ -21,9 +25,7 @@ export async function loginAction(cmdObj: { orgId?: string; host?: string; apiKe
       const existingEmail = getUserEmail();
       if (existingEmail && existingEmail !== user.email) {
         logger.info(
-          chalk.yellow(
-            `Updating local email configuration from ${existingEmail} to ${user.email}`,
-          ),
+          chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
         );
       }
       setUserEmail(user.email);
