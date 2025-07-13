@@ -269,7 +269,7 @@ export async function startServer(
     const results = await latestEval?.getResultsCount();
 
     if (results && results > 0) {
-      logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
+      logger.info(`Emitting update with eval ID: ${latestEval?.id || 'unknown'}`);
       io.emit('update', latestEval);
       allPrompts = null;
     }
