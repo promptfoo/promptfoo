@@ -332,7 +332,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                       ((strategyStats[selectedStrategy].total -
                         strategyStats[selectedStrategy].pass) /
                         strategyStats[selectedStrategy].total) *
-                      100
+                        100
                     ).toFixed(1)}%`}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">

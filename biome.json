@@ -1,0 +1,140 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.1.1/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.mjs", "**/*.cjs"]
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "complexity": {
+        "noUselessConstructor": "error",
+        "noUselessRename": "error",
+        "noUselessTernary": "error",
+        "noUselessFragments": "error",
+        "useOptionalChain": "error"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "useExhaustiveDependencies": "warn",
+        "noUnusedFunctionParameters": "off"
+      },
+      "style": {
+        "noNegationElse": "error",
+        "useConst": "error",
+        "useBlockStatements": "error",
+        "useShorthandAssign": "error",
+        "useShorthandFunctionType": "error",
+        "useTemplate": "error",
+        "useNumberNamespace": "error",
+        "useSingleVarDeclarator": "error",
+        "useImportType": "off",
+        "useNodejsImportProtocol": "off",
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noArrayIndexKey": "error",
+        "noCommentText": "off",
+        "noConfusingVoidType": "error",
+        "noRedundantUseStrict": "error"
+      },
+      "performance": {
+        "noDelete": "error"
+      },
+      "a11y": {
+        "recommended": false,
+        "useButtonType": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "enabled": true,
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false,
+      "quoteProperties": "asNeeded",
+      "attributePosition": "auto"
+    },
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
+    "globals": [
+      "process",
+      "Buffer",
+      "__dirname",
+      "__filename",
+      "console",
+      "global",
+      "require",
+      "module",
+      "exports"
+    ]
+  },
+  "css": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "overrides": [
+    {
+      "includes": [".jest/**/*.js"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["*.mdc"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["*.j2"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["test/**/*", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["examples/**/*", "site/**/*"],
+      "linter": {
+        "rules": {
+          "recommended": false
+        }
+      }
+    }
+  ]
+}
