@@ -5,7 +5,7 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
-import Grid2 from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
 import { StatCard } from '../ModelAudit.styles';
@@ -51,9 +51,9 @@ export default function ScanStatistics({
   ];
 
   return (
-    <Grid2 container spacing={3} sx={{ mb: 4 }}>
+    <Grid container spacing={3} sx={{ mb: 4 }}>
       {severityStats.map(({ severity, icon: Icon, label, color, count }) => (
-        <Grid2 size={{ xs: 12, sm: 6, md: 3 }} key={severity}>
+        <Grid item xs={12} sm={6} md={3} key={severity}>
           <StatCard
             elevation={0}
             sx={{
@@ -71,9 +71,9 @@ export default function ScanStatistics({
               {label}
             </Typography>
           </StatCard>
-        </Grid2>
+        </Grid>
       ))}
-      <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+      <Grid item xs={12} sm={6} md={3}>
         <StatCard
           elevation={0}
           sx={{ bgcolor: alpha(theme.palette.success.main, 0.05) }}
@@ -87,7 +87,7 @@ export default function ScanStatistics({
             Files Scanned
           </Typography>
         </StatCard>
-      </Grid2>
-    </Grid2>
+      </Grid>
+    </Grid>
   );
 }

@@ -5,7 +5,7 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Drawer from '@mui/material/Drawer';
-import Grid2 from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -307,16 +307,16 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               border: `1px solid ${theme.palette.divider}`,
             }}
           >
-            <Grid2 container spacing={3}>
-              <Grid2 size={4}>
+            <Grid container spacing={3}>
+              <Grid item xs={4}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy && strategyStats[selectedStrategy]?.total}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">
                   Total Attempts
                 </Typography>
-              </Grid2>
-              <Grid2 size={4}>
+              </Grid>
+              <Grid item xs={4}>
                 <Typography variant="h6" align="center" color="error.main">
                   {selectedStrategy &&
                     strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
@@ -324,8 +324,8 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 <Typography variant="body2" align="center" color="text.secondary">
                   Flagged Attempts
                 </Typography>
-              </Grid2>
-              <Grid2 size={4}>
+              </Grid>
+              <Grid item xs={4}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy &&
                     `${(
@@ -338,8 +338,8 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 <Typography variant="body2" align="center" color="text.secondary">
                   Success Rate
                 </Typography>
-              </Grid2>
-            </Grid2>
+              </Grid>
+            </Grid>
           </Box>
 
           <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2 }}>

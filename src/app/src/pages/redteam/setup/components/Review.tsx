@@ -23,7 +23,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid2 from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -380,8 +380,8 @@ export default function Review() {
         Configuration Summary
       </Typography>
 
-      <Grid2 container spacing={3}>
-        <Grid2 size={{ xs: 12, md: 6 }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
           <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
               Plugins ({pluginSummary.length})
@@ -409,9 +409,9 @@ export default function Review() {
               ))}
             </Box>
           </Paper>
-        </Grid2>
+        </Grid>
 
-        <Grid2 size={{ xs: 12, md: 6 }}>
+        <Grid item xs={12} md={6}>
           <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
               Strategies ({strategySummary.length})
@@ -439,10 +439,10 @@ export default function Review() {
               ))}
             </Box>
           </Paper>
-        </Grid2>
+        </Grid>
 
         {customPolicies.length > 0 && (
-          <Grid2 size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12} md={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Custom Policies ({customPolicies.length})
@@ -497,11 +497,11 @@ export default function Review() {
                 ))}
               </Stack>
             </Paper>
-          </Grid2>
+          </Grid>
         )}
 
         {intents.length > 0 && (
-          <Grid2 size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12} md={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Intents ({intents.length})
@@ -574,16 +574,16 @@ export default function Review() {
                 )}
               </Stack>
             </Paper>
-          </Grid2>
+          </Grid>
         )}
 
-        <Grid2 size={{ xs: 12 }}>
+        <Grid item xs={12}>
           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Additional Details
             </Typography>
-            <Grid2 container spacing={2}>
-              <Grid2 size={{ xs: 12, sm: 12 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
                 <Typography
                   variant="body2"
@@ -619,9 +619,9 @@ export default function Review() {
                     {isPurposeExpanded ? 'Show less' : 'Show more'}
                   </Typography>
                 )}
-              </Grid2>
+              </Grid>
               {config.testGenerationInstructions && (
-                <Grid2 size={{ xs: 12, sm: 12 }}>
+                <Grid item xs={12} sm={12}>
                   <Typography variant="subtitle2">Test Generation Instructions</Typography>
                   <Typography
                     variant="body2"
@@ -658,12 +658,12 @@ export default function Review() {
                         {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
                       </Typography>
                     )}
-                </Grid2>
+                </Grid>
               )}
-            </Grid2>
+            </Grid>
           </Paper>
-        </Grid2>
-      </Grid2>
+        </Grid>
+      </Grid>
 
       <Divider sx={{ my: 4 }} />
 

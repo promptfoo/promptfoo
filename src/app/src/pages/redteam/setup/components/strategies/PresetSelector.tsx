@@ -1,6 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
-import Grid2 from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import PresetCard from '../PresetCard';
 import type { StrategyPreset, PresetId } from './types';
 import { STRATEGY_PRESETS } from './types';
@@ -14,7 +14,7 @@ interface PresetSelectorProps {
 export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSelectorProps) {
   return (
     <Box sx={{ mb: 4 }}>
-      <Grid2
+      <Grid
         container
         spacing={2}
         sx={{
@@ -25,8 +25,8 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
         }}
       >
         {presets.map((preset) => (
-          <Grid2
-            size={{ xs: 12, sm: 6, md: 3 }}
+          <Grid
+            item xs={12} sm={6} md={3}
             key={preset.name}
             sx={{
               minWidth: { xs: '280px', sm: '280px' },
@@ -44,10 +44,10 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
               }
               onClick={() => onSelect(preset)}
             />
-          </Grid2>
+          </Grid>
         ))}
-        <Grid2
-          size={{ xs: 12, sm: 6, md: 3 }}
+        <Grid
+          item xs={12} sm={6} md={3}
           sx={{
             minWidth: { xs: '280px', sm: '280px' },
             maxWidth: { xs: '100%', sm: '280px' },
@@ -59,8 +59,8 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
             isSelected={selectedPreset === 'Custom'}
             onClick={() => onSelect({ name: 'Custom' })}
           />
-        </Grid2>
-      </Grid2>
+        </Grid>
+      </Grid>
     </Box>
   );
 }

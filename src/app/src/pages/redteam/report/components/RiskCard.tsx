@@ -5,7 +5,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid2 from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -67,7 +67,7 @@ const RiskCard: React.FC<{
         className="risk-card-container"
         sx={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
       >
-        <Grid2
+        <Grid
           container
           spacing={3}
           sx={{
@@ -77,8 +77,8 @@ const RiskCard: React.FC<{
             },
           }}
         >
-          <Grid2
-            size={{ xs: 12, md: 6 }}
+          <Grid
+            item xs={12} md={6}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -135,8 +135,8 @@ const RiskCard: React.FC<{
             >
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
-          </Grid2>
-          <Grid2 size={{ xs: 6, md: 4 }}>
+          </Grid>
+          <Grid item xs={6} md={4}>
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);
@@ -194,8 +194,8 @@ const RiskCard: React.FC<{
                 );
               })}
             </List>
-          </Grid2>
-        </Grid2>
+          </Grid>
+        </Grid>
         {selectedCategory && (
           <RiskCategoryDrawer
             open={drawerOpen}
