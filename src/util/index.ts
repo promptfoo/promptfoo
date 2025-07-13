@@ -2,6 +2,7 @@ import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
+import { XMLBuilder } from 'fast-xml-parser';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -171,6 +172,22 @@ export async function writeOutput(
       const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
       fs.appendFileSync(outputPath, text);
     }
+  } else if (outputExtension === 'xml') {
+    const summary = await evalRecord.toEvaluateSummary();
+    const xmlBuilder = new XMLBuilder({
+      ignoreAttributes: false,
+      format: true,
+      indentBy: '  ',
+    });
+    const xmlData = xmlBuilder.build({
+      promptfoo: {
+        evalId: evalRecord.id,
+        results: summary,
+        config: evalRecord.config,
+        shareableUrl: shareableUrl || undefined,
+      },
+    });
+    fs.writeFileSync(outputPath, xmlData);
   }
 }
 
