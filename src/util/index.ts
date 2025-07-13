@@ -227,14 +227,80 @@ export function setupEnv(envPath: string | undefined) {
   }
 }
 
-export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
-  if (isApiProvider(provider)) {
-    return provider.id();
-  } else if (isProviderOptions(provider)) {
-    return provider.id;
-  } else if (typeof provider === 'string') {
-    return provider;
+function canonicalizeProviderId(id: string): string {
+  // Handle file:// prefix
+  if (id.startsWith('file://')) {
+    const filePath = id.slice('file://'.length);
+    // If it's a relative path, resolve it to absolute
+    if (!path.isAbsolute(filePath)) {
+      return `file://${path.resolve(filePath)}`;
+    }
+    return id;
   }
+
+  // Handle other executable prefixes with file paths
+  const executablePrefixes = ['exec:', 'python:', 'golang:'];
+  for (const prefix of executablePrefixes) {
+    if (id.startsWith(prefix)) {
+      const filePath = id.slice(prefix.length);
+      if (filePath.includes('/') || filePath.includes('\\')) {
+        const resolved = path.resolve(filePath);
+        return `${prefix}${resolved}`;
+      }
+      break;
+    }
+  }
+
+  // For JavaScript/TypeScript files without file:// prefix
+  if (
+    (id.endsWith('.js') || id.endsWith('.ts') || id.endsWith('.mjs')) &&
+    (id.includes('/') || id.includes('\\'))
+  ) {
+    return `file://${path.resolve(id)}`;
+  }
+
+  return id;
+}
+
+export function providerToIdentifier(
+  provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
+): string | undefined {
+  if (!provider) {
+    return undefined;
+  }
+
+  if (typeof provider === 'string') {
+    return canonicalizeProviderId(provider);
+  }
+
+  if (isApiProvider(provider)) {
+    // Check if provider has a label property
+    const providerWithLabel = provider as any;
+    if (providerWithLabel.label && typeof providerWithLabel.label === 'string') {
+      return providerWithLabel.label;
+    }
+    return canonicalizeProviderId(provider.id());
+  }
+
+  if (isProviderOptions(provider)) {
+    // Prefer label over id for better matching
+    if (provider.label) {
+      return provider.label;
+    }
+    return canonicalizeProviderId(provider.id);
+  }
+
+  // Handle any object with id or label properties
+  if (typeof provider === 'object') {
+    const obj = provider as any;
+    if (obj.label && typeof obj.label === 'string') {
+      return obj.label;
+    }
+    if (obj.id && typeof obj.id === 'string') {
+      return canonicalizeProviderId(obj.id);
+    }
+  }
+
   return undefined;
 }
 

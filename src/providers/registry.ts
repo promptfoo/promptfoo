@@ -980,6 +980,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
+      // Preserve the original path as the provider ID
+      const providerId = providerOptions.id ?? providerPath;
+
       if (providerPath.startsWith('file://')) {
         providerPath = providerPath.slice('file://'.length);
       }
@@ -989,7 +992,7 @@ export const providerMap: ProviderFactory[] = [
         : path.join(context.basePath || process.cwd(), providerPath);
 
       const CustomApiProvider = await importModule(modulePath);
-      return new CustomApiProvider(providerOptions);
+      return new CustomApiProvider({ ...providerOptions, id: providerId });
     },
   },
   {
