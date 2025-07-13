@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { importModule } from '../src/esm';
 import logger from '../src/logger';
 

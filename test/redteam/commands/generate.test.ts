@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import * as yaml from 'js-yaml';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';

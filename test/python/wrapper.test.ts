@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import { runPython, state, validatePythonPath } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 

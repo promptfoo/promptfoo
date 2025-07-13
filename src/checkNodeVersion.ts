@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { engines } from '../package.json';
+import packageJson from '../package.json' with { type: 'json' };
 import logger from './logger';
 
 /**
@@ -7,7 +7,7 @@ import logger from './logger';
  * Logs a warning and exits the process if the current Node version is not supported
  */
 export const checkNodeVersion = (): void => {
-  const requiredVersion = engines.node;
+  const requiredVersion = packageJson.engines.node;
 
   const versionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
   if (!versionMatch) {

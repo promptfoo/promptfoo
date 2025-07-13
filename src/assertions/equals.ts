@@ -1,4 +1,4 @@
-import util from 'util';
+import util from 'node:util';
 import type { AssertionParams } from '../types';
 import type { GradingResult } from '../types';
 

@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
-import * as path from 'path';
+import * as path from 'node:path';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';

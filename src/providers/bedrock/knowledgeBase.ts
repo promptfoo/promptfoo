@@ -2,7 +2,7 @@ import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
-import type { Agent } from 'http';
+import type { Agent } from 'node:http';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString, getEnvInt } from '../../envars';
 import logger from '../../logger';

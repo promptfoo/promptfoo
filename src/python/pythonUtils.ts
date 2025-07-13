@@ -1,8 +1,10 @@
-﻿import fs from 'fs';
-import os from 'os';
-import path from 'path';
+﻿import { exec } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
+import { getDirname } from '../util/paths.js';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
@@ -143,7 +145,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: __dirname,
+    scriptPath: getDirname(import.meta.url),
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };

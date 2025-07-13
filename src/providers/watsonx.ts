@@ -1,5 +1,5 @@
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import { z } from 'zod';
 import { getCache, isCacheEnabled, fetchWithCache } from '../cache';

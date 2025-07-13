@@ -6,7 +6,7 @@
  * TODO:vedant Fix this hack one day
  */
 import { fileURLToPath } from 'node:url';
-import path from 'path';
+import path from 'node:path';
 
 function isAbsolute(filePath: string): boolean {
   try {

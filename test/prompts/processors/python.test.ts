@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import {
   processPythonFile,
   pythonPromptFunction,

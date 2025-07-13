@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';

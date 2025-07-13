@@ -1,63 +1,40 @@
 import { pathToFileURL } from 'node:url';
-import logger from './logger';
-import { safeResolve } from './util/file.node';
+import { getDirname } from './util/paths.js';
+import logger from './logger.js';
 
-// esm-specific crap that needs to get mocked out in tests
-
-//import path from 'path';
-//import { fileURLToPath } from 'url';
-
-export function getDirectory(): string {
-  /*
-  // @ts-ignore: Jest chokes on this
-  const __filename = fileURLToPath(import.meta.url);
-  return path.dirname(__filename);
+/**
+ * Get the directory of the current module
+ * @returns The directory path
  */
-  return __dirname;
+export function getDirectory(): string {
+  return getDirname(import.meta.url);
 }
 
-export async function importModule(modulePath: string, functionName?: string) {
-  logger.debug(
-    `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
-  );
+/**
+ * Dynamically import a module
+ * @param modulePath - Path to the module
+ * @param functionName - Optional function name to extract
+ * @returns The imported module or function
+ */
+export async function importModule(modulePath: string, functionName?: string): Promise<any> {
+  logger.debug(`Importing module: ${modulePath}`);
 
   try {
-    if (modulePath.endsWith('.ts') || modulePath.endsWith('.mjs')) {
-      logger.debug('TypeScript/ESM module detected, importing tsx/cjs');
-      // @ts-ignore: It actually works
-      await import('tsx/cjs');
-    }
+    // Convert to file URL if it's a file path
+    const moduleUrl = modulePath.startsWith('file://')
+      ? modulePath
+      : pathToFileURL(modulePath).toString();
 
-    const resolvedPath = pathToFileURL(safeResolve(modulePath));
-    logger.debug(`Attempting ESM import from: ${resolvedPath.toString()}`);
-    const importedModule = await import(resolvedPath.toString());
-    const mod = importedModule?.default?.default || importedModule?.default || importedModule;
-    logger.debug(
-      `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
-    );
+    const importedModule = await import(moduleUrl);
+    const mod = importedModule?.default || importedModule;
+
     if (functionName) {
       logger.debug(`Returning named export: ${functionName}`);
       return mod[functionName];
     }
     return mod;
   } catch (err) {
-    // If ESM import fails, try CommonJS require as fallback
-    logger.debug(`ESM import failed: ${err}`);
-    logger.debug('Attempting CommonJS require fallback...');
-    try {
-      const importedModule = require(safeResolve(modulePath));
-      const mod = importedModule?.default?.default || importedModule?.default || importedModule;
-      logger.debug(
-        `Successfully required module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
-      );
-      if (functionName) {
-        logger.debug(`Returning named export: ${functionName}`);
-        return mod[functionName];
-      }
-      return mod;
-    } catch (requireErr) {
-      logger.debug(`CommonJS require also failed: ${requireErr}`);
-      throw requireErr;
-    }
+    logger.error(`Failed to import module ${modulePath}: ${err}`);
+    throw err;
   }
 }

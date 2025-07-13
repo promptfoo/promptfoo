@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { runPython } from '../../src/python/pythonUtils';

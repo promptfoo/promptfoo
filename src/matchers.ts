@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvString, getEnvBool } from './envars';

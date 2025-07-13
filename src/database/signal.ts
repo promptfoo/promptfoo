@@ -1,5 +1,5 @@
 import debounce from 'debounce';
-import fs from 'fs';
+import fs from 'node:fs';
 import logger from '../logger';
 import { getDbSignalPath } from './index';
 

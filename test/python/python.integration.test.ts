@@ -1,8 +1,8 @@
-import { exec } from 'child_process';
+import { exec } from 'node:child_process';
 import dedent from 'dedent';
-import fs from 'fs';
-import path from 'path';
-import util from 'util';
+import fs from 'node:fs';
+import path from 'node:path';
+import util from 'node:util';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 

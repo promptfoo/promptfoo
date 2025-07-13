@@ -1,7 +1,7 @@
 import async from 'async';
-import fs from 'fs';
+import fs from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import logger from '../logger';

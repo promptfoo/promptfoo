@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
@@ -25,8 +25,8 @@ jest.mock('../../../src/util/file', () => ({
   maybeLoadFromExternalFile: jest.fn((input) => {
     if (typeof input === 'string' && input.startsWith('file://')) {
       // Simulate loading from file
-      const fs = require('fs');
-      const path = require('path');
+      const fs = require('node:fs');
+      const path = require('node:path');
       const filePath = path.resolve(input.slice('file://'.length));
 
       if (fs.existsSync(filePath)) {

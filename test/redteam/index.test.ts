@@ -1,5 +1,5 @@
 import cliProgress from 'cli-progress';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';

@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';

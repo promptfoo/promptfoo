@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import yaml from 'js-yaml';
-import * as path from 'path';
+import * as path from 'node:path';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';

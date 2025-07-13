@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';

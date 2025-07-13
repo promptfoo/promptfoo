@@ -1,8 +1,8 @@
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import type { CommandLineOptions, EvaluateOptions } from '../../../src/types';

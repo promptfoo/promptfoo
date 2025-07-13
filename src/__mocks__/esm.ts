@@ -1,13 +1,17 @@
-import * as path from 'path';
-
 export function getDirectory() {
   return '/test/dir';
 }
 
-export function importModule(filePath: string, functionName?: string) {
-  const mod = require(path.resolve(filePath));
+export async function importModule(filePath: string, functionName?: string) {
+  // Use require for test environment
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require(filePath);
+
+  // Handle ES module default exports
+  const resolvedMod = mod?.default || mod;
+
   if (functionName) {
-    return mod[functionName];
+    return resolvedMod[functionName];
   }
-  return mod;
+  return resolvedMod;
 }

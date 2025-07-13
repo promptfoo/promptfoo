@@ -1,9 +1,10 @@
-import { exec } from 'child_process';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
-import util from 'util';
+import { exec } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import util from 'node:util';
 import { getCache, isCacheEnabled } from '../cache';
+import { getDirname } from '../util/paths.js';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -126,7 +127,10 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(
+          path.join(getDirname(import.meta.url), '../golang/wrapper.go'),
+          tempWrapperPath,
+        );
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);

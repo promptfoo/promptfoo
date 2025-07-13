@@ -2,6 +2,7 @@
 import type { Config } from 'jest';
 
 const config: Config = {
+  preset: 'ts-jest/presets/default-esm',
   collectCoverage: false,
   coverageDirectory: '.coverage',
   coverageProvider: 'v8',
@@ -18,8 +19,21 @@ const config: Config = {
     '<rootDir>/src/app',
   ],
   transform: {
-    '^.+\\.m?[tj]sx?$': '@swc/jest',
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: {
+          module: 'ESNext',
+          target: 'ES2022',
+        },
+      },
+    ],
   },
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  testEnvironment: 'node',
 };
 
 export default config;

@@ -1,7 +1,7 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import dedent from 'dedent';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';

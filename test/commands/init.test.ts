@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import fs from 'fs/promises';
+import fs from 'node:fs/promises';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 

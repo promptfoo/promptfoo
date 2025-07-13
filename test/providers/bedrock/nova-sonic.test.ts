@@ -1,6 +1,6 @@
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
-import { TextEncoder } from 'util';
+import { TextEncoder } from 'node:util';
 import { disableCache, enableCache } from '../../../src/cache';
 import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 

@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { validateAssertions } from '../../../src/assertions/validateAssertions';

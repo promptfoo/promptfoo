@@ -1,8 +1,8 @@
-import type { ChildProcess } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import type { ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { PythonShell } from 'python-shell';
-import { Writable, Readable } from 'stream';
+import { Writable, Readable } from 'node:stream';
 import { getEnvString, getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { execAsync } from '../../src/python/execAsync';

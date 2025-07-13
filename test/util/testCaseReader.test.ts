@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
@@ -1094,7 +1094,7 @@ describe('readTests', () => {
     jest.mocked(globSync).mockReturnValue(['test.yaml']);
     jest
       .mocked(getEnvBool)
-      .mockImplementation((key) => (key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING' ? true : false));
+      .mockImplementation((key) => key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING');
 
     await readTests('test.yaml');
 

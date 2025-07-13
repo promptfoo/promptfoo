@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import path from 'path';
+import path from 'node:path';
 import winston from 'winston';
 import { getEnvString } from './envars';
 

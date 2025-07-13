@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import { runAssertion } from '../../src/assertions';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { runPython } from '../../src/python/pythonUtils';

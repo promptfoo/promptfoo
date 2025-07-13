@@ -1,6 +1,6 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import type { Logger } from 'winston';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';

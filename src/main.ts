@@ -1,13 +1,12 @@
-#!/usr/bin/env node
 import { Command } from 'commander';
-import { version } from '../package.json';
+import packageJson from '../package.json' with { type: 'json' };
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { evalCommand } from './commands/eval';
+import { evalCommand } from './commands/evaluate';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
@@ -77,7 +76,7 @@ async function main() {
 
   const program = new Command('promptfoo');
   program
-    .version(version)
+    .version(packageJson.version)
     .showHelpAfterError()
     .showSuggestionAfterError()
     .on('option:*', function () {
@@ -134,7 +133,8 @@ async function main() {
   program.parse();
 }
 
-if (require.main === module) {
+// Check if this file is being run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
   checkNodeVersion();
   main();
 }

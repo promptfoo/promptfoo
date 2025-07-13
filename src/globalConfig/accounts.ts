@@ -1,6 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { GlobalConfig } from '../configTypes';
 import { TERMINAL_MAX_WIDTH } from '../constants';

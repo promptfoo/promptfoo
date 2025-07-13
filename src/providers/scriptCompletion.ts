@@ -1,6 +1,6 @@
-import { execFile } from 'child_process';
-import crypto from 'crypto';
-import fs from 'fs';
+import { execFile } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {

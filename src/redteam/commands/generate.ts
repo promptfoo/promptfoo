@@ -1,10 +1,10 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { synthesize } from '../';

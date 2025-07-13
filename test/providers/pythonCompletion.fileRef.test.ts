@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Logger } from 'winston';
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';

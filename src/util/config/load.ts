@@ -1,11 +1,11 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
-import process from 'process';
+import * as path from 'node:path';
+import process from 'node:process';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';

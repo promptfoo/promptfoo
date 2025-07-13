@@ -2,10 +2,10 @@
  * Functions for manipulating the global configuration file, which lives at
  * ~/.promptfoo/promptfoo.yaml by default.
  */
-import { randomUUID } from 'crypto';
-import * as fs from 'fs';
+import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
 import yaml from 'js-yaml';
-import * as path from 'path';
+import * as path from 'node:path';
 import type { GlobalConfig } from '../configTypes';
 import { getConfigDirectoryPath } from '../util/config/manage';
 

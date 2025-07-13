@@ -1,5 +1,5 @@
 import { parse } from 'csv-parse/sync';
-import fs from 'fs';
+import fs from 'node:fs';
 import { getEnvBool, getEnvString } from '../../envars';
 import type { Prompt } from '../../types';
 

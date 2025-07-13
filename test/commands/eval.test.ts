@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import * as path from 'path';
+import * as path from 'node:path';
 import { disableCache } from '../../src/cache';
 import {
   doEval,

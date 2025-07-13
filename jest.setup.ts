@@ -1,9 +1,11 @@
+import { jest } from '@jest/globals';
 import { rm } from 'fs/promises';
 import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
 
 jest.mock('./src/logger');
 jest.mock('./src/globalConfig/globalConfig');
+jest.mock('./src/esm');
 
 // Configure nock
 beforeAll(() => {

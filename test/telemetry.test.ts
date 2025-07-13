@@ -20,6 +20,10 @@ jest.mock('../src/constants', () => ({
   VERSION: '1.0.0',
 }));
 
+jest.mock('../src/generated-constants', () => ({
+  POSTHOG_KEY: '',
+}));
+
 jest.mock('../src/cliState', () => ({
   __esModule: true,
   default: {
@@ -247,6 +251,9 @@ describe('Telemetry', () => {
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
+      jest.doMock('../src/generated-constants', () => ({
+        POSTHOG_KEY: 'test-posthog-key',
+      }));
 
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
@@ -271,6 +278,9 @@ describe('Telemetry', () => {
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
+      jest.doMock('../src/generated-constants', () => ({
+        POSTHOG_KEY: 'test-posthog-key',
+      }));
 
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
@@ -294,6 +304,9 @@ describe('Telemetry', () => {
       jest.resetModules();
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
+      }));
+      jest.doMock('../src/generated-constants', () => ({
+        POSTHOG_KEY: 'test-posthog-key',
       }));
     });
 

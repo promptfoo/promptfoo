@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { eq, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { tracesTable, spansTable } from '../database/tables';

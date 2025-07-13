@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';

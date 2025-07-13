@@ -4,24 +4,25 @@
   "author": "Ian Webster",
   "version": "0.116.7",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "dist/src/index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "workspaces": [
     "src/app",
     "site"
   ],
-  "types": "dist/src/index.d.ts",
-  "typings": "dist/src/index.d.ts",
+  "types": "./dist/index.d.ts",
+  "typings": "./dist/index.d.ts",
   "files": [
     "dist",
     "!dist/test",
@@ -31,16 +32,16 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "promptfoo": "dist/src/main.js",
-    "pf": "dist/src/main.js"
+    "promptfoo": "dist/main.js",
+    "pf": "dist/main.js"
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
-    "bin": "dist/src/main.js",
+    "bin": "dist/main.js",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
-    "build:watch": "tsc --watch",
-    "build": "npm run generate-constants && tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && shx chmod +x dist/src/main.js",
+    "build:watch": "tsup --watch",
+    "build": "tsup",
     "postbuild": "git checkout -- src/generated-constants.ts 2>/dev/null || true",
     "citation:generate": "ts-node scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
@@ -52,7 +53,7 @@
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome format --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "npx @biomejs/biome format && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
     "format": "npx @biomejs/biome format --write . && prettier --write '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
-    "generate-constants": "node scripts/generate-constants.js",
+    "generate-constants": "node scripts/generate-constants.mjs",
     "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json && npx @biomejs/biome format --write site/static/config-schema.json",
     "knip": "knip",
     "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs npx @biomejs/biome lint --write",
@@ -66,10 +67,10 @@
     "postversion": "npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm run test --prefix src/app",
-    "test:integration": "jest --config jest.integration.config.ts integration",
-    "test:watch": "jest --watch",
+    "test:integration": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --config jest.integration.config.ts integration",
+    "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
-    "test": "jest",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
     "tsc": "tsc"
   },
   "overrides": {
@@ -170,6 +171,8 @@
     "check-dependency-version-consistency": "^5.0.1",
     "concurrently": "^9.2.0",
     "drizzle-kit": "^0.31.4",
+    "esbuild": "^0.25.6",
+    "esbuild-plugin-file-path-extensions": "^2.1.4",
     "ibm-cloud-sdk-core": "^5.4.0",
     "jest": "^29.7.0",
     "knip": "^5.61.3",
@@ -191,22 +194,23 @@
     "ts-dedent": "^2.2.0",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "winston-transport": "^4.9.0",
     "zod-to-json-schema": "^3.24.6"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "^4.33.0",
-    "@swc/core-linux-x64-gnu": "^1.12.7",
-    "@swc/core-linux-x64-musl": "^1.12.7",
-    "@swc/core-win32-x64-msvc": "^1.12.7",
-    "@swc/core-darwin-x64": "^1.12.7",
-    "@swc/core-darwin-arm64": "^1.12.7",
+    "@biomejs/cli-darwin-arm64": "2.1.1",
+    "@biomejs/cli-darwin-x64": "2.1.1",
     "@biomejs/cli-linux-x64": "2.1.1",
     "@biomejs/cli-linux-x64-musl": "2.1.1",
     "@biomejs/cli-win32-x64": "2.1.1",
-    "@biomejs/cli-darwin-x64": "2.1.1",
-    "@biomejs/cli-darwin-arm64": "2.1.1"
+    "@rollup/rollup-linux-x64-gnu": "^4.33.0",
+    "@swc/core-darwin-arm64": "^1.12.7",
+    "@swc/core-darwin-x64": "^1.12.7",
+    "@swc/core-linux-x64-gnu": "^1.12.7",
+    "@swc/core-linux-x64-musl": "^1.12.7",
+    "@swc/core-win32-x64-msvc": "^1.12.7"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.56.0",

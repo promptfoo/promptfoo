@@ -1,6 +1,6 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
-import * as path from 'path';
+import * as path from 'node:path';
 import {
   renderPrompt,
   resolveVariables,

@@ -48,6 +48,23 @@ const response = await fetch('/api/traces/evaluation/123');
 
 - `promptfoo` or `pf` - Access the CLI tool
 
+## Module System
+
+This project uses ES Modules (ESM) exclusively:
+
+- `package.json` has `"type": "module"`
+- All TypeScript compiles to ESM
+- Import paths require .js extensions in the compiled output
+- Use `import.meta.url` instead of `__filename`/`__dirname`
+- For `__dirname` equivalent:
+
+  ```typescript
+  import { fileURLToPath } from 'url';
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  ```
+
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking

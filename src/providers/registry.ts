@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import path from 'path';
+import path from 'node:path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';

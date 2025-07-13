@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { PROMPT_DELIMITER } from '../../../src/prompts/constants';
 import { processTxtFile } from '../../../src/prompts/processors/text';
 

@@ -1,6 +1,6 @@
-import { execFile } from 'child_process';
-import crypto from 'crypto';
-import fs from 'fs';
+import { execFile } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import * as cacheModule from '../../src/cache';
 import {
   parseScriptParts,

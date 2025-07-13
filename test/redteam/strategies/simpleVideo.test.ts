@@ -3,7 +3,7 @@
  *
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
-import fs from 'fs';
+import fs from 'node:fs';
 import logger from '../../../src/logger';
 import {
   addVideoToBase64,

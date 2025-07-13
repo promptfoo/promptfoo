@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import yaml from 'js-yaml';
 import { disableCache } from '../../../src/cache';
 import { doGenerateDataset } from '../../../src/commands/generate/dataset';

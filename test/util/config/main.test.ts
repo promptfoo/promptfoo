@@ -1,7 +1,7 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import yaml from 'js-yaml';
-import * as os from 'os';
-import * as path from 'path';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import logger from '../../../src/logger';
 import type { UnifiedConfig } from '../../../src/types';
 import {

@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto';
-import fs from 'fs';
-import glob from 'glob';
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import * as glob from 'glob';
 import { FILE_METADATA_KEY } from '../src/constants';
 import {
   calculateThreadsPerBar,
@@ -153,6 +153,9 @@ jest.mock('glob', () => ({
   globSync: jest.fn().mockImplementation((pattern) => {
     if (pattern.includes('test/fixtures/test_file.txt')) {
       return [pattern];
+    }
+    if (pattern.includes('greetings/*.txt')) {
+      return ['greeting1.txt', 'greeting2.txt'];
     }
     return [];
   }),
@@ -2537,7 +2540,6 @@ describe('generateVarCombinations', () => {
 
   it('should handle file paths and expand them into combinations', () => {
     const vars = { language: 'English', greeting: 'file:///path/to/greetings/*.txt' };
-    jest.spyOn(glob, 'globSync').mockReturnValue(['greeting1.txt', 'greeting2.txt']);
     const expected = [
       { language: 'English', greeting: 'file://greeting1.txt' },
       { language: 'English', greeting: 'file://greeting2.txt' },

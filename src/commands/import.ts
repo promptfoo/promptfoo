@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import fs from 'fs';
+import fs from 'node:fs';
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';

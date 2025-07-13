@@ -1,7 +1,7 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import { z } from 'zod';
 import type { TestSuite } from '../../src/types';
 import {

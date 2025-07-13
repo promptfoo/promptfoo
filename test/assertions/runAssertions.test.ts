@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { runAssertion, runAssertions } from '../../src/assertions';
 import { validateXml, containsXml } from '../../src/assertions/xml';
 import { fetchWithRetries } from '../../src/fetch';
@@ -81,7 +81,7 @@ jest.mock('../../src/matchers', () => {
   };
 });
 
-const Grader = new TestGrader();
+const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {

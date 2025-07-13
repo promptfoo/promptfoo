@@ -1,8 +1,8 @@
-import crypto from 'crypto';
-import fs from 'fs';
-import http from 'http';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import http from 'node:http';
 import httpZ from 'http-z';
-import path from 'path';
+import path from 'node:path';
 import { z } from 'zod';
 import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';

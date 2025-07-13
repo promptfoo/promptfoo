@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import { importModule } from '../../../src/esm';
 import { runPython } from '../../../src/python/pythonUtils';
 import {

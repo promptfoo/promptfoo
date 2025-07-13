@@ -1,8 +1,15 @@
-import type { DataRecord } from 'natural';
-import type { Stemmer } from 'natural';
-import { PorterStemmer, WordNet } from 'natural';
 import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+// Lazy-loaded natural module (CommonJS)
+let naturalModule: any = null;
+
+async function getNaturalModule() {
+  if (!naturalModule) {
+    naturalModule = await import('natural');
+  }
+  return naturalModule;
+}
 
 type WordPair = [number, string];
 type MatchPair = [number, number];
@@ -63,11 +70,12 @@ function matchExactEnums(
   return [wordMatch, candidateCopy, referenceCopy];
 }
 
-function matchStemEnums(
+async function matchStemEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  stemmer: Stemmer = PorterStemmer,
-): [MatchPair[], WordPair[], WordPair[]] {
+): Promise<[MatchPair[], WordPair[], WordPair[]]> {
+  const natural = await getNaturalModule();
+  const stemmer = natural.PorterStemmer;
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
 
@@ -88,8 +96,9 @@ function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet: WordNet = new WordNet(),
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
+  const natural = await getNaturalModule();
+  const wordnet = new natural.WordNet();
   const wordMatch: MatchPair[] = [];
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
@@ -98,8 +107,8 @@ async function matchSynonymEnums(
     const candidateWord = candidateCopy[i][1];
 
     // Get all synsets and their synonyms
-    const candidateSynsets = await new Promise<DataRecord[]>((resolve) => {
-      wordnet.lookup(candidateWord, (results: DataRecord[]) => resolve(results));
+    const candidateSynsets = await new Promise<any[]>((resolve) => {
+      wordnet.lookup(candidateWord, (results: any[]) => resolve(results));
     });
 
     // Create set of synonyms, filtering out ones with underscores
@@ -156,10 +165,8 @@ async function calculateSingleMeteorScore(
   );
 
   // Stage 2: Stem matches
-  const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] = matchStemEnums(
-    remainingCandidate,
-    remainingReference,
-  );
+  const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] =
+    await matchStemEnums(remainingCandidate, remainingReference);
 
   // Stage 3: Synonym matches
   const [synonymMatches, ,] = await matchSynonymEnums(

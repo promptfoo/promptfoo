@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import type { UnifiedConfig } from '../../types';
 import { maybeReadConfig } from './load';
 

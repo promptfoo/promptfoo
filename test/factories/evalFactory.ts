@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { ResultFailureReason } from '../../src';
 import { getDb } from '../../src/database';
 import { evalsTable } from '../../src/database/tables';

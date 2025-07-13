@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { runAssertion } from '../../src/assertions';
 import type { Tool } from '../../src/providers/google//types';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';

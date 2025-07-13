@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { loadDefaultConfig, configCache } from '../../../src/util/config/default';
 import { maybeReadConfig } from '../../../src/util/config/load';
 

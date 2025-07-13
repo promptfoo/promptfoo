@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';

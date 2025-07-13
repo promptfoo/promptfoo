@@ -1,6 +1,6 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';

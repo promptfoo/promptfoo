@@ -1,9 +1,9 @@
 import chalk from 'chalk';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import yaml from 'js-yaml';
-import * as os from 'os';
-import * as path from 'path';
-import { doEval } from '../commands/eval';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { doEval } from '../commands/evaluate';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import type Eval from '../models/eval';
 import { createShareableUrl } from '../share';

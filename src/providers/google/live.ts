@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { spawn, type ChildProcess } from 'child_process';
-import path from 'path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import path from 'node:path';
 import WebSocket from 'ws';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';

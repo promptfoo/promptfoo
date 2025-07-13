@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 import { transform, TransformInputType } from '../../src/util/transform';

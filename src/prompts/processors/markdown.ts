@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import type { Prompt } from '../../types';
 
 export function processMarkdownFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {

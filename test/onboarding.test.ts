@@ -1,5 +1,5 @@
-import fs from 'fs';
-import { rm } from 'fs/promises';
+import fs from 'node:fs';
+import { rm } from 'node:fs/promises';
 import yaml from 'js-yaml';
 import { reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { createDummyFiles } from '../src/onboarding';

@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import path from 'path';
+import path from 'node:path';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';

@@ -1,7 +1,7 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
 import cliState from '../../src/cliState';
 import {
   maybeLoadFromExternalFile,

@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { runAssertion } from '../../src/assertions';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';

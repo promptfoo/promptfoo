@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const PLUGINS_DIR = path.join(__dirname, '../../../src/redteam/plugins');
 const DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/plugins');

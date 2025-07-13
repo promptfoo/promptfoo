@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { Metadata } from 'openai/resources/shared';
-import path from 'path';
+import path from 'node:path';
 import { OpenAiGenericProvider } from '.';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';

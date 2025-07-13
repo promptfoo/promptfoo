@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';

@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { InvalidArgumentError } from 'commander';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import yaml from 'js-yaml';
 import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';

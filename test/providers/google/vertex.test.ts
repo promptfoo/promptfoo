@@ -1,6 +1,6 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
-import path from 'path';
+import path from 'node:path';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';

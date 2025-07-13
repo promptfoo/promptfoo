@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';

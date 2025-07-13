@@ -1,7 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { getProxyForUrl } from 'proxy-from-env';
-import type { ConnectionOptions } from 'tls';
+import type { ConnectionOptions } from 'node:tls';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from './cliState';
 import { VERSION } from './constants';

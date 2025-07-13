@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
 import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';

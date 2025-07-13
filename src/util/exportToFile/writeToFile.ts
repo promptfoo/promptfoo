@@ -1,4 +1,4 @@
-import { createWriteStream, type WriteStream } from 'fs';
+import { createWriteStream, type WriteStream } from 'node:fs';
 
 export class JsonlFileWriter {
   private writeStream: WriteStream;

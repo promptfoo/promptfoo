@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'node:crypto';
 import logger from '../logger';
 import type { TestCase, TestSuite } from '../types';
 

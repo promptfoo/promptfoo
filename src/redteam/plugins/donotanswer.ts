@@ -1,5 +1,5 @@
 import { parse } from 'csv-parse/sync';
-import fs from 'fs';
+import fs from 'node:fs';
 import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
