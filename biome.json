@@ -98,6 +98,15 @@
   },
   "overrides": [
     {
+      "includes": ["examples/adaline-gateway/**/prompt.json"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": [".jest/**/*.js"],
       "linter": {
         "enabled": false
