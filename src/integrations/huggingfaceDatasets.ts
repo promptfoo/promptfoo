@@ -63,6 +63,7 @@ export async function fetchHuggingFaceDataset(
   const pageSize = 100; // Number of rows per request
   const queryParamLimit = queryParams.get('limit');
   const userLimit = limit ?? (queryParamLimit ? Number.parseInt(queryParamLimit, 10) : undefined);
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     // Create a new URLSearchParams for this request
     const requestParams = new URLSearchParams(queryParams);
