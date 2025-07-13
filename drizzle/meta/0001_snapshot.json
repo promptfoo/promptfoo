@@ -101,36 +101,25 @@
         "evals_to_datasets_eval_id_evals_id_fk": {
           "name": "evals_to_datasets_eval_id_evals_id_fk",
           "tableFrom": "evals_to_datasets",
-          "columnsFrom": [
-            "eval_id"
-          ],
+          "columnsFrom": ["eval_id"],
           "tableTo": "evals",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "evals_to_datasets_dataset_id_datasets_id_fk": {
           "name": "evals_to_datasets_dataset_id_datasets_id_fk",
           "tableFrom": "evals_to_datasets",
-          "columnsFrom": [
-            "dataset_id"
-          ],
+          "columnsFrom": ["dataset_id"],
           "tableTo": "datasets",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
         "evals_to_datasets_eval_id_dataset_id_pk": {
-          "columns": [
-            "dataset_id",
-            "eval_id"
-          ],
+          "columns": ["dataset_id", "eval_id"],
           "name": "evals_to_datasets_eval_id_dataset_id_pk"
         }
       },
@@ -159,36 +148,25 @@
         "evals_to_prompts_eval_id_evals_id_fk": {
           "name": "evals_to_prompts_eval_id_evals_id_fk",
           "tableFrom": "evals_to_prompts",
-          "columnsFrom": [
-            "eval_id"
-          ],
+          "columnsFrom": ["eval_id"],
           "tableTo": "evals",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "evals_to_prompts_prompt_id_prompts_id_fk": {
           "name": "evals_to_prompts_prompt_id_prompts_id_fk",
           "tableFrom": "evals_to_prompts",
-          "columnsFrom": [
-            "prompt_id"
-          ],
+          "columnsFrom": ["prompt_id"],
           "tableTo": "prompts",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
         "evals_to_prompts_eval_id_prompt_id_pk": {
-          "columns": [
-            "eval_id",
-            "prompt_id"
-          ],
+          "columns": ["eval_id", "prompt_id"],
           "name": "evals_to_prompts_eval_id_prompt_id_pk"
         }
       },

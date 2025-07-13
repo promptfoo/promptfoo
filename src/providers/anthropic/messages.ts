@@ -6,6 +6,7 @@ import logger from '../../logger';
 import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { AnthropicGenericProvider } from './generic';
@@ -131,9 +132,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+          const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
           return {
             output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
+            ...(finishReason && { finishReason }),
             cost: calculateAnthropicCost(
               this.modelName,
               this.config,
@@ -173,9 +176,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         };
       }
 
+      const finishReason = normalizeFinishReason(response.stop_reason);
       return {
         output: outputFromMessage(response, this.config.showThinking ?? true),
         tokenUsage: getTokenUsage(response, false),
+        ...(finishReason && { finishReason }),
         cost: calculateAnthropicCost(
           this.modelName,
           this.config,

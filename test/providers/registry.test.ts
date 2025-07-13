@@ -165,6 +165,7 @@ describe('Provider Registry', () => {
         'promptfoo:redteam:iterative',
         'promptfoo:redteam:iterative:image',
         'promptfoo:redteam:iterative:tree',
+        'promptfoo:redteam:mischievous-user',
         'promptfoo:redteam:pandamonium',
       ];
 

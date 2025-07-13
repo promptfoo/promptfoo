@@ -4,9 +4,9 @@ import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } 
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:beavertails';
+const PLUGIN_ID = 'promptfoo:redteam:beavertails';
 
-export const DATASETS = [
+const DATASETS = [
   // 'huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation',
   'huggingface://datasets/PKU-Alignment/BeaverTails?split=330k_train',
 ];

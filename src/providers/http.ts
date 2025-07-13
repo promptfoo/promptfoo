@@ -23,6 +23,43 @@ import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
+/**
+ * Escapes string values in variables for safe JSON template substitution.
+ * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
+ */
+function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : value,
+    ]),
+  );
+}
+
+/**
+ * Renders a JSON template string with proper escaping for JSON context.
+ *
+ * When template substitution would create invalid JSON (due to unescaped newlines,
+ * quotes, etc.), this function attempts to fix it by re-rendering with escaped variables.
+ *
+ * @param template - The template string (should look like JSON)
+ * @param vars - Variables to substitute into the template
+ * @returns Parsed JSON object/array/primitive
+ * @throws Error if the template cannot be rendered as valid JSON
+ */
+function renderJsonTemplate(template: string, vars: Record<string, any>): any {
+  // First attempt: try normal rendering and parsing
+  const rendered = renderVarsInObject(template, vars);
+  try {
+    return JSON.parse(rendered);
+  } catch {
+    // Second attempt: re-render with JSON-escaped variables
+    const escapedVars = escapeJsonVariables(vars);
+    const reRendered = renderVarsInObject(template, escapedVars);
+    return JSON.parse(reRendered); // This will throw if still invalid
+  }
+}
+
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
   const firstLine = rawRequest.split('\n')[0];
@@ -77,7 +114,7 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
   return rawRequest;
 }
 
-export async function generateSignature(
+async function generateSignature(
   privateKeyPathOrKey: string,
   signatureTimestamp: number,
   signatureDataTemplate: string,
@@ -102,25 +139,19 @@ export async function generateSignature(
   }
 }
 
-export function needsSignatureRefresh(
-  timestamp: number,
-  validityMs: number,
-  bufferMs?: number,
-): boolean {
+function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?: number): boolean {
   const now = Date.now();
   const timeElapsed = now - timestamp;
   const effectiveBufferMs = bufferMs ?? Math.floor(validityMs * 0.1); // Default to 10% of validity time
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
-export const TokenEstimationConfigSchema = z.object({
+const TokenEstimationConfigSchema = z.object({
   enabled: z.boolean().default(false),
   multiplier: z.number().min(0.01).default(1.3),
 });
 
-export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
-
-export const HttpProviderConfigSchema = z.object({
+const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
@@ -163,7 +194,7 @@ export const HttpProviderConfigSchema = z.object({
     .optional(),
 });
 
-export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
@@ -324,9 +355,9 @@ export async function createTransformResponse(
  * @returns A new object or array with all template expressions replaced
  */
 export function processJsonBody(
-  body: Record<string, any> | any[],
+  body: Record<string, any> | any[] | string,
   vars: Record<string, any>,
-): Record<string, any> | any[] {
+): Record<string, any> | any[] | string {
   // First apply the standard variable rendering
   const rendered = renderVarsInObject(body, vars);
 
@@ -359,7 +390,21 @@ export function processJsonBody(
   if (typeof rendered === 'string') {
     try {
       return JSON.parse(rendered);
-    } catch {
+    } catch (err) {
+      // If it looks like JSON but parsing failed, try with escaped variables
+      const trimmed = rendered.trim();
+      if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && typeof body === 'string') {
+        try {
+          return renderJsonTemplate(body, vars);
+        } catch {
+          // Fall back to original behavior
+        }
+      }
+      // JSON.parse failed, return the string as-is
+      // This string will be used directly as the request body without further JSON.stringify()
+      logger.debug(
+        `[HTTP Provider] Body is a string that failed JSON parsing, using as-is: ${String(err)}`,
+      );
       return rendered;
     }
   }
@@ -855,7 +900,9 @@ export class HttpProvider implements ApiProvider {
         headers: renderedConfig.headers,
         ...(method !== 'GET' && {
           body: contentTypeIsJson(headers)
-            ? JSON.stringify(renderedConfig.body)
+            ? typeof renderedConfig.body === 'string'
+              ? renderedConfig.body // Already a JSON string, use as-is
+              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
             : String(renderedConfig.body)?.trim(),
         }),
       },

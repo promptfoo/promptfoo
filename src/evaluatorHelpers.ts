@@ -27,7 +27,7 @@ import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
-export type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
@@ -276,17 +276,59 @@ export async function renderPrompt(
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
-    // we default to "text" type.
-    const [helper, version, promptType = 'text'] = langfusePrompt.split(':');
+    let helper: string;
+    let version: string | undefined;
+    let label: string | undefined;
+    let promptType: 'text' | 'chat' | undefined = 'text';
+
+    // More robust parsing that handles @ in prompt IDs
+    // Look for the last @ that's followed by a label pattern
+    const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
+    const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
+
+    if (labelMatch) {
+      // Label-based syntax: prompt-id@label or prompt-id@label:type
+      helper = labelMatch[1];
+      label = labelMatch[2];
+      if (labelMatch[3]) {
+        promptType = labelMatch[3] as 'text' | 'chat';
+      }
+    } else if (versionMatch) {
+      // Version/label syntax: prompt-id:version-or-label or prompt-id:version-or-label:type
+      helper = versionMatch[1];
+      const versionOrLabel = versionMatch[2];
+
+      // Auto-detect if it's a version (numeric) or label (string)
+      if (/^\d+$/.test(versionOrLabel)) {
+        // It's a numeric version
+        version = versionOrLabel;
+      } else {
+        // It's a string, treat as label
+        label = versionOrLabel;
+        if (label === 'latest') {
+          // 'latest' is always treated as a label, even though it could be ambiguous
+          version = undefined;
+        }
+      }
+
+      if (versionMatch[3]) {
+        promptType = versionMatch[3] as 'text' | 'chat';
+      }
+    } else {
+      // Simple prompt-id only
+      helper = langfusePrompt;
+    }
+
     if (promptType !== 'text' && promptType !== 'chat') {
-      throw new Error('Unknown promptfoo prompt type');
+      throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
     }
 
     const langfuseResult = await getLangfusePrompt(
       helper,
       vars,
       promptType,
-      version === 'latest' ? undefined : Number(version),
+      version === undefined || version === 'latest' ? undefined : Number(version),
+      label,
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
@@ -363,12 +405,6 @@ type HookContextMap = {
   afterEach: AfterEachExtensionHookContext;
   afterAll: AfterAllExtensionHookContext;
 };
-
-export type ExtensionHookContext =
-  | BeforeAllExtensionHookContext
-  | BeforeEachExtensionHookContext
-  | AfterEachExtensionHookContext
-  | AfterAllExtensionHookContext;
 
 /**
  * Runs extension hooks for the given hook name and context. The hook will be called with the context object,

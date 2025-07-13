@@ -11,7 +11,7 @@ import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
 import { AwsBedrockGenericProvider } from './index';
 
-export interface BedrockKnowledgeBaseOptions {
+interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
   profile?: string;
   region?: string;
@@ -27,7 +27,7 @@ export interface BedrockKnowledgeBaseOptions {
 }
 
 // Define citation types for metadata
-export interface CitationReference {
+interface CitationReference {
   content?: {
     text?: string;
     [key: string]: any;
@@ -43,7 +43,7 @@ export interface CitationReference {
   [key: string]: any;
 }
 
-export interface Citation {
+interface Citation {
   retrievedReferences?: CitationReference[];
   generatedResponsePart?: {
     textResponsePart?: {
@@ -142,22 +142,40 @@ export class AwsBedrockKnowledgeBaseProvider
     const client = await this.getKnowledgeBaseClient();
 
     // Prepare the request parameters
-    const modelArn =
-      this.kbConfig.modelArn ||
-      (this.modelName.includes(':')
-        ? this.modelName.includes('arn:aws:bedrock')
-          ? this.modelName // Already has full ARN format
-          : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`
-        : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`);
+    let modelArn = this.kbConfig.modelArn;
+
+    if (!modelArn) {
+      if (this.modelName.includes('arn:aws:bedrock')) {
+        modelArn = this.modelName; // Already has full ARN format
+      } else if (
+        this.modelName.startsWith('us.') ||
+        this.modelName.startsWith('eu.') ||
+        this.modelName.startsWith('apac.')
+      ) {
+        // This is a cross-region inference profile - use inference-profile ARN format
+        // Note: We'll use the modelName directly as the inference profile ID since Knowledge Bases
+        // expect the inference profile ID, not a full ARN for these
+        modelArn = this.modelName;
+      } else {
+        // Regular foundation model
+        modelArn = `arn:aws:bedrock:${this.getRegion()}::foundation-model/${this.modelName}`;
+      }
+    }
+
+    const knowledgeBaseConfiguration: any = {
+      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+    };
+
+    // Only include modelArn if explicitly configured or if it's a valid model
+    if (this.kbConfig.modelArn || this.modelName !== 'default') {
+      knowledgeBaseConfiguration.modelArn = modelArn;
+    }
 
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
       retrieveAndGenerateConfiguration: {
         type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration: {
-          knowledgeBaseId: this.kbConfig.knowledgeBaseId,
-          modelArn,
-        },
+        knowledgeBaseConfiguration,
       },
     };
 

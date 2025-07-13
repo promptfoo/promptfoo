@@ -29,7 +29,7 @@ Here is the main structure of the promptfoo configuration file:
 | providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                              |
 | prompts                         | string \| string[]                                                                               | Yes      | One or more prompts to load                                                                                                                                                                                 |
 | tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                                                                                                                     |
-| defaultTest                     | Partial [Test Case](#test-case)                                                                  | No       | Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.                                                                                            |
+| defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the default properties for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                                                  |
 | outputPath                      | string                                                                                           | No       | Where to write output. Writes to console/web viewer if not set.                                                                                                                                             |
 | evaluateOptions.maxConcurrency  | number                                                                                           | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                        |
 | evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
@@ -64,13 +64,14 @@ A test case represents a single example input that is fed into all prompts and p
 
 More details on using assertions, including examples [here](/docs/configuration/expected-outputs).
 
-| Property  | Type   | Required | Description                                                                                              |
-| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
-| type      | string | Yes      | Type of assertion                                                                                        |
-| value     | string | No       | The expected value, if applicable                                                                        |
-| threshold | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`  |
-| provider  | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
-| metric    | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                 |
+| Property         | Type   | Required | Description                                                                                                                                                                                                                                                                            |
+| ---------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
+| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
+| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                |
+| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                               |
+| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                                                               |
+| contextTransform | string | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
 
 ### AssertionValueFunctionContext
 
@@ -316,6 +317,7 @@ ProviderResponse is an object that represents the response from a provider. It i
 interface ProviderResponse {
   error?: string;
   output?: string | object;
+  metadata?: object;
   tokenUsage?: Partial<{
     total: number;
     prompt: number;

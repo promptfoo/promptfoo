@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -76,6 +77,7 @@ const getSubCategoryStats = (
 };
 
 const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins }) => {
+  const navigate = useNavigate();
   const subCategoryStats = getSubCategoryStats(categoryStats, plugins).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
@@ -328,7 +330,9 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                           const searchQuery = pluginId
                             ? `metadata=pluginId:${pluginId}`
                             : `metric=${subCategory.type}`;
-                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
+                          navigate(
+                            `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`,
+                          );
                         }}
                       >
                         View logs

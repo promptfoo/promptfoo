@@ -23,6 +23,7 @@ import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,
+  isOtlpReceiverStarted,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
@@ -227,6 +228,7 @@ export async function runEval({
     vars,
   };
   let latencyMs = 0;
+  let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> = null;
 
   try {
     // Render the prompt
@@ -262,12 +264,7 @@ export async function runEval({
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
       // Generate trace context if tracing is enabled
-      const traceContext = await generateTraceContextIfNeeded(
-        test,
-        evaluateOptions,
-        testIdx,
-        promptIdx,
-      );
+      traceContext = await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx);
 
       const callApiContext: any = {
         // Always included
@@ -394,6 +391,17 @@ export async function runEval({
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Extract traceId from traceparent if available
+      let traceId: string | undefined;
+      if (traceContext?.traceparent) {
+        // traceparent format: version-traceId-spanId-flags
+        const parts = traceContext.traceparent.split('-');
+        if (parts.length >= 3) {
+          traceId = parts[1];
+        }
+      }
+
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
@@ -401,6 +409,7 @@ export async function runEval({
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+        traceId,
       });
 
       if (!checkResult.pass) {
@@ -536,7 +545,10 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/')) || [];
+      const filePaths =
+        globSync(resolvedPath.replace(/\\/g, '/'), {
+          windowsPathsNoEscape: true,
+        }) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
@@ -750,16 +762,18 @@ class Evaluator {
             ]
           ).map((test) => {
             return {
-              ...testSuite.defaultTest,
+              ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {}),
               ...data,
               ...test,
               vars: {
-                ...testSuite.defaultTest?.vars,
+                ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
                 ...data.vars,
                 ...test.vars,
               },
               options: {
-                ...testSuite.defaultTest?.options,
+                ...(typeof testSuite.defaultTest === 'object'
+                  ? testSuite.defaultTest?.options
+                  : {}),
                 ...test.options,
               },
               assert: [
@@ -768,7 +782,9 @@ class Evaluator {
                 ...(test.assert || []),
               ],
               metadata: {
-                ...testSuite.defaultTest?.metadata,
+                ...(typeof testSuite.defaultTest === 'object'
+                  ? testSuite.defaultTest?.metadata
+                  : {}),
                 ...data.metadata,
                 ...test.metadata,
               },
@@ -785,9 +801,15 @@ class Evaluator {
     // Prepare vars
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Vars[] = [];
-    const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
+    const inputTransformDefault =
+      typeof testSuite?.defaultTest === 'object'
+        ? testSuite?.defaultTest?.options?.transformVars
+        : undefined;
     for (const testCase of tests) {
-      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
+      testCase.vars = {
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
+        ...testCase?.vars,
+      };
 
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
@@ -826,7 +848,8 @@ class Evaluator {
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
-        Array.isArray(testSuite.defaultTest?.assert || []),
+        typeof testSuite.defaultTest !== 'object' ||
+          Array.isArray(testSuite.defaultTest?.assert || []),
         `defaultTest.assert is not an array in test case #${index + 1}`,
       );
       invariant(
@@ -834,13 +857,29 @@ class Evaluator {
         `testCase.assert is not an array in test case #${index + 1}`,
       );
       // Handle default properties
-      testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
-      testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
-      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
-      testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
-      testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assert = [
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.assert || [] : []),
+        ...(testCase.assert || []),
+      ];
+      testCase.threshold =
+        testCase.threshold ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.threshold : undefined);
+      testCase.options = {
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.options : {}),
+        ...testCase.options,
+      };
+      testCase.metadata = {
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
+        ...testCase.metadata,
+      };
+      testCase.provider =
+        testCase.provider ||
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.provider : undefined);
       testCase.assertScoringFunction =
-        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
+        testCase.assertScoringFunction ||
+        (typeof testSuite.defaultTest === 'object'
+          ? testSuite.defaultTest?.assertScoringFunction
+          : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -852,13 +891,17 @@ class Evaluator {
         });
       }
       const prependToPrompt =
-        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
+        testCase.options?.prefix ||
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.options?.prefix : '') ||
+        '';
       const appendToPrompt =
-        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+        testCase.options?.suffix ||
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.options?.suffix : '') ||
+        '';
 
       // Finalize test case eval
       const varCombinations =
-        getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options.disableVarExpansion
+        getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
           ? [testCase.vars]
           : generateVarCombinations(testCase.vars || {});
 
@@ -1604,6 +1647,11 @@ class Evaluator {
     try {
       return await this._runEvaluation();
     } finally {
+      // Add a delay to allow providers to finish exporting spans
+      if (isOtlpReceiverStarted()) {
+        logger.debug('[Evaluator] Waiting for span exports to complete...');
+        await sleep(1000); // Wait 1 second for any remaining spans to be exported
+      }
       // Stop OTLP receiver if it was started
       await stopOtlpReceiverIfNeeded();
     }

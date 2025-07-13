@@ -142,9 +142,18 @@ describe('Plugins', () => {
   });
 
   describe('remote generation', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it('should call remote generation with correct parameters', async () => {
-      // Mock shouldGenerateRemote to return true for this test
+      // Mock both functions for this test
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      jest.mocked(neverGenerateRemote).mockReturnValue(false);
 
       const mockResponse = {
         data: { result: [{ test: 'case' }] },

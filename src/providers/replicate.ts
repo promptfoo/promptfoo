@@ -180,7 +180,7 @@ export class ReplicateProvider implements ApiProvider {
   }
 }
 
-export const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
+const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
   S1: 'Violent Crimes',
   S2: 'Non-Violent Crimes',
   S3: 'Sex Crimes',

@@ -6,11 +6,11 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@langchain/community": "^0.3.41",
-    "@langchain/core": "^0.3.48",
-    "@langchain/langgraph": "^0.2.67",
-    "@langchain/openai": "^0.5.7",
-    "dedent": "^1.5.3",
+    "@langchain/community": "^0.3.48",
+    "@langchain/core": "^0.3.62",
+    "@langchain/langgraph": "^0.3.8",
+    "@langchain/openai": "^0.5.18",
+    "dedent": "^1.6.0",
     "express": "^5.1.0"
   },
   "devDependencies": {
