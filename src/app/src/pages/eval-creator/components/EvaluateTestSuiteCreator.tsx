@@ -74,7 +74,26 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     return Array.from(varsSet);
   };
 
-  const varsList = extractVarsFromPrompts(prompts as string[]);
+  // Normalize prompts to string array
+  const normalizedPrompts = React.useMemo(() => {
+    if (!prompts || !Array.isArray(prompts)) {
+      return [];
+    }
+    
+    return prompts
+      .map((prompt) => {
+        if (typeof prompt === 'string') {
+          return prompt;
+        } else if (typeof prompt === 'object' && prompt !== null && 'raw' in prompt) {
+          return (prompt as { raw: string }).raw;
+        }
+        // For functions or other types, return empty string
+        return '';
+      })
+      .filter((p): p is string => p !== ''); // Filter out empty strings
+  }, [prompts]);
+
+  const varsList = extractVarsFromPrompts(normalizedPrompts);
 
   const handleReset = () => {
     reset();
