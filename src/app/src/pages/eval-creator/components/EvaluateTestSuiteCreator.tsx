@@ -38,20 +38,8 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
-  const {
-    setDescription,
-    providers,
-    setProviders,
-    prompts,
-    setPrompts,
-    setTestCases,
-    setDefaultTest,
-    setDerivedMetrics,
-    setEnv,
-    setEvaluateOptions,
-    setScenarios,
-    setExtensions,
-  } = useStore();
+  const { config, updateConfig, reset } = useStore();
+  const { providers = [], prompts = [] } = config;
 
   useEffect(() => {
     useStore.persist.rehydrate();
@@ -71,19 +59,10 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     return Array.from(varsSet);
   };
 
-  const varsList = extractVarsFromPrompts(prompts);
+  const varsList = extractVarsFromPrompts(prompts as string[]);
 
   const handleReset = () => {
-    setDescription('');
-    setProviders([]);
-    setPrompts([]);
-    setDefaultTest({});
-    setDerivedMetrics([]);
-    setEnv({});
-    setEvaluateOptions({});
-    setScenarios([]);
-    setExtensions([]);
-    setTestCases([]);
+    reset();
     setResetDialogOpen(false);
   };
 
@@ -106,7 +85,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
           label="Description"
           value={description}
           onChange={(e) => {
-            setDescription(e.target.value);
+            updateConfig({ description: e.target.value });
           }}
           fullWidth
           margin="normal"
@@ -117,12 +96,15 @@ const EvaluateTestSuiteCreator: React.FC = () => {
         <ErrorBoundary
           FallbackComponent={ErrorFallback}
           onReset={() => {
-            setProviders([]);
+            updateConfig({ providers: [] });
           }}
         >
           <Stack direction="column" spacing={2} justifyContent="space-between">
             <Typography variant="h5">Providers</Typography>
-            <ProviderSelector providers={providers} onChange={setProviders} />
+            <ProviderSelector
+              providers={providers}
+              onChange={(p) => updateConfig({ providers: p })}
+            />
           </Stack>
         </ErrorBoundary>
       </Box>
@@ -130,7 +112,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       <ErrorBoundary
         FallbackComponent={ErrorFallback}
         onReset={() => {
-          setPrompts([]);
+          updateConfig({ prompts: [] });
         }}
       >
         <PromptsSection />
@@ -139,7 +121,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       <ErrorBoundary
         FallbackComponent={ErrorFallback}
         onReset={() => {
-          setTestCases([]);
+          updateConfig({ tests: [] });
         }}
       >
         <TestCasesSection varsList={varsList} />

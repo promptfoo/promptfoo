@@ -1,20 +1,60 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useStore } from '../evalConfig';
+import { useStore, DEFAULT_CONFIG } from '../evalConfig';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
     // Reset the store state before each test
-    useStore.setState({
-      env: {},
-      testCases: [],
-      description: '',
-      providers: [],
-      prompts: [],
-      extensions: [],
-      defaultTest: {},
-      derivedMetrics: [],
-      evaluateOptions: {},
-      scenarios: [],
+    useStore.getState().reset();
+  });
+
+  describe('config management', () => {
+    it('should initialize with default config', () => {
+      const { config } = useStore.getState();
+      expect(config).toEqual(DEFAULT_CONFIG);
+    });
+
+    it('should update config with updateConfig', () => {
+      const updates = {
+        description: 'Test Description',
+        providers: [{ id: 'openai:gpt-4' }],
+      };
+
+      useStore.getState().updateConfig(updates);
+
+      const { config } = useStore.getState();
+      expect(config.description).toBe('Test Description');
+      expect(config.providers).toEqual([{ id: 'openai:gpt-4' }]);
+      // Other fields should remain as defaults
+      expect(config.prompts).toEqual([]);
+    });
+
+    it('should replace entire config with setConfig', () => {
+      const newConfig = {
+        description: 'New Config',
+        providers: [{ id: 'anthropic:claude' }],
+        prompts: ['Test prompt'],
+      };
+
+      useStore.getState().setConfig(newConfig);
+
+      const { config } = useStore.getState();
+      expect(config).toEqual(newConfig);
+      // Note: fields not in newConfig are undefined, not defaults
+      expect(config.env).toBeUndefined();
+    });
+
+    it('should reset to default config', () => {
+      // First, modify the config
+      useStore.getState().updateConfig({
+        description: 'Modified',
+        providers: [{ id: 'test' }],
+      });
+
+      // Then reset
+      useStore.getState().reset();
+
+      const { config } = useStore.getState();
+      expect(config).toEqual(DEFAULT_CONFIG);
     });
   });
 
@@ -22,9 +62,9 @@ describe('evalConfig store', () => {
     it('should accept string defaultTest', () => {
       const stringDefaultTest = 'file://path/to/defaultTest.yaml';
 
-      useStore.getState().setDefaultTest(stringDefaultTest);
+      useStore.getState().updateConfig({ defaultTest: stringDefaultTest });
 
-      expect(useStore.getState().defaultTest).toBe(stringDefaultTest);
+      expect(useStore.getState().config.defaultTest).toBe(stringDefaultTest);
     });
 
     it('should accept object defaultTest', () => {
@@ -34,17 +74,17 @@ describe('evalConfig store', () => {
         options: { provider: 'openai:gpt-4' },
       };
 
-      useStore.getState().setDefaultTest(objectDefaultTest as any);
+      useStore.getState().updateConfig({ defaultTest: objectDefaultTest as any });
 
-      expect(useStore.getState().defaultTest).toEqual(objectDefaultTest);
+      expect(useStore.getState().config.defaultTest).toEqual(objectDefaultTest);
     });
 
     it('should handle undefined defaultTest', () => {
       // Set to undefined explicitly
-      useStore.getState().setDefaultTest(undefined as any);
+      useStore.getState().updateConfig({ defaultTest: undefined as any });
 
       // When set to undefined, it becomes undefined
-      expect(useStore.getState().defaultTest).toBeUndefined();
+      expect(useStore.getState().config.defaultTest).toBeUndefined();
     });
 
     it('should update from object to string defaultTest', () => {
@@ -53,28 +93,28 @@ describe('evalConfig store', () => {
         vars: { foo: 'bar' },
       };
 
-      useStore.getState().setDefaultTest(objectDefaultTest as any);
-      expect(useStore.getState().defaultTest).toEqual(objectDefaultTest);
+      useStore.getState().updateConfig({ defaultTest: objectDefaultTest as any });
+      expect(useStore.getState().config.defaultTest).toEqual(objectDefaultTest);
 
       const stringDefaultTest = 'file://new/path/defaultTest.yaml';
-      useStore.getState().setDefaultTest(stringDefaultTest);
+      useStore.getState().updateConfig({ defaultTest: stringDefaultTest });
 
-      expect(useStore.getState().defaultTest).toBe(stringDefaultTest);
+      expect(useStore.getState().config.defaultTest).toBe(stringDefaultTest);
     });
 
     it('should update from string to object defaultTest', () => {
       const stringDefaultTest = 'file://path/to/defaultTest.yaml';
 
-      useStore.getState().setDefaultTest(stringDefaultTest);
-      expect(useStore.getState().defaultTest).toBe(stringDefaultTest);
+      useStore.getState().updateConfig({ defaultTest: stringDefaultTest });
+      expect(useStore.getState().config.defaultTest).toBe(stringDefaultTest);
 
       const objectDefaultTest = {
         assert: [{ type: 'contains' as const, value: 'new' }],
         metadata: { suite: 'test' },
       };
-      useStore.getState().setDefaultTest(objectDefaultTest as any);
+      useStore.getState().updateConfig({ defaultTest: objectDefaultTest as any });
 
-      expect(useStore.getState().defaultTest).toEqual(objectDefaultTest);
+      expect(useStore.getState().config.defaultTest).toEqual(objectDefaultTest);
     });
   });
 
@@ -82,10 +122,12 @@ describe('evalConfig store', () => {
     it('should return config with string defaultTest', () => {
       const stringDefaultTest = 'file://shared/defaultTest.yaml';
 
-      useStore.getState().setDescription('Test config');
-      useStore.getState().setProviders([{ id: 'openai:gpt-4' }]);
-      useStore.getState().setPrompts(['Test prompt']);
-      useStore.getState().setDefaultTest(stringDefaultTest);
+      useStore.getState().updateConfig({
+        description: 'Test config',
+        providers: [{ id: 'openai:gpt-4' }],
+        prompts: ['Test prompt'],
+        defaultTest: stringDefaultTest,
+      });
 
       const config = useStore.getState().getTestSuite();
 
@@ -99,47 +141,39 @@ describe('evalConfig store', () => {
         vars: { foo: 'bar' },
       };
 
-      useStore.getState().setDescription('Test config');
-      useStore.getState().setProviders([{ id: 'openai:gpt-4' }]);
-      useStore.getState().setPrompts(['Test prompt']);
-      useStore.getState().setDefaultTest(objectDefaultTest as any);
+      useStore.getState().updateConfig({
+        description: 'Test config',
+        providers: [{ id: 'openai:gpt-4' }],
+        prompts: ['Test prompt'],
+        defaultTest: objectDefaultTest as any,
+      });
 
       const config = useStore.getState().getTestSuite();
 
       expect(config.defaultTest).toEqual(objectDefaultTest);
     });
-  });
 
-  describe('setStateFromConfig', () => {
-    it('should handle string defaultTest in config', () => {
-      const config = {
-        description: 'Test suite',
-        defaultTest: 'file://external/defaultTest.yaml',
-        providers: [{ id: 'openai:gpt-4' }],
-        prompts: ['Test prompt'],
-      };
+    it('should handle complex prompts configuration', () => {
+      // Test string prompts
+      useStore.getState().updateConfig({ prompts: ['Test prompt'] });
+      expect(useStore.getState().config.prompts).toEqual(['Test prompt']);
 
-      useStore.getState().setStateFromConfig(config);
-
-      expect(useStore.getState().defaultTest).toBe('file://external/defaultTest.yaml');
-      expect(useStore.getState().description).toBe('Test suite');
+      // Test array of prompts
+      const multiplePrompts = ['Prompt 1', 'Prompt 2'];
+      useStore.getState().updateConfig({ prompts: multiplePrompts });
+      expect(useStore.getState().config.prompts).toEqual(multiplePrompts);
     });
 
-    it('should handle object defaultTest in config', () => {
-      const defaultTestObj = {
-        assert: [{ type: 'equals' as const, value: 'expected' }],
-        vars: { test: 'value' },
-      };
+    it('should include new fields like derivedMetrics automatically', () => {
+      const derivedMetrics = [
+        { name: 'precision', value: 'tp / (tp + fp)' },
+        { name: 'recall', value: 'tp / (tp + fn)' },
+      ];
 
-      const config = {
-        description: 'Test suite',
-        defaultTest: defaultTestObj as any,
-        providers: [{ id: 'openai:gpt-4' }],
-      };
+      useStore.getState().updateConfig({ derivedMetrics });
 
-      useStore.getState().setStateFromConfig(config);
-
-      expect(useStore.getState().defaultTest).toEqual(defaultTestObj);
+      const testSuite = useStore.getState().getTestSuite();
+      expect(testSuite.derivedMetrics).toEqual(derivedMetrics);
     });
   });
 });
