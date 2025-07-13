@@ -63,7 +63,6 @@ function getValue(result: GradingResult) {
   // For context-related assertions, read the context value from metadata, if it exists
   if (
     result.assertion?.type &&
-    // prettier-ignore
     ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
       result.assertion.type,
     ) &&

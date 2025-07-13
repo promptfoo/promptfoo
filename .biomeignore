@@ -6,7 +6,7 @@ examples/redteam-medical-agent/src/**/*
 **/site-packages/**
 .aider*
 .coverage
-drizzle
+drizzle/**/*
 examples/adaline-gateway/adaline-chat-history/prompt.json
 examples/adaline-gateway/adaline-embedding-similarity/prompt.json
 examples/multiple-turn-conversation/prompt.json
@@ -15,8 +15,6 @@ examples/redteam-foundation-model/redteam.yaml
 examples/simple-test/output.html
 examples/custom-provider/vercelAiSdkExample.js
 helm/chart/promptfoo/templates/**/*.yaml
-site/static/config-schema.json
-venv
 .jest/**/*
 .local/**/*
 **/*.j2
