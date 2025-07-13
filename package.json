@@ -141,7 +141,6 @@
     "@swc/cli": "^0.7.8",
     "@swc/core": "^1.12.11",
     "@swc/jest": "^0.2.39",
-    "@trivago/prettier-plugin-sort-imports": "5.2.2",
     "@types/async": "^3.2.24",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cache-manager": "^4.0.6",
