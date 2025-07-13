@@ -18,7 +18,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 export default function CloudStatusIndicator() {
-  const { isAuthenticated, appUrl, isLoading, error, refetch } = useCloudAuth();
+  const { isAuthenticated, appUrl, isLoading, error } = useCloudAuth();
   const [showDialog, setShowDialog] = useState(false);
   const { recordEvent } = useTelemetry();
 
@@ -59,9 +59,15 @@ export default function CloudStatusIndicator() {
   };
 
   const getTooltipTitle = () => {
-    if (isLoading) return 'Checking cloud status...';
-    if (error) return 'Error checking cloud status';
-    if (isAuthenticated) return 'Connected to Promptfoo Cloud (click to open dashboard)';
+    if (isLoading) {
+      return 'Checking cloud status...';
+    }
+    if (error) {
+      return 'Error checking cloud status';
+    }
+    if (isAuthenticated) {
+      return 'Connected to Promptfoo Cloud (click to open dashboard)';
+    }
     return 'Not connected to Promptfoo Cloud (click to learn more)';
   };
 
@@ -76,10 +82,16 @@ export default function CloudStatusIndicator() {
   };
 
   const getIconColor = () => {
-    if (isLoading) return 'default';
-    if (error) return 'error';
-    if (isAuthenticated) return 'success';
-    return 'action';
+    if (isLoading) {
+      return 'default';
+    }
+    if (error) {
+      return 'error';
+    }
+    if (isAuthenticated) {
+      return 'success';
+    }
+    return 'inherit';
   };
 
   return (
