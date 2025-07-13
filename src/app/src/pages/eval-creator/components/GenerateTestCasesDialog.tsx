@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { callApi } from '@app/utils/api';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -52,6 +56,8 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [_jobId, setJobId] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [simpleTestCaseCount, setSimpleTestCaseCount] = useState(10);
 
   // Extract variables from prompts
   const extractedVariables = React.useMemo(() => {
@@ -66,7 +72,24 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
     return Array.from(varsSet);
   }, [prompts]);
 
-  const totalTestCases = options.numPersonas * options.numTestCasesPerPersona;
+  const totalTestCases = showAdvanced
+    ? options.numPersonas * options.numTestCasesPerPersona
+    : simpleTestCaseCount;
+
+  // Sync advanced options when switching modes
+  React.useEffect(() => {
+    if (!showAdvanced) {
+      // Update options to match simple count
+      // Try to find reasonable factors
+      const personas = Math.min(5, simpleTestCaseCount);
+      const perPersona = Math.ceil(simpleTestCaseCount / personas);
+      setOptions((prev) => ({
+        ...prev,
+        numPersonas: personas,
+        numTestCasesPerPersona: perPersona,
+      }));
+    }
+  }, [simpleTestCaseCount, showAdvanced]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -163,6 +186,8 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
       });
       setError(null);
       setJobId(null);
+      setSimpleTestCaseCount(10);
+      setShowAdvanced(false);
       onClose();
     }
   };
@@ -192,42 +217,96 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
             )}
           </div>
 
-          {/* Generation Settings */}
-          <div>
-            <Typography variant="subtitle2" gutterBottom>
-              Number of Personas
-            </Typography>
-            <Slider
-              value={options.numPersonas}
-              onChange={(_, value) => setOptions({ ...options, numPersonas: value as number })}
-              min={1}
-              max={20}
-              marks
-              valueLabelDisplay="auto"
-              disabled={isGenerating}
-            />
-          </div>
+          {/* Simple Mode - Number of Test Cases */}
+          {!showAdvanced && (
+            <div>
+              <Typography variant="subtitle2" gutterBottom>
+                Number of Test Cases
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                How many test variations would you like to generate?
+              </Typography>
+              <Slider
+                value={simpleTestCaseCount}
+                onChange={(_, value) => setSimpleTestCaseCount(value as number)}
+                min={1}
+                max={50}
+                marks={[
+                  { value: 1, label: '1' },
+                  { value: 10, label: '10' },
+                  { value: 25, label: '25' },
+                  { value: 50, label: '50' },
+                ]}
+                valueLabelDisplay="auto"
+                disabled={isGenerating}
+              />
+            </div>
+          )}
 
-          <div>
-            <Typography variant="subtitle2" gutterBottom>
-              Test Cases per Persona
-            </Typography>
-            <Slider
-              value={options.numTestCasesPerPersona}
-              onChange={(_, value) =>
-                setOptions({ ...options, numTestCasesPerPersona: value as number })
-              }
-              min={1}
-              max={10}
-              marks
-              valueLabelDisplay="auto"
-              disabled={isGenerating}
-            />
-          </div>
+          {/* Advanced Mode - Personas */}
+          <Accordion
+            expanded={showAdvanced}
+            onChange={() => setShowAdvanced(!showAdvanced)}
+            sx={{ mt: 2, mb: 2 }}
+          >
+            <AccordionSummary expandIcon={<ExpandMore />}>
+              <Typography>Advanced Options</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Stack spacing={3}>
+                <Typography variant="body2" color="text.secondary">
+                  Generate test cases using personas - different user types or scenarios that will
+                  each get multiple test variations.
+                </Typography>
 
-          <Typography variant="body2" color="text.secondary">
-            This will generate {totalTestCases} test cases total
-          </Typography>
+                <div>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Number of Personas
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Different user types or scenarios (e.g., "admin user", "first-time visitor",
+                    "mobile user")
+                  </Typography>
+                  <Slider
+                    value={options.numPersonas}
+                    onChange={(_, value) =>
+                      setOptions({ ...options, numPersonas: value as number })
+                    }
+                    min={1}
+                    max={20}
+                    marks
+                    valueLabelDisplay="auto"
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Test Cases per Persona
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Variations to generate for each persona
+                  </Typography>
+                  <Slider
+                    value={options.numTestCasesPerPersona}
+                    onChange={(_, value) =>
+                      setOptions({ ...options, numTestCasesPerPersona: value as number })
+                    }
+                    min={1}
+                    max={10}
+                    marks
+                    valueLabelDisplay="auto"
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <Typography variant="body2" color="primary">
+                  Total: {options.numPersonas} personas × {options.numTestCasesPerPersona}{' '}
+                  variations = {options.numPersonas * options.numTestCasesPerPersona} test cases
+                </Typography>
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
 
           {/* Provider Selection */}
           {providers.length > 0 && (
@@ -269,7 +348,7 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
                 <CircularProgress size={20} />
                 <Typography variant="body2">
-                  Generating test cases... ({progress.current}/{progress.total})
+                  Generating {totalTestCases} test cases... ({progress.current}/{progress.total})
                 </Typography>
               </Stack>
               <LinearProgress
