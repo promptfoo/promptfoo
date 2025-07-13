@@ -197,7 +197,16 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.33.0",
-    "@swc/core-linux-x64-gnu": "^1.12.7"
+    "@swc/core-linux-x64-gnu": "^1.12.7",
+    "@swc/core-linux-x64-musl": "^1.12.7",
+    "@swc/core-win32-x64-msvc": "^1.12.7",
+    "@swc/core-darwin-x64": "^1.12.7",
+    "@swc/core-darwin-arm64": "^1.12.7",
+    "@biomejs/cli-linux-x64": "2.1.1",
+    "@biomejs/cli-linux-x64-musl": "2.1.1",
+    "@biomejs/cli-win32-x64": "2.1.1",
+    "@biomejs/cli-darwin-x64": "2.1.1",
+    "@biomejs/cli-darwin-arm64": "2.1.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.56.0",
