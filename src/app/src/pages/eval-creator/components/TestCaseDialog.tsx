@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useStore } from '@app/stores/evalConfig';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -7,6 +8,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import type { Assertion, TestCase } from '@promptfoo/types';
 import AssertsForm from './AssertsForm';
+import GenerateAssertionsDialog from './GenerateAssertionsDialog';
 import VarsForm from './VarsForm';
 
 interface TestCaseFormProps {
@@ -28,6 +30,12 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);
   const [assertsFormKey, setAssertsFormKey] = useState(0);
+  const [generateAssertionsOpen, setGenerateAssertionsOpen] = useState(false);
+  
+  const { config } = useStore();
+  const providers = (config.providers || []) as any[];
+  const prompts = (config.prompts || []) as any[];
+  const tests = (config.tests || []) as TestCase[];
 
   React.useEffect(() => {
     if (initialValues) {
@@ -40,6 +48,25 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
       setAsserts([]);
     }
   }, [initialValues]);
+
+  const handleGeneratedAssertions = (newAssertions: Assertion[]) => {
+    setAsserts([...asserts, ...newAssertions]);
+    setAssertsFormKey(prev => prev + 1); // Force re-render of AssertsForm
+    setGenerateAssertionsOpen(false);
+  };
+
+  const normalizedPrompts = React.useMemo(() => {
+    return prompts
+      .map((prompt) => {
+        if (typeof prompt === 'string') {
+          return prompt;
+        } else if (prompt && typeof prompt === 'object' && 'raw' in prompt) {
+          return prompt.raw;
+        }
+        return '';
+      })
+      .filter((p) => p !== '');
+  }, [prompts]);
 
   const handleAdd = (close: boolean) => {
     onAdd(
@@ -86,6 +113,8 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
                 (item) => item.type !== 'assert-set',
               ) as Assertion[]) || []
             }
+            onGenerateClick={() => setGenerateAssertionsOpen(true)}
+            canGenerate={normalizedPrompts.length > 0}
           />
         </Box>
       </DialogContent>
@@ -102,6 +131,17 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
           Cancel
         </Button>
       </DialogActions>
+      
+      {/* Generate Assertions Dialog */}
+      <GenerateAssertionsDialog
+        open={generateAssertionsOpen}
+        onClose={() => setGenerateAssertionsOpen(false)}
+        prompts={normalizedPrompts}
+        testCase={{ description, vars, assert: asserts }}
+        allTestCases={tests}
+        providers={providers}
+        onGenerated={handleGeneratedAssertions}
+      />
     </Dialog>
   );
 };

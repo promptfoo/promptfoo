@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AutoAwesome from '@mui/icons-material/AutoAwesome';
 import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -12,6 +13,8 @@ import type { Assertion, AssertionType } from '@promptfoo/types';
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;
   initialValues: Assertion[];
+  onGenerateClick?: () => void;
+  canGenerate?: boolean;
 }
 
 const assertTypes: AssertionType[] = [
@@ -69,7 +72,7 @@ const assertTypes: AssertionType[] = [
   'finish-reason',
 ];
 
-const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
+const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues, onGenerateClick, canGenerate = false }) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
 
   const handleAdd = () => {
@@ -125,9 +128,21 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
           ))}
         </Stack>
       </Box>
-      <Button color="primary" onClick={handleAdd}>
-        Add Assert
-      </Button>
+      <Stack direction="row" spacing={1}>
+        {canGenerate && onGenerateClick && (
+          <Button
+            color="primary"
+            onClick={onGenerateClick}
+            variant="outlined"
+            startIcon={<AutoAwesome />}
+          >
+            Generate Assertions
+          </Button>
+        )}
+        <Button color="primary" onClick={handleAdd}>
+          Add Assert
+        </Button>
+      </Stack>
     </>
   );
 };
