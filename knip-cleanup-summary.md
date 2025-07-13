@@ -87,6 +87,7 @@ Successfully merged the latest changes from main branch:
 After fixing all test failures and CI issues:
 
 ### CI Checks Status
+
 - ✅ All unit tests passing (350 test suites, 5711 tests)
 - ✅ All integration tests passing (5 test suites, 32 tests)
 - ✅ Build successful
@@ -95,6 +96,7 @@ After fixing all test failures and CI issues:
 - ✅ JSON schema generation works
 
 ### Final Knip Findings
+
 - **Unused files**: 0 (reduced from multiple)
 - **Duplicate exports**: 0 (reduced from several)
 - **Unused exports**: 11 (reduced from 23)
@@ -103,6 +105,7 @@ After fixing all test failures and CI issues:
 - **Unlisted dependencies**: Internal @promptfoo imports (valid for monorepo)
 
 ### All Commits Made
+
 1. `fix: address PR review comments for knip cleanup`
 2. `fix: address more knip findings`
 3. `fix: address final knip findings`
