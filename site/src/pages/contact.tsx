@@ -57,7 +57,7 @@ function TabPanel(props: TabPanelProps) {
       aria-labelledby={`contact-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+      {value === index && <Box sx={{ py: 3 }}><>{children}</></Box>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
-import Grid2 from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
@@ -74,8 +74,8 @@ const PressContent = () => {
           </Typography>
 
           {/* DeepSeek Research Coverage */}
-          <Grid2 container spacing={4} mb={6}>
-            <Grid2 size={12}>
+          <Grid container spacing={4} mb={6}>
+            <Grid size={12}>
               <Box className={styles.coverageItem} p={3}>
                 <Typography variant="h6" component="h4" gutterBottom>
                   DeepSeek AI Censorship Research
@@ -90,7 +90,7 @@ const PressContent = () => {
                 <Typography variant="body2" paragraph>
                   <Link to="/blog/deepseek-censorship/">Read the original research →</Link>
                 </Typography>
-                <Grid2 container spacing={2} mt={2}>
+                <Grid container spacing={2} mt={2}>
                   {[
                     {
                       publication: 'Ars Technica',
@@ -146,26 +146,26 @@ const PressContent = () => {
                       link: 'https://news.ycombinator.com/item?id=42858552',
                     },
                   ].map((article) => (
-                    <Grid2 size={{ xs: 12, md: 6 }} key={article.link}>
+                    <Grid size={{ xs: 12, md: 6 }} key={article.link}>
                       <Link href={article.link} className={styles.articleLink}>
                         <Typography variant="subtitle2" color="text.secondary" component="span">
                           {article.publication}
                         </Typography>
                         <Typography variant="body2">{article.title}</Typography>
                       </Link>
-                    </Grid2>
+                    </Grid>
                   ))}
-                </Grid2>
+                </Grid>
               </Box>
-            </Grid2>
-          </Grid2>
+            </Grid>
+          </Grid>
 
           {/* Featured Podcasts */}
           <Typography variant="h5" component="h4" id="featured-podcasts" gutterBottom mt={6}>
             Featured Podcasts
           </Typography>
-          <Grid2 container spacing={4} mb={6}>
-            <Grid2 size={{ xs: 12, md: 6 }}>
+          <Grid container spacing={4} mb={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -192,8 +192,8 @@ const PressContent = () => {
                   Listen on Spotify →
                 </Link>
               </Box>
-            </Grid2>
-            <Grid2 size={{ xs: 12, md: 6 }}>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -215,8 +215,8 @@ const PressContent = () => {
                   Listen to episode →
                 </Link>
               </Box>
-            </Grid2>
-            <Grid2 size={{ xs: 12, md: 6 }}>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -237,8 +237,8 @@ const PressContent = () => {
                   Listen on Spotify →
                 </Link>
               </Box>
-            </Grid2>
-          </Grid2>
+            </Grid>
+          </Grid>
 
           {/* Educational Resources Section */}
           <Typography variant="h5" component="h4" id="educational-resources" gutterBottom mt={6}>
@@ -250,9 +250,9 @@ const PressContent = () => {
             evaluation, and security. These courses and workshops, developed in partnership with
             industry leaders, provide comprehensive training on building reliable AI applications.
           </Typography>
-          <Grid2 container spacing={4} mb={6}>
+          <Grid container spacing={4} mb={6}>
             {/* OpenAI Build Hour */}
-            <Grid2 size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -276,10 +276,10 @@ const PressContent = () => {
                   <Link href="https://vimeo.com/1023317525">Watch video →</Link>
                 </Box>
               </Box>
-            </Grid2>
+            </Grid>
 
             {/* Anthropic Course */}
-            <Grid2 size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -306,10 +306,10 @@ const PressContent = () => {
                   </Link>
                 </Box>
               </Box>
-            </Grid2>
+            </Grid>
 
             {/* AWS Workshop */}
-            <Grid2 size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -336,10 +336,10 @@ const PressContent = () => {
                   </Link>
                 </Box>
               </Box>
-            </Grid2>
+            </Grid>
 
             {/* IBM Course */}
-            <Grid2 size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -365,15 +365,15 @@ const PressContent = () => {
                   </Link>
                 </Box>
               </Box>
-            </Grid2>
-          </Grid2>
+            </Grid>
+          </Grid>
 
           {/* Technical Content Section */}
           <Typography variant="h5" component="h4" id="technical-content-guides" gutterBottom mt={6}>
             Technical Content & Guides
           </Typography>
-          <Grid2 container spacing={4} mb={6}>
-            <Grid2 size={{ xs: 12, md: 6 }}>
+          <Grid container spacing={4} mb={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -393,8 +393,8 @@ const PressContent = () => {
                   Read article →
                 </Link>
               </Box>
-            </Grid2>
-          </Grid2>
+            </Grid>
+          </Grid>
         </Box>
 
         <Divider sx={{ my: 8 }} />
@@ -413,8 +413,8 @@ const PressContent = () => {
           <Typography variant="body1" paragraph>
             Download official Promptfoo logos and brand assets for media use.
           </Typography>
-          <Grid2 container spacing={4}>
-            <Grid2 size={{ xs: 12, md: 6 }}>
+          <Grid container spacing={4}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box
                 sx={{
                   border: '1px solid',
@@ -432,8 +432,8 @@ const PressContent = () => {
                   Download
                 </a>
               </Box>
-            </Grid2>
-          </Grid2>
+            </Grid>
+          </Grid>
         </Box>
 
         <Divider sx={{ my: 8 }} />
@@ -465,8 +465,8 @@ const PressContent = () => {
           <Typography variant="h4" component="h3" id="quick-facts" gutterBottom fontWeight="medium">
             Quick Facts
           </Typography>
-          <Grid2 container spacing={4}>
-            <Grid2 size={{ xs: 12, md: 6 }}>
+          <Grid container spacing={4}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" component="h4" gutterBottom>
                 Founded
               </Typography>
@@ -479,8 +479,8 @@ const PressContent = () => {
               <Typography variant="body1" paragraph>
                 San Francisco, California
               </Typography>
-            </Grid2>
-            <Grid2 size={{ xs: 12, md: 6 }}>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" component="h4" gutterBottom>
                 Leadership
               </Typography>
@@ -509,8 +509,8 @@ const PressContent = () => {
               <Typography variant="body1" paragraph>
                 Andreessen Horowitz and industry leaders
               </Typography>
-            </Grid2>
-          </Grid2>
+            </Grid>
+          </Grid>
         </Box>
       </Container>
     </ThemeProvider>
