@@ -25,16 +25,16 @@ export default function CloudStatusIndicator() {
   const handleIconClick = () => {
     if (!isAuthenticated) {
       // Track unauthenticated click
-      recordEvent('feature_used', { 
+      recordEvent('feature_used', {
         feature: 'cloud_status_icon_click',
-        authenticated: false 
+        authenticated: false,
       });
       setShowDialog(true);
     } else if (appUrl) {
       // Track authenticated click
-      recordEvent('feature_used', { 
+      recordEvent('feature_used', {
         feature: 'cloud_status_icon_click',
-        authenticated: true 
+        authenticated: true,
       });
       window.open(appUrl, '_blank');
     }
@@ -47,14 +47,14 @@ export default function CloudStatusIndicator() {
   const handleLearnMoreClick = () => {
     recordEvent('webui_action', {
       action: 'cloud_cta_learn_more_click',
-      source: 'cloud_status_dialog'
+      source: 'cloud_status_dialog',
     });
   };
 
   const handlePromptfooAppClick = () => {
     recordEvent('webui_action', {
       action: 'cloud_cta_signup_click',
-      source: 'cloud_status_dialog'
+      source: 'cloud_status_dialog',
     });
   };
 
@@ -126,9 +126,9 @@ export default function CloudStatusIndicator() {
 
           <Alert severity="info" sx={{ mb: 2 }}>
             Run <code>promptfoo auth login</code> or visit{' '}
-            <Link 
-              href="https://www.promptfoo.app/welcome" 
-              target="_blank" 
+            <Link
+              href="https://www.promptfoo.app/welcome"
+              target="_blank"
               rel="noopener"
               onClick={handlePromptfooAppClick}
             >
@@ -159,4 +159,4 @@ export default function CloudStatusIndicator() {
       </Dialog>
     </>
   );
-} 
+}

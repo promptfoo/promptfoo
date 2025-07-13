@@ -21,11 +21,12 @@ describe('useCloudAuth', () => {
   it('should return authenticated status when API returns authenticated', async () => {
     vi.mocked(callApi).mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({
-        isAuthenticated: true,
-        hasApiKey: true,
-        appUrl: 'https://app.promptfoo.app',
-      }),
+      json: () =>
+        Promise.resolve({
+          isAuthenticated: true,
+          hasApiKey: true,
+          appUrl: 'https://app.promptfoo.app',
+        }),
     } as Response);
 
     const { result } = renderHook(() => useCloudAuth());
@@ -45,11 +46,12 @@ describe('useCloudAuth', () => {
   it('should return unauthenticated status when API returns not authenticated', async () => {
     vi.mocked(callApi).mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({
-        isAuthenticated: false,
-        hasApiKey: false,
-        appUrl: null,
-      }),
+      json: () =>
+        Promise.resolve({
+          isAuthenticated: false,
+          hasApiKey: false,
+          appUrl: null,
+        }),
     } as Response);
 
     const { result } = renderHook(() => useCloudAuth());
@@ -96,11 +98,12 @@ describe('useCloudAuth', () => {
   it('should support refetching', async () => {
     vi.mocked(callApi).mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({
-        isAuthenticated: false,
-        hasApiKey: false,
-        appUrl: null,
-      }),
+      json: () =>
+        Promise.resolve({
+          isAuthenticated: false,
+          hasApiKey: false,
+          appUrl: null,
+        }),
     } as Response);
 
     const { result } = renderHook(() => useCloudAuth());
@@ -114,11 +117,12 @@ describe('useCloudAuth', () => {
     // Mock authenticated response for refetch
     vi.mocked(callApi).mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({
-        isAuthenticated: true,
-        hasApiKey: true,
-        appUrl: 'https://app.promptfoo.app',
-      }),
+      json: () =>
+        Promise.resolve({
+          isAuthenticated: true,
+          hasApiKey: true,
+          appUrl: 'https://app.promptfoo.app',
+        }),
     } as Response);
 
     // Trigger refetch
@@ -128,4 +132,4 @@ describe('useCloudAuth', () => {
       expect(result.current.isAuthenticated).toBe(true);
     });
   });
-}); 
+});

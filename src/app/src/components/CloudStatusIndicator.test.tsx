@@ -22,7 +22,7 @@ describe('CloudStatusIndicator', () => {
     vi.clearAllMocks();
     // Reset window.open mock
     global.window.open = vi.fn();
-    
+
     // Default mock for useTelemetry
     vi.mocked(useTelemetry).mockReturnValue({
       recordEvent: mockRecordEvent,
@@ -42,7 +42,7 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     const button = screen.getByRole('button');
     expect(button).toHaveAttribute('aria-label', expect.stringContaining('Checking cloud status'));
   });
@@ -58,9 +58,12 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('aria-label', expect.stringContaining('Connected to Promptfoo Cloud'));
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Connected to Promptfoo Cloud'),
+    );
     expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
   });
 
@@ -75,9 +78,12 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('aria-label', expect.stringContaining('Not connected to Promptfoo Cloud'));
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Not connected to Promptfoo Cloud'),
+    );
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
@@ -92,9 +98,12 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('aria-label', expect.stringContaining('Error checking cloud status'));
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Error checking cloud status'),
+    );
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
@@ -110,10 +119,10 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     const button = screen.getByRole('button');
     fireEvent.click(button);
-    
+
     expect(window.open).toHaveBeenCalledWith(mockAppUrl, '_blank');
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
@@ -132,13 +141,15 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     const button = screen.getByRole('button');
     fireEvent.click(button);
-    
+
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
     expect(screen.getByText(/Share evaluation results with your team/)).toBeInTheDocument();
-    expect(screen.getByText(/Advanced red teaming with team-wide configurations/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Advanced red teaming with team-wide configurations/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/New features and updates as they're released/)).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
@@ -157,17 +168,17 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     // Open dialog
     const button = screen.getByRole('button');
     fireEvent.click(button);
-    
+
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
-    
+
     // Close dialog
     const closeButton = screen.getByText('Close');
     fireEvent.click(closeButton);
-    
+
     await waitFor(() => {
       expect(screen.queryByText('Connect to Promptfoo Cloud')).not.toBeInTheDocument();
     });
@@ -185,11 +196,11 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     // Open dialog
     const button = screen.getByRole('button');
     fireEvent.click(button);
-    
+
     expect(screen.getByText(`Error checking cloud status: ${errorMessage}`)).toBeInTheDocument();
   });
 
@@ -204,15 +215,15 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     // Open dialog
     const button = screen.getByRole('button');
     fireEvent.click(button);
-    
+
     // Click Learn More
     const learnMoreButton = screen.getByText('Learn More');
     fireEvent.click(learnMoreButton);
-    
+
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
       action: 'cloud_cta_learn_more_click',
       source: 'cloud_status_dialog',
@@ -230,18 +241,18 @@ describe('CloudStatusIndicator', () => {
     });
 
     render(<CloudStatusIndicator />);
-    
+
     // Open dialog
     const button = screen.getByRole('button');
     fireEvent.click(button);
-    
+
     // Click promptfoo.app link
     const promptfooLink = screen.getByText('promptfoo.app');
     fireEvent.click(promptfooLink);
-    
+
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
       action: 'cloud_cta_signup_click',
       source: 'cloud_status_dialog',
     });
   });
-}); 
+});

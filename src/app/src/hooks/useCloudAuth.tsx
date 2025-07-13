@@ -21,15 +21,15 @@ export function useCloudAuth() {
   const checkCloudStatus = useCallback(async () => {
     try {
       setStatus((prev) => ({ ...prev, isLoading: true, error: null }));
-      
+
       const response = await callApi('/user/cloud/status');
-      
+
       if (!response.ok) {
         throw new Error('Failed to check cloud status');
       }
-      
+
       const data = await response.json();
-      
+
       setStatus({
         isAuthenticated: data.isAuthenticated,
         hasApiKey: data.hasApiKey,
@@ -54,4 +54,4 @@ export function useCloudAuth() {
     ...status,
     refetch: checkCloudStatus,
   };
-} 
+}
