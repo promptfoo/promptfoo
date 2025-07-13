@@ -11,6 +11,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import type { ProviderOptions } from '@promptfoo/types';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import PromptsSection from './PromptsSection';
 import ProviderSelector from './ProviderSelector';
@@ -40,6 +41,20 @@ const EvaluateTestSuiteCreator: React.FC = () => {
 
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
+
+  // Ensure providers is always an array of ProviderOptions
+  const normalizedProviders: ProviderOptions[] = React.useMemo(() => {
+    if (!providers) {
+      return [];
+    }
+    if (Array.isArray(providers)) {
+      // Filter out any non-object providers (strings, functions)
+      return providers.filter((p): p is ProviderOptions => 
+        typeof p === 'object' && p !== null && !Array.isArray(p)
+      );
+    }
+    return [];
+  }, [providers]);
 
   useEffect(() => {
     useStore.persist.rehydrate();
@@ -102,7 +117,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
           <Stack direction="column" spacing={2} justifyContent="space-between">
             <Typography variant="h5">Providers</Typography>
             <ProviderSelector
-              providers={providers}
+              providers={normalizedProviders}
               onChange={(p) => updateConfig({ providers: p })}
             />
           </Stack>
