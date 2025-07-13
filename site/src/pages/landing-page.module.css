@@ -64,10 +64,13 @@ section {
 }
 
 /* Button styles */
-.heroBanner .buttons {
+.buttons {
   display: flex;
   justify-content: center;
   gap: 1rem;
+}
+
+.heroBanner .buttons {
   position: relative;
   z-index: 1;
 }
