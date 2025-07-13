@@ -14,13 +14,20 @@
       }
     },
     "site": {
-      "entry": [
-        "src/**/*.{js,ts,tsx}",
-        "blog/**/*.{js,ts,tsx}",
-        "docusaurus.config.ts"
-      ],
+      "entry": ["src/**/*.{js,ts,tsx}", "blog/**/*.{js,ts,tsx}", "docusaurus.config.ts"],
       "project": ["**/*.{js,ts,tsx}"],
-      "ignoreDependencies": ["@docusaurus/types", "@docusaurus/theme-common", "@theme/*", "@mui/*", "@docusaurus/plugin-content-blog", "@swc/core", "@swc/jest", "canvas-confetti", "framer-motion", "lucide-react"]
+      "ignoreDependencies": [
+        "@docusaurus/types",
+        "@docusaurus/theme-common",
+        "@theme/*",
+        "@mui/*",
+        "@docusaurus/plugin-content-blog",
+        "@swc/core",
+        "@swc/jest",
+        "canvas-confetti",
+        "framer-motion",
+        "lucide-react"
+      ]
     }
   },
   "ignoreBinaries": ["dist/src/main.js", "gh"],
