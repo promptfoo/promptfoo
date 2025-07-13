@@ -80,10 +80,14 @@
       "whatwg-url": "14.1.0",
       "chokidar": "4.0.3",
       "react": "^19.1.0",
-      "react-dom": "^19.1.0"
+      "react-dom": "^19.1.0",
+      "@types/react": "^19.1.8",
+      "@types/react-dom": "^19.1.6"
     },
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6"
   },
   "peerDependencies": {
     "@adaline/anthropic": "1.4.0",
