@@ -187,9 +187,7 @@ function EvalOutputCell({
                   <span className="search-highlight" key={`match-${index}`}>
                     {matchText}
                   </span>
-                  <span key={`text-after-${index}`}>
-                    {afterText}
-                  </span>
+                  <span key={`text-after-${index}`}>{afterText}</span>
                 </React.Fragment>
               );
             })}
