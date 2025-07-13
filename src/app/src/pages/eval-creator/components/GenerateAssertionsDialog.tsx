@@ -64,7 +64,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
 
     try {
       const testsToUse = testCase ? [testCase] : allTestCases;
-      
+
       await generationService.generateAssertions(prompts, testsToUse, options, {
         onProgress: (current, total) => {
           setProgress({ current, total });
@@ -109,7 +109,8 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
               Context
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Generating assertions for {testCase ? '1 specific test case' : `${allTestCases.length} test cases`}
+              Generating assertions for{' '}
+              {testCase ? '1 specific test case' : `${allTestCases.length} test cases`}
             </Typography>
             {prompts.length > 0 && (
               <Typography variant="body2" color="text.secondary">
@@ -123,7 +124,12 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
             <FormLabel component="legend">Assertion Type</FormLabel>
             <RadioGroup
               value={options.type}
-              onChange={(e) => setOptions({ ...options, type: e.target.value as GenerateAssertionsOptions['type'] })}
+              onChange={(e) =>
+                setOptions({
+                  ...options,
+                  type: e.target.value as GenerateAssertionsOptions['type'],
+                })
+              }
             >
               {Object.entries(ASSERTION_TYPE_DESCRIPTIONS).map(([value, description]) => (
                 <FormControlLabel
@@ -234,4 +240,4 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
   );
 };
 
-export default GenerateAssertionsDialog; 
+export default GenerateAssertionsDialog;

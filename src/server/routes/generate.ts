@@ -172,4 +172,4 @@ generateRouter.get('/job/:id', (req: Request, res: Response): void => {
       logs: job.logs,
     });
   }
-}); 
+});

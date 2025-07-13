@@ -108,7 +108,7 @@ class GenerationService {
    */
   async getJobStatus(jobId: string): Promise<GenerationJob> {
     const response = await callApi(`/generate/job/${jobId}`);
-    
+
     if (!response.ok) {
       throw new Error('Failed to check job status');
     }
@@ -227,4 +227,4 @@ class GenerationService {
 }
 
 // Export singleton instance
-export const generationService = new GenerationService(); 
+export const generationService = new GenerationService();

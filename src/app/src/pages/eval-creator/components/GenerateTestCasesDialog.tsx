@@ -16,6 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { TestCase, ProviderOptions } from '@promptfoo/types';
+import type { GenerationMetadata } from '../types';
 
 interface GenerateTestCasesDialogProps {
   open: boolean;
@@ -50,7 +51,7 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [_jobId, setJobId] = useState<string | null>(null);
 
   // Extract variables from prompts
   const extractedVariables = React.useMemo(() => {
@@ -109,8 +110,19 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
             clearInterval(intervalId);
             const { results } = jobStatus.result || {};
             if (results && Array.isArray(results)) {
+              const generationMetadata: GenerationMetadata = {
+                isGenerated: true,
+                generatedAt: new Date().toISOString(),
+                generatedBy: options.provider || 'default',
+                generationOptions: {
+                  numPersonas: options.numPersonas,
+                  numTestCasesPerPersona: options.numTestCasesPerPersona,
+                  instructions: options.instructions,
+                },
+              };
               const newTestCases: TestCase[] = results.map((varMapping) => ({
                 vars: varMapping,
+                metadata: generationMetadata,
               }));
               onGenerated(newTestCases);
               handleClose();
@@ -291,4 +303,4 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
   );
 };
 
-export default GenerateTestCasesDialog; 
+export default GenerateTestCasesDialog;

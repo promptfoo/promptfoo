@@ -202,7 +202,9 @@ export function createApp() {
 
   // Legacy endpoint - maintained for backward compatibility
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
-    logger.warn('Using deprecated /api/dataset/generate endpoint. Please use /api/generate/dataset instead.');
+    logger.warn(
+      'Using deprecated /api/dataset/generate endpoint. Please use /api/generate/dataset instead.',
+    );
     const testSuite: TestSuite = {
       prompts: req.body.prompts as Prompt[],
       tests: req.body.tests as TestCase[],
@@ -246,15 +248,17 @@ export function createApp() {
   // Configure proper MIME types for JavaScript files
   app.use(setJavaScriptMimeType);
 
-  app.use(express.static(staticDir, { 
-    dotfiles: 'allow',
-    setHeaders: (res, path) => {
-      // Ensure proper MIME types for JavaScript modules
-      if (path.endsWith('.js') || path.endsWith('.mjs') || path.endsWith('.cjs')) {
-        res.setHeader('Content-Type', 'application/javascript');
-      }
-    }
-  }));
+  app.use(
+    express.static(staticDir, {
+      dotfiles: 'allow',
+      setHeaders: (res, path) => {
+        // Ensure proper MIME types for JavaScript modules
+        if (path.endsWith('.js') || path.endsWith('.mjs') || path.endsWith('.cjs')) {
+          res.setHeader('Content-Type', 'application/javascript');
+        }
+      },
+    }),
+  );
 
   // Handle client routing, return all requests to the app
   app.get('/*splat', (req: Request, res: Response): void => {

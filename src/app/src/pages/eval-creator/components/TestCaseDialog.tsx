@@ -29,9 +29,9 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);
-  const [assertsFormKey, setAssertsFormKey] = useState(0);
   const [generateAssertionsOpen, setGenerateAssertionsOpen] = useState(false);
-  
+  const [recentlyGeneratedAssertions, setRecentlyGeneratedAssertions] = useState<Assertion[]>([]);
+
   const { config } = useStore();
   const providers = (config.providers || []) as any[];
   const prompts = (config.prompts || []) as any[];
@@ -47,11 +47,12 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
       setVars({});
       setAsserts([]);
     }
+    setRecentlyGeneratedAssertions([]); // Reset generated assertions when switching test cases
   }, [initialValues]);
 
   const handleGeneratedAssertions = (newAssertions: Assertion[]) => {
     setAsserts([...asserts, ...newAssertions]);
-    setAssertsFormKey(prev => prev + 1); // Force re-render of AssertsForm
+    setRecentlyGeneratedAssertions(newAssertions);
     setGenerateAssertionsOpen(false);
   };
 
@@ -83,7 +84,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
     setDescription('');
     setVars({});
     setAsserts([]);
-    setAssertsFormKey((prevKey) => prevKey + 1);
+    setRecentlyGeneratedAssertions([]);
   };
 
   return (
@@ -106,7 +107,6 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
             initialValues={initialValues?.vars as Record<string, string>}
           />
           <AssertsForm
-            key={assertsFormKey}
             onAdd={(asserts) => setAsserts(asserts)}
             initialValues={
               ((initialValues?.assert || []).filter(
@@ -115,6 +115,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
             }
             onGenerateClick={() => setGenerateAssertionsOpen(true)}
             canGenerate={normalizedPrompts.length > 0}
+            generatedAssertions={recentlyGeneratedAssertions}
           />
         </Box>
       </DialogContent>
@@ -131,7 +132,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
           Cancel
         </Button>
       </DialogActions>
-      
+
       {/* Generate Assertions Dialog */}
       <GenerateAssertionsDialog
         open={generateAssertionsOpen}

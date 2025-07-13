@@ -6,6 +6,7 @@ import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
 import Publish from '@mui/icons-material/Publish';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -23,6 +24,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase } from '@promptfoo/types';
+import type { GenerationMetadata } from '../types';
 import GenerateTestCasesDialog from './GenerateTestCasesDialog';
 import TestCaseDialog from './TestCaseDialog';
 
@@ -100,6 +102,16 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const handleDuplicateTestCase = (event: React.MouseEvent, index: number) => {
     event.stopPropagation();
     const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
+    // Update generation metadata for duplicated test case
+    const metadata = duplicatedTestCase.metadata as GenerationMetadata | undefined;
+    if (metadata?.isGenerated) {
+      duplicatedTestCase.metadata = {
+        ...duplicatedTestCase.metadata,
+        isGenerated: false,
+        duplicatedFrom: 'generated',
+        duplicatedAt: new Date().toISOString(),
+      } as GenerationMetadata;
+    }
     setTestCases([...testCases, duplicatedTestCase]);
   };
 
@@ -220,9 +232,31 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                   }}
                 >
                   <TableCell>
-                    <Typography variant="body2">
-                      {testCase.description || `Test Case #${index + 1}`}
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2">
+                        {testCase.description || `Test Case #${index + 1}`}
+                      </Typography>
+                      {(() => {
+                        const metadata = testCase.metadata as GenerationMetadata | undefined;
+                        return metadata?.isGenerated ? (
+                          <Tooltip
+                            title={
+                              metadata.generatedAt
+                                ? `Generated on ${new Date(metadata.generatedAt).toLocaleString()}`
+                                : 'Generated test case'
+                            }
+                          >
+                            <Chip
+                              icon={<AutoAwesome />}
+                              label="Generated"
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                            />
+                          </Tooltip>
+                        ) : null;
+                      })()}
+                    </Stack>
                   </TableCell>
                   <TableCell>{testCase.assert?.length || 0} assertions</TableCell>
                   <TableCell>

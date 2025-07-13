@@ -4,9 +4,11 @@ import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
@@ -15,6 +17,7 @@ interface AssertsFormProps {
   initialValues: Assertion[];
   onGenerateClick?: () => void;
   canGenerate?: boolean;
+  generatedAssertions?: Assertion[]; // Assertions that were just generated
 }
 
 const assertTypes: AssertionType[] = [
@@ -72,8 +75,43 @@ const assertTypes: AssertionType[] = [
   'finish-reason',
 ];
 
-const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues, onGenerateClick, canGenerate = false }) => {
+const AssertsForm: React.FC<AssertsFormProps> = ({
+  onAdd,
+  initialValues,
+  onGenerateClick,
+  canGenerate = false,
+  generatedAssertions = [],
+}) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
+  const [generatedIndices, setGeneratedIndices] = useState<Set<number>>(new Set());
+  const [hasBeenEdited, setHasBeenEdited] = useState<Set<number>>(new Set());
+
+  // Reset when initialValues changes
+  React.useEffect(() => {
+    setAsserts(initialValues || []);
+    setGeneratedIndices(new Set());
+    setHasBeenEdited(new Set());
+  }, [initialValues]);
+
+  // Track which assertions are generated when generatedAssertions changes
+  React.useEffect(() => {
+    if (generatedAssertions.length > 0) {
+      const newGeneratedIndices = new Set<number>();
+      // Find indices of generated assertions by comparing with current asserts
+      asserts.forEach((assert, index) => {
+        const isGenerated = generatedAssertions.some(
+          (genAssert) =>
+            genAssert.type === assert.type &&
+            genAssert.value === assert.value &&
+            !hasBeenEdited.has(index),
+        );
+        if (isGenerated) {
+          newGeneratedIndices.add(index);
+        }
+      });
+      setGeneratedIndices(newGeneratedIndices);
+    }
+  }, [generatedAssertions, asserts, hasBeenEdited]);
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
@@ -85,6 +123,42 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues, onGener
     const newAsserts = asserts.filter((_, index) => index !== indexToRemove);
     setAsserts(newAsserts);
     onAdd(newAsserts);
+
+    // Update indices when removing an assertion
+    const newGeneratedIndices = new Set<number>();
+    const newHasBeenEdited = new Set<number>();
+
+    generatedIndices.forEach((idx) => {
+      if (idx < indexToRemove) {
+        newGeneratedIndices.add(idx);
+      } else if (idx > indexToRemove) {
+        newGeneratedIndices.add(idx - 1);
+      }
+    });
+
+    hasBeenEdited.forEach((idx) => {
+      if (idx < indexToRemove) {
+        newHasBeenEdited.add(idx);
+      } else if (idx > indexToRemove) {
+        newHasBeenEdited.add(idx - 1);
+      }
+    });
+
+    setGeneratedIndices(newGeneratedIndices);
+    setHasBeenEdited(newHasBeenEdited);
+  };
+
+  const handleAssertionEdit = (index: number) => {
+    // Mark assertion as edited, removing its generated status
+    if (generatedIndices.has(index)) {
+      const newGeneratedIndices = new Set(generatedIndices);
+      newGeneratedIndices.delete(index);
+      setGeneratedIndices(newGeneratedIndices);
+
+      const newHasBeenEdited = new Set(hasBeenEdited);
+      newHasBeenEdited.add(index);
+      setHasBeenEdited(newHasBeenEdited);
+    }
   };
 
   return (
@@ -94,6 +168,17 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues, onGener
         <Stack direction="column" spacing={2}>
           {asserts.map((assert, index) => (
             <Stack key={index} direction="row" spacing={2} alignItems="center">
+              {generatedIndices.has(index) && (
+                <Tooltip title="Generated assertion">
+                  <Chip
+                    icon={<AutoAwesome />}
+                    label="Generated"
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                  />
+                </Tooltip>
+              )}
               <Autocomplete
                 value={assert.type}
                 options={assertTypes}
@@ -105,6 +190,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues, onGener
                   );
                   setAsserts(newAsserts);
                   onAdd(newAsserts);
+                  handleAssertionEdit(index);
                 }}
                 renderInput={(params) => <TextField {...params} label="Type" />}
               />
@@ -119,6 +205,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues, onGener
                   );
                   setAsserts(newAsserts);
                   onAdd(newAsserts);
+                  handleAssertionEdit(index);
                 }}
               />
               <IconButton onClick={() => handleRemoveAssert(index)} size="small">
