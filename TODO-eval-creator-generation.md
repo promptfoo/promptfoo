@@ -227,6 +227,28 @@ This document outlines the implementation plan for adding dataset and assertion 
   - Generated chip tooltip shows batch generation time and provider
   - Properly handles duplicated test cases by removing batch reference
 
+### Code Refactoring for Maintainability (Completed 2025-07-13)
+
+- [x] Decomposed TestCasesSection component
+  - Split into TestCasesTable (display), TestCasesActions (controls), and main section
+  - Reduced from 356 lines to more manageable components
+  - Each component now has single responsibility
+- [x] Created custom hooks for reusable logic
+  - usePromptNormalization: Handles prompt format conversion
+  - useGenerationBatches: Manages generation batch metadata
+  - useAssertionTracking: Tracks generated vs edited assertions
+- [x] Improved TypeScript type safety
+  - Created type guards for runtime validation
+  - Replaced unsafe type assertions with proper checks
+  - Centralized assertion types in utils/assertTypes.ts
+- [x] Added error boundaries
+  - Created ErrorBoundary component for graceful error handling
+  - Wrapped critical components to prevent crashes
+- [x] Enhanced accessibility
+  - Added ARIA labels to interactive elements
+  - Implemented keyboard navigation for table rows
+  - Added proper focus management
+
 ### Next Priority Tasks
 
 1. **Generation History Tracking**

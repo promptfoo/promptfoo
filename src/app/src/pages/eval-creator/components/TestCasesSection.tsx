@@ -1,93 +1,116 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useStore } from '@app/stores/evalConfig';
-import AutoAwesome from '@mui/icons-material/AutoAwesome';
-import Copy from '@mui/icons-material/ContentCopy';
-import Delete from '@mui/icons-material/Delete';
-import Edit from '@mui/icons-material/Edit';
-import Publish from '@mui/icons-material/Publish';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
-import type { CsvRow, TestCase } from '@promptfoo/types';
+import type { CsvRow, TestCase, ProviderOptions } from '@promptfoo/types';
 import type { GenerationMetadata, GenerationBatch } from '../types';
+import { useGenerationBatches } from '../hooks/useGenerationBatches';
+import { usePromptNormalization } from '../hooks/usePromptNormalization';
+import { hasGenerationMetadata } from '../utils/typeGuards';
+import ErrorBoundary from './ErrorBoundary';
 import GenerateTestCasesDialog from './GenerateTestCasesDialog';
 import TestCaseDialog from './TestCaseDialog';
+import TestCasesTable from './TestCasesTable';
+import TestCasesActions from './TestCasesActions';
 
 interface TestCasesSectionProps {
   varsList: string[];
 }
 
+const EXAMPLE_TEST_CASE: TestCase = {
+  description: 'Fun animal adventure story',
+  vars: {
+    animal: 'penguin',
+    location: 'tropical island',
+  },
+  assert: [
+    {
+      type: 'contains-any',
+      value: ['penguin', 'adventure', 'tropical', 'island'],
+    },
+    {
+      type: 'llm-rubric',
+      value:
+        'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
+    },
+  ],
+};
+
 const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const { config, updateConfig } = useStore();
   const testCases = (config.tests || []) as TestCase[];
-  const providers = (config.providers || []) as any[];
-  const prompts = (config.prompts || []) as any[];
-  const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
+  const providers = (config.providers || []) as ProviderOptions[];
+  const prompts = config.prompts || [];
+  const setTestCases = useCallback(
+    (cases: TestCase[]) => updateConfig({ tests: cases }),
+    [updateConfig],
+  );
+  
+  // Dialog states
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
   
-  // Track generation batches
-  const [generationBatches, setGenerationBatches] = React.useState<Map<string, GenerationBatch>>(new Map());
+  // Custom hooks
+  const { batches: generationBatches, addBatch } = useGenerationBatches();
+  const normalizedPrompts = usePromptNormalization(prompts);
 
-  const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
-    if (editingTestCaseIndex === null) {
-      setTestCases([...testCases, testCase]);
-    } else {
-      const updatedTestCases = testCases.map((tc, index) =>
-        index === editingTestCaseIndex ? testCase : tc,
-      );
-      setTestCases(updatedTestCases);
-      setEditingTestCaseIndex(null);
-    }
+  const handleAddTestCase = useCallback(
+    (testCase: TestCase, shouldClose: boolean) => {
+      if (editingTestCaseIndex === null) {
+        setTestCases([...testCases, testCase]);
+      } else {
+        const updatedTestCases = testCases.map((tc, index) =>
+          index === editingTestCaseIndex ? testCase : tc,
+        );
+        setTestCases(updatedTestCases);
+        setEditingTestCaseIndex(null);
+      }
 
-    if (shouldClose) {
-      setTestCaseDialogOpen(false);
-    }
-  };
+      if (shouldClose) {
+        setTestCaseDialogOpen(false);
+      }
+    },
+    [editingTestCaseIndex, testCases, setTestCases],
+  );
 
-  const handleAddTestCaseFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.stopPropagation();
-    event.preventDefault();
+  const handleAddTestCaseFromFile = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
 
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const text = e.target?.result?.toString();
-        if (text) {
-          const { parse: parseCsv } = await import('csv-parse/sync');
-          const rows: CsvRow[] = parseCsv(text, { columns: true });
-          const newTestCases: TestCase[] = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
-          setTestCases([...testCases, ...newTestCases]);
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
+      const file = event.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const text = e.target?.result?.toString();
+          if (text) {
+            const { parse: parseCsv } = await import('csv-parse/sync');
+            const rows: CsvRow[] = parseCsv(text, { columns: true });
+            const newTestCases: TestCase[] = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
+            setTestCases([...testCases, ...newTestCases]);
+          }
+        };
+        reader.readAsText(file);
+      }
+    },
+    [testCases, setTestCases],
+  );
 
-  const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
-    event.stopPropagation();
-    setTestCaseToDelete(index);
-    setDeleteDialogOpen(true);
-  };
+  const handleRemoveTestCase = useCallback(
+    (index: number) => {
+      setTestCaseToDelete(index);
+      setDeleteDialogOpen(true);
+    },
+    [],
+  );
 
   const confirmDeleteTestCase = () => {
     if (testCaseToDelete !== null) {
@@ -102,211 +125,72 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     setDeleteDialogOpen(false);
   };
 
-  const handleDuplicateTestCase = (event: React.MouseEvent, index: number) => {
-    event.stopPropagation();
-    const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
-    // Update generation metadata for duplicated test case
-    const metadata = duplicatedTestCase.metadata as GenerationMetadata | undefined;
-    if (metadata?.generationBatchId) {
-      duplicatedTestCase.metadata = {
-        ...duplicatedTestCase.metadata,
-        generationBatchId: undefined, // Remove batch reference
-        duplicatedFrom: 'generated',
-        duplicatedAt: new Date().toISOString(),
-      } as GenerationMetadata;
-    }
-    setTestCases([...testCases, duplicatedTestCase]);
-  };
-
-  const handleGeneratedTestCases = (newTestCases: TestCase[]) => {
-    // Extract generation batch from the first test case if present
-    if (newTestCases.length > 0) {
-      const firstTestCase = newTestCases[0];
-      const batchInfo = (firstTestCase.metadata as any)?._generationBatch;
-      if (batchInfo) {
-        // Store the batch information
-        setGenerationBatches(prev => new Map(prev).set(batchInfo.id, batchInfo));
-        // Remove the temporary batch info from the test case
-        delete (firstTestCase.metadata as any)._generationBatch;
-      }
-    }
-    
-    setTestCases([...testCases, ...newTestCases]);
-    setGenerateDialogOpen(false);
-  };
-
-  // Extract normalized prompts (convert to string array)
-  const normalizedPrompts = React.useMemo(() => {
-    return prompts
-      .map((prompt) => {
-        if (typeof prompt === 'string') {
-          return prompt;
-        } else if (prompt && typeof prompt === 'object' && 'raw' in prompt) {
-          return prompt.raw;
+  const handleDuplicateTestCase = useCallback(
+    (index: number) => {
+      const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
+      // Update generation metadata for duplicated test case
+      if (hasGenerationMetadata(duplicatedTestCase.metadata)) {
+        const metadata = duplicatedTestCase.metadata;
+        if (metadata.generationBatchId) {
+          duplicatedTestCase.metadata = {
+            ...duplicatedTestCase.metadata,
+            generationBatchId: undefined, // Remove batch reference
+            duplicatedFrom: 'generated',
+            duplicatedAt: new Date().toISOString(),
+          } as GenerationMetadata;
         }
-        return '';
-      })
-      .filter((p) => p !== '');
-  }, [prompts]);
+      }
+      setTestCases([...testCases, duplicatedTestCase]);
+    },
+    [testCases, setTestCases],
+  );
+
+  const handleGeneratedTestCases = useCallback(
+    (newTestCases: TestCase[]) => {
+      // Extract generation batch from the first test case if present
+      if (newTestCases.length > 0) {
+        const firstTestCase = newTestCases[0];
+        const batchInfo = (firstTestCase.metadata as any)?._generationBatch;
+        if (batchInfo) {
+          // Store the batch information
+          addBatch(batchInfo);
+          // Remove the temporary batch info from the test case
+          delete (firstTestCase.metadata as any)._generationBatch;
+        }
+      }
+      
+      setTestCases([...testCases, ...newTestCases]);
+      setGenerateDialogOpen(false);
+    },
+    [testCases, setTestCases, addBatch],
+  );
+
+  const handleAddExample = useCallback(() => {
+    setTestCases([...testCases, EXAMPLE_TEST_CASE]);
+  }, [testCases, setTestCases]);
+
+  const handleEditTestCase = useCallback((index: number) => {
+    setEditingTestCaseIndex(index);
+    setTestCaseDialogOpen(true);
+  }, []);
 
   return (
-    <>
-      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
-        <Typography variant="h5">Test Cases</Typography>
-        <div>
-          <label htmlFor={`file-input-add-test-case`}>
-            <Tooltip title="Upload test cases from csv">
-              <span>
-                <IconButton component="span">
-                  <Publish />
-                </IconButton>
-                <input
-                  id={`file-input-add-test-case`}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleAddTestCaseFromFile}
-                  style={{ display: 'none' }}
-                />
-              </span>
-            </Tooltip>
-          </label>
-          {testCases.length === 0 && (
-            <Button
-              color="secondary"
-              onClick={() => {
-                const exampleTestCase: TestCase = {
-                  description: 'Fun animal adventure story',
-                  vars: {
-                    animal: 'penguin',
-                    location: 'tropical island',
-                  },
-                  assert: [
-                    {
-                      type: 'contains-any',
-                      value: ['penguin', 'adventure', 'tropical', 'island'],
-                    },
-                    {
-                      type: 'llm-rubric',
-                      value:
-                        'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
-                    },
-                  ],
-                };
-                setTestCases([...testCases, exampleTestCase]);
-              }}
-              sx={{ mr: 1 }}
-            >
-              Add Example
-            </Button>
-          )}
-          <Button
-            color="primary"
-            onClick={() => setGenerateDialogOpen(true)}
-            variant="outlined"
-            startIcon={<AutoAwesome />}
-            disabled={normalizedPrompts.length === 0}
-            sx={{ mr: 1 }}
-          >
-            Generate Test Cases
-          </Button>
-          <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
-            Add Test Case
-          </Button>
-        </div>
-      </Stack>
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Description</TableCell>
-              <TableCell>Assertions</TableCell>
-              <TableCell>Variables</TableCell>
-              <TableCell align="right"></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {testCases.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} align="center">
-                  No test cases added yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              testCases.map((testCase, index) => (
-                <TableRow
-                  key={index}
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                      cursor: 'pointer',
-                    },
-                  }}
-                  onClick={() => {
-                    setEditingTestCaseIndex(index);
-                    setTestCaseDialogOpen(true);
-                  }}
-                >
-                  <TableCell>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography variant="body2">
-                        {testCase.description || `Test Case #${index + 1}`}
-                      </Typography>
-                      {(() => {
-                        const metadata = testCase.metadata as GenerationMetadata | undefined;
-                        const batchId = metadata?.generationBatchId;
-                        const batch = batchId ? generationBatches.get(batchId) : null;
-                        
-                        return batch ? (
-                          <Tooltip
-                            title={`Generated on ${new Date(batch.generatedAt).toLocaleString()} by ${batch.generatedBy}`}
-                          >
-                            <Chip
-                              icon={<AutoAwesome />}
-                              label="Generated"
-                              size="small"
-                              color="primary"
-                              variant="outlined"
-                            />
-                          </Tooltip>
-                        ) : null;
-                      })()}
-                    </Stack>
-                  </TableCell>
-                  <TableCell>{testCase.assert?.length || 0} assertions</TableCell>
-                  <TableCell>
-                    {Object.entries(testCase.vars || {})
-                      .map(([k, v]) => k + '=' + v)
-                      .join(', ')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ minWidth: 150 }}>
-                    <IconButton
-                      onClick={() => {
-                        setEditingTestCaseIndex(index);
-                        setTestCaseDialogOpen(true);
-                      }}
-                      size="small"
-                    >
-                      <Edit />
-                    </IconButton>
-                    <IconButton
-                      onClick={(event) => handleDuplicateTestCase(event, index)}
-                      size="small"
-                    >
-                      <Copy />
-                    </IconButton>
-                    <IconButton
-                      onClick={(event) => handleRemoveTestCase(event, index)}
-                      size="small"
-                    >
-                      <Delete />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+    <ErrorBoundary>
+      <TestCasesActions
+        hasTestCases={testCases.length > 0}
+        hasPrompts={normalizedPrompts.length > 0}
+        onAddExample={handleAddExample}
+        onGenerate={() => setGenerateDialogOpen(true)}
+        onAdd={() => setTestCaseDialogOpen(true)}
+        onUpload={handleAddTestCaseFromFile}
+      />
+      <TestCasesTable
+        testCases={testCases}
+        generationBatches={generationBatches}
+        onEdit={handleEditTestCase}
+        onDuplicate={handleDuplicateTestCase}
+        onDelete={handleRemoveTestCase}
+      />
       <TestCaseDialog
         open={testCaseDialogOpen}
         onAdd={handleAddTestCase}
@@ -349,7 +233,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         providers={providers}
         onGenerated={handleGeneratedTestCases}
       />
-    </>
+    </ErrorBoundary>
   );
 };
 
