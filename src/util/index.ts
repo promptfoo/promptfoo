@@ -283,7 +283,10 @@ export function providerToIdentifier(
   }
 
   if (isProviderOptions(provider)) {
-    return canonicalizeProviderId(provider.id);
+    if (provider.id) {
+      return canonicalizeProviderId(provider.id);
+    }
+    return undefined;
   }
 
   // Handle any other object with id property
