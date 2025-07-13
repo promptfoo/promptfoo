@@ -68,7 +68,7 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
   if (error.code === 'EADDRINUSE') {
     logger.error(`Port ${port} is already in use. Do you have another Promptfoo instance running?`);
   } else {
-    logger.error(`Failed to start server: ${error.message}`);
+    logger.error(`Failed to start server: ${error.message || error}`);
   }
   process.exit(1);
 }
@@ -175,8 +175,8 @@ export function createApp() {
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
-    logger.debug(`Share request body: ${JSON.stringify(req.body)}`);
     const { id } = req.body;
+    logger.debug(`Share request for eval ID: ${id || 'undefined'}`);
 
     const result = await readResult(id);
     if (!result) {
@@ -189,10 +189,10 @@ export function createApp() {
 
     try {
       const url = await createShareableUrl(eval_, true);
-      logger.debug(`Generated share URL: ${url}`);
+      logger.debug(`Generated share URL for eval: ${id}`);
       res.json({ url });
     } catch (error) {
-      logger.error(`Failed to generate share URL: ${error}`);
+      logger.error(`Failed to generate share URL for eval ${id}: ${error instanceof Error ? error.message : error}`);
       res.status(500).json({ error: 'Failed to generate share URL' });
     }
   });
@@ -229,7 +229,7 @@ export function createApp() {
       await telemetry.record(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
-      logger.error(`Error processing telemetry request: ${error}`);
+      logger.error(`Error processing telemetry request: ${error instanceof Error ? error.message : error}`);
       res.status(500).json({ error: 'Failed to process telemetry request' });
     }
   });
@@ -283,8 +283,8 @@ export async function startServer(
     .listen(port, () => {
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((err) => {
-        logger.error(`Failed to handle browser behavior: ${err}`);
+      openBrowser(browserBehavior, port).catch((error) => {
+        logger.error(`Failed to handle browser behavior: ${error instanceof Error ? error.message : error}`);
       });
     })
     .on('error', (error: NodeJS.ErrnoException) => {
