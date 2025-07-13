@@ -56,20 +56,23 @@ const DialogLoader = () => (
 const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const { config, updateConfig } = useStore();
   const [isPending, startTransition] = useTransition();
-  
+
   // Memoize expensive computations
   const testCases = useMemo(() => (config.tests || []) as TestCase[], [config.tests]);
-  const providers = useMemo(() => (config.providers || []) as ProviderOptions[], [config.providers]);
+  const providers = useMemo(
+    () => (config.providers || []) as ProviderOptions[],
+    [config.providers],
+  );
   const prompts = useMemo(() => config.prompts || [], [config.prompts]);
-  
+
   // Use reducer for complex state management
   const { state, actions } = useTestCasesReducer(testCases);
-  
+
   // Dialog states
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
-  
+
   // Custom hooks
   const { batches: generationBatches, addBatch } = useGenerationBatches();
   const normalizedPrompts = usePromptNormalization(prompts);
@@ -113,7 +116,7 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
             const { parse: parseCsv } = await import('csv-parse/sync');
             const rows: CsvRow[] = parseCsv(text, { columns: true });
             const newTestCases: TestCase[] = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
-            
+
             startTransition(() => {
               actions.addMultipleTestCases(newTestCases);
             });
@@ -167,7 +170,7 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           delete (firstTestCase.metadata as any)._generationBatch;
         }
       }
-      
+
       startTransition(() => {
         actions.addMultipleTestCases(newTestCases);
       });
@@ -182,10 +185,13 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     });
   }, [actions]);
 
-  const handleEditTestCase = useCallback((index: number) => {
-    actions.setEditingIndex(index);
-    setTestCaseDialogOpen(true);
-  }, [actions]);
+  const handleEditTestCase = useCallback(
+    (index: number) => {
+      actions.setEditingIndex(index);
+      setTestCaseDialogOpen(true);
+    },
+    [actions],
+  );
 
   return (
     <ErrorBoundary>
@@ -212,7 +218,9 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           open={testCaseDialogOpen}
           onAdd={handleAddTestCase}
           varsList={varsList}
-          initialValues={state.editingIndex === null ? undefined : state.testCases[state.editingIndex]}
+          initialValues={
+            state.editingIndex === null ? undefined : state.testCases[state.editingIndex]
+          }
           onCancel={() => {
             actions.setEditingIndex(null);
             setTestCaseDialogOpen(false);

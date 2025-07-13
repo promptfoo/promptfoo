@@ -39,10 +39,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
       <DialogTitle>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <span>{`Edit Prompt ${index + 1}`}</span>
-          <PromptSuggestions 
-            onSelectPrompt={setEditingPrompt}
-            currentPrompt={editingPrompt}
-          />
+          <PromptSuggestions onSelectPrompt={setEditingPrompt} currentPrompt={editingPrompt} />
         </Stack>
       </DialogTitle>
       <DialogContent>

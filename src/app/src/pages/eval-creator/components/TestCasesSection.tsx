@@ -50,14 +50,14 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     (cases: TestCase[]) => updateConfig({ tests: cases }),
     [updateConfig],
   );
-  
+
   // Dialog states
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
-  
+
   // Custom hooks
   const { batches: generationBatches, addBatch } = useGenerationBatches();
   const normalizedPrompts = usePromptNormalization(prompts);
@@ -104,13 +104,10 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     [testCases, setTestCases],
   );
 
-  const handleRemoveTestCase = useCallback(
-    (index: number) => {
-      setTestCaseToDelete(index);
-      setDeleteDialogOpen(true);
-    },
-    [],
-  );
+  const handleRemoveTestCase = useCallback((index: number) => {
+    setTestCaseToDelete(index);
+    setDeleteDialogOpen(true);
+  }, []);
 
   const confirmDeleteTestCase = () => {
     if (testCaseToDelete !== null) {
@@ -158,7 +155,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           delete (firstTestCase.metadata as any)._generationBatch;
         }
       }
-      
+
       setTestCases([...testCases, ...newTestCases]);
       setGenerateDialogOpen(false);
     },

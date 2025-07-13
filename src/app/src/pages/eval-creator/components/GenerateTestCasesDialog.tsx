@@ -136,7 +136,7 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
             if (results && Array.isArray(results)) {
               // Create a unique batch ID for this generation
               const batchId = uuidv4();
-              
+
               // Store the batch information (in a real app, this would be saved to a database)
               const generationBatch: GenerationBatch = {
                 id: batchId,
@@ -149,7 +149,7 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
                   instructions: options.instructions,
                 },
               };
-              
+
               // Create test cases with just the batch ID reference
               const newTestCases: TestCase[] = results.map((varMapping) => ({
                 vars: varMapping,
@@ -157,13 +157,13 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
                   generationBatchId: batchId,
                 },
               }));
-              
+
               // In a real implementation, we'd store the batch info somewhere
               // For now, we'll attach it to the first test case for the UI to use
               if (newTestCases.length > 0) {
                 (newTestCases[0].metadata as any)._generationBatch = generationBatch;
               }
-              
+
               onGenerated(newTestCases);
               handleClose();
             } else {

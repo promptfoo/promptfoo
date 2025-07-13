@@ -23,7 +23,7 @@ export function useAssertionTracking(
   useEffect(() => {
     if (generatedAssertions.length > 0) {
       const newGeneratedIndices = new Set<number>();
-      
+
       // Find indices of generated assertions by comparing with current assertions
       generatedAssertions.forEach((genAssertion) => {
         const index = initialAssertions.findIndex(
@@ -35,31 +35,31 @@ export function useAssertionTracking(
           newGeneratedIndices.add(index);
         }
       });
-      
+
       setGeneratedIndices(newGeneratedIndices);
     }
   }, [generatedAssertions, initialAssertions]);
 
-  const markAsEdited = useCallback((index: number) => {
-    if (generatedIndices.has(index)) {
-      setGeneratedIndices((prev) => {
-        const next = new Set(prev);
-        next.delete(index);
-        return next;
-      });
-      setHasBeenEdited((prev) => new Set(prev).add(index));
-    }
-  }, [generatedIndices]);
+  const markAsEdited = useCallback(
+    (index: number) => {
+      if (generatedIndices.has(index)) {
+        setGeneratedIndices((prev) => {
+          const next = new Set(prev);
+          next.delete(index);
+          return next;
+        });
+        setHasBeenEdited((prev) => new Set(prev).add(index));
+      }
+    },
+    [generatedIndices],
+  );
 
   const isGenerated = useCallback(
     (index: number) => generatedIndices.has(index),
     [generatedIndices],
   );
 
-  const wasEdited = useCallback(
-    (index: number) => hasBeenEdited.has(index),
-    [hasBeenEdited],
-  );
+  const wasEdited = useCallback((index: number) => hasBeenEdited.has(index), [hasBeenEdited]);
 
   return {
     generatedIndices,

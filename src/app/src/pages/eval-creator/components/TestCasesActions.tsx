@@ -41,17 +41,13 @@ const TestCasesActions = React.memo<TestCasesActionsProps>(
               </span>
             </Tooltip>
           </label>
-          
+
           {!hasTestCases && (
-            <Button
-              color="secondary"
-              onClick={onAddExample}
-              sx={{ mr: 1 }}
-            >
+            <Button color="secondary" onClick={onAddExample} sx={{ mr: 1 }}>
               Add Example
             </Button>
           )}
-          
+
           <Button
             color="primary"
             onClick={onGenerate}
@@ -62,12 +58,8 @@ const TestCasesActions = React.memo<TestCasesActionsProps>(
           >
             Generate Test Cases
           </Button>
-          
-          <Button 
-            color="primary" 
-            onClick={onAdd} 
-            variant="contained"
-          >
+
+          <Button color="primary" onClick={onAdd} variant="contained">
             Add Test Case
           </Button>
         </div>

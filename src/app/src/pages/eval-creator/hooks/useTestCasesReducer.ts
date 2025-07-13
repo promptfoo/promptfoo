@@ -40,11 +40,11 @@ function testCasesReducer(state: TestCasesState, action: TestCasesAction): TestC
 
     case 'DELETE_TEST_CASE': {
       const newTestCases = state.testCases.filter((_, i) => i !== action.index);
-      return { 
-        ...state, 
-        testCases: newTestCases, 
+      return {
+        ...state,
+        testCases: newTestCases,
         deleteIndex: null,
-        isDeleting: false 
+        isDeleting: false,
       };
     }
 

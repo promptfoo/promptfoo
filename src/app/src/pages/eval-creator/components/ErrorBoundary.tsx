@@ -42,16 +42,9 @@ class ErrorBoundary extends Component<Props, State> {
         <Alert severity="error" sx={{ mt: 2 }}>
           <AlertTitle>Something went wrong</AlertTitle>
           <Stack spacing={2}>
+            <div>{this.state.error?.message || 'An unexpected error occurred'}</div>
             <div>
-              {this.state.error?.message || 'An unexpected error occurred'}
-            </div>
-            <div>
-              <Button 
-                variant="outlined" 
-                color="error" 
-                onClick={this.handleReset}
-                size="small"
-              >
+              <Button variant="outlined" color="error" onClick={this.handleReset} size="small">
                 Try Again
               </Button>
             </div>

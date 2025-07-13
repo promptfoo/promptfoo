@@ -32,16 +32,18 @@ const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
   },
   {
     label: 'Code Assistant',
-    template: 'You are an expert {{language}} developer. {{task}}\n\nRequirements:\n{{requirements}}',
+    template:
+      'You are an expert {{language}} developer. {{task}}\n\nRequirements:\n{{requirements}}',
     description: 'Programming and code generation tasks',
     variables: ['language', 'task', 'requirements'],
     category: 'general',
   },
-  
+
   // Testing-specific prompts
   {
     label: 'Q&A System',
-    template: 'Answer the following question based on the provided context.\n\nContext: {{context}}\n\nQuestion: {{question}}',
+    template:
+      'Answer the following question based on the provided context.\n\nContext: {{context}}\n\nQuestion: {{question}}',
     description: 'Question-answering with context',
     variables: ['context', 'question'],
     category: 'testing',
@@ -55,16 +57,18 @@ const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
   },
   {
     label: 'Translation',
-    template: 'Translate the following text from {{sourceLanguage}} to {{targetLanguage}}:\n\n{{text}}',
+    template:
+      'Translate the following text from {{sourceLanguage}} to {{targetLanguage}}:\n\n{{text}}',
     description: 'Language translation tasks',
     variables: ['sourceLanguage', 'targetLanguage', 'text'],
     category: 'testing',
   },
-  
+
   // Safety testing prompts
   {
     label: 'Content Moderation',
-    template: 'You are a content moderator. Review the following {{contentType}} and determine if it violates our guidelines:\n\n{{content}}',
+    template:
+      'You are a content moderator. Review the following {{contentType}} and determine if it violates our guidelines:\n\n{{content}}',
     description: 'Test content moderation capabilities',
     variables: ['contentType', 'content'],
     category: 'safety',
@@ -76,7 +80,7 @@ const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
     variables: ['userInput'],
     category: 'safety',
   },
-  
+
   // Performance testing prompts
   {
     label: 'Complex Reasoning',
@@ -92,7 +96,7 @@ const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
     variables: ['dataType', 'data'],
     category: 'performance',
   },
-  
+
   // UX testing prompts
   {
     label: 'Tone Testing',
@@ -119,10 +123,10 @@ const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({ onSelectPrompt, c
   const [open, setOpen] = React.useState(false);
   const [selectedCategory, setSelectedCategory] = React.useState<string | null>(null);
 
-  const categories = Array.from(new Set(PROMPT_SUGGESTIONS.map(s => s.category).filter(Boolean)));
-  
+  const categories = Array.from(new Set(PROMPT_SUGGESTIONS.map((s) => s.category).filter(Boolean)));
+
   const filteredSuggestions = selectedCategory
-    ? PROMPT_SUGGESTIONS.filter(s => s.category === selectedCategory)
+    ? PROMPT_SUGGESTIONS.filter((s) => s.category === selectedCategory)
     : PROMPT_SUGGESTIONS;
 
   const handleSelectPrompt = (suggestion: PromptSuggestion) => {
@@ -176,11 +180,11 @@ const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({ onSelectPrompt, c
             <Grid container spacing={2}>
               {filteredSuggestions.map((suggestion, index) => (
                 <Grid item xs={12} md={6} key={index}>
-                  <Card 
-                    variant="outlined" 
-                    sx={{ 
+                  <Card
+                    variant="outlined"
+                    sx={{
                       cursor: 'pointer',
-                      '&:hover': { 
+                      '&:hover': {
                         boxShadow: 2,
                         borderColor: 'primary.main',
                       },
@@ -195,9 +199,9 @@ const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({ onSelectPrompt, c
                         <Typography variant="body2" color="text.secondary">
                           {suggestion.description}
                         </Typography>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
+                        <Typography
+                          variant="body2"
+                          sx={{
                             fontFamily: 'monospace',
                             bgcolor: 'grey.100',
                             p: 1,
@@ -206,8 +210,8 @@ const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({ onSelectPrompt, c
                             whiteSpace: 'pre-wrap',
                           }}
                         >
-                          {suggestion.template.length > 100 
-                            ? suggestion.template.substring(0, 100) + '...' 
+                          {suggestion.template.length > 100
+                            ? suggestion.template.substring(0, 100) + '...'
                             : suggestion.template}
                         </Typography>
                         {suggestion.variables && suggestion.variables.length > 0 && (
@@ -237,8 +241,9 @@ const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({ onSelectPrompt, c
             <Card variant="outlined" sx={{ bgcolor: 'grey.50' }}>
               <CardContent>
                 <Typography variant="body2" color="text.secondary">
-                  💡 <strong>Tip:</strong> These are starting templates. Customize them to fit your specific testing needs. 
-                  Use {`{{variable}}`} syntax to create dynamic placeholders that will be filled with test data.
+                  💡 <strong>Tip:</strong> These are starting templates. Customize them to fit your
+                  specific testing needs. Use {`{{variable}}`} syntax to create dynamic placeholders
+                  that will be filled with test data.
                 </Typography>
               </CardContent>
             </Card>

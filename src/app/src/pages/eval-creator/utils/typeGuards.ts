@@ -23,9 +23,7 @@ export function isProviderOptions(value: unknown): value is ProviderOptions {
 /**
  * Type guard to check if metadata contains generation info
  */
-export function hasGenerationMetadata(
-  metadata: unknown,
-): metadata is GenerationMetadata {
+export function hasGenerationMetadata(metadata: unknown): metadata is GenerationMetadata {
   return (
     typeof metadata === 'object' &&
     metadata !== null &&
@@ -50,9 +48,6 @@ export function isGenerationBatch(value: unknown): value is GenerationBatch {
 /**
  * Safe array type guard
  */
-export function isArray<T>(
-  value: unknown,
-  itemGuard: (item: unknown) => item is T,
-): value is T[] {
+export function isArray<T>(value: unknown, itemGuard: (item: unknown) => item is T): value is T[] {
   return Array.isArray(value) && value.every(itemGuard);
 }
