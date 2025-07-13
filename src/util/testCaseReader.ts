@@ -326,7 +326,7 @@ export async function loadTestsFromGlob(
     return (await $RefParser.dereference(testCases)) as TestCase[];
   };
 
-  const ret: TestCase<Record<string, string | string[] | object>>[] = [];
+  const ret: TestCase[] = [];
   if (testFiles.length < 1) {
     logger.error(`No test files found for path: ${loadTestsGlob}`);
     return ret;
