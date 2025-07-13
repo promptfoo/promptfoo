@@ -41,6 +41,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -60,6 +61,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -81,6 +83,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -102,6 +105,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -140,6 +144,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Expected output');

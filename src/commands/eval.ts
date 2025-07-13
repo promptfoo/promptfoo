@@ -433,7 +433,7 @@ export async function doEval(
           `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
         );
       }
-      if (evalTokens.completionDetails.reasoning > 0) {
+      if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
         logger.info(
           `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
         );
@@ -483,23 +483,30 @@ export async function doEval(
       }
 
       // Grading tokens
-      if (tokenUsage.assertions.total > 0) {
+      if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
         logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
         logger.info(
           `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
         );
-        logger.info(
-          `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
-        );
-        logger.info(
-          `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
-        );
-        if (tokenUsage.assertions.cached > 0) {
+        if (tokenUsage.assertions.prompt) {
+          logger.info(
+            `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
+          );
+        }
+        if (tokenUsage.assertions.completion) {
+          logger.info(
+            `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
+          );
+        }
+        if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
           logger.info(
             `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
           );
         }
-        if (tokenUsage.assertions.completionDetails?.reasoning > 0) {
+        if (
+          tokenUsage.assertions.completionDetails?.reasoning &&
+          tokenUsage.assertions.completionDetails.reasoning > 0
+        ) {
           logger.info(
             `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
           );

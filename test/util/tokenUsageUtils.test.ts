@@ -213,7 +213,7 @@ describe('tokenUsageUtils', () => {
 
     it('should increment numRequests when response exists but has no tokenUsage', () => {
       const target = createEmptyTokenUsage();
-      const response = { output: 'test' };
+      const response = {};
 
       accumulateResponseTokenUsage(target, response);
 
@@ -269,7 +269,7 @@ describe('tokenUsageUtils', () => {
 
     it('should increment numRequests when grader result exists but has no tokensUsed', () => {
       const target = createEmptyTokenUsage();
-      const graderResult = { pass: true };
+      const graderResult = {};
 
       accumulateGraderTokenUsage(target, graderResult);
 
