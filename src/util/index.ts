@@ -20,7 +20,6 @@ import {
   type NunjucksFilterMap,
   type TestCase,
   type OutputFile,
-  type CompletedPrompt,
   type CsvRow,
   isApiProvider,
   isProviderOptions,
@@ -227,18 +226,6 @@ export function setupEnv(envPath: string | undefined) {
     dotenv.config();
   }
 }
-
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-  uuid: string;
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-};
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
   if (isApiProvider(provider)) {

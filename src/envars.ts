@@ -3,7 +3,7 @@ import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
-export type EnvVars = {
+type EnvVars = {
   //=========================================================================
   // Core promptfoo configuration
   //=========================================================================

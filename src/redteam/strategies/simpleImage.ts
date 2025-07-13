@@ -41,7 +41,7 @@ async function importSharp() {
  * Converts text to an image and then to base64 encoded string
  * using the sharp library which has better cross-platform support than canvas
  */
-export async function textToImage(text: string): Promise<string> {
+async function textToImage(text: string): Promise<string> {
   // Special case for test environment - avoids actually loading Sharp
   if (getEnvString('NODE_ENV') === 'test' || getEnvString('JEST_WORKER_ID')) {
     return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

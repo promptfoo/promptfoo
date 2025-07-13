@@ -1,5 +1,6 @@
 import { desc, eq, and, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
+import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
   datasetsTable,
@@ -28,8 +29,6 @@ import {
 } from '../types';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-
-const DEFAULT_QUERY_LIMIT = 100;
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -211,7 +210,7 @@ export async function updateResult(
   }
 }
 
-export async function getPromptsWithPredicate(
+async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
@@ -276,7 +275,7 @@ export function getPromptsForTestCasesHash(
   }, limit);
 }
 
-export async function getTestCasesWithPredicate(
+async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
@@ -377,7 +376,7 @@ export async function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-export async function getEvalsWithPredicate(
+async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<EvalWithMetadata[]> {
@@ -424,7 +423,7 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
-export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
+async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
   return getEvalsWithPredicate(() => true, limit);
 }
 

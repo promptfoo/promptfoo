@@ -4,7 +4,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
 import { RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
+const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
 
 const DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection.json';

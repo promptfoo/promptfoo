@@ -27,7 +27,7 @@ import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
-export type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
@@ -405,12 +405,6 @@ type HookContextMap = {
   afterEach: AfterEachExtensionHookContext;
   afterAll: AfterAllExtensionHookContext;
 };
-
-export type ExtensionHookContext =
-  | BeforeAllExtensionHookContext
-  | BeforeEachExtensionHookContext
-  | AfterEachExtensionHookContext
-  | AfterAllExtensionHookContext;
 
 /**
  * Runs extension hooks for the given hook name and context. The hook will be called with the context object,

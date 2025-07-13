@@ -13,7 +13,7 @@ import { sleep } from '../../util/time';
 import { extractGoalFromPrompt } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:intent';
+const PLUGIN_ID = 'promptfoo:redteam:intent';
 
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;

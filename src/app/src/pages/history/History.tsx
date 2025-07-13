@@ -23,7 +23,7 @@ import {
   gridFilteredSortedRowIdsSelector,
   gridVisibleColumnFieldsSelector,
 } from '@mui/x-data-grid';
-import type { StandaloneEval } from '@promptfoo/util';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
 function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   const apiRef = useGridApiContext();

@@ -34,6 +34,9 @@ export default defineConfig({
       '@promptfoo': path.resolve(__dirname, '../'),
     },
   },
+  optimizeDeps: {
+    exclude: ['react-syntax-highlighter'],
+  },
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
@@ -58,7 +61,7 @@ export default defineConfig({
           'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
           'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
-          'vendor-syntax': ['prismjs', 'react-syntax-highlighter'],
+          'vendor-syntax': ['prismjs'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
         },
       },
