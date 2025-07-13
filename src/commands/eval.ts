@@ -228,7 +228,7 @@ ${chalk.green(`${runCommand} -j 1`)}`),
         );
         if (!extension) {
           throw new Error(
-            `Unsupported output file format: ${maybeFilePath}. Please use one of: ${(OutputFileExtension as any).options.join(', ')}.`,
+            `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
           );
         }
       }

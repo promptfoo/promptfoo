@@ -48,13 +48,14 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate assertions',
-    numAssertions: options.numAssertions || 1,
+    numAssertions: options.numAssertions ? Number.parseInt(options.numAssertions, 10) : 1,
   });
   // Call synthesize function
   const assertions = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
     provider: options.provider,
     type: options.type,
+    numQuestions: options.numAssertions ? Number.parseInt(options.numAssertions, 10) : 1,
   });
   logger.info(
     `Generated ${assertions.length} assertions in ${Math.round((Date.now() - startTime) / 1000)}s`,

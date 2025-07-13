@@ -47,16 +47,18 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
   }
 
   const startTime = Date.now();
+  const numPersonas = Number(options.numPersonas) || 5;
+  const numTestCasesPerPersona = Number(options.numTestCasesPerPersona) || 3;
   telemetry.record('command_used', {
     name: 'generate dataset',
-    numPersonas: options.numPersonas || 5,
-    numTestCasesPerPersona: options.numTestCasesPerPersona || 3,
+    numPersonas,
+    numTestCasesPerPersona,
   });
   // Call synthesize function
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
-    numPersonas: Number(options.numPersonas) || 5,
-    numTestCasesPerPersona: Number(options.numTestCasesPerPersona) || 3,
+    numPersonas,
+    numTestCasesPerPersona,
     provider: options.provider,
   });
   logger.info(

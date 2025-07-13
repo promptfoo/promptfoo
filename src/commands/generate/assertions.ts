@@ -37,8 +37,12 @@ export function generateAssertionsCommand(
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option('--numAssertions <amount>', 'Number of assertions to generate')
     .option(
+      '-i, --instructions [instructions]',
+      'Additional instructions to guide assertion generation',
+    )
+    .option(
       '--provider <provider>',
-      `Provider to use for generating adversarial tests. Defaults to the default grading provider.`,
+      `Provider to use for generating assertions. Defaults to the default grading provider.`,
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')

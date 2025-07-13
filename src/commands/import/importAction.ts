@@ -12,6 +12,9 @@ export async function importAction(file: string): Promise<void> {
   try {
     const fileContent = fs.readFileSync(file, 'utf-8');
     const evalData = JSON.parse(fileContent);
+    if (!evalData.results || !evalData.config) {
+      throw new Error('Invalid import file: missing required fields "results" or "config"');
+    }
     if (evalData.results.version === 3) {
       logger.debug('Importing v3 eval');
       const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
@@ -40,7 +43,7 @@ export async function importAction(file: string): Promise<void> {
     logger.info(`Eval with ID ${evalId} has been successfully imported.`);
     telemetry.record('command_used', {
       name: 'import',
-      evalId: evalData.id,
+      evalId: evalId,
     });
   } catch (error) {
     logger.error(`Failed to import eval: ${error}`);

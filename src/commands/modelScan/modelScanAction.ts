@@ -1,18 +1,16 @@
 import chalk from 'chalk';
 import { spawn } from 'child_process';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import logger from '../../logger';
 
-const execAsync = promisify(exec);
-
 export async function checkModelAuditInstalled(): Promise<boolean> {
-  try {
-    await execAsync('which modelaudit');
-    return true;
-  } catch {
-    return false;
-  }
+  return new Promise((resolve) => {
+    const child = spawn('modelaudit', ['--version'], { 
+      stdio: 'ignore',
+      shell: true 
+    });
+    child.on('error', () => resolve(false));
+    child.on('exit', (code) => resolve(code === 0));
+  });
 }
 
 export async function modelScanAction(

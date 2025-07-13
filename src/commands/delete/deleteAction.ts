@@ -5,13 +5,13 @@ import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { deleteAllEvals, deleteEval, getEvalFromId } from '../../util/database';
 
-export async function handleEvalDelete(evalId: string, envPath?: string) {
+export async function handleEvalDelete(evalId: string) {
   try {
     await deleteEval(evalId);
     logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
   } catch (error) {
     logger.error(`Could not delete evaluation with ID ${evalId}:\n${error}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
@@ -35,7 +35,7 @@ export async function deleteAction(id: string, cmdObj: { envPath?: string }): Pr
 
   const evl = await getEvalFromId(id);
   if (evl) {
-    return handleEvalDelete(id, cmdObj.envPath);
+    return handleEvalDelete(id);
   }
 
   logger.error(`No resource found with ID ${id}`);
@@ -55,7 +55,7 @@ export async function deleteEvalAction(
   if (evalId === 'latest') {
     const latestResults = await Eval.latest();
     if (latestResults) {
-      await handleEvalDelete(latestResults.id, cmdObj.envPath);
+      await handleEvalDelete(latestResults.id);
     } else {
       logger.error('No eval found.');
       process.exitCode = 1;
@@ -63,6 +63,6 @@ export async function deleteEvalAction(
   } else if (evalId === 'all') {
     await handleEvalDeleteAll();
   } else {
-    await handleEvalDelete(evalId, cmdObj.envPath);
+    await handleEvalDelete(evalId);
   }
 }
