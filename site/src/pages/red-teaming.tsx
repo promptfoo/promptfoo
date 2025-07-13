@@ -32,7 +32,7 @@ function HeroSection() {
         />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer noBackground noBorder className={styles.heroLogos} />
         </div>
         <h2>Move beyond fuzzing and canned attacks</h2>
         <p>Our agentic red teamers specifically target your application use case.</p>
