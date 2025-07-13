@@ -38,6 +38,7 @@ describe('server startup behavior', () => {
 
       if (isRunning) {
         logger.info(`Promptfoo server already running at http://localhost:${port}`);
+        process.exitCode = 1;
         // Early return - don't start server
       } else {
         await startServer(port, BrowserBehavior.SKIP);
@@ -53,6 +54,31 @@ describe('server startup behavior', () => {
       expect(mockStartServer).not.toHaveBeenCalled();
     });
 
+    it('should set process.exitCode to 1 when server is already running', async () => {
+      // Given a server is already running
+      mockCheckServerRunning.mockResolvedValue(true);
+      
+      // Save original process.exitCode
+      const originalExitCode = process.exitCode;
+      process.exitCode = undefined;
+
+      // When attempting to start the server
+      const port = getDefaultPort();
+      const isRunning = await checkServerRunning(port);
+
+      if (isRunning) {
+        logger.info(`Promptfoo server already running at http://localhost:${port}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      // Then process.exitCode should be set to 1
+      expect(process.exitCode).toBe(1);
+      
+      // Restore original process.exitCode
+      process.exitCode = originalExitCode;
+    });
+
     it('should start server when none is running', async () => {
       // Given no server is running
       mockCheckServerRunning.mockResolvedValue(false);
@@ -63,6 +89,7 @@ describe('server startup behavior', () => {
 
       if (isRunning) {
         logger.info(`Promptfoo server already running at http://localhost:${port}`);
+        process.exitCode = 1;
       } else {
         await startServer(port, BrowserBehavior.SKIP);
       }
@@ -85,6 +112,7 @@ describe('server startup behavior', () => {
 
         if (isRunning) {
           logger.info(`Promptfoo server already running at http://localhost:${port}`);
+          process.exitCode = 1;
         } else {
           await startServer(port, BrowserBehavior.SKIP);
         }
@@ -104,7 +132,7 @@ describe('server startup behavior', () => {
       // Given an error occurs during startup
       const testError = new Error('Connection failed');
       mockCheckServerRunning.mockRejectedValue(testError);
-
+      
       // Save original process.exitCode
       const originalExitCode = process.exitCode;
       process.exitCode = undefined;
@@ -115,6 +143,7 @@ describe('server startup behavior', () => {
         const isRunning = await checkServerRunning(port);
         if (isRunning) {
           logger.info(`Promptfoo server already running at http://localhost:${port}`);
+          process.exitCode = 1;
         } else {
           await startServer(port, BrowserBehavior.SKIP);
         }
@@ -125,7 +154,7 @@ describe('server startup behavior', () => {
 
       // Then process.exitCode should be set to 1
       expect(process.exitCode).toBe(1);
-
+      
       // Restore original process.exitCode
       process.exitCode = originalExitCode;
     });
