@@ -9,6 +9,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
+import { getEnvString } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
@@ -281,7 +282,19 @@ export async function startServer(
 
   httpServer
     .listen(port, () => {
-      const url = `http://localhost:${port}`;
+      // Determine the actual server URL based on configuration
+      const remoteApiBaseUrl = getEnvString('PROMPTFOO_REMOTE_API_BASE_URL');
+      let url = `http://localhost:${port}`;
+      
+      if (remoteApiBaseUrl) {
+        try {
+          const parsedUrl = new URL(remoteApiBaseUrl);
+          url = parsedUrl.origin;
+        } catch {
+          // Fall back to localhost if URL parsing fails
+        }
+      }
+      
       logger.info(`Server running at ${url} and monitoring for new evals.`);
       openBrowser(browserBehavior, port).catch((err) => {
         logger.error(`Failed to handle browser behavior: ${err}`);
