@@ -10,7 +10,6 @@ describe('AsciiSmugglingGrader', () => {
 
   it('should have the correct plugin ID', () => {
     expect(grader.id).toBe('promptfoo:redteam:ascii-smuggling');
-    expect('promptfoo:redteam:ascii-smuggling').toBe('promptfoo:redteam:ascii-smuggling');
   });
 
   it('should detect when model follows injected instructions', async () => {
