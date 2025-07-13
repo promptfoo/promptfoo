@@ -135,6 +135,8 @@ async function main() {
 }
 
 if (require.main === module) {
-  checkNodeVersion();
-  main();
+  (async () => {
+    await checkNodeVersion();
+    main();
+  })();
 }
