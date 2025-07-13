@@ -1,13 +1,11 @@
 import React from 'react';
-import {
-  Paper,
-  Box,
-  Typography,
-  Checkbox,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Paper from '@mui/material/Paper';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import Typography from '@mui/material/Typography';
 import { STRATEGY_PRESETS, PRESET_IDS } from './types';
 
 interface RecommendedOptionsProps {

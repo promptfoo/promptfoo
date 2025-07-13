@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Grid } from '@mui/material';
+import Box from '@mui/material/Box';
+import Grid from '@mui/material/Grid';
 import PresetCard from '../PresetCard';
 import type { StrategyPreset, PresetId } from './types';
 import { STRATEGY_PRESETS } from './types';

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, unused-imports/no-unused-imports */
 import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';

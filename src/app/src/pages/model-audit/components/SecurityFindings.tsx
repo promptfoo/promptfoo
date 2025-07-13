@@ -7,20 +7,17 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
-import {
-  Alert,
-  Box,
-  Button,
-  Collapse,
-  Divider,
-  MenuItem,
-  Paper,
-  Select,
-  Stack,
-  Typography,
-  alpha,
-  useTheme,
-} from '@mui/material';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
+import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import { alpha, useTheme } from '@mui/material/styles';
 import { SeverityBadge } from '../ModelAudit.styles';
 import type { ScanResult } from '../ModelAudit.types';
 
