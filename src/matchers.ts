@@ -227,10 +227,11 @@ export async function matchesSimilarity(
     }
   }
 
+  const defaults = await getDefaultProviders();
   const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    (await getDefaultProviders()).embeddingProvider,
+    defaults.embeddingProvider,
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 

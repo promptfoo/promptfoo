@@ -81,8 +81,11 @@ jobs:
 
             FILE_PATH="{{file}}"
 
-            npx prettier --write $FILE_PATH
-            npx eslint --fix $FILE_PATH --no-warn-ignored
+            cd ../..
+            # Adjust the file path to be relative to the root directory
+            npx @biomejs/biome format --write "src/app/$FILE_PATH"
+            npx @biomejs/biome lint --write "src/app/$FILE_PATH"
+            cd src/app
 
             # Use incremental build to reduce latency for subsequent build checks
             # However, this means that we need to run with concurrency of 1 (on Tusk)

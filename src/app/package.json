@@ -8,7 +8,7 @@
     "tsc": "tsc",
     "build": "tsc -b && vite build",
     "build:watch": "tsc -b --watch",
-    "lint": "eslint .",
+    "lint": "cd ../.. && npx @biomejs/biome lint src/app",
     "preview": "vite preview",
     "test": "vitest",
     "test:ci": "vitest run"
@@ -16,7 +16,6 @@
   "devDependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@eslint/js": "^8.56.0",
     "@kurkle/color": "^0.4.0",
     "@mui/icons-material": "^6.5.0",
     "@mui/material": "^6.5.0",
@@ -45,9 +44,6 @@
     "csv-parse": "^5.6.0",
     "csv-stringify": "^6.6.0",
     "diff": "^7.0.0",
-    "eslint": "^8.56.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
     "fuzzysearch": "^1.0.3",
     "globals": "^15.15.0",
     "idb-keyval": "^6.2.2",
