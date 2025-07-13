@@ -71,12 +71,14 @@ describe('matchesLlmRubric', () => {
       pass: true,
       reason: 'Test grading output',
       score: 1,
+      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -110,6 +112,7 @@ describe('matchesLlmRubric', () => {
           acceptedPrediction: 0,
           rejectedPrediction: 0,
         },
+        numRequests: 0,
       },
     });
   });
@@ -160,6 +163,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         completionDetails: undefined,
+        numRequests: 0,
       },
     });
   });
@@ -189,6 +193,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         completionDetails: undefined,
+        numRequests: 0,
       },
     });
   });
@@ -218,6 +223,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         completionDetails: undefined,
+        numRequests: 0,
       },
     });
   });
@@ -239,12 +245,14 @@ describe('matchesLlmRubric', () => {
       pass: false,
       reason: 'Grading failed',
       score: 0,
+      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -319,12 +327,14 @@ describe('matchesLlmRubric', () => {
       reason: 'Grading passed',
       pass: true,
       score: 1,
+      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
@@ -686,12 +696,14 @@ describe('matchesLlmRubric', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
+      assertion: undefined,
       tokensUsed: {
         total: 10,
         prompt: 5,
         completion: 5,
         cached: 0,
         completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
       },
     });
   });

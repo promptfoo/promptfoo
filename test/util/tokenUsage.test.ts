@@ -36,7 +36,17 @@ describe('TokenUsageTracker', () => {
     tracker.trackUsage('test-provider', usage);
     const tracked = tracker.getProviderUsage('test-provider');
 
-    expect(tracked).toEqual(usage);
+    expect(tracked).toEqual({
+      ...usage,
+      assertions: {
+        ...usage.assertions,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
+    });
   });
 
   it('should handle undefined token usage', () => {
@@ -103,6 +113,11 @@ describe('TokenUsageTracker', () => {
         prompt: 30,
         completion: 45,
         cached: 15,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });
@@ -169,6 +184,11 @@ describe('TokenUsageTracker', () => {
         prompt: 30,
         completion: 45,
         cached: 15,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });

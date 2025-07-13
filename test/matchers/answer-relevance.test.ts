@@ -59,6 +59,7 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -106,6 +107,7 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(

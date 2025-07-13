@@ -39,6 +39,7 @@ describe('matchesClosedQa', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -64,6 +65,7 @@ describe('matchesClosedQa', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -112,6 +114,7 @@ describe('matchesClosedQa', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(isJson).toBeTruthy();

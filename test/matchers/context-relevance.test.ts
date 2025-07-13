@@ -41,6 +41,7 @@ describe('matchesContextRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -69,6 +70,7 @@ describe('matchesContextRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
