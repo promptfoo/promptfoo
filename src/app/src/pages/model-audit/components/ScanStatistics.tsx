@@ -5,7 +5,7 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/GridLegacy';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
 import { StatCard } from '../ModelAudit.styles';

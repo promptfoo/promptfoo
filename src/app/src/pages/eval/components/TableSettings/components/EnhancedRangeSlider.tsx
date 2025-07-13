@@ -144,7 +144,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
               fontSize: '1.1rem',
             }}
           >
-            <>{icon}</>
+            {icon}
           </Box>
         )}
         <Typography

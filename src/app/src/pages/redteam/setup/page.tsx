@@ -130,7 +130,7 @@ function CustomTabPanel(props: TabPanelProps) {
       aria-labelledby={`vertical-tab-${index}`}
       {...other}
     >
-      {value === index && <>{children}</>}
+      {value === index && children}
     </TabPanel>
   );
 }

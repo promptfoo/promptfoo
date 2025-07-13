@@ -16,7 +16,7 @@ export function renderWithProviders(ui: React.ReactElement, options?: CustomRend
     return (
       <ThemeProvider theme={initialTheme}>
         <CssBaseline />
-        <>{children}</>
+        {children}
       </ThemeProvider>
     );
   }

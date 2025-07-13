@@ -17,7 +17,7 @@ import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/GridLegacy';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import List from '@mui/material/List';
