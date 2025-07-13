@@ -686,10 +686,7 @@ export const TestCaseSchema = z.object({
     .optional(),
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type TestCase<_vars = Record<string, string | string[] | object>> = z.infer<
-  typeof TestCaseSchema
->;
+export type TestCase = z.infer<typeof TestCaseSchema>;
 
 export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -728,10 +725,7 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type AtomicTestCase<_vars = Record<string, string | object>> = z.infer<
-  typeof AtomicTestCaseSchema
->;
+export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
 
 /**
  * Configuration schema for test generators that accept parameters

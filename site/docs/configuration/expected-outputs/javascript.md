@@ -384,7 +384,11 @@ Additional examples:
 
 ```js
 // Check span hierarchy depth
+const MAX_ALLOWED_DEPTH = 1000;
 const maxDepth = (spans, parentId = null, depth = 0) => {
+  if (depth > MAX_ALLOWED_DEPTH) {
+    throw new Error('Span hierarchy too deep');
+  }
   const children = spans.filter((s) => s.parentSpanId === parentId);
   if (children.length === 0) return depth;
   return Math.max(...children.map((c) => maxDepth(spans, c.spanId, depth + 1)));

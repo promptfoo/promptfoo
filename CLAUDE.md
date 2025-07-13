@@ -21,7 +21,7 @@ const response = await fetch('/api/traces/evaluation/123');
 - `npm run build` - Build the project
 - `npm run build:clean` - Clean the dist directory
 - `npm run build:watch` - Watch for changes and rebuild TypeScript files
-- `npm run lint` - Run Biome linter on src directory
+- `npm run lint` - Run Biome linter (alias for lint:src)
 - `npm run lint:src` - Run Biome linter on src directory
 - `npm run lint:tests` - Run Biome linter on test directory
 - `npm run lint:site` - Run Biome linter on site directory

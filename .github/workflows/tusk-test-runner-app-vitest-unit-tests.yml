@@ -82,8 +82,9 @@ jobs:
             FILE_PATH="{{file}}"
 
             cd ../..
-            npx @biomejs/biome format --write "$FILE_PATH"
-            npx @biomejs/biome lint --write "$FILE_PATH"
+            # Adjust the file path to be relative to the root directory
+            npx @biomejs/biome format --write "src/app/$FILE_PATH"
+            npx @biomejs/biome lint --write "src/app/$FILE_PATH"
             cd src/app
 
             # Use incremental build to reduce latency for subsequent build checks

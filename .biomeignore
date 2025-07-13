@@ -11,11 +11,9 @@ examples/adaline-gateway/adaline-chat-history/prompt.json
 examples/adaline-gateway/adaline-embedding-similarity/prompt.json
 examples/multiple-turn-conversation/prompt.json
 examples/openai-chat-history/prompt.json
-examples/**/*.j2
-examples/**/*.jinja
-examples/**/*.jinja2
 examples/redteam-foundation-model/redteam.yaml
 examples/simple-test/output.html
+examples/custom-provider/vercelAiSdkExample.js
 helm/chart/promptfoo/templates/**/*.yaml
 site/static/config-schema.json
 venv
@@ -25,4 +23,3 @@ venv
 **/*.jinja
 **/*.jinja2
 **/*.mdc
-examples/custom-provider/vercelAiSdkExample.js
