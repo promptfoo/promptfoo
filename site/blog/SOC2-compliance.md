@@ -1,17 +1,33 @@
 ---
 title: 'Promptfoo Achieves SOC 2 Type II and ISO 27001 Certification: Strengthening Trust in AI Security'
-description: Promptfoo achieves SOC2 Type II and ISO 27001 compliance
+description: 'Promptfoo achieves SOC 2 Type II and ISO 27001 compliance, demonstrating enterprise-grade security for AI red teaming and LLM evaluation tools.'
 image: /img/blog/soc2-compliance.png
-keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
+keywords:
+  [
+    promptfoo,
+    SOC2 Type II,
+    ISO 27001,
+    AI security,
+    red teaming,
+    LLM evaluation,
+    prompt engineering,
+    AI agents,
+    enterprise security,
+    compliance,
+    information security,
+  ]
 date: 2025-07-11
 authors: [vanessa]
+tags: [security, compliance, enterprise, certification]
 ---
 
 # Promptfoo Achieves SOC 2 Type II and ISO 27001 Certification: Strengthening Trust in AI Security
 
-We’re proud to announce that Promptfoo is now SOC 2 Type II compliant and ISO 27001 certified — two globally recognized milestones that affirm our commitment to the highest standards in information security, privacy, and risk management.
+We're proud to announce that Promptfoo is now SOC 2 Type II compliant and ISO 27001 certified — two globally recognized milestones that affirm our commitment to the highest standards in information security, privacy, and risk management.
 
 At Promptfoo, we help organizations secure their generative AI applications by proactively identifying and fixing vulnerabilities through adversarial emulation and red teaming. These new certifications reflect our continued investment in building secure, trustworthy AI systems — not only in our technology, but across our entire organization.
+
+<!-- truncate -->
 
 ## Why This Matters
 
