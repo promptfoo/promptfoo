@@ -711,6 +711,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     let pollIntervalMs = 1000;
 
     // Poll until terminal state
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       // Check timeout
       if (Date.now() - startTime > maxPollTime) {

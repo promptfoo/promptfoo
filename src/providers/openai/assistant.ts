@@ -267,6 +267,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const currentRun = await openai.beta.threads.runs.retrieve(run.id, {
         thread_id: run.thread_id,
