@@ -16,7 +16,7 @@ import 'swiper/css/pagination';
 import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
-import styles from './llm-vulnerability-scanner.module.css';
+import styles from './landing-page.module.css';
 // Import Swiper styles
 import 'swiper/css';
 
