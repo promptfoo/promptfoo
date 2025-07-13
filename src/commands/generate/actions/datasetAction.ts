@@ -76,7 +76,6 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
       outputFormat = 'yaml';
     } else {
       // Throw error for unsupported file types
-      const ext = options.output.includes('.') ? options.output.split('.').pop() : 'no extension';
       throw new Error(`Unsupported output file type: ${options.output}`);
     }
 

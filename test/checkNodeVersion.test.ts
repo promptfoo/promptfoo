@@ -16,7 +16,7 @@ describe('checkNodeVersion', () => {
   const originalConsoleError = console.error;
 
   beforeEach(() => {
-    console.error = jest.fn();
+    jest.spyOn(console, 'error').mockImplementation();
   });
 
   afterEach(() => {

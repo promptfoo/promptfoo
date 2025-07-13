@@ -72,13 +72,16 @@ These optimizations can be done immediately with minimal risk:
 
 - [ ] Modify `src/checkNodeVersion.ts` to lazy-load dependencies
 - [ ] Current implementation:
+
   ```typescript
   import chalk from 'chalk';
   import logger from './logger';
 
   // Heavy import!
   ```
+
 - [ ] Optimized implementation:
+
   ```typescript
   export const checkNodeVersion = (): void => {
     const requiredVersion = engines.node;
@@ -101,6 +104,7 @@ These optimizations can be done immediately with minimal risk:
     // Happy path: zero imports!
   };
   ```
+
 - [ ] Benefits:
   - Saves ~150ms on every CLI invocation
   - No async changes needed

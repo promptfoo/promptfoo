@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import fs from 'fs/promises';
 import * as init from '../../src/commands/init';
-import logger from '../../src/logger';
 
 jest.mock('../../src/redteam/commands/init', () => ({
   redteamInit: jest.fn(),
@@ -134,73 +133,6 @@ describe('init command', () => {
       );
     });
   });
-
-  /* TODO: Re-enable when downloadExample is implemented
-  describe('downloadExample', () => {
-    it('should throw an error if directory creation fails', async () => {
-      jest.spyOn(fs, 'mkdir').mockRejectedValue(new Error('Permission denied'));
-
-      await expect(init.downloadExample('example', '/path/to/target')).rejects.toThrow(
-        'Failed to download example: Permission denied',
-      );
-    });
-
-    it('should throw an error if downloadDirectory fails', async () => {
-      jest.spyOn(fs, 'mkdir').mockResolvedValue(undefined);
-
-      // Mock fetch to simulate downloadDirectory failure
-      mockFetch.mockRejectedValue(new Error('Network error'));
-
-      await expect(init.downloadExample('example', '/path/to/target')).rejects.toThrow(
-        'Failed to download example: Network error',
-      );
-    });
-  });
-  */
-
-  /* TODO: Re-enable when getExamplesList is implemented
-  describe('getExamplesList', () => {
-    it('should return a list of examples', async () => {
-      const mockResponse = {
-        ok: true,
-        status: 200,
-        json: jest.fn().mockResolvedValue([
-          { name: 'example1', type: 'dir' },
-          { name: 'example2', type: 'dir' },
-          { name: 'not-an-example', type: 'file' },
-        ]),
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-
-      const examples = await init.getExamplesList();
-
-      expect(examples).toEqual(['example1', 'example2']);
-    });
-
-    it('should return an empty array if fetching fails', async () => {
-      const mockResponse = {
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-
-      const examples = await init.getExamplesList();
-
-      expect(examples).toEqual([]);
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Not Found'));
-    });
-
-    it('should handle network errors', async () => {
-      mockFetch.mockRejectedValue(new Error('Network error'));
-
-      const examples = await init.getExamplesList();
-
-      expect(examples).toEqual([]);
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Network error'));
-    });
-  });
-  */
 
   describe('initCommand', () => {
     let program: Command;
