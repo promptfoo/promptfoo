@@ -49,9 +49,9 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const checkRateLimit = (req: Request, res: Response): boolean => {
   const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
   const now = Date.now();
-  
+
   const rateLimit = rateLimitMap.get(clientIp);
-  
+
   if (!rateLimit || now > rateLimit.resetTime) {
     // New window or expired window
     rateLimitMap.set(clientIp, {
@@ -60,7 +60,7 @@ const checkRateLimit = (req: Request, res: Response): boolean => {
     });
     return true;
   }
-  
+
   if (rateLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
     const retryAfter = Math.ceil((rateLimit.resetTime - now) / 1000);
     res.status(429).json({
@@ -70,7 +70,7 @@ const checkRateLimit = (req: Request, res: Response): boolean => {
     });
     return false;
   }
-  
+
   rateLimit.count++;
   return true;
 };
@@ -91,7 +91,11 @@ const MAX_CACHE_SIZE = 100; // Maximum number of cached results
 const generationCache = new Map<string, { result: any; timestamp: number }>();
 
 // Generate cache key from request parameters
-const getCacheKey = (type: 'dataset' | 'assertions', testSuite: TestSuite, options: any): string => {
+const getCacheKey = (
+  type: 'dataset' | 'assertions',
+  testSuite: TestSuite,
+  options: any,
+): string => {
   const cacheObject = {
     type,
     prompts: testSuite.prompts,
@@ -122,11 +126,12 @@ const setCachedResult = (key: string, result: any): void => {
   // Enforce max cache size
   if (generationCache.size >= MAX_CACHE_SIZE) {
     // Remove oldest entry
-    const oldestKey = Array.from(generationCache.entries())
-      .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0];
+    const oldestKey = Array.from(generationCache.entries()).sort(
+      (a, b) => a[1].timestamp - b[1].timestamp,
+    )[0][0];
     generationCache.delete(oldestKey);
   }
-  
+
   generationCache.set(key, {
     result,
     timestamp: Date.now(),
@@ -166,7 +171,7 @@ generateRouter.post('/dataset', async (req: Request, res: Response): Promise<voi
   if (!checkRateLimit(req, res)) {
     return;
   }
-  
+
   const { prompts, tests, options = {} } = req.body;
   const { async: isAsync = false, ...synthesisOptions } = options as GenerateDatasetOptions;
 
@@ -179,14 +184,14 @@ generateRouter.post('/dataset', async (req: Request, res: Response): Promise<voi
   // Check cache first
   const cacheKey = getCacheKey('dataset', testSuite, synthesisOptions);
   const cachedResult = getCachedResult(cacheKey);
-  
+
   // Synchronous generation (backward compatibility)
   if (!isAsync) {
     if (cachedResult) {
       res.json({ results: cachedResult });
       return;
     }
-    
+
     try {
       const results = await synthesizeFromTestSuite(testSuite, synthesisOptions);
       setCachedResult(cacheKey, results);
@@ -200,8 +205,9 @@ generateRouter.post('/dataset', async (req: Request, res: Response): Promise<voi
 
   // Async generation with job tracking
   const jobId = uuidv4();
-  const jobTotal = (synthesisOptions.numPersonas || 5) * (synthesisOptions.numTestCasesPerPersona || 3);
-  
+  const jobTotal =
+    (synthesisOptions.numPersonas || 5) * (synthesisOptions.numTestCasesPerPersona || 3);
+
   // If we have cached results, complete the job immediately
   if (cachedResult) {
     generationJobs.set(jobId, {
@@ -216,7 +222,7 @@ generateRouter.post('/dataset', async (req: Request, res: Response): Promise<voi
     res.json({ id: jobId });
     return;
   }
-  
+
   generationJobs.set(jobId, {
     evalId: null,
     status: 'in-progress',
@@ -258,7 +264,7 @@ generateRouter.post('/assertions', async (req: Request, res: Response): Promise<
   if (!checkRateLimit(req, res)) {
     return;
   }
-  
+
   const { prompts, tests, options = {} } = req.body;
   const { async: isAsync = false, ...synthesisOptions } = options as GenerateAssertionsOptions;
 
@@ -271,14 +277,14 @@ generateRouter.post('/assertions', async (req: Request, res: Response): Promise<
   // Check cache first
   const cacheKey = getCacheKey('assertions', testSuite, synthesisOptions);
   const cachedResult = getCachedResult(cacheKey);
-  
+
   // Synchronous generation
   if (!isAsync) {
     if (cachedResult) {
       res.json({ results: cachedResult });
       return;
     }
-    
+
     try {
       const results = await synthesizeAssertionsFromTestSuite(testSuite, synthesisOptions);
       setCachedResult(cacheKey, results);
@@ -293,7 +299,7 @@ generateRouter.post('/assertions', async (req: Request, res: Response): Promise<
   // Async generation with job tracking
   const jobId = uuidv4();
   const jobTotal = synthesisOptions.numQuestions || 5;
-  
+
   // If we have cached results, complete the job immediately
   if (cachedResult) {
     generationJobs.set(jobId, {
@@ -308,7 +314,7 @@ generateRouter.post('/assertions', async (req: Request, res: Response): Promise<
     res.json({ id: jobId });
     return;
   }
-  
+
   generationJobs.set(jobId, {
     evalId: null,
     status: 'in-progress',
