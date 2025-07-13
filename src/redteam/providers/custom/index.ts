@@ -137,7 +137,7 @@ export class MemorySystem {
   }
 }
 
-class CustomProvider implements ApiProvider {
+export class CustomProvider implements ApiProvider {
   readonly config: CustomConfig;
   private readonly nunjucks: any;
   private userGoal: string | undefined;
@@ -919,4 +919,3 @@ class CustomProvider implements ApiProvider {
 }
 
 export default CustomProvider;
-export { CustomProvider };
