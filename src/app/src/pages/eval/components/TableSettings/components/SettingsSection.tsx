@@ -100,7 +100,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           role: 'list',
         }}
       >
-        {children}
+        <>{children}</>
       </Box>
     </Box>
   );

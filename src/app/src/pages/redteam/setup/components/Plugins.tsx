@@ -603,7 +603,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     : preset.name === currentlySelectedPreset?.name;
                 return (
                   <Grid
-                    item xs={12} sm={6} md={4} lg={3}
+                    item
+                    xs={12}
+                    sm={6}
+                    md={4}
+                    lg={3}
                     key={preset.name}
                     sx={{
                       minWidth: { xs: '280px', sm: '320px' },
