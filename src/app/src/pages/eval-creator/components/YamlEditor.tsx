@@ -234,17 +234,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
         </Box>
         {!readOnly && (
           <Stack direction="row" spacing={1}>
-            {!isEditing ? (
-              <Button
-                variant="outlined"
-                color="primary"
-                size="small"
-                startIcon={<EditIcon />}
-                onClick={handleEdit}
-              >
-                Edit YAML
-              </Button>
-            ) : (
+            {isEditing ? (
               <>
                 <Button
                   variant="contained"
@@ -266,6 +256,16 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
                   Cancel
                 </Button>
               </>
+            ) : (
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                startIcon={<EditIcon />}
+                onClick={handleEdit}
+              >
+                Edit YAML
+              </Button>
             )}
           </Stack>
         )}
@@ -308,7 +308,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
 
       <Box position="relative">
         <div
-          className={`editor-container ${!isEditing ? 'editor-readonly' : ''}`}
+          className={`editor-container ${isEditing ? '' : 'editor-readonly'}`}
           style={{
             opacity: isEditing ? 1 : 0.9,
             border: isEditing ? '2px solid' : '1px solid',

@@ -82,11 +82,11 @@ describe('YamlEditor', () => {
   it('switches to edit mode when Edit button is clicked', () => {
     render(<YamlEditorComponent />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit YAML' }));
+    fireEvent.click(screen.getByRole('button', { name: /Edit YAML/ }));
 
-    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit YAML' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cancel/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Edit YAML/ })).not.toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
