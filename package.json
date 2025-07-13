@@ -53,7 +53,7 @@
     "format:check": "npx @biomejs/biome format && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
     "format": "npx @biomejs/biome format --write . && prettier --write '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
     "generate-constants": "node scripts/generate-constants.js",
-    "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json | npx prettier --write site/static/config-schema.json",
+    "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json && npx @biomejs/biome format --write site/static/config-schema.json",
     "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs npx @biomejs/biome lint --write",
     "lint:site": "npx @biomejs/biome lint site",
     "lint:src": "npx @biomejs/biome lint src",
