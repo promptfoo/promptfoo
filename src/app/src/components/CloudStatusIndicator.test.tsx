@@ -202,7 +202,9 @@ describe('CloudStatusIndicator', () => {
 
     expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
     expect(screen.getByText(/Share evaluation results with your organization/)).toBeInTheDocument();
-    expect(screen.getByText(/Advanced red teaming with enterprise configurations/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Advanced red teaming with enterprise configurations/),
+    ).toBeInTheDocument();
   });
 
   it('should close dialog when close button is clicked', async () => {
