@@ -490,7 +490,7 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)), // eslint-disable-line @typescript-eslint/no-use-before-define
+  assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
   // Tag this assertion result as a named metric

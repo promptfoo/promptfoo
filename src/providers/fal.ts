@@ -22,7 +22,6 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
   config: FalProviderOptions;
   input: Input;
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   private fal: typeof import('@fal-ai/client') | null = null;
 
   constructor(
