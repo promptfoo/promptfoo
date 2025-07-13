@@ -104,7 +104,7 @@ describe('server startup behavior', () => {
       // Given an error occurs during startup
       const testError = new Error('Connection failed');
       mockCheckServerRunning.mockRejectedValue(testError);
-      
+
       // Save original process.exitCode
       const originalExitCode = process.exitCode;
       process.exitCode = undefined;
@@ -125,7 +125,7 @@ describe('server startup behavior', () => {
 
       // Then process.exitCode should be set to 1
       expect(process.exitCode).toBe(1);
-      
+
       // Restore original process.exitCode
       process.exitCode = originalExitCode;
     });
