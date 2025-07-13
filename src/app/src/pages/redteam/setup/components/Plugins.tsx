@@ -13,7 +13,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/GridLegacy';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';

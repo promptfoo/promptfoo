@@ -141,7 +141,7 @@ describe('Eval Page Metadata', () => {
       evalId,
     });
 
-    let rerender: (ui: React.ReactElement) => void;
+    let rerender: (ui: React.ReactElement<any>) => void;
 
     await act(async () => {
       const renderResult = render(

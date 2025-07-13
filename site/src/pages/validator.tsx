@@ -125,7 +125,7 @@ const ConfigValidator = () => {
           </Typography>
         </Box>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper elevation={3} sx={{ height: '80vh' }}>
               <Editor
                 height="100%"
@@ -136,7 +136,7 @@ const ConfigValidator = () => {
               />
             </Paper>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper elevation={3} sx={{ height: '80vh', p: 2, overflow: 'auto' }}>
               <pre style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
                 {validationOutput}

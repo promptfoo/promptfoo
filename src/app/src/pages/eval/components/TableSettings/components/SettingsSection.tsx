@@ -1,9 +1,5 @@
-import React from 'react';
-import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import { alpha, useTheme } from '@mui/material/styles';
+import React, { type JSX } from 'react';
+import { Box, Typography, Stack, useTheme, Paper, alpha } from '@mui/material';
 import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
@@ -104,7 +100,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           role: 'list',
         }}
       >
-        {children}
+        {children as React.ReactNode}
       </Box>
     </Box>
   );

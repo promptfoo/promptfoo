@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type JSX } from 'react';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
