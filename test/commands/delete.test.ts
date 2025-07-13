@@ -31,7 +31,6 @@ describe('delete command', () => {
     });
 
     it('should handle error when deleting evaluation', async () => {
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
       const error = new Error('Delete failed');
       jest.mocked(database.deleteEval).mockRejectedValueOnce(error);
 
@@ -40,9 +39,10 @@ describe('delete command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Could not delete evaluation with ID test-id:\nError: Delete failed',
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
-
-      mockExit.mockRestore();
+      expect(process.exitCode).toBe(1);
+      
+      // Reset exitCode after test
+      process.exitCode = undefined;
     });
   });
 
