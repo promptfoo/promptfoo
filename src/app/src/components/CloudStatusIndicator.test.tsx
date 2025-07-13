@@ -36,6 +36,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: true,
       error: null,
       refetch: vi.fn(),
@@ -52,6 +53,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: true,
       hasApiKey: true,
       appUrl: 'https://app.promptfoo.app',
+      isEnterprise: false,
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -67,11 +69,33 @@ describe('CloudStatusIndicator', () => {
     expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
   });
 
+  it('should show authenticated state with enterprise', () => {
+    vi.mocked(useCloudAuth).mockReturnValue({
+      isAuthenticated: true,
+      hasApiKey: true,
+      appUrl: 'https://enterprise.company.com',
+      isEnterprise: true,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Connected to Promptfoo Enterprise'),
+    );
+    expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
+  });
+
   it('should show unauthenticated state with cloud off icon', () => {
     vi.mocked(useCloudAuth).mockReturnValue({
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -92,6 +116,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: false,
       error: 'Network error',
       refetch: vi.fn(),
@@ -113,6 +138,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: true,
       hasApiKey: true,
       appUrl: mockAppUrl,
+      isEnterprise: false,
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -135,6 +161,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -157,11 +184,33 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
+  it('should show enterprise dialog when unauthenticated and enterprise', () => {
+    vi.mocked(useCloudAuth).mockReturnValue({
+      isAuthenticated: false,
+      hasApiKey: false,
+      appUrl: null,
+      isEnterprise: true,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<CloudStatusIndicator />);
+
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
+    expect(screen.getByText(/Share evaluation results with your organization/)).toBeInTheDocument();
+    expect(screen.getByText(/Advanced red teaming with enterprise configurations/)).toBeInTheDocument();
+  });
+
   it('should close dialog when close button is clicked', async () => {
     vi.mocked(useCloudAuth).mockReturnValue({
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -190,6 +239,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: false,
       error: errorMessage,
       refetch: vi.fn(),
@@ -209,6 +259,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -235,6 +286,7 @@ describe('CloudStatusIndicator', () => {
       isAuthenticated: false,
       hasApiKey: false,
       appUrl: null,
+      isEnterprise: false,
       isLoading: false,
       error: null,
       refetch: vi.fn(),

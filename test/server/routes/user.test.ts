@@ -44,6 +44,7 @@ describe('userRouter', () => {
         isAuthenticated: true,
         hasApiKey: true,
         appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
       });
     });
 
@@ -58,6 +59,22 @@ describe('userRouter', () => {
         isAuthenticated: false,
         hasApiKey: false,
         appUrl: null,
+        isEnterprise: false,
+      });
+    });
+
+    it('should detect enterprise deployment when URL does not include promptfoo.app', async () => {
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue('enterprise-api-key');
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://enterprise.company.com');
+
+      const response = await request(app).get('/api/user/cloud/status').expect(200);
+
+      expect(response.body).toEqual({
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://enterprise.company.com',
+        isEnterprise: true,
       });
     });
 

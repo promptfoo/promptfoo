@@ -18,7 +18,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 export default function CloudStatusIndicator() {
-  const { isAuthenticated, appUrl, isLoading, error } = useCloudAuth();
+  const { isAuthenticated, appUrl, isLoading, error, isEnterprise } = useCloudAuth();
   const [showDialog, setShowDialog] = useState(false);
   const { recordEvent } = useTelemetry();
 
@@ -66,9 +66,11 @@ export default function CloudStatusIndicator() {
       return 'Error checking cloud status';
     }
     if (isAuthenticated) {
-      return 'Connected to Promptfoo Cloud (click to open dashboard)';
+      const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
+      return `Connected to ${serviceName} (click to open dashboard)`;
     }
-    return 'Not connected to Promptfoo Cloud (click to learn more)';
+    const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
+    return `Not connected to ${serviceName} (click to learn more)`;
   };
 
   const getIcon = () => {
@@ -115,20 +117,20 @@ export default function CloudStatusIndicator() {
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CloudQueueIcon color="primary" />
-            Connect to Promptfoo Cloud
+            Connect to {isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud'}
           </Box>
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mb: 2 }}>
             <Typography variant="body1" gutterBottom>
-              Connect to unlock powerful team features:
+              Connect to unlock powerful {isEnterprise ? 'enterprise' : 'team'} features:
             </Typography>
             <Box component="ul" sx={{ mt: 2, pl: 2 }}>
               <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                🔗 Share evaluation results with your team
+                🔗 Share evaluation results with your {isEnterprise ? 'organization' : 'team'}
               </Typography>
               <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                🎯 Advanced red teaming with team-wide configurations
+                🎯 Advanced red teaming with {isEnterprise ? 'enterprise' : 'team-wide'} configurations
               </Typography>
               <Typography component="li" variant="body2">
                 ✨ New features and updates as they're released

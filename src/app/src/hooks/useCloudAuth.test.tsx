@@ -26,6 +26,7 @@ describe('useCloudAuth', () => {
           isAuthenticated: true,
           hasApiKey: true,
           appUrl: 'https://app.promptfoo.app',
+          isEnterprise: false,
         }),
     } as Response);
 
@@ -40,6 +41,7 @@ describe('useCloudAuth', () => {
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.hasApiKey).toBe(true);
     expect(result.current.appUrl).toBe('https://app.promptfoo.app');
+    expect(result.current.isEnterprise).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
@@ -51,6 +53,7 @@ describe('useCloudAuth', () => {
           isAuthenticated: false,
           hasApiKey: false,
           appUrl: null,
+          isEnterprise: false,
         }),
     } as Response);
 
@@ -63,6 +66,7 @@ describe('useCloudAuth', () => {
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.hasApiKey).toBe(false);
     expect(result.current.appUrl).toBeNull();
+    expect(result.current.isEnterprise).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
@@ -103,6 +107,7 @@ describe('useCloudAuth', () => {
           isAuthenticated: false,
           hasApiKey: false,
           appUrl: null,
+          isEnterprise: false,
         }),
     } as Response);
 
@@ -122,6 +127,7 @@ describe('useCloudAuth', () => {
           isAuthenticated: true,
           hasApiKey: true,
           appUrl: 'https://app.promptfoo.app',
+          isEnterprise: false,
         }),
     } as Response);
 
@@ -131,5 +137,28 @@ describe('useCloudAuth', () => {
     await waitFor(() => {
       expect(result.current.isAuthenticated).toBe(true);
     });
+  });
+
+  it('should detect enterprise deployment', async () => {
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          isAuthenticated: true,
+          hasApiKey: true,
+          appUrl: 'https://enterprise.company.com',
+          isEnterprise: true,
+        }),
+    } as Response);
+
+    const { result } = renderHook(() => useCloudAuth());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.isEnterprise).toBe(true);
+    expect(result.current.appUrl).toBe('https://enterprise.company.com');
   });
 });

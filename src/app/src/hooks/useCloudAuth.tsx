@@ -5,6 +5,7 @@ export interface CloudAuthStatus {
   isAuthenticated: boolean;
   hasApiKey: boolean;
   appUrl: string | null;
+  isEnterprise: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -14,6 +15,7 @@ export function useCloudAuth() {
     isAuthenticated: false,
     hasApiKey: false,
     appUrl: null,
+    isEnterprise: false,
     isLoading: true,
     error: null,
   });
@@ -34,6 +36,7 @@ export function useCloudAuth() {
         isAuthenticated: data.isAuthenticated,
         hasApiKey: data.hasApiKey,
         appUrl: data.appUrl,
+        isEnterprise: data.isEnterprise || false,
         isLoading: false,
         error: null,
       });
