@@ -200,17 +200,17 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "^4.33.0",
-    "@swc/core-linux-x64-gnu": "^1.12.7",
-    "@swc/core-linux-x64-musl": "^1.12.7",
-    "@swc/core-win32-x64-msvc": "^1.12.7",
-    "@swc/core-darwin-x64": "^1.12.7",
-    "@swc/core-darwin-arm64": "^1.12.7",
+    "@biomejs/cli-darwin-arm64": "2.1.1",
+    "@biomejs/cli-darwin-x64": "2.1.1",
     "@biomejs/cli-linux-x64": "2.1.1",
     "@biomejs/cli-linux-x64-musl": "2.1.1",
     "@biomejs/cli-win32-x64": "2.1.1",
-    "@biomejs/cli-darwin-x64": "2.1.1",
-    "@biomejs/cli-darwin-arm64": "2.1.1"
+    "@rollup/rollup-linux-x64-gnu": "^4.33.0",
+    "@swc/core-darwin-arm64": "^1.12.7",
+    "@swc/core-darwin-x64": "^1.12.7",
+    "@swc/core-linux-x64-gnu": "^1.12.7",
+    "@swc/core-linux-x64-musl": "^1.12.7",
+    "@swc/core-win32-x64-msvc": "^1.12.7"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.56.0",
@@ -254,6 +254,8 @@
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
     "python-shell": "^5.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "replicate": "^0.34.1",
     "rfdc": "^1.4.1",
     "rxjs": "^7.8.2",

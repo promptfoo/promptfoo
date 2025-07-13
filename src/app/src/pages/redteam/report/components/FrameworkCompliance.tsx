@@ -2,7 +2,7 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
+import Grid2 from '@mui/material/Grid2';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import {
@@ -222,14 +222,14 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
               },
             }}
           />
-          <Grid container spacing={3} className="framework-grid">
+          <Grid2 container spacing={3} className="framework-grid">
             {FRAMEWORK_COMPLIANCE_IDS.map((framework, idx) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
               const isCompliant = frameworkCompliance[framework];
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid item xs={12} sm={6} md={4} key={framework}>
+                <Grid2 size={{ xs: 12, sm: 6, md: 4 }} key={framework}>
                   <FrameworkCard
                     framework={framework}
                     isCompliant={isCompliant}
@@ -241,10 +241,10 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                     getPluginPassRate={getPluginPassRate}
                     idx={idx}
                   />
-                </Grid>
+                </Grid2>
               );
             })}
-          </Grid>
+          </Grid2>
         </CardContent>
       </Card>
     </Box>

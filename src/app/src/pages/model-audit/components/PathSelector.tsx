@@ -17,7 +17,7 @@ import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import Grid from '@mui/material/Grid';
+import Grid2 from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import List from '@mui/material/List';
@@ -225,8 +225,8 @@ export default function PathSelector({
             </Typography>
           </Box>
 
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={4}>
+          <Grid2 container spacing={3}>
+            <Grid2 size={{ xs: 12, md: 4 }}>
               <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
                 <CloudUploadIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
@@ -239,8 +239,8 @@ export default function PathSelector({
                   <code>s3://bucket/models/</code>
                 </Typography>
               </Paper>
-            </Grid>
-            <Grid item xs={12} md={4}>
+            </Grid2>
+            <Grid2 size={{ xs: 12, md: 4 }}>
               <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
                 <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
@@ -253,8 +253,8 @@ export default function PathSelector({
                   <code>az://container/path/</code>
                 </Typography>
               </Paper>
-            </Grid>
-            <Grid item xs={12} md={4}>
+            </Grid2>
+            <Grid2 size={{ xs: 12, md: 4 }}>
               <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
                 <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
@@ -267,8 +267,8 @@ export default function PathSelector({
                   <code>gs://bucket/models/</code>
                 </Typography>
               </Paper>
-            </Grid>
-          </Grid>
+            </Grid2>
+          </Grid2>
 
           <Box sx={{ textAlign: 'center', mt: 4 }}>
             <Button

@@ -5,7 +5,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
+import Grid2 from '@mui/material/Grid2';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -67,7 +67,7 @@ const RiskCard: React.FC<{
         className="risk-card-container"
         sx={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
       >
-        <Grid
+        <Grid2
           container
           spacing={3}
           sx={{
@@ -77,10 +77,8 @@ const RiskCard: React.FC<{
             },
           }}
         >
-          <Grid
-            item
-            xs={12}
-            md={6}
+          <Grid2
+            size={{ xs: 12, md: 6 }}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -108,16 +106,17 @@ const RiskCard: React.FC<{
                 value={progressValue}
                 // @ts-ignore
                 max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
+                innerRadius="70%"
+                outerRadius="100%"
+                startAngle={-90}
+                endAngle={90}
                 text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
                 sx={{
                   width: '100%',
                   height: '100%',
+                  '& .MuiGauge-arc': {
+                    fill: 'primary.main',
+                  },
                 }}
               />
             </Box>
@@ -136,8 +135,8 @@ const RiskCard: React.FC<{
             >
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
-          </Grid>
-          <Grid item xs={6} md={4}>
+          </Grid2>
+          <Grid2 size={{ xs: 6, md: 4 }}>
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);
@@ -195,8 +194,8 @@ const RiskCard: React.FC<{
                 );
               })}
             </List>
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
         {selectedCategory && (
           <RiskCategoryDrawer
             open={drawerOpen}

@@ -33,7 +33,10 @@ export const EvalIdChip: React.FC<EvalIdChipProps> = ({ evalId, onCopy }) => {
     >
       <FingerprintIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
       <Typography variant="body2" sx={{ mr: 1 }}>
-        <strong>ID:</strong> {evalId}
+        <Box component="span" sx={{ fontWeight: 'bold' }}>
+          ID:
+        </Box>{' '}
+        {evalId}
       </Typography>
       <Tooltip title="Copy ID">
         <IconButton size="small" onClick={handleCopy} sx={{ ml: 'auto' }} aria-label="Copy Eval ID">

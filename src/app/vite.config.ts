@@ -32,6 +32,10 @@ export default defineConfig({
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
+      '@mui/material/Grid2': path.resolve(
+        __dirname,
+        '../../node_modules/@mui/material/Grid2/index.js',
+      ),
     },
   },
   optimizeDeps: {

@@ -84,14 +84,18 @@ function CustomToolbar() {
         <GridToolbarExport />
       </Box>
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
+      <Box
         sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
+          '& .MuiTextField-root': {
+            '& .MuiInputBase-root': {
+              borderRadius: 2,
+              backgroundColor: theme.palette.background.paper,
+            },
           },
         }}
-      />
+      >
+        <GridToolbarQuickFilter />
+      </Box>
     </GridToolbarContainer>
   );
 }
