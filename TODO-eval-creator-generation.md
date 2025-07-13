@@ -115,15 +115,15 @@ This document outlines the implementation plan for adding dataset and assertion 
 
 ### 3.3 Performance & Reliability
 
-- [ ] Add caching layer
-  - [ ] Cache generation results
-  - [ ] Implement cache invalidation
+- [x] Add caching layer
+  - [x] Cache generation results
+  - [x] Implement cache invalidation
   - [ ] Offline generation queue
 
-- [ ] Rate limiting
+- [x] Rate limiting
   - [ ] Client-side request throttling
-  - [ ] Server-side rate limits
-  - [ ] Graceful degradation
+  - [x] Server-side rate limits
+  - [x] Graceful degradation
 
 ## Technical Debt & Refactoring
 
@@ -174,6 +174,31 @@ This document outlines the implementation plan for adding dataset and assertion 
   - AssertsForm tracks which assertions were generated
   - Shows "Generated" chip next to generated assertions
   - Maintains tracking when assertions are removed
+
+### UI Improvements
+
+- [x] Simplified test case generation UI
+  - Replaced confusing "personas" terminology with simple "Number of Test Cases" slider
+  - Moved advanced persona options to collapsible "Advanced Options" section
+  - Added helpful descriptions explaining what personas are
+
+### Performance & Reliability Fixes
+
+- [x] Fixed memory leak in generation jobs Map
+  - Jobs are now automatically cleaned up 5 minutes after completion
+  - Added timestamp tracking for completed jobs
+  - Prevents unbounded memory growth
+
+- [x] Implemented rate limiting
+  - 10 requests per minute per IP address
+  - Returns 429 status with retry-after header
+  - Automatic cleanup of expired rate limit entries
+
+- [x] Added caching layer for generation results
+  - 30-minute TTL for cached results
+  - SHA-256 hash-based cache keys
+  - Maximum cache size of 100 entries with LRU eviction
+  - Works for both sync and async generation
 
 ### Next Priority Tasks
 
