@@ -1,3 +1,4 @@
+import React from 'react';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 
@@ -15,7 +16,7 @@ export default function Code({ children }: { children: React.ReactNode }) {
         fontSize: '0.875rem',
       }}
     >
-      {children}
+      {children as React.ReactNode}
     </Box>
   );
 }
