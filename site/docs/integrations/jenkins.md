@@ -2,9 +2,9 @@
 sidebar_label: Jenkins
 ---
 
-# Setting up promptfoo with Jenkins
+# Setting up Promptfoo with Jenkins
 
-This guide demonstrates how to integrate promptfoo's LLM evaluation into your Jenkins pipeline. This setup enables automatic testing of your prompts and models whenever changes are made to your repository.
+This guide demonstrates how to integrate Promptfoo's LLM evaluation into your Jenkins pipeline. This setup enables automatic testing of your prompts and models whenever changes are made to your repository.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ This guide demonstrates how to integrate promptfoo's LLM evaluation into your Je
 
 ### 1. Create Jenkinsfile
 
-Create a `Jenkinsfile` in your repository root. Here's a basic configuration that installs promptfoo and runs evaluations:
+Create a `Jenkinsfile` in your repository root. Here's a basic configuration that installs Promptfoo and runs evaluations:
 
 ```groovy:Jenkinsfile
 pipeline {
@@ -241,4 +241,4 @@ Common issues and solutions:
    - Verify npm is available in PATH
    - Consider using `nodejs` tool installer in Jenkins
 
-For more information on promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/guide/).
+For more information on Promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/guide/).

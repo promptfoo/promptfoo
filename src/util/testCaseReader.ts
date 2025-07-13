@@ -326,7 +326,7 @@ export async function loadTestsFromGlob(
     return (await $RefParser.dereference(testCases)) as TestCase[];
   };
 
-  const ret: TestCase<Record<string, string | string[] | object>>[] = [];
+  const ret: TestCase[] = [];
   if (testFiles.length < 1) {
     logger.error(`No test files found for path: ${loadTestsGlob}`);
     return ret;
@@ -353,7 +353,6 @@ export async function loadTestsFromGlob(
         .map((line) => JSON.parse(line));
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       testCases = await _deref(require(testFile), testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
