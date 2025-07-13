@@ -25,7 +25,7 @@
     "@docusaurus/theme-mermaid": "^3.8.1",
     "@mdx-js/react": "^3.1.0",
     "@monaco-editor/react": "^4.7.0",
-    "@mui/icons-material": "^6.5.0",
+    "@mui/icons-material": "^7.2.0",
     "@segment/ajv-human-errors": "^2.15.0",
     "@swc/core": "^1.12.11",
     "@swc/jest": "^0.2.39",
@@ -57,6 +57,8 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@mui/material": "^7.2.0",
+    "@mui/system": "^7.2.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "swiper": "^11.2.10"

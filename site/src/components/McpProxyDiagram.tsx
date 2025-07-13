@@ -7,7 +7,7 @@ import SecurityIcon from '@mui/icons-material/Security';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
+import Grid2 from '@mui/material/Grid2';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
@@ -27,9 +27,9 @@ export default function MCPProxyDiagram() {
         boxShadow: 3,
       }}
     >
-      <Grid container alignItems="center" justifyContent="center">
+      <Grid2 container alignItems="center" justifyContent="center">
         {/* Left column: Users & Apps */}
-        <Grid item xs={12} sm={3}>
+        <Grid2 size={{ xs: 12, sm: 3 }}>
           <Stack
             spacing={8}
             justifyContent="center"
@@ -49,10 +49,10 @@ export default function MCPProxyDiagram() {
               <Typography variant="h6">Apps</Typography>
             </Stack>
           </Stack>
-        </Grid>
+        </Grid2>
 
         {/* Center column: Proxy */}
-        <Grid item xs={12} sm={6}>
+        <Grid2 size={{ xs: 12, sm: 6 }}>
           <Stack spacing={2} alignItems="center">
             <Box
               sx={{
@@ -85,10 +85,10 @@ export default function MCPProxyDiagram() {
               MCP Proxy
             </Typography>
           </Stack>
-        </Grid>
+        </Grid2>
 
         {/* Right column: Trusted & Unapproved */}
-        <Grid item xs={12} sm={3}>
+        <Grid2 size={{ xs: 12, sm: 3 }}>
           <Stack
             spacing={8}
             justifyContent="center"
@@ -108,8 +108,8 @@ export default function MCPProxyDiagram() {
               <Typography variant="h6">Unapproved MCP</Typography>
             </Stack>
           </Stack>
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
     </Box>
   );
 }

@@ -4,7 +4,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Grid from '@mui/material/Grid';
+import Grid2 from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -107,8 +107,8 @@ Content-Type: application/json
 
   return (
     <Box sx={{ my: 4 }} className={className}>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+      <Grid2 container spacing={3}>
+        <Grid2 size={{ xs: 12, md: 6 }}>
           <Typography variant="h6" gutterBottom>
             Example Request
           </Typography>
@@ -127,8 +127,8 @@ Content-Type: application/json
               }}
             />
           </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
+        </Grid2>
+        <Grid2 size={{ xs: 12, md: 6 }}>
           <Typography variant="h6" gutterBottom>
             Example Response
           </Typography>
@@ -147,21 +147,21 @@ Content-Type: application/json
               }}
             />
           </Paper>
-        </Grid>
-        <Grid item xs={12}>
+        </Grid2>
+        <Grid2 size={12}>
           <Button variant="contained" onClick={handleSubmit} disabled={loading} sx={{ mr: 2 }}>
             {loading ? 'Generating...' : 'Generate Configuration'}
           </Button>
-        </Grid>
+        </Grid2>
         {error && (
-          <Grid item xs={12}>
+          <Grid2 size={12}>
             <Typography color="error" sx={{ mt: 2 }}>
               Error: {error}
             </Typography>
-          </Grid>
+          </Grid2>
         )}
         {config && (
-          <Grid item xs={12}>
+          <Grid2 size={12}>
             <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
               <Typography variant="h6" sx={{ flexGrow: 1 }}>
                 Generated HTTP Configuration
@@ -190,9 +190,9 @@ Content-Type: application/json
                 }}
               />
             </Paper>
-          </Grid>
+          </Grid2>
         )}
-      </Grid>
+      </Grid2>
     </Box>
   );
 }

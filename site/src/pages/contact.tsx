@@ -1,5 +1,5 @@
 import Cal, { getCalApi } from '@calcom/embed-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, type ReactNode } from 'react';
 import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -41,7 +41,7 @@ function Calendar() {
 }
 
 interface TabPanelProps {
-  children?: React.ReactNode;
+  children?: ReactNode;
   index: number;
   value: number;
 }
