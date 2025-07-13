@@ -1155,7 +1155,16 @@ export interface Job {
 }
 
 // used for writing eval results
-export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'yaml', 'yml']);
+export const OutputFileExtension = z.enum([
+  'csv',
+  'html',
+  'json',
+  'jsonl',
+  'txt',
+  'xml',
+  'yaml',
+  'yml',
+]);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
 
 export interface LoadApiProviderContext {
