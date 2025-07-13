@@ -45,7 +45,6 @@ export async function importModule(modulePath: string, functionName?: string) {
     logger.debug(`ESM import failed: ${err}`);
     logger.debug('Attempting CommonJS require fallback...');
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const importedModule = require(safeResolve(modulePath));
       const mod = importedModule?.default?.default || importedModule?.default || importedModule;
       logger.debug(
