@@ -93,7 +93,7 @@ describe('modelScanCommand', () => {
     });
 
     modelScanCommand(program);
-    
+
     // Parse the command with the program, not the command directly
     await program.parseAsync([
       'node',

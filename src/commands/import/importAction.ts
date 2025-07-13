@@ -43,7 +43,7 @@ export async function importAction(file: string): Promise<void> {
     logger.info(`Eval with ID ${evalId} has been successfully imported.`);
     telemetry.record('command_used', {
       name: 'import',
-      evalId: evalId,
+      evalId,
     });
   } catch (error) {
     logger.error(`Failed to import eval: ${error}`);

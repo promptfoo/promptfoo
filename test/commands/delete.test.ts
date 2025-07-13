@@ -40,7 +40,7 @@ describe('delete command', () => {
         'Could not delete evaluation with ID test-id:\nError: Delete failed',
       );
       expect(process.exitCode).toBe(1);
-      
+
       // Reset exitCode after test
       process.exitCode = undefined;
     });

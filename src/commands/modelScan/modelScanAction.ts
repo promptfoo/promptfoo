@@ -4,9 +4,9 @@ import logger from '../../logger';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn('modelaudit', ['--version'], { 
+    const child = spawn('modelaudit', ['--version'], {
       stdio: 'ignore',
-      shell: true 
+      shell: true,
     });
     child.on('error', () => resolve(false));
     child.on('exit', (code) => resolve(code === 0));
