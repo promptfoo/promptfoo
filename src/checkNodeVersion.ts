@@ -4,14 +4,20 @@ import { engines } from '../package.json';
  * Function to check the current Node version against the required version
  * Logs a warning and exits the process if the current Node version is not supported
  */
-export const checkNodeVersion = (): void => {
+export const checkNodeVersion = async (): Promise<void> => {
   const requiredVersion = engines.node;
 
   const versionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
   if (!versionMatch) {
-    // Using console.error to avoid loading logger at startup
-    console.error(
-      `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
+    // Lazy load logger and chalk only when needed
+    const [{ default: logger }, { default: chalk }] = await Promise.all([
+      import('./logger'),
+      import('chalk'),
+    ]);
+    logger.warn(
+      chalk.yellow(
+        `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
+      ),
     );
     return;
   }
@@ -27,11 +33,13 @@ export const checkNodeVersion = (): void => {
     (major === requiredMajor && minor < requiredMinor) ||
     (major === requiredMajor && minor === requiredMinor && patch < requiredPatch)
   ) {
-    const errorMessage = `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`;
-    // Using console.error to avoid loading logger at startup
-    console.error(errorMessage);
-
+    // Lazy load chalk only when needed (logger not used in error case)
+    const { default: chalk } = await import('chalk');
     process.exitCode = 1;
-    throw new Error(errorMessage);
+    throw new Error(
+      chalk.yellow(
+        `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`,
+      ),
+    );
   }
 };
