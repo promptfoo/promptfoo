@@ -15,4 +15,5 @@ async function main() {
 
 main().catch((err) => {
   logger.error(`Failed to start server: ${String(err)}`);
+  process.exitCode = 1;
 });

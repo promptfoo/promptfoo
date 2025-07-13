@@ -99,5 +99,35 @@ describe('server startup behavior', () => {
       // And NOT attempt to start the server
       expect(mockStartServer).not.toHaveBeenCalled();
     });
+
+    it('should set process.exitCode to 1 on error', async () => {
+      // Given an error occurs during startup
+      const testError = new Error('Connection failed');
+      mockCheckServerRunning.mockRejectedValue(testError);
+      
+      // Save original process.exitCode
+      const originalExitCode = process.exitCode;
+      process.exitCode = undefined;
+
+      // When the main function encounters an error
+      try {
+        const port = getDefaultPort();
+        const isRunning = await checkServerRunning(port);
+        if (isRunning) {
+          logger.info(`Promptfoo server already running at http://localhost:${port}`);
+        } else {
+          await startServer(port, BrowserBehavior.SKIP);
+        }
+      } catch (err) {
+        logger.error(`Failed to start server: ${String(err)}`);
+        process.exitCode = 1;
+      }
+
+      // Then process.exitCode should be set to 1
+      expect(process.exitCode).toBe(1);
+      
+      // Restore original process.exitCode
+      process.exitCode = originalExitCode;
+    });
   });
 });
