@@ -21,7 +21,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import { ellipsize } from '../../../../../util/text';
-import TraceView from '../../../components/traces/TraceView';
+import TraceSection from '../../../components/traces/TraceSection';
 import ChatMessages, { type Message } from './ChatMessages';
 import Citations from './Citations';
 import type { GradingResult } from './types';
@@ -418,16 +418,7 @@ export default function EvalOutputPromptDialog({
         )}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
-        {evaluationId && (
-          <Box mt={2}>
-            <Typography variant="subtitle1" sx={subtitleTypographySx}>
-              Trace Timeline
-            </Typography>
-            <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
-              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
-            </ErrorBoundary>
-          </Box>
-        )}
+        <TraceSection evaluationId={evaluationId} testCaseId={testCaseId} />
         {citationsData && <Citations citations={citationsData} />}
         {metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0 && (
           <Box my={2}>
