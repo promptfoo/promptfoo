@@ -136,6 +136,12 @@ describe('Google Sheets Integration', () => {
           sheets: [
             {
               properties: {
+                sheetId: 0,
+                title: 'Sheet1',
+              },
+            },
+            {
+              properties: {
                 sheetId: 98765,
                 title: 'TestSheet',
               },
@@ -158,9 +164,13 @@ describe('Google Sheets Integration', () => {
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
       expect(result).toEqual([{ header1: 'value1', header2: 'value2', header3: '' }]);
+      expect(spreadsheets.get).toHaveBeenCalledWith({
+        spreadsheetId: '1234567890',
+        auth: mockAuthClient,
+      });
       expect(spreadsheets.values.get).toHaveBeenCalledWith({
         spreadsheetId: '1234567890',
-        range: 'A1:ZZZ',
+        range: 'Sheet1',
         auth: mockAuthClient,
       });
     });
@@ -179,7 +189,7 @@ describe('Google Sheets Integration', () => {
       });
       expect(spreadsheets.values.get).toHaveBeenCalledWith({
         spreadsheetId: '1234567890',
-        range: 'TestSheet!A1:ZZZ',
+        range: 'TestSheet',
         auth: mockAuthClient,
       });
     });
@@ -189,11 +199,30 @@ describe('Google Sheets Integration', () => {
         'Invalid Google Sheets URL',
       );
     });
+
+    it('should throw error when no sheets found', async () => {
+      spreadsheets.get.mockResolvedValue({
+        data: {
+          sheets: [],
+        },
+      });
+
+      await expect(fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL)).rejects.toThrow(
+        'No sheets found in spreadsheet',
+      );
+    });
+
+    it('should throw error when sheet with gid not found', async () => {
+      await expect(
+        fetchCsvFromGoogleSheetAuthenticated(
+          'https://docs.google.com/spreadsheets/d/1234567890/edit?gid=99999',
+        ),
+      ).rejects.toThrow('Sheet not found for gid: 99999');
+    });
   });
 
-  describe('writeCsvToGoogleSheet', () => {
+  describe('Range behavior and backwards compatibility', () => {
     const spreadsheets = mockSpreadsheetsApi as MockSpreadsheets;
-    const testRows: CsvRow[] = [{ header1: 'value1', header2: 'value2' }];
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -203,8 +232,8 @@ describe('Google Sheets Integration', () => {
           sheets: [
             {
               properties: {
-                sheetId: 98765,
-                title: 'TestSheet',
+                sheetId: 0,
+                title: 'Sheet1',
               },
             },
           ],
@@ -212,75 +241,171 @@ describe('Google Sheets Integration', () => {
       });
     });
 
-    it('should write data to existing sheet', async () => {
-      const mockDate = 1234567890;
-      jest.spyOn(Date, 'now').mockReturnValue(mockDate);
-      spreadsheets.values.update.mockResolvedValue({});
-
-      await writeCsvToGoogleSheet(testRows, TEST_SHEET_URL);
-      expect(spreadsheets.values.update).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        range: `Sheet${mockDate}!A1:ZZZ`,
-        valueInputOption: 'USER_ENTERED',
-        auth: mockAuthClient,
-        requestBody: {
+    it('should retrieve all data when using sheet name only (no range specified)', async () => {
+      const mockResponse = {
+        data: {
           values: [
-            ['header1', 'header2'],
-            ['value1', 'value2'],
+            ['header1', 'header2', 'header3'],
+            ['value1', 'value2', 'value3'],
+            ['value4', 'value5', 'value6'],
           ],
         },
+      };
+
+      spreadsheets.values.get.mockResolvedValue(mockResponse);
+
+      const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+
+      // Verify the API was called with just the sheet name
+      expect(spreadsheets.values.get).toHaveBeenCalledWith({
+        spreadsheetId: '1234567890',
+        range: 'Sheet1',
+        auth: mockAuthClient,
       });
+
+      // Verify all data was returned
+      expect(result).toEqual([
+        { header1: 'value1', header2: 'value2', header3: 'value3' },
+        { header1: 'value4', header2: 'value5', header3: 'value6' },
+      ]);
     });
 
-    it('should create new sheet when no gid provided', async () => {
-      // Mock Date.now() to get consistent sheet names in tests
-      const mockDate = 1234567890;
-      jest.spyOn(Date, 'now').mockReturnValue(mockDate);
+    it('should handle empty cells correctly with sheet name only', async () => {
+      const mockResponse = {
+        data: {
+          values: [
+            ['header1', 'header2', 'header3', 'header4'],
+            ['value1', '', 'value3'], // Missing value2 and header4
+            ['', 'value5', '', 'value7'], // Missing header1 and header3
+          ],
+        },
+      };
 
-      spreadsheets.batchUpdate.mockResolvedValue({});
-      spreadsheets.values.update.mockResolvedValue({});
+      spreadsheets.values.get.mockResolvedValue(mockResponse);
 
-      await writeCsvToGoogleSheet(testRows, TEST_SHEET_URL);
-      expect(spreadsheets.batchUpdate).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        auth: mockAuthClient,
-        requestBody: {
-          requests: [
+      const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+
+      expect(result).toEqual([
+        { header1: 'value1', header2: '', header3: 'value3', header4: '' },
+        { header1: '', header2: 'value5', header3: '', header4: 'value7' },
+      ]);
+    });
+
+    it('should handle sheets with many columns beyond Z', async () => {
+      // Create headers for columns A through AZ (52 columns)
+      const headers = [];
+      for (let i = 0; i < 52; i++) {
+        headers.push(`header${i + 1}`);
+      }
+
+      const row1 = headers.map((_, i) => `value${i + 1}`);
+
+      const mockResponse = {
+        data: {
+          values: [headers, row1],
+        },
+      };
+
+      spreadsheets.values.get.mockResolvedValue(mockResponse);
+
+      const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+
+      // Verify all 52 columns were retrieved
+      expect(Object.keys(result[0])).toHaveLength(52);
+      expect(result[0].header52).toBe('value52');
+    });
+
+    it('should handle trailing empty rows and columns correctly', async () => {
+      // According to Google Sheets API docs, trailing empty rows and columns are omitted
+      const mockResponse = {
+        data: {
+          values: [
+            ['header1', 'header2', 'header3'],
+            ['value1', 'value2', ''], // Trailing empty cell
+            ['value4', '', ''], // Two trailing empty cells
+            // Trailing empty rows are not included in the response
+          ],
+        },
+      };
+
+      spreadsheets.values.get.mockResolvedValue(mockResponse);
+
+      const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+
+      expect(result).toEqual([
+        { header1: 'value1', header2: 'value2', header3: '' },
+        { header1: 'value4', header2: '', header3: '' },
+      ]);
+    });
+
+    it('should handle very wide sheets efficiently', async () => {
+      // Create a sheet with 100 columns
+      const headers = Array.from({ length: 100 }, (_, i) => `Col${i + 1}`);
+      const row1 = Array.from({ length: 100 }, (_, i) => `Val${i + 1}`);
+      const testData = [headers, row1];
+
+      spreadsheets.get.mockResolvedValue({
+        data: {
+          sheets: [
             {
-              addSheet: {
-                properties: {
-                  title: `Sheet${mockDate}`,
-                },
+              properties: {
+                sheetId: 0,
+                title: 'WideSheet',
               },
             },
           ],
         },
       });
-    });
 
-    it('should use existing sheet when gid provided', async () => {
-      spreadsheets.values.update.mockResolvedValue({});
-
-      await writeCsvToGoogleSheet(testRows, TEST_SHEET_URL_WITH_GID);
-      expect(spreadsheets.batchUpdate).not.toHaveBeenCalled();
-      expect(spreadsheets.values.update).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        range: 'TestSheet!A1:ZZZ',
-        valueInputOption: 'USER_ENTERED',
-        auth: mockAuthClient,
-        requestBody: {
-          values: [
-            ['header1', 'header2'],
-            ['value1', 'value2'],
-          ],
-        },
+      spreadsheets.values.get.mockResolvedValue({
+        data: { values: testData },
       });
+
+      const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+
+      // Verify the API was called with just the sheet name (not a huge range)
+      expect(spreadsheets.values.get).toHaveBeenCalledWith({
+        spreadsheetId: '1234567890',
+        range: 'WideSheet',
+        auth: mockAuthClient,
+      });
+
+      // Verify all 100 columns were retrieved
+      expect(Object.keys(result[0])).toHaveLength(100);
+      expect(result[0].Col100).toBe('Val100');
     });
 
-    it('should throw error for invalid sheet URL', async () => {
-      await expect(writeCsvToGoogleSheet(testRows, 'invalid-url')).rejects.toThrow(
-        'Invalid Google Sheets URL',
-      );
+    it('should calculate correct column letters for write operations', async () => {
+      // Test the column letter calculation for various sizes
+      const testCases = [
+        { cols: 1, expected: 'A' },
+        { cols: 26, expected: 'Z' },
+        { cols: 27, expected: 'AA' },
+        { cols: 52, expected: 'AZ' },
+        { cols: 53, expected: 'BA' },
+        { cols: 702, expected: 'ZZ' },
+        { cols: 703, expected: 'AAA' },
+      ];
+
+      for (const { cols, expected } of testCases) {
+        jest.clearAllMocks(); // Clear mocks between iterations
+
+        const headers = Array.from({ length: cols }, (_, i) => `col${i + 1}`);
+        const mockRows: CsvRow[] = [
+          headers.reduce((acc, header) => ({ ...acc, [header]: 'value' }), {}),
+        ];
+
+        spreadsheets.values.update.mockResolvedValue({});
+        spreadsheets.batchUpdate.mockResolvedValue({});
+
+        await writeCsvToGoogleSheet(mockRows, TEST_SHEET_URL);
+
+        const updateCall = spreadsheets.values.update.mock.calls[0][0];
+        const range = updateCall.range;
+        const endColumn = range.match(/!A1:([A-Z]+)\d+/)?.[1];
+
+        expect(endColumn).toBe(expected);
+      }
     });
   });
 });
