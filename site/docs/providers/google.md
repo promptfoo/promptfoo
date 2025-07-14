@@ -342,6 +342,21 @@ For multimodal inputs (images and video), the provider supports:
 - Images: PNG, JPEG, WEBP, HEIC, HEIF formats (max 3,600 files)
 - Videos: MP4, MPEG, MOV, AVI, FLV, MPG, WEBM, WMV, 3GPP formats (up to ~1 hour)
 
+Pass images as inline data in binary format on separate lines, explained in the [Google Gemini documentation](https://ai.google.dev/gemini-api/docs/image-understanding):
+
+```yaml
+prompts: |
+  {{imageFile}}
+  Caption this image.
+
+providers:
+  - id: google:gemini-2.5-flash
+
+tests:
+  - vars:
+      imageFile: file://assets/red-panda.jpg
+```
+
 ### Safety Settings
 
 Safety settings can be configured to control content filtering:
@@ -627,11 +642,60 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
-#### Example and Resources
-
-For a complete working example, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
-
 For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+### Code Execution
+
+Code execution allows Gemini models to write and execute Python code to solve computational problems, perform calculations, and generate data visualizations.
+
+#### Basic Usage
+
+To enable code execution:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools:
+        - codeExecution: {}
+```
+
+#### Example Use Cases
+
+Code execution is particularly valuable for:
+
+- Mathematical computations and calculations
+- Data analysis and visualization
+
+For more details, see the [Google AI Studio documentation on Code Execution](https://ai.google.dev/gemini-api/docs/code-execution).
+
+### URL Context
+
+URL context allows Gemini models to extract and analyze content from web URLs, enabling them to understand and work with information from specific web pages.
+
+#### Basic Usage
+
+To enable URL context:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools:
+        - urlContext: {}
+```
+
+#### Example Use Cases
+
+URL context is particularly valuable for:
+
+- Analyzing specific web page content
+- Extracting information from documentation
+- Comparing information across multiple URLs
+
+For more details, see the [Google AI Studio documentation on URL Context](https://ai.google.dev/gemini-api/docs/url-context).
+
+For a complete working examples of the search grounding, code execution, and url context features, see the [google-aistudio-tools examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-tools).
 
 ## Google Live API
 
