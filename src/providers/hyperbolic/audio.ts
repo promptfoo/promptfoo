@@ -16,7 +16,7 @@ export type HyperbolicAudioOptions = {
   language?: string;
 };
 
-export const HYPERBOLIC_AUDIO_MODELS = [
+const HYPERBOLIC_AUDIO_MODELS = [
   {
     id: 'Melo-TTS',
     aliases: ['melo-tts', 'melo'],

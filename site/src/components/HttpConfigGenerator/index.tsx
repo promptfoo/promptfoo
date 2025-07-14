@@ -2,7 +2,12 @@ import { Editor } from '@monaco-editor/react';
 import React, { useState } from 'react';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { Box, Button, Grid, Paper, Typography, IconButton } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
 import { dump as yamlDump } from 'js-yaml';
 
 interface HttpConfigGeneratorProps {
@@ -87,11 +92,17 @@ Content-Type: application/json
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(config);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    navigator.clipboard
+      .writeText(config)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
+      })
+      .catch(() => {
+        setError('Unable to copy to clipboard');
+      });
   };
 
   return (

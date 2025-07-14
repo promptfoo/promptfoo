@@ -1,23 +1,21 @@
-/* eslint-disable */
-
 !(function (t) {
   if (window.ko) return;
-  ((window.ko = []),
+  (window.ko = []),
     ['identify', 'track', 'removeListeners', 'open', 'on', 'off', 'qualify', 'ready'].forEach(
       function (t) {
         ko[t] = function () {
           var n = [].slice.call(arguments);
-          return (n.unshift(t), ko.push(n), ko);
+          return n.unshift(t), ko.push(n), ko;
         };
       },
-    ));
+    );
   var n = document.createElement('script');
-  ((n.async = !0),
+  (n.async = !0),
     n.setAttribute(
       'src',
       'https://cdn.getkoala.com/v1/pk_27d6c47cb0df11c274749db81d01a49ddee8/sdk.js',
     ),
-    (document.body || document.head).appendChild(n));
+    (document.body || document.head).appendChild(n);
 
   document.addEventListener('copy', function () {
     const content = window.getSelection().toString();
@@ -50,9 +48,9 @@
     }
     if (((e.vector = t), !t.loaded)) {
       var i = r.createElement('script');
-      ((i.type = 'text/javascript'), (i.async = !0), (i.src = 'https://cdn.vector.co/pixel.js'));
+      (i.type = 'text/javascript'), (i.async = !0), (i.src = 'https://cdn.vector.co/pixel.js');
       var l = r.getElementsByTagName('script')[0];
-      (l.parentNode.insertBefore(i, l), (t.loaded = !0));
+      l.parentNode.insertBefore(i, l), (t.loaded = !0);
     }
   } catch (e) {
     console.error('Error loading Vector:', e);
@@ -68,23 +66,23 @@ vector.load('18d08a7d-45cf-4805-b8b1-978305be5dd4');
     (e.init = function (i, s, a) {
       function g(t, e) {
         var o = e.split('.');
-        (2 == o.length && ((t = t[o[0]]), (e = o[1])),
+        2 == o.length && ((t = t[o[0]]), (e = o[1])),
           (t[e] = function () {
             t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
-          }));
+          });
       }
-      (((p = t.createElement('script')).type = 'text/javascript'),
+      ((p = t.createElement('script')).type = 'text/javascript'),
         (p.async = !0),
         (p.src =
           s.api_host.replace('.i.posthog.com', '-assets.i.posthog.com') + '/static/array.js'),
-        (r = t.getElementsByTagName('script')[0]).parentNode.insertBefore(p, r));
+        (r = t.getElementsByTagName('script')[0]).parentNode.insertBefore(p, r);
       var u = e;
       for (
         void 0 !== a ? (u = e[a] = []) : (a = 'posthog'),
           u.people = u.people || [],
           u.toString = function (t) {
             var e = 'posthog';
-            return ('posthog' !== a && (e += '.' + a), t || (e += ' (stub)'), e);
+            return 'posthog' !== a && (e += '.' + a), t || (e += ' (stub)'), e;
           },
           u.people.toString = function () {
             return u.toString(1) + '.people (stub)';
@@ -110,12 +108,27 @@ posthog.init('phc_gOS5ctlYqd64vmJtYVpAU0W5iew7OopcETkyYNpkyYP', {
 /* Reo */
 !(function () {
   var e, t, n;
-  ((e = '59f3ca4439de16d'),
+  (e = '59f3ca4439de16d'),
     (t = function () {
       Reo.init({ clientID: '59f3ca4439de16d' });
     }),
     ((n = document.createElement('script')).src = 'https://static.reo.dev/' + e + '/reo.js'),
     (n.defer = !0),
     (n.onload = t),
-    document.head.appendChild(n));
+    document.head.appendChild(n);
+})();
+
+/* Google */
+(function () {
+  var script = document.createElement('script');
+  script.src = 'https://www.googletagmanager.com/gtag/js?id=AW-17347444171';
+  script.async = true;
+  document.head.appendChild(script);
+
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag('js', new Date());
+  gtag('config', 'AW-17347444171');
 })();

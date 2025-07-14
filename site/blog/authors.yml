@@ -1,3 +1,9 @@
+promptfoo_team:
+  name: Promptfoo Team
+  title: Development Team
+  url: https://github.com/promptfoo
+  image_url: /img/logo-panda.svg
+
 adel:
   name: Adel Müürsepp
   title: Contributor
@@ -24,7 +30,7 @@ faizan:
 
 ian:
   name: Ian Webster
-  title: CEO & Co-founder, Engineer, OWASP Gen AI Red Teaming Contributor
+  title: Engineer & OWASP Gen AI Red Teaming Contributor
   url: https://github.com/typpo
   image_url: /img/team/ian.jpeg
 

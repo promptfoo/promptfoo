@@ -11,6 +11,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import yaml from 'js-yaml';
 import { useTableStore } from './store';
 
 interface ConfigModalProps {
@@ -26,10 +27,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
 
   React.useEffect(() => {
     if (open) {
-      (async () => {
-        const { default: yaml } = await import('js-yaml');
-        setYamlConfig(yaml.dump(config));
-      })();
+      setYamlConfig(yaml.dump(config));
     }
   }, [open, config]);
 

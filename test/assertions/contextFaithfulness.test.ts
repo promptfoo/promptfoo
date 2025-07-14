@@ -57,6 +57,8 @@ describe('handleContextFaithfulness', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.9);
     expect(result.reason).toBe('Content is faithful to context');
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata!.context).toBe('test context');
     expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
       'What is the capital of France?',
       'The capital of France is Paris.',
@@ -113,6 +115,8 @@ describe('handleContextFaithfulness', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0.3);
     expect(result.reason).toBe('Content contains hallucinations');
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata!.context).toBe('test context');
     expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
       'What is the capital of France?',
       'The capital of France is Paris and it has a population of 50 million.',
@@ -246,7 +250,7 @@ describe('handleContextFaithfulness', () => {
       providerResponse: null,
     } as any;
 
-    await handleContextFaithfulness(params);
+    const result = await handleContextFaithfulness(params);
 
     expect(contextUtils.resolveContext).toHaveBeenCalledWith(
       params.assertion,
@@ -263,5 +267,7 @@ describe('handleContextFaithfulness', () => {
       0,
       {},
     );
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata!.context).toBe('from-transform');
   });
 });

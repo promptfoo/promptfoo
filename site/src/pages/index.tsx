@@ -232,9 +232,27 @@ function HomepageWalkthrough() {
   ];
 
   const selectedStepData = steps.find((step) => step.id === selectedStep);
+  const tabsRef = React.useRef<HTMLDivElement>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkScroll = () => {
+      if (tabsRef.current && isMobile) {
+        const { scrollWidth, clientWidth } = tabsRef.current;
+        setShowScrollIndicator(scrollWidth > clientWidth);
+      }
+    };
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [isMobile]);
+
   return (
     <div className={styles.walkthroughContainer}>
-      <div className={styles.walkthroughTabs}>
+      <div
+        className={clsx(styles.walkthroughTabs, showScrollIndicator && styles.scrollable)}
+        ref={tabsRef}
+      >
         {steps.map((step) => (
           <button
             key={step.id}

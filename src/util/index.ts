@@ -2,6 +2,7 @@ import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
+import { XMLBuilder } from 'fast-xml-parser';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -20,7 +21,6 @@ import {
   type NunjucksFilterMap,
   type TestCase,
   type OutputFile,
-  type CompletedPrompt,
   type CsvRow,
   isApiProvider,
   isProviderOptions,
@@ -172,6 +172,22 @@ export async function writeOutput(
       const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
       fs.appendFileSync(outputPath, text);
     }
+  } else if (outputExtension === 'xml') {
+    const summary = await evalRecord.toEvaluateSummary();
+    const xmlBuilder = new XMLBuilder({
+      ignoreAttributes: false,
+      format: true,
+      indentBy: '  ',
+    });
+    const xmlData = xmlBuilder.build({
+      promptfoo: {
+        evalId: evalRecord.id,
+        results: summary,
+        config: evalRecord.config,
+        shareableUrl: shareableUrl || undefined,
+      },
+    });
+    fs.writeFileSync(outputPath, xmlData);
   }
 }
 
@@ -227,18 +243,6 @@ export function setupEnv(envPath: string | undefined) {
     dotenv.config();
   }
 }
-
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-  uuid: string;
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-};
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
   if (isApiProvider(provider)) {

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type React from 'react';
+import { useState, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -51,6 +52,33 @@ const textContentTypographySx = {
   wordBreak: 'break-word',
 };
 
+/**
+ * Returns the value of the assertion.
+ * For context-related assertions, read the context value from metadata, if it exists.
+ * Otherwise, return the assertion value.
+ * @param result - The grading result.
+ * @returns The value of the assertion.
+ */
+function getValue(result: GradingResult) {
+  // For context-related assertions, read the context value from metadata, if it exists
+  if (
+    result.assertion?.type &&
+    ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
+      result.assertion.type,
+    ) &&
+    result.metadata?.context
+  ) {
+    return result.metadata?.context;
+  }
+
+  // Otherwise, return the assertion value
+  return result.assertion?.value
+    ? typeof result.assertion.value === 'object'
+      ? JSON.stringify(result.assertion.value, null, 2)
+      : String(result.assertion.value)
+    : '-';
+}
+
 // Code display component
 interface CodeDisplayProps {
   content: string;
@@ -75,7 +103,7 @@ function CodeDisplay({
 }: CodeDisplayProps) {
   // Improved code detection logic
   const isCode =
-    /^[\s]*[{\[]/.test(content) || // JSON-like (starts with { or [)
+    /^[\s]*[{[]/.test(content) || // JSON-like (starts with { or [)
     /^#\s/.test(content) || // Markdown headers (starts with # )
     /```/.test(content) || // Code blocks (contains ```)
     /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
@@ -195,11 +223,8 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
               if (!result) {
                 return null;
               }
-              const value = result.assertion?.value
-                ? typeof result.assertion.value === 'object'
-                  ? JSON.stringify(result.assertion.value, null, 2)
-                  : String(result.assertion.value)
-                : '-';
+
+              const value = getValue(result);
               const truncatedValue = ellipsize(value, 300);
               const isExpanded = expandedValues[i] || false;
               const valueKey = `value-${i}`;
@@ -340,7 +365,7 @@ export default function EvalOutputPromptDialog({
     setExpandedMetadata((prev: ExpandedMetadataState) => ({
       ...prev,
       [key]: {
-        expanded: isDoubleClick ? false : true,
+        expanded: !isDoubleClick,
         lastClickTime: now,
       },
     }));
