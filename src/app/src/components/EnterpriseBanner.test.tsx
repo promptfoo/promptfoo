@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { callApi } from '@app/utils/api';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -45,7 +45,10 @@ describe('EnterpriseBanner', () => {
     expect(mockCallApi).toHaveBeenCalledTimes(1);
     expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-123');
 
-    expect(container.firstChild).toBeNull();
+    // Wait for the component to finish updating
+    await waitFor(() => {
+      expect(container.firstChild).toBeNull();
+    });
   });
 
   it('should render the community edition banner when no evalId is provided', async () => {
