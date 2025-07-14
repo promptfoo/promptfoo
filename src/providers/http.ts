@@ -179,63 +179,89 @@ export async function generateSignature(
         break;
       }
       case 'pfx': {
-        logger.debug(`[Signature Auth] Loading PFX file: ${signatureAuth.pfxPath}`);
+        if (signatureAuth.pfxPath) {
+          logger.debug(`[Signature Auth] Loading PFX file: ${signatureAuth.pfxPath}`);
 
-        // Check for PFX password in config first, then fallback to environment variable
-        const pfxPassword = signatureAuth.pfxPassword || getEnvString('PROMPTFOO_PFX_PASSWORD');
+          // Check for PFX password in config first, then fallback to environment variable
+          const pfxPassword = signatureAuth.pfxPassword || getEnvString('PROMPTFOO_PFX_PASSWORD');
 
-        if (!pfxPassword) {
-          throw new Error(
-            'PFX certificate password is required. Provide it via config pfxPassword or PROMPTFOO_PFX_PASSWORD environment variable',
-          );
-        }
-
-        try {
-          // Use eval to avoid TypeScript static analysis of the dynamic import
-          const pemModule = await import('pem').catch(() => {
+          if (!pfxPassword) {
             throw new Error(
-              'PFX certificate support requires the "pem" package. Install it with: npm install pem',
+              'PFX certificate password is required. Provide it via config pfxPassword or PROMPTFOO_PFX_PASSWORD environment variable',
             );
-          });
-
-          const pem = pemModule.default as any;
-
-          // Use promise wrapper for pem.readPkcs12
-          const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-            pem.readPkcs12(
-              signatureAuth.pfxPath,
-              { p12Password: pfxPassword },
-              (err: any, data: any) => {
-                if (err) {
-                  reject(err);
-                } else {
-                  resolve(data);
-                }
-              },
-            );
-          });
-
-          if (!result.key) {
-            throw new Error('No private key found in PFX file');
           }
 
-          privateKey = result.key;
-          logger.debug(
-            `[Signature Auth] Successfully extracted private key from PFX using pem library`,
-          );
-        } catch (err) {
-          if (err instanceof Error) {
-            if (err.message.includes('ENOENT')) {
-              throw new Error(`PFX file not found: ${signatureAuth.pfxPath}`);
+          try {
+            // Use eval to avoid TypeScript static analysis of the dynamic import
+            const pemModule = await import('pem').catch(() => {
+              throw new Error(
+                'PFX certificate support requires the "pem" package. Install it with: npm install pem',
+              );
+            });
+
+            const pem = pemModule.default as any;
+
+            // Use promise wrapper for pem.readPkcs12
+            const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
+              pem.readPkcs12(
+                signatureAuth.pfxPath,
+                { p12Password: pfxPassword },
+                (err: any, data: any) => {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve(data);
+                  }
+                },
+              );
+            });
+
+            if (!result.key) {
+              throw new Error('No private key found in PFX file');
             }
-            if (err.message.includes('invalid') || err.message.includes('decrypt')) {
-              throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
+
+            privateKey = result.key;
+            logger.debug(
+              `[Signature Auth] Successfully extracted private key from PFX using pem library`,
+            );
+          } catch (err) {
+            if (err instanceof Error) {
+              if (err.message.includes('ENOENT')) {
+                throw new Error(`PFX file not found: ${signatureAuth.pfxPath}`);
+              }
+              if (err.message.includes('invalid') || err.message.includes('decrypt')) {
+                throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
+              }
             }
+            logger.error(`Error loading PFX certificate: ${String(err)}`);
+            throw new Error(
+              `Failed to load PFX certificate. Make sure the file exists and the password is correct: ${String(err)}`,
+            );
           }
-          logger.error(`Error loading PFX certificate: ${String(err)}`);
-          throw new Error(
-            `Failed to load PFX certificate. Make sure the file exists and the password is correct: ${String(err)}`,
-          );
+        } else if (signatureAuth.certPath && signatureAuth.keyPath) {
+          logger.debug(`[Signature Auth] Loading separate CRT and KEY files: ${signatureAuth.certPath}, ${signatureAuth.keyPath}`);
+
+          try {
+            // Read the private key directly from the key file
+            if (!fs.existsSync(signatureAuth.keyPath)) {
+              throw new Error(`Key file not found: ${signatureAuth.keyPath}`);
+            }
+            if (!fs.existsSync(signatureAuth.certPath)) {
+              throw new Error(`Certificate file not found: ${signatureAuth.certPath}`);
+            }
+
+            privateKey = fs.readFileSync(signatureAuth.keyPath, 'utf8');
+            logger.debug(
+              `[Signature Auth] Successfully loaded private key from separate key file`,
+            );
+          } catch (err) {
+            logger.error(`Error loading certificate/key files: ${String(err)}`);
+            throw new Error(
+              `Failed to load certificate/key files. Make sure both files exist and are readable: ${String(err)}`,
+            );
+          }
+        } else {
+          throw new Error('PFX type requires either pfxPath or both certPath and keyPath');
         }
         break;
       }
@@ -301,8 +327,14 @@ const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
 // PFX signature auth schema
 const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   type: z.literal('pfx'),
-  pfxPath: z.string(),
+  pfxPath: z.string().optional(),
   pfxPassword: z.string().optional(),
+  certPath: z.string().optional(),
+  keyPath: z.string().optional(),
+}).refine((data) => {
+  return data.pfxPath || (data.certPath && data.keyPath);
+}, {
+  message: 'Either pfxPath or both certPath and keyPath must be provided for PFX type',
 });
 
 // Legacy signature auth schema (for backward compatibility)
@@ -315,6 +347,8 @@ const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
   keyPassword: z.string().optional(),
   pfxPath: z.string().optional(),
   pfxPassword: z.string().optional(),
+  certPath: z.string().optional(),
+  keyPath: z.string().optional(),
 });
 
 export const HttpProviderConfigSchema = z.object({

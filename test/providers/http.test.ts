@@ -3186,6 +3186,10 @@ describe('RSA signature authentication', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+      // Ensure environment variables are restored
+    if (process.env.PROMPTFOO_JKS_PASSWORD === 'env-password') {
+      delete process.env.PROMPTFOO_JKS_PASSWORD;
+    }
   });
 
   it('should generate and include signature in vars', async () => {
@@ -3420,15 +3424,14 @@ describe('RSA signature authentication', () => {
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(Buffer.from('mock-keystore-data'));
 
-    // Mock environment variable
-    jest.mock('../../src/envars', () => ({
-      getEnvString: jest.fn().mockImplementation((key: string) => {
-        if (key === 'PROMPTFOO_JKS_PASSWORD') {
-          return 'env-password';
-        }
-        return '';
-      }),
-    }));
+      // Mock the getEnvString function directly
+    const { getEnvString } = require('../../src/envars');
+    jest.mocked(getEnvString).mockImplementation((key: string) => {
+      if (key === 'PROMPTFOO_JKS_PASSWORD') {
+        return 'env-password';
+      }
+      return '';
+    });
 
     const provider = new HttpProvider('http://example.com', {
       config: {

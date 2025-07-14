@@ -8,12 +8,15 @@ npx promptfoo@latest init --example http-provider-auth-signature-pfx
 
 ## Introduction
 
-This example demonstrates how to setup authentication with an HTTP provider using PFX (PKCS#12) certificates for cryptographic signature validation.
+This example demonstrates how to setup authentication with an HTTP provider using certificates for cryptographic signature validation. You can use either:
+
+1. A PFX certificate file (PKCS#12 format)
+2. Separate CRT and KEY files
 
 ## Prerequisites
 
 - Node.js 18.0.0 or higher
-- A PFX certificate file with a keypair for signing/verification
+- Either a PFX certificate file OR separate CRT and KEY files with a keypair for signing/verification
 
 ## Setup
 
@@ -25,7 +28,9 @@ This example demonstrates how to setup authentication with an HTTP provider usin
 npm install
 ```
 
-2. **Create a PFX certificate** (if you don't have one):
+2. **Create certificates** (if you don't have them):
+
+#### Option A: PFX Certificate
 
 ```bash
 # First, create a private key and certificate
@@ -40,6 +45,16 @@ openssl pkcs12 -export -out certificate.pfx -inkey private.key -in certificate.c
 rm private.key certificate.crt
 ```
 
+#### Option B: Separate CRT and KEY Files
+
+```bash
+# Create a private key and certificate (keep both files)
+openssl req -x509 -newkey rsa:2048 -keyout private.key -out certificate.crt \
+  -days 365 -nodes -subj "/CN=PromptFoo Test/O=Test/C=US"
+
+# No cleanup needed - both files are used directly
+```
+
 3. Start the server:
 
 ```bash
@@ -48,14 +63,31 @@ npm start
 
 ## Configuration
 
-The example uses the following PFX signature authentication configuration:
+The example includes two configuration files demonstrating different certificate formats:
 
-- **Type**: `pfx`
-- **PFX Path**: `./certificate.pfx`
-- **PFX Password**: `password`
-- **Signature Algorithm**: `SHA256`
-- **Signature Validity**: 300000ms (5 minutes)
-- **Signature Data Template**: `promptfoo-app{{signatureTimestamp}}`
+### Option A: PFX Certificate (`promptfooconfig.yaml`)
+
+```yaml
+signatureAuth:
+  type: pfx
+  pfxPath: ./certificate.pfx
+  pfxPassword: password
+  signatureAlgorithm: SHA256
+  signatureValidityMs: 300000
+  signatureDataTemplate: 'promptfoo-app{{signatureTimestamp}}'
+```
+
+### Option B: Separate CRT/KEY Files (`promptfooconfig-crt-key.yaml`)
+
+```yaml
+signatureAuth:
+  type: pfx
+  certPath: ./certificate.crt
+  keyPath: ./private.key
+  signatureAlgorithm: SHA256
+  signatureValidityMs: 300000
+  signatureDataTemplate: 'promptfoo-app{{signatureTimestamp}}'
+```
 
 **Important**: In production, use environment variables for passwords and secure key management practices.
 
@@ -64,8 +96,11 @@ The example uses the following PFX signature authentication configuration:
 Note, for this example to work, you will need to set the environment variable `NODE_TLS_REJECT_UNAUTHORIZED=0`, as this cert is self-signed.
 
 ```bash
-# Run test cases
+# Run test cases with PFX certificate
 NODE_TLS_REJECT_UNAUTHORIZED=0 promptfoo eval --no-cache
+
+# Or run with separate CRT/KEY files
+NODE_TLS_REJECT_UNAUTHORIZED=0 promptfoo eval -c promptfooconfig-crt-key.yaml --no-cache
 
 # View results
 promptfoo view
@@ -75,19 +110,21 @@ promptfoo view
 
 ## How it Works
 
-1. The server loads the PFX certificate and extracts the public key for signature verification
-2. The promptfoo HTTP provider uses the same PFX certificate to generate signatures
+1. The server loads the certificate (either from PFX file or separate CRT/KEY files) and extracts the public key for signature verification
+2. The promptfoo HTTP provider uses the same certificate to generate signatures
 3. Incoming requests must include signature headers (`signature`, `timestamp`, `client-id`)
-4. The server validates the timestamp and verifies the signature using the public key extracted from the PFX
+4. The server validates the timestamp and verifies the signature using the public key
 5. Only requests with valid signatures are processed
 
 ## Environment Variables
 
-This example uses hardcoded passwords for simplicity. In production, you should use:
+This example uses hardcoded values for simplicity. In production, you should use:
 
-- `PFX_PASSWORD` - Password for the PFX certificate file
+- `PROMPTFOO_PFX_PASSWORD` - Password for the PFX certificate file (when using PFX option)
 
-## About PFX/PKCS#12
+## About Certificate Formats
+
+### PFX/PKCS#12
 
 PFX (Personal Information Exchange) is a binary format for storing cryptographic objects. It's commonly used on Windows systems and can contain:
 
@@ -96,4 +133,15 @@ PFX (Personal Information Exchange) is a binary format for storing cryptographic
 - Certificate chains
 - Other cryptographic data
 
-This format is password-protected and provides a convenient way to transport certificates and private keys together. In this example, the PFX certificate is used for cryptographic signature generation and verification.
+This format is password-protected and provides a convenient way to transport certificates and private keys together.
+
+### Separate CRT/KEY Files
+
+Alternatively, you can use separate certificate and key files:
+
+- **CRT file**: Contains the public certificate in PEM format
+- **KEY file**: Contains the private key in PEM format
+
+This approach is common in Unix/Linux environments and provides flexibility in managing certificates and keys separately.
+
+Both formats are supported by the promptfoo HTTP provider for cryptographic signature generation and verification.
