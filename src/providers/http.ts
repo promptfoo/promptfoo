@@ -239,7 +239,9 @@ export async function generateSignature(
             );
           }
         } else if (signatureAuth.certPath && signatureAuth.keyPath) {
-          logger.debug(`[Signature Auth] Loading separate CRT and KEY files: ${signatureAuth.certPath}, ${signatureAuth.keyPath}`);
+          logger.debug(
+            `[Signature Auth] Loading separate CRT and KEY files: ${signatureAuth.certPath}, ${signatureAuth.keyPath}`,
+          );
 
           try {
             // Read the private key directly from the key file
@@ -251,9 +253,7 @@ export async function generateSignature(
             }
 
             privateKey = fs.readFileSync(signatureAuth.keyPath, 'utf8');
-            logger.debug(
-              `[Signature Auth] Successfully loaded private key from separate key file`,
-            );
+            logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
           } catch (err) {
             logger.error(`Error loading certificate/key files: ${String(err)}`);
             throw new Error(
@@ -298,7 +298,6 @@ const TokenEstimationConfigSchema = z.object({
   multiplier: z.number().min(0.01).default(1.3),
 });
 
-
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
   signatureValidityMs: z.number().default(300000),
@@ -331,11 +330,14 @@ const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   pfxPassword: z.string().optional(),
   certPath: z.string().optional(),
   keyPath: z.string().optional(),
-}).refine((data) => {
-  return data.pfxPath || (data.certPath && data.keyPath);
-}, {
-  message: 'Either pfxPath or both certPath and keyPath must be provided for PFX type',
-});
+}).refine(
+  (data) => {
+    return data.pfxPath || (data.certPath && data.keyPath);
+  },
+  {
+    message: 'Either pfxPath or both certPath and keyPath must be provided for PFX type',
+  },
+);
 
 // Legacy signature auth schema (for backward compatibility)
 const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
@@ -925,7 +927,7 @@ export class HttpProvider implements ApiProvider {
       // Determine the signature auth type for legacy configurations
       let authConfig = signatureAuth;
       if (!('type' in signatureAuth)) {
-          authConfig = { ...signatureAuth, type: 'pem' };
+        authConfig = { ...signatureAuth, type: 'pem' };
       }
 
       this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
