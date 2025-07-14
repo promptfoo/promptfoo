@@ -80,7 +80,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--no-progress-bar`                 | Do not show progress bar                                                    |
 | `--no-table`                        | Do not output table in CLI                                                  |
 | `--no-write`                        | Do not write results to promptfoo directory                                 |
-| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html)             |
+| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)        |
 | `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                |
 | `--prompt-prefix <path>`            | Prefix prepended to every prompt                                            |
 | `--prompt-suffix <path>`            | Suffix appended to every prompt                                             |
