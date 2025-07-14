@@ -59,6 +59,12 @@ export async function importModule(modulePath: string, functionName?: string) {
   } catch (err) {
     // If ESM import fails, try CommonJS require as fallback
     logger.debug(`ESM import failed: ${err}`);
+
+    // If error has a callstack, log it:
+    if ((err as any).stack) {
+      logger.debug((err as any).stack);
+    }
+    
     logger.debug('Attempting CommonJS require fallback...');
     try {
       const importedModule = require(safeResolve(modulePath));
