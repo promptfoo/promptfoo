@@ -84,7 +84,7 @@ export default function Defcon2025(): JSX.Element {
               </p>
               <div className={styles.heroButtons}>
                 <a
-                  href="https://lu.ma/ljm23pj6?tk=qGE9ez"
+                  href="https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web"
                   className={styles.primaryButton}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -270,7 +270,7 @@ export default function Defcon2025(): JSX.Element {
             </p>
             <div className={styles.ctaButtons}>
               <a
-                href="https://lu.ma/ljm23pj6?tk=qGE9ez"
+                href="https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web"
                 className={styles.primaryButton}
                 target="_blank"
                 rel="noopener noreferrer"
