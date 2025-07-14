@@ -574,4 +574,4 @@ You’ve successfully set up, tested, and red-teamed your CrewAI recruitment age
 
 With this workflow, you can confidently check agent performance, catch issues early, and share clear pass/fail results with your team — all in a fast, repeatable way.
 
-You’re now ready to scale, improve, and deploy smarter multi-agent systems with trust!
+You're now ready to scale, improve, and deploy smarter multi-agent systems with trust!
