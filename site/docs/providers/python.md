@@ -163,9 +163,6 @@ Contains your provider configuration and metadata:
 }
 ```
 
-:::tip
-The `basePath` is automatically provided by promptfoo and contains the absolute path to the directory containing your `promptfooconfig.yaml`. Use it to load files relative to your configuration:
-
 #### The `context` Parameter
 
 Provides information about the current test case:
