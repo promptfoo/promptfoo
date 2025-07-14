@@ -392,6 +392,31 @@ describe('calculateOpenAICost', () => {
     const cost = calculateOpenAICost('gpt-4o-audio-preview-2025-06-03', {}, 1000, 500);
     expect(cost).toBeCloseTo(0.0075); // 2.5/1M * 1000 + 10/1M * 500
   });
+
+  it('should calculate cost correctly for o4-mini (responses model)', () => {
+    const cost = calculateOpenAICost('o4-mini', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.1 + 500 * 4.4) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-deep-research', () => {
+    const cost = calculateOpenAICost('o3-deep-research', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 10 + 500 * 40) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-deep-research-2025-06-26', () => {
+    const cost = calculateOpenAICost('o3-deep-research-2025-06-26', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 10 + 500 * 40) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o4-mini-deep-research', () => {
+    const cost = calculateOpenAICost('o4-mini-deep-research', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o4-mini-deep-research-2025-06-26', () => {
+    const cost = calculateOpenAICost('o4-mini-deep-research-2025-06-26', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
 });
 
 describe('validateFunctionCall', () => {
