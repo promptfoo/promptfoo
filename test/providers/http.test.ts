@@ -3424,14 +3424,7 @@ describe('RSA signature authentication', () => {
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(Buffer.from('mock-keystore-data'));
 
-      // Mock the getEnvString function directly
-    const { getEnvString } = require('../../src/envars');
-    jest.mocked(getEnvString).mockImplementation((key: string) => {
-      if (key === 'PROMPTFOO_JKS_PASSWORD') {
-        return 'env-password';
-      }
-      return '';
-    });
+    process.env.PROMPTFOO_JKS_PASSWORD = 'env-password';
 
     const provider = new HttpProvider('http://example.com', {
       config: {
@@ -3461,7 +3454,6 @@ describe('RSA signature authentication', () => {
 
     // Clean up
     readFileSyncSpy.mockRestore();
-    jest.unmock('../../src/envars');
   });
 
   it('should throw error when neither config password nor environment variable is provided for JKS', async () => {
@@ -3476,10 +3468,6 @@ describe('RSA signature authentication', () => {
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(Buffer.from('mock-keystore-data'));
 
-    // Mock environment variable to return empty string
-    jest.mock('../../src/envars', () => ({
-      getEnvString: jest.fn().mockReturnValue(''),
-    }));
 
     const provider = new HttpProvider('http://example.com', {
       config: {
@@ -3508,7 +3496,6 @@ describe('RSA signature authentication', () => {
 
     // Clean up
     readFileSyncSpy.mockRestore();
-    jest.unmock('../../src/envars');
   });
 });
 
@@ -3739,6 +3726,10 @@ describe('Token Estimation', () => {
   });
 
   describe('HttpProvider with token estimation', () => {
+    beforeEach(() => {
+      jest.resetModules();
+      jest.clearAllMocks(); 
+    });
     afterEach(() => {
       delete cliState.config;
     });
