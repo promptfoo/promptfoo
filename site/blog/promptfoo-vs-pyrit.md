@@ -1,8 +1,22 @@
 ---
 description: "Detailed comparison of Promptfoo and Microsoft's PyRIT for LLM security testing. Covers attack methods, RAG testing, CI/CD integration, and selection criteria."
 image: /img/blog/pyrit/promptfoo-vs-pyrit.jpg
+keywords:
+  [
+    promptfoo,
+    PyRIT,
+    LLM security,
+    AI red teaming,
+    prompt injection,
+    RAG testing,
+    CI/CD integration,
+    AI security comparison,
+    Microsoft PyRIT,
+    LLM vulnerability testing,
+  ]
 date: 2025-06-27
 authors: [ian]
+tags: [comparison, security, red-teaming, tools]
 ---
 
 # Promptfoo vs PyRIT: A Practical Comparison of LLM Red Teaming Tools

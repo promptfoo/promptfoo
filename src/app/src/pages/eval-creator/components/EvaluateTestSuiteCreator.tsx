@@ -11,6 +11,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import type { ProviderOptions } from '@promptfoo/types';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import PromptsSection from './PromptsSection';
 import ProviderSelector from './ProviderSelector';
@@ -38,20 +39,22 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
-  const {
-    setDescription,
-    providers,
-    setProviders,
-    prompts,
-    setPrompts,
-    setTestCases,
-    setDefaultTest,
-    setDerivedMetrics,
-    setEnv,
-    setEvaluateOptions,
-    setScenarios,
-    setExtensions,
-  } = useStore();
+  const { config, updateConfig, reset } = useStore();
+  const { providers = [], prompts = [] } = config;
+
+  // Ensure providers is always an array of ProviderOptions
+  const normalizedProviders: ProviderOptions[] = React.useMemo(() => {
+    if (!providers) {
+      return [];
+    }
+    if (Array.isArray(providers)) {
+      // Filter out any non-object providers (strings, functions)
+      return providers.filter(
+        (p): p is ProviderOptions => typeof p === 'object' && p !== null && !Array.isArray(p),
+      );
+    }
+    return [];
+  }, [providers]);
 
   useEffect(() => {
     useStore.persist.rehydrate();
@@ -71,19 +74,29 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     return Array.from(varsSet);
   };
 
-  const varsList = extractVarsFromPrompts(prompts);
+  // Normalize prompts to string array
+  const normalizedPrompts = React.useMemo(() => {
+    if (!prompts || !Array.isArray(prompts)) {
+      return [];
+    }
+
+    return prompts
+      .map((prompt) => {
+        if (typeof prompt === 'string') {
+          return prompt;
+        } else if (typeof prompt === 'object' && prompt !== null && 'raw' in prompt) {
+          return (prompt as { raw: string }).raw;
+        }
+        // For functions or other types, return empty string
+        return '';
+      })
+      .filter((p): p is string => p !== ''); // Filter out empty strings
+  }, [prompts]);
+
+  const varsList = extractVarsFromPrompts(normalizedPrompts);
 
   const handleReset = () => {
-    setDescription('');
-    setProviders([]);
-    setPrompts([]);
-    setDefaultTest({});
-    setDerivedMetrics([]);
-    setEnv({});
-    setEvaluateOptions({});
-    setScenarios([]);
-    setExtensions([]);
-    setTestCases([]);
+    reset();
     setResetDialogOpen(false);
   };
 
@@ -106,7 +119,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
           label="Description"
           value={description}
           onChange={(e) => {
-            setDescription(e.target.value);
+            updateConfig({ description: e.target.value });
           }}
           fullWidth
           margin="normal"
@@ -117,12 +130,15 @@ const EvaluateTestSuiteCreator: React.FC = () => {
         <ErrorBoundary
           FallbackComponent={ErrorFallback}
           onReset={() => {
-            setProviders([]);
+            updateConfig({ providers: [] });
           }}
         >
           <Stack direction="column" spacing={2} justifyContent="space-between">
             <Typography variant="h5">Providers</Typography>
-            <ProviderSelector providers={providers} onChange={setProviders} />
+            <ProviderSelector
+              providers={normalizedProviders}
+              onChange={(p) => updateConfig({ providers: p })}
+            />
           </Stack>
         </ErrorBoundary>
       </Box>
@@ -130,7 +146,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       <ErrorBoundary
         FallbackComponent={ErrorFallback}
         onReset={() => {
-          setPrompts([]);
+          updateConfig({ prompts: [] });
         }}
       >
         <PromptsSection />
@@ -139,7 +155,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       <ErrorBoundary
         FallbackComponent={ErrorFallback}
         onReset={() => {
-          setTestCases([]);
+          updateConfig({ tests: [] });
         }}
       >
         <TestCasesSection varsList={varsList} />

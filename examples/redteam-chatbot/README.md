@@ -8,7 +8,7 @@ npx promptfoo@latest init --example redteam-chatbot
 
 ## Introduction
 
-This example demonstrates how to test a stateless chatbot for security vulnerabilities using promptfoo's multi-turn strategies. It includes a Node.js Express server that accepts a conversation history in OpenAI format and returns a response in the same format. It leverages promptfoo's [goat](https://www.promptfoo.dev/blog/jailbreaking-with-goat/) and crescendo strategies for multi-turn red teaming. You can learn more about configuring these strategies [here](https://www.promptfoo.dev/docs/red-team/strategies/multi-turn/).
+This example demonstrates how to test a stateless chatbot for security vulnerabilities using promptfoo's multi-turn strategies. It includes a Node.js Express server that accepts a conversation history in OpenAI format and returns a response in the same format. It leverages promptfoo's [goat](https://www.promptfoo.dev/blog/jailbreaking-with-goat/), crescendo, and mischievous-user strategies for multi-turn red teaming. You can learn more about configuring these strategies [here](https://www.promptfoo.dev/docs/red-team/strategies/multi-turn/).
 
 ## Setup
 
