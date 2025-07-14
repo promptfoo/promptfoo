@@ -186,13 +186,11 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
   //'scam_fraud_creation',
 } as const;
-export type UnalignedProviderHarmPlugin = keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS;
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:privacy': 'Privacy violations',
 } as const;
-export type RedTeamProviderHarmPlugin = keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS;
 
 export const HARM_PLUGINS = {
   'harmful:misinformation-disinformation':
@@ -264,11 +262,11 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'xstest',
 ] as const;
-export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
+type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
-export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
@@ -284,9 +282,6 @@ export const STRATEGY_EXEMPT_PLUGINS = [
   ...AGENTIC_EXEMPT_PLUGINS,
   ...DATASET_EXEMPT_PLUGINS,
 ] as const;
-
-export type AgenticExemptPlugin = (typeof AGENTIC_EXEMPT_PLUGINS)[number];
-export type DatasetExemptPlugin = (typeof DATASET_EXEMPT_PLUGINS)[number];
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =

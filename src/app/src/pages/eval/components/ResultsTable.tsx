@@ -533,7 +533,7 @@ function ResultsTable({
                 return (
                   <div className="cell" data-capture="true">
                     {renderMarkdown ? (
-                      <MarkdownErrorBoundary fallback={<>{value}</>}>
+                      <MarkdownErrorBoundary fallback={value}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
                       </MarkdownErrorBoundary>
                     ) : (

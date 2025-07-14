@@ -18,6 +18,15 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 };
 
 export const XAI_CHAT_MODELS = [
+  // Grok-4 Models
+  {
+    id: 'grok-4-0709',
+    cost: {
+      input: 3.0 / 1e6,
+      output: 15.0 / 1e6,
+    },
+    aliases: ['grok-4', 'grok-4-latest'],
+  },
   // Grok-3 Models
   {
     id: 'grok-3-beta',
@@ -85,7 +94,40 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
-export const GROK_3_MINI_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
+export const GROK_3_MINI_MODELS = [
+  'grok-3-mini-beta',
+  'grok-3-mini',
+  'grok-3-mini-latest',
+  'grok-3-mini-fast-beta',
+  'grok-3-mini-fast',
+  'grok-3-mini-fast-latest',
+];
+
+// Models that support reasoning_effort parameter (only Grok-3 mini models)
+export const GROK_REASONING_EFFORT_MODELS = [
+  'grok-3-mini-beta',
+  'grok-3-mini',
+  'grok-3-mini-latest',
+  'grok-3-mini-fast-beta',
+  'grok-3-mini-fast',
+  'grok-3-mini-fast-latest',
+];
+
+// All reasoning models (including Grok-4 which doesn't support reasoning_effort)
+export const GROK_REASONING_MODELS = [
+  'grok-4-0709',
+  'grok-4',
+  'grok-4-latest',
+  'grok-3-mini-beta',
+  'grok-3-mini',
+  'grok-3-mini-latest',
+  'grok-3-mini-fast-beta',
+  'grok-3-mini-fast',
+  'grok-3-mini-fast-latest',
+];
+
+// Grok-4 models that have specific parameter restrictions
+export const GROK_4_MODELS = ['grok-4-0709', 'grok-4', 'grok-4-latest'];
 
 /**
  * Calculate xAI Grok cost based on model name and token usage
@@ -124,7 +166,7 @@ export function calculateXAICost(
   return inputCostTotal + outputCostTotal;
 }
 
-export class XAIProvider extends OpenAiChatCompletionProvider {
+class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
   protected get apiKey(): string | undefined {
@@ -132,7 +174,11 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return GROK_3_MINI_MODELS.includes(this.modelName);
+    return GROK_REASONING_MODELS.includes(this.modelName);
+  }
+
+  protected supportsReasoningEffort(): boolean {
+    return GROK_REASONING_EFFORT_MODELS.includes(this.modelName);
   }
 
   protected supportsTemperature(): boolean {
@@ -141,27 +187,53 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
 
   getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
     const result = super.getOpenAiBody(prompt, context, callApiOptions);
+
+    // Ensure we have a valid result
+    if (!result || !result.body) {
+      return result;
+    }
+
+    // Filter out unsupported parameters for Grok-4
+    if (this.modelName && GROK_4_MODELS.includes(this.modelName)) {
+      delete result.body.presence_penalty;
+      delete result.body.frequency_penalty;
+      delete result.body.stop;
+      // Grok-4 doesn't support reasoning_effort parameter
+      delete result.body.reasoning_effort;
+    }
+
+    // Filter reasoning_effort for models that don't support it
+    if (!this.supportsReasoningEffort() && result.body.reasoning_effort) {
+      delete result.body.reasoning_effort;
+    }
+
+    // Handle search parameters
     const searchParams = this.originalConfig?.search_parameters;
     if (searchParams) {
       result.body.search_parameters = renderVarsInObject(searchParams, context?.vars);
     }
+
     return result;
   }
 
   constructor(modelName: string, providerOptions: XAIProviderOptions) {
+    // Extract the nested config
+    const xaiConfig = providerOptions.config?.config;
+
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
+        ...xaiConfig, // Merge the nested config into the main config
         apiKeyEnvar: 'XAI_API_KEY',
-        apiBaseUrl: providerOptions.config?.config?.region
-          ? `https://${providerOptions.config.config.region}.api.x.ai/v1`
+        apiBaseUrl: xaiConfig?.region
+          ? `https://${xaiConfig.region}.api.x.ai/v1`
           : 'https://api.x.ai/v1',
       },
     });
 
     // Store the original config for later use
-    this.originalConfig = providerOptions.config?.config;
+    this.originalConfig = xaiConfig;
   }
 
   id(): string {

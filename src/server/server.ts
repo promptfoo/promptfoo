@@ -107,7 +107,6 @@ export function createApp() {
   app.get(
     '/api/results',
     async (
-      // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       req: Request<{}, {}, {}, { datasetId?: string }>,
       res: Response<{ data: EvalSummary[] }>,
     ): Promise<void> => {

@@ -9,7 +9,7 @@ import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
-import styles from './llm-vulnerability-scanner.module.css';
+import styles from './landing-page.module.css';
 
 function HeroSection() {
   return (
@@ -18,7 +18,7 @@ function HeroSection() {
         <img src="/img/guardrails-framed.png" alt="AI Guardrails" className={styles.heroImage} />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer className={styles.heroLogos} noBackground noBorder />
         </div>
         {/*
         <h2>Guardrails that evolve with emerging threats</h2>

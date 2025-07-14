@@ -82,5 +82,3 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
 
   return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>;
 };
-
-export default PostHogProvider;

@@ -5,8 +5,8 @@ import logger from '../../logger';
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
-export const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';
+const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
+const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';
 
 // Valid categories in the UnsafeBench dataset
 export const VALID_CATEGORIES = [
