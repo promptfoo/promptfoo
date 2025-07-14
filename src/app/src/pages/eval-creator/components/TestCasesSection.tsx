@@ -34,7 +34,7 @@ import { usePromptNormalization } from '../hooks/usePromptNormalization';
 import ErrorBoundary from './ErrorBoundary';
 import GenerateTestCasesDialog from './GenerateTestCasesDialog';
 import GenerateAssertionsDialog from './GenerateAssertionsDialog';
-import TestCaseDialogV2 from './TestCaseDialogV2';
+import TestCaseDialog from './TestCaseDialog';
 import TestCasesTable from './TestCasesTable';
 import TestCasesCardView from './TestCasesCardView';
 import { VirtualizedTestCasesTable } from './VirtualizedTestCasesTable';
@@ -542,7 +542,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         />
       )}
 
-      <TestCaseDialogV2
+      <TestCaseDialog
         open={testCaseDialogOpen}
         onClose={() => {
           setEditingTestCaseIndex(null);

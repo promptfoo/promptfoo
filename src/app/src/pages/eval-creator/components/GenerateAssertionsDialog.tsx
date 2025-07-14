@@ -26,7 +26,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import type { TestCase } from '@promptfoo/types';
 import { callApi } from '@app/utils/api';
-import { useUserPreferencesStore } from '@app/stores/userPreferences';
+import { useUserPreferences } from '@app/stores/userPreferences';
 
 interface GenerateAssertionsDialogProps {
   open: boolean;
@@ -65,7 +65,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
   testCase,
   existingAssertions = [],
 }) => {
-  const { showExperience } = useUserPreferencesStore();
+  const { experienceMode } = useUserPreferences();
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,7 +167,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
 
       <DialogContent sx={{ pt: 2 }}>
         <Stack spacing={3}>
-          {showExperience && (
+          {experienceMode === 'beginner' && (
             <Alert severity="info" variant="outlined">
               Generates intelligent assertions based on your prompts and test case. The AI will
               create both objective (Python-based) and subjective (LLM-based) evaluations.
@@ -186,7 +186,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
                 <MenuItem key={type} value={type}>
                   <Box>
                     <Typography variant="body2">{info.name}</Typography>
-                    {showExperience && (
+                    {experienceMode === 'beginner' && (
                       <Typography variant="caption" color="text.secondary">
                         {info.description}
                       </Typography>
@@ -195,7 +195,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
                 </MenuItem>
               ))}
             </Select>
-            {showExperience && (
+            {experienceMode === 'beginner' && (
               <FormHelperText>
                 Choose the evaluation framework for subjective assertions
               </FormHelperText>
@@ -206,7 +206,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
           <Box>
             <Typography gutterBottom>
               Number of Assertions
-              {showExperience && (
+              {experienceMode === 'beginner' && (
                 <Tooltip title="How many unique assertions to generate">
                   <HelpOutlineIcon sx={{ fontSize: 16, ml: 0.5, verticalAlign: 'middle' }} />
                 </Tooltip>
@@ -230,7 +230,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
           <Box>
             <Typography gutterBottom>
               Focus Areas (optional)
-              {showExperience && (
+              {experienceMode === 'beginner' && (
                 <Tooltip title="Click to select areas of focus for assertion generation">
                   <HelpOutlineIcon sx={{ fontSize: 16, ml: 0.5, verticalAlign: 'middle' }} />
                 </Tooltip>
@@ -260,7 +260,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             helperText={
-              showExperience ? 'Provide specific guidance for assertion generation' : undefined
+              experienceMode === 'beginner' ? 'Provide specific guidance for assertion generation' : undefined
             }
           />
 
@@ -271,7 +271,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
             placeholder="E.g., openai:gpt-4"
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
-            helperText={showExperience ? 'Leave empty to use default grading provider' : undefined}
+            helperText={experienceMode === 'beginner' ? 'Leave empty to use default grading provider' : undefined}
           />
 
           {/* Error Display */}
@@ -282,7 +282,7 @@ const GenerateAssertionsDialog: React.FC<GenerateAssertionsDialogProps> = ({
           )}
 
           {/* Test Case Preview */}
-          {showExperience && (
+          {experienceMode === 'beginner' && (
             <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
               <Typography variant="caption" color="text.secondary" gutterBottom>
                 Generating assertions for:
