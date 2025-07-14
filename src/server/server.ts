@@ -16,7 +16,7 @@ import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain } from '../share';
+import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import type { EvalSummary } from '../types';
@@ -189,7 +189,7 @@ export function createApp() {
 
     try {
       const url = await createShareableUrl(eval_, true);
-      logger.debug(`Generated share URL for eval: ${id}`);
+      logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
       res.json({ url });
     } catch (error) {
       logger.error(
