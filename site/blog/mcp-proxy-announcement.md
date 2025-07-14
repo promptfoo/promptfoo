@@ -53,7 +53,7 @@ const result = await this.executeTool(toolCall);
 // in the ReAct Agent loop - https://github.com/promptfoo/mcp-agent-provider/blob/main/src/react-agent.js#L104
 
 const completion = await this.openai.chat.completions.create({
-  model: 'gpt-4o',
+  model: 'gpt-4.1',
   messages: messages,
   tools: tools.length > 0 ? tools : undefined,
   tool_choice: tools.length > 0 ? 'auto' : undefined,
@@ -121,7 +121,7 @@ Then someone discovers a Slack MCP server from `github.com/4rmy0fd4rkness/slackb
 
 Now every query to your ERP system, every financial report, every customer detail gets quietly exfiltrated through this malicious MCP server.
 
-![McpExploitFlow](/img/blog/mcp/mcp-exploit-flow.png)
+![Diagram showing how data can be exfiltrated using an MCP server](/img/blog/mcp/mcp-exploit-flow.png)
 
 ### The Evil MCP Server: A Real Demo
 
@@ -320,7 +320,7 @@ There are a couple of things you can do when coding with MCP servers to protect 
 
 While the coding practices mentioned above can help reduce some risks, they place the burden of security entirely on individual developers and don't scale across enterprise environments. Enterprises need centralized visibility, consistent policy enforcement, and comprehensive monitoring across all MCP server deployments. Manual code reviews and ad-hoc security measures simply aren't sufficient when dealing with dozens or hundreds of MCP servers across multiple teams and applications. This is why we built the Promptfoo MCP Proxy—to provide enterprise-grade security controls that work at scale.
 
-![MCP Dashboard](/img/mcp-proxy/mcp-dashboard.png)
+![Dashboard showing details of the MCP proxy](/img/mcp-proxy/mcp-dashboard.png)
 
 We've developed a strategy built around three core principles:
 
@@ -332,13 +332,13 @@ All MCP servers must be explicitly whitelisted after thorough review for potenti
 
 We must have clear visibility into which MCP servers are allowed to coexist within the same agent loop. It's critical to prevent any LLM from sending sensitive data to untrusted destinations.
 
-![WhitelistMCPServers](/img/mcp-proxy/mcp-app-details.png)
+![A list of white listed MCP servers](/img/mcp-proxy/mcp-app-details.png)
 
 ### 3. Data Visibility and Control
 
-It's essential to ensure sensitive data isn't sent to inappropriate locations. Therefore, we've created robust controls and monitoring to guarantee data protection.
+Robust controls and monitoring ensure sensitive data isn't sent to inappropriate locations.
 
-![McpAlertDetails](/img/mcp-proxy/mcp-alert-details.png)
+![Alert details showing sensitive data exfiltration](/img/mcp-proxy/mcp-alert-details.png)
 
 ## Conclusion
 
