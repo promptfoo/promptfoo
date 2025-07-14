@@ -1123,7 +1123,10 @@ function ResultsTable({
           })}
         </tbody>
       </table>
-      {pageCount > 1 && (
+
+      {
+      // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
+      filteredResultsCount > 10 && (
         <Box
           className="pagination"
           mx={1}
