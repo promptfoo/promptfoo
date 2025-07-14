@@ -7,7 +7,7 @@ keywords: [azure, openai, gpt-4, vision, reasoning models, evaluation]
 
 # Azure
 
-The `azure` provider enables you to use Azure OpenAI Service models with promptfoo. It shares configuration settings with the [OpenAI provider](/docs/providers/openai).
+The `azure` provider enables you to use Azure OpenAI Service models with Promptfoo. It shares configuration settings with the [OpenAI provider](/docs/providers/openai).
 
 ## Setup
 
