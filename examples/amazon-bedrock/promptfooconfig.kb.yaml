@@ -4,7 +4,7 @@ description: Knowledge Base RAG with contextTransform evaluation
 prompts:
   - |
     Answer the following question in a concise manner:
-    {{prompt}}
+    {{query}}
 
 providers:
   # Knowledge Base provider with Claude 4 (cross-region inference profile)
@@ -24,29 +24,28 @@ providers:
       max_tokens: 1000
 tests:
   - vars:
-      prompt: 'How do I set up my first promptfoo configuration file?'
+      query: 'How do I set up my first promptfoo configuration file?'
   - vars:
-      prompt: 'What authentication is required for OpenAI and Anthropic providers?'
+      query: 'What authentication is required for OpenAI and Anthropic providers?'
   - vars:
-      prompt: 'How can I compare GPT-4 vs Claude performance?'
+      query: 'How can I compare GPT-4 vs Claude performance?'
   - vars:
-      prompt: 'What types of assertions can I use to automatically grade LLM outputs?'
+      query: 'What types of assertions can I use to automatically grade LLM outputs?'
   - vars:
-      prompt: 'How do I evaluate RAG systems with context-based assertions?'
+      query: 'How do I evaluate RAG systems with context-based assertions?'
 
   # Example using contextTransform to extract context from Knowledge Base citations
   - vars:
-      prompt: 'How do I set up my first promptfoo configuration file?'
+      # `context-faithfulness` and `context-relevance` require the `query` variable to be defined.
       query: 'How do I set up my first promptfoo configuration file?'
     assert:
       # Basic content assertions
       - type: contains
         value: 'yaml'
       - type: contains
-        value:
-          'prompts'
+        value: 'prompts'
 
-          # Context-based assertions using contextTransform to extract from citations
+      # Context-based assertions using contextTransform to extract from citations
       # This demonstrates the key contextTransform feature: extracting context from provider responses
       - type: context-faithfulness
         contextTransform: 'context?.metadata?.citations?.flatMap(c => c.retrievedReferences || []).map(r => r.content?.text || "").filter(t => t.length > 0).join("\\n\\n") || "No citations found"'

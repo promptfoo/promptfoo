@@ -5,7 +5,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:pii';
+const PLUGIN_ID = 'promptfoo:redteam:pii';
 
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
 /**

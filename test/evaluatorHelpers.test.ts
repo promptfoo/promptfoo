@@ -40,12 +40,16 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('pdf-parse', () => ({
-  __esModule: true,
-  default: jest
-    .fn()
-    .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
-}));
+jest.mock(
+  'pdf-parse',
+  () => ({
+    __esModule: true,
+    default: jest
+      .fn()
+      .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+  }),
+  { virtual: true },
+);
 
 jest.mock('../src/esm');
 jest.mock('../src/database', () => ({

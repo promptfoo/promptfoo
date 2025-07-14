@@ -2,7 +2,6 @@ import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDa
 import {
   AegisGrader,
   AegisPlugin,
-  PLUGIN_ID,
   DATASET_PATH,
   fetchDataset,
 } from '../../../src/redteam/plugins/aegis';
@@ -35,7 +34,7 @@ describe('AegisPlugin', () => {
     const assertions = (plugin as any).getAssertions('test prompt');
     expect(assertions).toEqual([
       {
-        type: PLUGIN_ID,
+        type: 'promptfoo:redteam:aegis',
         metric: 'Aegis',
       },
     ]);
@@ -65,7 +64,7 @@ describe('AegisPlugin', () => {
         },
         assert: [
           {
-            type: PLUGIN_ID,
+            type: 'promptfoo:redteam:aegis',
             metric: 'Aegis',
           },
         ],
@@ -134,7 +133,7 @@ describe('AegisGrader', () => {
   });
 
   it('should have correct ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:aegis');
   });
 
   it('should handle basic refusal', async () => {
