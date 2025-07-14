@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type React from 'react';
+import { useState, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -62,8 +63,9 @@ function getValue(result: GradingResult) {
   // For context-related assertions, read the context value from metadata, if it exists
   if (
     result.assertion?.type &&
-    // prettier-ignore
-    ['context-faithfulness', 'context-recall', 'context-relevance'].includes(result.assertion.type) &&
+    ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
+      result.assertion.type,
+    ) &&
     result.metadata?.context
   ) {
     return result.metadata?.context;
@@ -101,7 +103,7 @@ function CodeDisplay({
 }: CodeDisplayProps) {
   // Improved code detection logic
   const isCode =
-    /^[\s]*[{\[]/.test(content) || // JSON-like (starts with { or [)
+    /^[\s]*[{[]/.test(content) || // JSON-like (starts with { or [)
     /^#\s/.test(content) || // Markdown headers (starts with # )
     /```/.test(content) || // Code blocks (contains ```)
     /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
@@ -363,7 +365,7 @@ export default function EvalOutputPromptDialog({
     setExpandedMetadata((prev: ExpandedMetadataState) => ({
       ...prev,
       [key]: {
-        expanded: isDoubleClick ? false : true,
+        expanded: !isDoubleClick,
         lastClickTime: now,
       },
     }));

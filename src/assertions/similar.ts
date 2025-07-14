@@ -16,7 +16,7 @@ export const handleSimilar = async ({
   const threshold = assertion.threshold ?? 0.75;
 
   if (Array.isArray(renderedValue)) {
-    let minScore = Infinity;
+    let minScore = Number.POSITIVE_INFINITY;
     for (const value of renderedValue) {
       const result = await matchesSimilarity(value, outputString, threshold, inverse, test.options);
       if (result.pass) {

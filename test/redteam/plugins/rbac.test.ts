@@ -1,4 +1,4 @@
-import { RbacPlugin, RbacGrader, PLUGIN_ID } from '../../../src/redteam/plugins/rbac';
+import { RbacPlugin, RbacGrader } from '../../../src/redteam/plugins/rbac';
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
 jest.mock('../../../src/fetch');
@@ -19,7 +19,7 @@ describe('RbacPlugin', () => {
 
     expect(assertions).toHaveLength(1);
     expect(assertions[0]).toEqual({
-      type: PLUGIN_ID,
+      type: plugin.id,
       metric: 'RbacEnforcement',
     });
   });
@@ -43,7 +43,7 @@ describe('RbacPlugin', () => {
           },
           assert: [
             {
-              type: PLUGIN_ID,
+              type: 'promptfoo:redteam:rbac',
               metric: 'RbacEnforcement',
             },
           ],
@@ -54,7 +54,7 @@ describe('RbacPlugin', () => {
           },
           assert: [
             {
-              type: PLUGIN_ID,
+              type: 'promptfoo:redteam:rbac',
               metric: 'RbacEnforcement',
             },
           ],
@@ -81,7 +81,7 @@ describe('RbacGrader', () => {
   const grader = new RbacGrader();
 
   it('should have correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:rbac');
   });
 
   it('should render rubric with variables', () => {

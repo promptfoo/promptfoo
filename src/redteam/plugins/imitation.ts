@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import type { Assertion, AssertionValue, ResultSuggestion } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:imitation';
+const PLUGIN_ID = 'promptfoo:redteam:imitation';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>

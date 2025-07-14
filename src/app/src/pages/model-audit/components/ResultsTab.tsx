@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box } from '@mui/material';
+import Box from '@mui/material/Box';
 import type { ScanResult } from '../ModelAudit.types';
 import ScanStatistics from './ScanStatistics';
 import SecurityFindings from './SecurityFindings';

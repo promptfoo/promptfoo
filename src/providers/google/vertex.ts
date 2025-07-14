@@ -1,4 +1,3 @@
-import type { GaxiosError } from 'gaxios';
 import path from 'path';
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
@@ -35,6 +34,9 @@ import {
   mergeParts,
   formatCandidateContents,
 } from './util';
+
+// Type for Google API errors - using 'any' to avoid gaxios dependency
+type GaxiosError = any;
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;

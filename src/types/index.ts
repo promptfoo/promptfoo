@@ -490,7 +490,7 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)), // eslint-disable-line @typescript-eslint/no-use-before-define
+  assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
   // Tag this assertion result as a named metric
@@ -544,7 +544,7 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
   vars: Record<string, string | object>;
-  test: AtomicTestCase<Record<string, string | object>>;
+  test: AtomicTestCase;
   logProbs: number[] | undefined;
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
@@ -686,10 +686,7 @@ export const TestCaseSchema = z.object({
     .optional(),
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
-  typeof TestCaseSchema
->;
+export type TestCase = z.infer<typeof TestCaseSchema>;
 
 export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -728,10 +725,7 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
-  typeof AtomicTestCaseSchema
->;
+export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
 
 /**
  * Configuration schema for test generators that accept parameters
@@ -1161,7 +1155,16 @@ export interface Job {
 }
 
 // used for writing eval results
-export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'yaml', 'yml']);
+export const OutputFileExtension = z.enum([
+  'csv',
+  'html',
+  'json',
+  'jsonl',
+  'txt',
+  'xml',
+  'yaml',
+  'yml',
+]);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
 
 export interface LoadApiProviderContext {

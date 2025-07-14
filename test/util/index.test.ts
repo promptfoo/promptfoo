@@ -220,6 +220,14 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
+    it('writeOutput with XML output', async () => {
+      const outputPath = 'output.xml';
+      const eval_ = new Eval({});
+      await writeOutput(outputPath, eval_, null);
+
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    });
+
     it('writeOutput with json and txt output', async () => {
       const outputPath = ['output.json', 'output.txt'];
       const eval_ = new Eval({});
@@ -279,6 +287,12 @@ describe('util', () => {
 
       await expect(readOutput('output.yml')).rejects.toThrow(
         'Unsupported output file format: yml currently only supports json',
+      );
+    });
+
+    it('fails for xml output', async () => {
+      await expect(readOutput('output.xml')).rejects.toThrow(
+        'Unsupported output file format: xml currently only supports json',
       );
     });
   });

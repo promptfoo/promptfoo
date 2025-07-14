@@ -6,7 +6,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
 import { RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
+const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
 
 const PRODUCTION_DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/donotanswer/dataset/do_not_answer_data.csv';

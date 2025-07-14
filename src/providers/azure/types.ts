@@ -6,7 +6,7 @@ import type { AssistantFunctionCallback } from '../openai/types';
 /**
  * Options for configuring retry behavior
  */
-export interface RetryOptions {
+interface RetryOptions {
   /** Maximum number of retry attempts */
   maxRetries: number;
   /** Initial delay in milliseconds before the first retry */

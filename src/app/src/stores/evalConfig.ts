@@ -11,7 +11,7 @@ import type {
   Scenario,
 } from '../../../types';
 
-export interface State {
+interface State {
   env: EnvOverrides;
   testCases: TestCase[];
   description: string;

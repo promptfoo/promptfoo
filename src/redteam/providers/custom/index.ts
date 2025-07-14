@@ -32,8 +32,8 @@ import {
   tryUnblocking,
 } from '../shared';
 
-export const DEFAULT_MAX_TURNS = 10;
-export const DEFAULT_MAX_BACKTRACKS = 10;
+const DEFAULT_MAX_TURNS = 10;
+const DEFAULT_MAX_BACKTRACKS = 10;
 
 // Parent template that provides context and structure
 const CUSTOM_PARENT_TEMPLATE = dedent`

@@ -6,7 +6,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:harmbench';
+const PLUGIN_ID = 'promptfoo:redteam:harmbench';
 
 const DATASET_URL =
   'https://raw.githubusercontent.com/centerforaisafety/HarmBench/c0423b952435fcc8467108d8f25962dbae5b7de2/data/behavior_datasets/harmbench_behaviors_text_all.csv';

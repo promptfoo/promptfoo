@@ -6,7 +6,7 @@ import Eval from '../../src/models/eval';
 import type { EvaluateResult } from '../../src/types';
 import { oldStyleEval } from './data/eval/database_records';
 
-export interface CreateEvalOptions {
+interface CreateEvalOptions {
   numResults?: number;
   resultTypes?: Array<'success' | 'error' | 'failure'>;
   withHighlights?: boolean;
