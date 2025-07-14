@@ -23,12 +23,14 @@ const EXAMPLE_PROMPTS = [
   },
   {
     label: 'Code Assistant',
-    template: 'You are an expert {{language}} developer. {{task}}\n\nRequirements:\n{{requirements}}',
+    template:
+      'You are an expert {{language}} developer. {{task}}\n\nRequirements:\n{{requirements}}',
     icon: '👨‍💻',
   },
   {
     label: 'Q&A System',
-    template: 'Answer the following question based on the provided context.\n\nContext: {{context}}\n\nQuestion: {{question}}',
+    template:
+      'Answer the following question based on the provided context.\n\nContext: {{context}}\n\nQuestion: {{question}}',
     icon: '❓',
   },
   {
@@ -38,7 +40,8 @@ const EXAMPLE_PROMPTS = [
   },
   {
     label: 'Translation',
-    template: 'Translate the following text from {{sourceLanguage}} to {{targetLanguage}}:\n\n{{text}}',
+    template:
+      'Translate the following text from {{sourceLanguage}} to {{targetLanguage}}:\n\n{{text}}',
     icon: '🌐',
   },
 ];
@@ -48,9 +51,9 @@ interface PromptSuggestionsSimpleProps {
   disabled?: boolean;
 }
 
-const PromptSuggestionsSimple: React.FC<PromptSuggestionsSimpleProps> = ({ 
-  onSelectPrompt, 
-  disabled = false 
+const PromptSuggestionsSimple: React.FC<PromptSuggestionsSimpleProps> = ({
+  onSelectPrompt,
+  disabled = false,
 }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
@@ -92,10 +95,10 @@ const PromptSuggestionsSimple: React.FC<PromptSuggestionsSimpleProps> = ({
           horizontal: 'left',
         }}
         PaperProps={{
-          sx: { 
+          sx: {
             maxWidth: 400,
             mt: 1,
-          }
+          },
         }}
       >
         <Box sx={{ px: 2, py: 1 }}>
@@ -115,10 +118,8 @@ const PromptSuggestionsSimple: React.FC<PromptSuggestionsSimpleProps> = ({
               },
             }}
           >
-            <ListItemIcon sx={{ minWidth: 36, fontSize: '1.2rem' }}>
-              {example.icon}
-            </ListItemIcon>
-            <ListItemText 
+            <ListItemIcon sx={{ minWidth: 36, fontSize: '1.2rem' }}>{example.icon}</ListItemIcon>
+            <ListItemText
               primary={example.label}
               primaryTypographyProps={{
                 fontSize: '0.875rem',

@@ -1,0 +1,284 @@
+/* Responsive styles for Eval Creator */
+
+/* Mobile devices (max-width: 600px) */
+@media (max-width: 600px) {
+  /* Main container adjustments */
+  .MuiContainer-root {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* Stack header buttons vertically on mobile */
+  .MuiStack-root[direction='row'] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  /* Auto-save indicator adjustments */
+  .MuiChip-root.MuiChip-sizeSmall {
+    font-size: 0.7rem !important;
+    height: 24px !important;
+  }
+
+  /* Hide auto-save indicator text on very small screens */
+  @media (max-width: 400px) {
+    .MuiChip-root.MuiChip-sizeSmall .MuiChip-label {
+      display: none;
+    }
+    .MuiChip-root.MuiChip-sizeSmall {
+      padding: 0 4px !important;
+    }
+  }
+
+  /* Full width buttons on mobile */
+  .MuiButton-root {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Table responsiveness */
+  .MuiTableContainer-root {
+    overflow-x: auto;
+  }
+
+  .MuiTable-root {
+    min-width: 300px;
+  }
+
+  /* Make table cells more compact */
+  .MuiTableCell-root {
+    padding: 8px !important;
+    font-size: 0.875rem;
+  }
+
+  /* Hide table action buttons text, show only icons */
+  .MuiTableCell-root:last-child .MuiIconButton-root {
+    padding: 4px;
+  }
+
+  /* Test case variables display */
+  .MuiChip-root {
+    margin: 2px !important;
+    max-width: 100%;
+    font-size: 0.75rem !important;
+  }
+
+  /* Variable form cards */
+  .MuiCard-root {
+    margin-bottom: 8px !important;
+  }
+
+  /* Help text accordions */
+  .MuiAccordion-root {
+    margin-bottom: 8px !important;
+  }
+
+  .MuiAccordionSummary-content {
+    margin: 8px 0 !important;
+  }
+
+  .MuiAccordionDetails-root {
+    padding: 8px 16px !important;
+  }
+
+  /* Autocomplete adjustments */
+  .MuiAutocomplete-root {
+    width: 100% !important;
+  }
+
+  /* Help text adjustments */
+  .MuiAccordion-root {
+    margin-bottom: 8px !important;
+  }
+
+  /* Typography adjustments */
+  h4.MuiTypography-h4 {
+    font-size: 1.5rem !important;
+  }
+
+  h5.MuiTypography-h5 {
+    font-size: 1.2rem !important;
+  }
+
+  /* Dialog adjustments */
+  .MuiDialog-paper {
+    margin: 16px !important;
+    max-height: calc(100% - 32px) !important;
+  }
+}
+
+/* Tablet devices (max-width: 960px) */
+@media (max-width: 960px) {
+  /* Two-column layout for tablets */
+  .MuiGrid-container {
+    flex-direction: column;
+  }
+
+  /* Adjust button sizes */
+  .MuiButton-root {
+    padding: 6px 12px;
+  }
+
+  /* Table adjustments */
+  .MuiTableCell-root {
+    padding: 12px !important;
+  }
+
+  /* Variable form grid */
+  .MuiGrid-item {
+    padding: 8px !important;
+  }
+}
+
+/* Small desktop (max-width: 1280px) */
+@media (max-width: 1280px) {
+  /* Container max width */
+  .MuiContainer-maxWidthLg {
+    max-width: 960px;
+  }
+}
+
+/* Dark mode specific adjustments */
+@media (prefers-color-scheme: dark) {
+  /* Ensure proper contrast in dark mode */
+  .MuiChip-outlined {
+    border-color: rgba(255, 255, 255, 0.23) !important;
+  }
+
+  /* Help text visibility */
+  .MuiAccordion-root {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* Code blocks */
+  code {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #90caf9 !important;
+  }
+
+  /* Variable cards */
+  .MuiCard-root {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* Alert styling */
+  .MuiAlert-root {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .MuiButton-outlined {
+    border-width: 2px !important;
+  }
+
+  .MuiChip-outlined {
+    border-width: 2px !important;
+  }
+}
+
+/* Landscape orientation adjustments */
+@media (orientation: landscape) and (max-height: 600px) {
+  /* Reduce vertical spacing */
+  .MuiBox-root[mt='4'] {
+    margin-top: 16px !important;
+  }
+
+  .MuiBox-root[mt='6'] {
+    margin-top: 24px !important;
+  }
+
+  /* Compact dialogs */
+  .MuiDialogContent-root {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  /* Hide interactive elements */
+  .MuiButton-root,
+  .MuiIconButton-root,
+  .MuiAutocomplete-root {
+    display: none !important;
+  }
+
+  /* Show all content expanded */
+  .MuiAccordion-root {
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+  }
+
+  .MuiAccordionDetails-root {
+    display: block !important;
+  }
+
+  /* Better table printing */
+  .MuiTable-root {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .MuiTableCell-root {
+    border: 1px solid #000;
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid #2196f3 !important;
+  outline-offset: 2px !important;
+}
+
+/* Touch-friendly targets */
+@media (pointer: coarse) {
+  .MuiIconButton-root {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .MuiChip-root {
+    min-height: 36px;
+    padding: 4px 8px;
+  }
+
+  /* Larger touch targets for form fields */
+  .MuiTextField-root input,
+  .MuiTextField-root textarea {
+    min-height: 44px;
+    padding: 12px;
+  }
+
+  /* Larger accordion headers */
+  .MuiAccordionSummary-root {
+    min-height: 56px;
+  }
+}
+
+/* Ultra-wide screens */
+@media (min-width: 1920px) {
+  /* Limit content width for readability */
+  .MuiContainer-root {
+    max-width: 1600px;
+  }
+
+  /* Larger variable cards on wide screens */
+  .MuiGrid-item {
+    flex-basis: 25% !important;
+    max-width: 25% !important;
+  }
+}

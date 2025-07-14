@@ -22,6 +22,8 @@ import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-yaml';
+import { cleanConfig } from '@app/utils/cleanConfig';
+import NextStepsGuide from './NextStepsGuide';
 import './YamlEditor.css';
 import 'prismjs/themes/prism.css';
 
@@ -44,7 +46,8 @@ const ensureSchemaComment = (yamlContent: string): string => {
 };
 
 const formatYamlWithSchema = (config: any): string => {
-  const yamlContent = yaml.dump(config);
+  const cleaned = cleanConfig(config);
+  const yamlContent = yaml.dump(cleaned);
   return ensureSchemaComment(yamlContent);
 };
 
@@ -205,6 +208,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
 
   return (
     <Box>
+      <NextStepsGuide currentSection="yaml" />
       <Box
         sx={{
           mb: 3,
@@ -381,4 +385,4 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   );
 };
 
-export default YamlEditorComponent;
+export default React.memo(YamlEditorComponent);

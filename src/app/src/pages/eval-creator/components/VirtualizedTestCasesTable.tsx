@@ -1,25 +1,31 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { FixedSizeList as List } from 'react-window';
-import AutoAwesome from '@mui/icons-material/AutoAwesome';
-import Copy from '@mui/icons-material/ContentCopy';
-import Delete from '@mui/icons-material/Delete';
-import Edit from '@mui/icons-material/Edit';
-import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import TableCell from '@mui/material/TableCell';
-import TableRow from '@mui/material/TableRow';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import {
+  Box,
+  IconButton,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Tooltip,
+  Typography,
+  useTheme,
+  useMediaQuery,
+} from '@mui/material';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import type { TestCase } from '@promptfoo/types';
+import { ComponentErrorBoundary } from './ComponentErrorBoundary';
 
 interface VirtualizedTestCasesTableProps {
   testCases: TestCase[];
   onEdit: (index: number) => void;
-  onDuplicate: (index: number) => void;
   onDelete: (index: number) => void;
-  height?: number;
+  onDuplicate: (index: number) => void;
 }
 
 interface RowProps {
@@ -27,124 +33,93 @@ interface RowProps {
   style: React.CSSProperties;
   data: {
     testCases: TestCase[];
+    varsList: string[];
     onEdit: (index: number) => void;
-    onDuplicate: (index: number) => void;
     onDelete: (index: number) => void;
+    onDuplicate: (index: number) => void;
   };
 }
 
-const Row = React.memo<RowProps>(({ index, style, data }) => {
-  const { testCases, onEdit, onDuplicate, onDelete } = data;
+const Row: React.FC<RowProps> = React.memo(({ index, style, data }) => {
+  const { testCases, varsList, onEdit, onDelete, onDuplicate } = data;
   const testCase = testCases[index];
 
-  const handleRowClick = useCallback(() => {
-    onEdit(index);
-  }, [onEdit, index]);
+  if (!testCase) {
+    return null;
+  }
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onEdit(index);
-      }
-    },
-    [onEdit, index],
-  );
-
-  const renderGenerationChip = () => {
-    if (!testCase.metadata?.isGenerated) {
-      return null;
-    }
-
-    return (
-      <Tooltip title="AI-generated test case">
-        <Chip
-          icon={<AutoAwesome />}
-          label="Generated"
-          size="small"
-          color="primary"
-          variant="outlined"
-        />
-      </Tooltip>
-    );
-  };
+  const handleEdit = () => onEdit(index);
+  const handleDelete = () => onDelete(index);
+  const handleDuplicate = () => onDuplicate(index);
 
   return (
     <div style={style}>
       <TableRow
-        tabIndex={0}
-        role="button"
-        aria-label={`Edit test case ${testCase.description || index + 1}`}
+        hover
         sx={{
-          '&:hover': {
-            backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            cursor: 'pointer',
+          cursor: 'pointer',
+          '&:hover .action-buttons': {
+            opacity: 1,
           },
-          '&:focus': {
-            outline: '2px solid',
-            outlineColor: 'primary.main',
-            outlineOffset: -2,
-          },
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
         }}
-        onClick={handleRowClick}
-        onKeyDown={handleKeyDown}
       >
-        <TableCell sx={{ flex: 3, overflow: 'hidden' }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2" noWrap>
-              {testCase.description || `Test Case #${index + 1}`}
+        <TableCell>{index + 1}</TableCell>
+        {varsList.map((varName) => (
+          <TableCell key={varName}>
+            <Typography
+              variant="body2"
+              sx={{
+                maxWidth: 200,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {testCase.vars?.[varName] || '-'}
             </Typography>
-            {renderGenerationChip()}
-          </Stack>
-        </TableCell>
-        <TableCell sx={{ flex: 1 }}>{testCase.assert?.length || 0} assertions</TableCell>
-        <TableCell sx={{ flex: 2, overflow: 'hidden' }}>
-          <Typography variant="body2" noWrap>
-            {Object.entries(testCase.vars || {})
-              .map(([k, v]) => `${k}=${v}`)
-              .join(', ')}
-          </Typography>
-        </TableCell>
-        <TableCell sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-          <Tooltip title="Edit test case">
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(index);
-              }}
-              size="small"
-              aria-label={`Edit test case ${index + 1}`}
-            >
-              <Edit />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Duplicate test case">
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                onDuplicate(index);
-              }}
-              size="small"
-              aria-label={`Duplicate test case ${index + 1}`}
-            >
-              <Copy />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete test case">
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(index);
-              }}
-              size="small"
-              aria-label={`Delete test case ${index + 1}`}
-            >
-              <Delete />
-            </IconButton>
-          </Tooltip>
+          </TableCell>
+        ))}
+        <TableCell>{testCase.assert?.length || 0}</TableCell>
+        <TableCell align="right">
+          <Box
+            className="action-buttons"
+            sx={{
+              display: 'flex',
+              gap: 0.5,
+              justifyContent: 'flex-end',
+              opacity: 0,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            <Tooltip title="Edit">
+              <IconButton
+                size="small"
+                onClick={handleEdit}
+                aria-label={`Edit test case ${index + 1}`}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Duplicate">
+              <IconButton
+                size="small"
+                onClick={handleDuplicate}
+                aria-label={`Duplicate test case ${index + 1}`}
+              >
+                <ContentCopyIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete">
+              <IconButton
+                size="small"
+                onClick={handleDelete}
+                color="error"
+                aria-label={`Delete test case ${index + 1}`}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </TableCell>
       </TableRow>
     </div>
@@ -153,67 +128,86 @@ const Row = React.memo<RowProps>(({ index, style, data }) => {
 
 Row.displayName = 'VirtualizedRow';
 
-const VirtualizedTestCasesTable: React.FC<VirtualizedTestCasesTableProps> = ({
-  testCases,
-  onEdit,
-  onDuplicate,
-  onDelete,
-  height = 600,
-}) => {
-  if (testCases.length === 0) {
-    return (
-      <Box p={4} textAlign="center">
-        <Typography color="textSecondary">No test cases added yet.</Typography>
-      </Box>
+const VirtualizedTestCasesTableInner: React.FC<VirtualizedTestCasesTableProps> = React.memo(
+  ({ testCases, onEdit, onDelete, onDuplicate }) => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+    // Extract variable names from test cases
+    const varsList = useMemo(() => {
+      const varsSet = new Set<string>();
+      testCases.forEach((testCase) => {
+        if (testCase.vars) {
+          Object.keys(testCase.vars).forEach((varName) => varsSet.add(varName));
+        }
+      });
+      return Array.from(varsSet).sort();
+    }, [testCases]);
+
+    // Data for virtualized list
+    const itemData = useMemo(
+      () => ({
+        testCases,
+        varsList,
+        onEdit,
+        onDelete,
+        onDuplicate,
+      }),
+      [testCases, varsList, onEdit, onDelete, onDuplicate],
     );
-  }
 
-  const itemData = {
-    testCases,
-    onEdit,
-    onDuplicate,
-    onDelete,
-  };
+    // Calculate row height based on content
+    const rowHeight = isMobile ? 80 : 64;
 
+    // Calculate list height (max 600px or 10 rows)
+    const listHeight = Math.min(600, Math.max(200, testCases.length * rowHeight));
+
+    if (testCases.length === 0) {
+      return (
+        <Typography color="textSecondary" align="center" sx={{ py: 4 }}>
+          No test cases yet. Click "Generate" or "Add Test Case" to get started.
+        </Typography>
+      );
+    }
+
+    return (
+      <TableContainer component={Paper} variant="outlined">
+        <Table stickyHeader>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ width: 60 }}>#</TableCell>
+              {varsList.map((varName) => (
+                <TableCell key={varName}>{varName}</TableCell>
+              ))}
+              <TableCell sx={{ width: 100 }}>Assertions</TableCell>
+              <TableCell align="right" sx={{ width: 140 }}>
+                Actions
+              </TableCell>
+            </TableRow>
+          </TableHead>
+        </Table>
+        <Box>
+          <List
+            height={listHeight}
+            itemCount={testCases.length}
+            itemSize={rowHeight}
+            width="100%"
+            itemData={itemData}
+          >
+            {Row}
+          </List>
+        </Box>
+      </TableContainer>
+    );
+  },
+);
+
+VirtualizedTestCasesTableInner.displayName = 'VirtualizedTestCasesTableInner';
+
+export const VirtualizedTestCasesTable: React.FC<VirtualizedTestCasesTableProps> = (props) => {
   return (
-    <Box>
-      {/* Table Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          p: 2,
-          borderBottom: 1,
-          borderColor: 'divider',
-          bgcolor: 'grey.50',
-        }}
-      >
-        <Typography variant="subtitle2" sx={{ flex: 3 }}>
-          Description
-        </Typography>
-        <Typography variant="subtitle2" sx={{ flex: 1 }}>
-          Assertions
-        </Typography>
-        <Typography variant="subtitle2" sx={{ flex: 2 }}>
-          Variables
-        </Typography>
-        <Typography variant="subtitle2" sx={{ flex: 1, textAlign: 'right' }}>
-          Actions
-        </Typography>
-      </Box>
-
-      {/* Virtualized List */}
-      <List
-        height={height}
-        itemCount={testCases.length}
-        itemSize={64}
-        width="100%"
-        itemData={itemData}
-      >
-        {Row}
-      </List>
-    </Box>
+    <ComponentErrorBoundary componentName="VirtualizedTestCasesTable">
+      <VirtualizedTestCasesTableInner {...props} />
+    </ComponentErrorBoundary>
   );
 };
-
-export default VirtualizedTestCasesTable;

@@ -5,20 +5,21 @@ import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
+import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import InputLabel from '@mui/material/InputLabel';
-import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Slider from '@mui/material/Slider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 import type { TestCase, ProviderOptions } from '@promptfoo/types';
 
 interface GenerateTestCasesDialogProps {
@@ -28,6 +29,7 @@ interface GenerateTestCasesDialogProps {
   existingTests: TestCase[];
   providers: ProviderOptions[];
   onGenerated: (newTestCases: TestCase[]) => void;
+  onGenerationStarted?: (jobId: string, totalCount: number) => void;
 }
 
 interface GenerationOptions {
@@ -35,6 +37,7 @@ interface GenerationOptions {
   numTestCasesPerPersona: number;
   instructions: string;
   provider?: string;
+  includeAssertions: boolean;
 }
 
 const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
@@ -43,20 +46,19 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
   prompts,
   existingTests,
   providers,
-  onGenerated,
+  onGenerationStarted,
 }) => {
   const [options, setOptions] = useState<GenerationOptions>({
     numPersonas: 5,
     numTestCasesPerPersona: 3,
     instructions: '',
     provider: undefined,
+    includeAssertions: false,
   });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
-  const [_jobId, setJobId] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [simpleTestCaseCount, setSimpleTestCaseCount] = useState(10);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Extract variables from prompts
   const extractedVariables = React.useMemo(() => {
@@ -91,9 +93,8 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
   }, [simpleTestCaseCount, showAdvanced]);
 
   const handleGenerate = async () => {
-    setIsGenerating(true);
     setError(null);
-    setProgress({ current: 0, total: totalTestCases });
+    setIsGenerating(true);
 
     try {
       // Start generation job
@@ -104,7 +105,10 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
           prompts: prompts.map((p) => ({ raw: p })),
           tests: existingTests,
           options: {
-            ...options,
+            numPersonas: options.numPersonas,
+            numTestCasesPerPersona: options.numTestCasesPerPersona,
+            instructions: options.instructions,
+            provider: options.provider,
             async: true,
           },
         }),
@@ -115,54 +119,23 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
       }
 
       const { id } = await response.json();
-      setJobId(id);
 
-      // Poll for job completion
-      const intervalId = setInterval(async () => {
-        try {
-          const statusResponse = await callApi(`/generate/job/${id}`);
-          if (!statusResponse.ok) {
-            clearInterval(intervalId);
-            throw new Error('Failed to check job status');
-          }
+      // Pass the job info to parent and close dialog
+      if (onGenerationStarted) {
+        onGenerationStarted(id, totalTestCases);
+      }
 
-          const jobStatus = await statusResponse.json();
+      // Store options for the parent to use
+      localStorage.setItem(
+        `generation-job-${id}`,
+        JSON.stringify({
+          includeAssertions: options.includeAssertions,
+          provider: options.provider,
+          prompts,
+        }),
+      );
 
-          if (jobStatus.status === 'complete') {
-            clearInterval(intervalId);
-            const { results } = jobStatus.result || {};
-            if (results && Array.isArray(results)) {
-              // Create test cases with simple isGenerated flag
-              const newTestCases: TestCase[] = results.map((varMapping) => ({
-                vars: varMapping,
-                metadata: {
-                  isGenerated: true,
-                },
-              }));
-
-              onGenerated(newTestCases);
-              handleClose();
-            } else {
-              setError('No test cases were generated');
-              setIsGenerating(false);
-            }
-          } else if (jobStatus.status === 'error' || jobStatus.status === 'failed') {
-            clearInterval(intervalId);
-            setError(jobStatus.logs?.join('\n') || 'Generation failed');
-            setIsGenerating(false);
-          } else {
-            // Update progress
-            setProgress({
-              current: jobStatus.progress || 0,
-              total: jobStatus.total || totalTestCases,
-            });
-          }
-        } catch (err) {
-          clearInterval(intervalId);
-          setError(err instanceof Error ? err.message : 'An error occurred');
-          setIsGenerating(false);
-        }
-      }, 1000);
+      handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start generation');
       setIsGenerating(false);
@@ -170,19 +143,20 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
   };
 
   const handleClose = () => {
-    if (!isGenerating) {
-      setOptions({
-        numPersonas: 5,
-        numTestCasesPerPersona: 3,
-        instructions: '',
-        provider: undefined,
-      });
-      setError(null);
-      setJobId(null);
-      setSimpleTestCaseCount(10);
-      setShowAdvanced(false);
-      onClose();
-    }
+    // Reset state
+    setOptions({
+      numPersonas: 5,
+      numTestCasesPerPersona: 3,
+      instructions: '',
+      provider: undefined,
+      includeAssertions: false,
+    });
+    setError(null);
+    setSimpleTestCaseCount(10);
+    setShowAdvanced(false);
+    setIsGenerating(false);
+
+    onClose();
   };
 
   return (
@@ -231,7 +205,6 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
                   { value: 50, label: '50' },
                 ]}
                 valueLabelDisplay="auto"
-                disabled={isGenerating}
               />
             </div>
           )}
@@ -269,7 +242,6 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
                     max={20}
                     marks
                     valueLabelDisplay="auto"
-                    disabled={isGenerating}
                   />
                 </div>
 
@@ -289,7 +261,6 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
                     max={10}
                     marks
                     valueLabelDisplay="auto"
-                    disabled={isGenerating}
                   />
                 </div>
 
@@ -308,7 +279,6 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
               <Select
                 value={options.provider || ''}
                 onChange={(e) => setOptions({ ...options, provider: e.target.value || undefined })}
-                disabled={isGenerating}
                 label="Provider (Optional)"
               >
                 <MenuItem value="">
@@ -330,26 +300,27 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
             rows={3}
             value={options.instructions}
             onChange={(e) => setOptions({ ...options, instructions: e.target.value })}
-            disabled={isGenerating}
             placeholder="e.g., Focus on edge cases, Include diverse demographics, Test error scenarios..."
             fullWidth
           />
 
-          {/* Progress */}
-          {isGenerating && (
-            <div>
-              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-                <CircularProgress size={20} />
-                <Typography variant="body2">
-                  Generating {totalTestCases} test cases... ({progress.current}/{progress.total})
-                </Typography>
-              </Stack>
-              <LinearProgress
-                variant="determinate"
-                value={progress.total > 0 ? (progress.current / progress.total) * 100 : 0}
+          {/* Include Assertions */}
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={options.includeAssertions}
+                onChange={(e) => setOptions({ ...options, includeAssertions: e.target.checked })}
               />
-            </div>
-          )}
+            }
+            label={
+              <div>
+                <Typography variant="body2">Include assertions</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Generate 2 unique LLM-rubric assertions for each test case (adds time)
+                </Typography>
+              </div>
+            }
+          />
 
           {/* Error Display */}
           {error && (
@@ -366,7 +337,8 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
         <Button
           onClick={handleGenerate}
           variant="contained"
-          disabled={isGenerating || prompts.length === 0}
+          disabled={prompts.length === 0 || isGenerating}
+          startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : null}
         >
           {isGenerating ? 'Generating...' : 'Generate'}
         </Button>

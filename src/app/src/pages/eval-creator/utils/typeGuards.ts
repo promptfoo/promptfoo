@@ -20,17 +20,6 @@ export function isProviderOptions(value: unknown): value is ProviderOptions {
 }
 
 /**
- * Type guard to check if metadata contains generation info
- */
-export function hasGenerationMetadata(metadata: unknown): metadata is { isGenerated: boolean } {
-  return (
-    typeof metadata === 'object' &&
-    metadata !== null &&
-    'isGenerated' in metadata
-  );
-}
-
-/**
  * Safe array type guard
  */
 export function isArray<T>(value: unknown, itemGuard: (item: unknown) => item is T): value is T[] {

@@ -4,6 +4,7 @@ import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
 import Publish from '@mui/icons-material/Publish';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -21,6 +22,8 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import PromptDialog from './PromptDialog';
 import PromptSuggestionsSimple from './PromptSuggestionsSimple';
+import { PromptsHelp } from './HelpText';
+import NextStepsGuide from './NextStepsGuide';
 import './PromptsSection.css';
 
 const PromptsSection: React.FC = () => {
@@ -93,6 +96,8 @@ const PromptsSection: React.FC = () => {
 
   return (
     <div>
+      <PromptsHelp />
+      <NextStepsGuide currentSection="prompts" />
       <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
         <Typography variant="h5">Prompts</Typography>
         <div>
@@ -130,6 +135,15 @@ const PromptsSection: React.FC = () => {
           </Button>
         </div>
       </Stack>
+      {prompts.length > 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography variant="body2">
+            <strong>Variable substitution:</strong> Text within {'{{curly braces}}'} will be
+            replaced with values from your test cases below. For example, <code>{`{{topic}}`}</code>{' '}
+            in your prompt will be replaced with the actual topic value from each test case.
+          </Typography>
+        </Alert>
+      )}
       <TableContainer>
         <Table>
           <TableBody>
@@ -230,4 +244,4 @@ const PromptsSection: React.FC = () => {
   );
 };
 
-export default PromptsSection;
+export default React.memo(PromptsSection);

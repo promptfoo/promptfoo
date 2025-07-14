@@ -1,22 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import Button from '@mui/material/Button';
+import Fab from '@mui/material/Fab';
+import Zoom from '@mui/material/Zoom';
 import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
-import Alert from '@mui/material/Alert';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import Badge from '@mui/material/Badge';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ErrorIcon from '@mui/icons-material/Error';
+import CheckIcon from '@mui/icons-material/Check';
 import EvaluationPreview from './EvaluationPreview';
 import type { TestCase, ProviderOptions } from '@promptfoo/types';
 
 interface ValidationResult {
   isValid: boolean;
   errors: string[];
+  completedSteps: number;
+  totalSteps: number;
 }
 
-const RunTestSuiteButton: React.FC = () => {
+const FloatingRunButton: React.FC = () => {
   const navigate = useNavigate();
   const { config } = useStore();
   const {
@@ -30,32 +34,57 @@ const RunTestSuiteButton: React.FC = () => {
     scenarios,
     tests,
   } = config;
+
   const [isRunning, setIsRunning] = useState(false);
-  const [progressPercent, setProgressPercent] = useState(0);
+  const [_progressPercent, setProgressPercent] = useState(0);
+  const [showButton, setShowButton] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Show button when scrolled down past the header
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollThreshold = 200; // Show after scrolling 200px
+      setShowButton(window.scrollY > scrollThreshold);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Check initial scroll position
+
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Validate the configuration
   const validation = useMemo((): ValidationResult => {
     const errors: string[] = [];
+    let completedSteps = 0;
+    const totalSteps = 3;
 
     // Check for prompts
     if (!prompts || prompts.length === 0) {
       errors.push('At least one prompt is required');
+    } else {
+      completedSteps++;
     }
 
     // Check for providers
     if (!providers || providers.length === 0) {
       errors.push('At least one provider is required');
+    } else {
+      completedSteps++;
     }
 
     // Check for test cases
     if (!tests || tests.length === 0) {
       errors.push('At least one test case is required');
+    } else {
+      completedSteps++;
     }
 
     return {
       isValid: errors.length === 0,
       errors,
+      completedSteps,
+      totalSteps,
     };
   }, [prompts, providers, tests]);
 
@@ -83,7 +112,7 @@ const RunTestSuiteButton: React.FC = () => {
       prompts,
       providers,
       scenarios,
-      tests, // Note: This is 'tests' in the API, not 'testCases'
+      tests,
     };
 
     try {
@@ -143,28 +172,11 @@ const RunTestSuiteButton: React.FC = () => {
     }
   };
 
-  const buttonContent = isRunning ? (
-    <>
-      <CircularProgress size={24} sx={{ marginRight: 2 }} />
-      {progressPercent.toFixed(0)}% complete
-    </>
-  ) : validation.isValid ? (
-    <>
-      <CheckCircleIcon sx={{ mr: 1, fontSize: 20 }} />
-      Run Eval
-    </>
-  ) : (
-    <>
-      <ErrorIcon sx={{ mr: 1, fontSize: 20 }} />
-      Run Eval
-    </>
-  );
-
   const tooltipContent = validation.isValid ? (
     'Click to run the evaluation'
   ) : (
     <div>
-      <strong>Cannot run evaluation:</strong>
+      <strong>Complete these steps:</strong>
       <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
         {validation.errors.map((error, index) => (
           <li key={index}>{error}</li>
@@ -172,6 +184,16 @@ const RunTestSuiteButton: React.FC = () => {
       </ul>
     </div>
   );
+
+  const fabIcon = isRunning ? (
+    <CircularProgress size={24} color="inherit" />
+  ) : validation.isValid ? (
+    <PlayArrowIcon />
+  ) : (
+    <ErrorIcon />
+  );
+
+  const fabColor = validation.isValid ? 'primary' : 'error';
 
   // Normalize prompts for preview
   const normalizedPrompts = React.useMemo(() => {
@@ -192,18 +214,40 @@ const RunTestSuiteButton: React.FC = () => {
 
   return (
     <>
-      <Tooltip title={tooltipContent} arrow placement="bottom">
-        <span>
-          <Button
-            variant="contained"
-            color={validation.isValid ? 'primary' : 'error'}
-            onClick={handleRunClick}
-            disabled={isRunning || !validation.isValid}
+      <Zoom in={showButton}>
+        <Tooltip title={tooltipContent} arrow placement="left">
+          <Badge
+            badgeContent={
+              validation.isValid ? (
+                <CheckIcon sx={{ fontSize: 12 }} />
+              ) : (
+                `${validation.completedSteps}/${validation.totalSteps}`
+              )
+            }
+            color={validation.isValid ? 'success' : 'warning'}
+            overlap="circular"
+            anchorOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
           >
-            {buttonContent}
-          </Button>
-        </span>
-      </Tooltip>
+            <Fab
+              color={fabColor}
+              aria-label="Run eval"
+              onClick={handleRunClick}
+              disabled={isRunning}
+              sx={{
+                position: 'fixed',
+                bottom: 32,
+                right: 32,
+                zIndex: 1200,
+              }}
+            >
+              {fabIcon}
+            </Fab>
+          </Badge>
+        </Tooltip>
+      </Zoom>
 
       <EvaluationPreview
         open={showPreview}
@@ -217,4 +261,4 @@ const RunTestSuiteButton: React.FC = () => {
   );
 };
 
-export default RunTestSuiteButton;
+export default FloatingRunButton;

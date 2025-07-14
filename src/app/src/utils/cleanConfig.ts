@@ -9,31 +9,24 @@ export function cleanConfig(config: Partial<UnifiedConfig>): Partial<UnifiedConf
 
   for (const key in config) {
     const value = config[key as keyof UnifiedConfig];
-    
+
     // Skip null or undefined
     if (value === null || value === undefined) {
       continue;
     }
 
-    // Skip empty arrays
+    // Skip empty arrays - ALL empty arrays should be removed
     if (Array.isArray(value) && value.length === 0) {
       continue;
     }
 
-    // Skip empty objects (but keep defaultTest and evaluateOptions even if empty)
-    if (
-      typeof value === 'object' && 
-      !Array.isArray(value) && 
-      Object.keys(value).length === 0 &&
-      key !== 'defaultTest' && 
-      key !== 'evaluateOptions' &&
-      key !== 'env'
-    ) {
+    // Skip ALL empty objects
+    if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) {
       continue;
     }
 
-    // Skip empty strings for description
-    if (key === 'description' && value === '') {
+    // Skip empty strings
+    if (typeof value === 'string' && value === '') {
       continue;
     }
 

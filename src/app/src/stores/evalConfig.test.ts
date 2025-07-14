@@ -1,10 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useStore, DEFAULT_CONFIG } from './evalConfig';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
     // Reset the store state before each test
     useStore.getState().reset();
+    // Clear localStorage
+    localStorage.clear();
+    // Clear all mocks
+    vi.clearAllMocks();
   });
 
   describe('config management', () => {
@@ -24,8 +28,8 @@ describe('evalConfig store', () => {
       const { config } = useStore.getState();
       expect(config.description).toBe('Test Description');
       expect(config.providers).toEqual([{ id: 'openai:gpt-4' }]);
-      // Other fields should remain as defaults
-      expect(config.prompts).toEqual([]);
+      // Other fields should be undefined due to cleanConfig
+      expect(config.prompts).toBeUndefined();
     });
 
     it('should replace entire config with setConfig', () => {
@@ -174,6 +178,130 @@ describe('evalConfig store', () => {
 
       const testSuite = useStore.getState().getTestSuite();
       expect(testSuite.derivedMetrics).toEqual(derivedMetrics);
+    });
+  });
+
+  describe('auto-save functionality', () => {
+    it('should initialize with idle save status', () => {
+      const { saveStatus, saveError, lastSavedAt } = useStore.getState();
+      expect(saveStatus).toBe('idle');
+      expect(saveError).toBeNull();
+      expect(lastSavedAt).toBeNull();
+    });
+
+    it('should update save status when updating config', () => {
+      const { updateConfig } = useStore.getState();
+
+      // Update config
+      updateConfig({ description: 'Test' });
+
+      // Should now show saved status
+      const state = useStore.getState();
+      expect(state.saveStatus).toBe('saved');
+      expect(state.lastSavedAt).toBeGreaterThan(0);
+      expect(state.saveError).toBeNull();
+    });
+
+    it('should handle save errors gracefully', () => {
+      // Mock localStorage.setItem to throw an error
+      const originalSetItem = Storage.prototype.setItem;
+      let errorThrown = false;
+      Storage.prototype.setItem = vi.fn().mockImplementation((key, value) => {
+        if (key === 'promptfoo' && !errorThrown) {
+          errorThrown = true;
+          throw new Error('Storage error');
+        }
+        return originalSetItem.call(localStorage, key, value);
+      });
+
+      const { updateConfig } = useStore.getState();
+
+      // Update config
+      updateConfig({ description: 'Test error handling' });
+
+      // Should show error status
+      const state = useStore.getState();
+      expect(state.saveStatus).toBe('error');
+      expect(state.saveError).toContain('Storage error');
+
+      // Restore original implementation
+      Storage.prototype.setItem = originalSetItem;
+    });
+
+    it('should clear saved data', () => {
+      const { updateConfig, clearSavedData } = useStore.getState();
+
+      // First add some data
+      updateConfig({ description: 'Test data' });
+
+      // Clear saved data
+      clearSavedData();
+
+      // Should reset to default state
+      const state = useStore.getState();
+      expect(state.config).toEqual(DEFAULT_CONFIG);
+      expect(state.saveStatus).toBe('idle');
+      expect(state.lastSavedAt).toBeNull();
+    });
+
+    it('should calculate saved data size', () => {
+      const { updateConfig, getSavedDataSize } = useStore.getState();
+
+      // Initially should be 0
+      expect(getSavedDataSize()).toBe(0);
+
+      // Add some data
+      updateConfig({
+        description: 'Test data',
+        prompts: ['This is a test prompt'],
+      });
+
+      // Size should be greater than 0
+      const size = getSavedDataSize();
+      expect(size).toBeGreaterThan(0);
+    });
+
+    it('should handle localStorage quota errors', () => {
+      // Mock localStorage.setItem to throw quota exceeded error
+      const originalSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = vi.fn().mockImplementation(() => {
+        const error = new Error('QuotaExceededError');
+        error.name = 'QuotaExceededError';
+        throw error;
+      });
+
+      const { updateConfig } = useStore.getState();
+
+      // Update config
+      updateConfig({ description: 'Test' });
+
+      // Should show error status with specific message
+      const state = useStore.getState();
+      expect(state.saveStatus).toBe('error');
+      expect(state.saveError).toContain('Storage quota exceeded');
+
+      // Restore original implementation
+      Storage.prototype.setItem = originalSetItem;
+    });
+
+    it('should persist and rehydrate data', async () => {
+      const testConfig = {
+        description: 'Persisted test',
+        prompts: ['Test prompt'],
+        providers: [{ id: 'test-provider' }],
+      };
+
+      // Update config
+      useStore.getState().updateConfig(testConfig);
+
+      // Manually trigger rehydration
+      await useStore.persist.rehydrate();
+
+      // Check that data was restored
+      const rehydratedState = useStore.getState();
+      expect(rehydratedState.config.description).toBe(testConfig.description);
+      expect(rehydratedState.config.prompts).toEqual(testConfig.prompts);
+      expect(rehydratedState.config.providers).toEqual(testConfig.providers);
     });
   });
 });

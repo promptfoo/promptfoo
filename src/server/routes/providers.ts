@@ -7,6 +7,7 @@ import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers';
+import { hasGoogleDefaultCredentials } from '../../providers/google/util';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
@@ -17,6 +18,52 @@ import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
 export const providersRouter = Router();
+
+// GET /api/providers/available - Check which providers have available credentials
+providersRouter.get('/available', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Check for various API keys following the pattern from defaults.ts
+    const hasOpenAI = Boolean(getEnvString('OPENAI_API_KEY'));
+    const hasAnthropic = Boolean(getEnvString('ANTHROPIC_API_KEY'));
+    const hasMistral = Boolean(getEnvString('MISTRAL_API_KEY'));
+
+    // Check for Azure credentials
+    const hasAzureApiKey = Boolean(
+      getEnvString('AZURE_OPENAI_API_KEY') || getEnvString('AZURE_API_KEY'),
+    );
+    const hasAzureClientCreds = Boolean(
+      getEnvString('AZURE_CLIENT_ID') &&
+        getEnvString('AZURE_CLIENT_SECRET') &&
+        getEnvString('AZURE_TENANT_ID'),
+    );
+    const hasAzure = Boolean(
+      (hasAzureApiKey || hasAzureClientCreds) &&
+        (getEnvString('AZURE_DEPLOYMENT_NAME') || getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME')),
+    );
+
+    // Check for AWS credentials (these are standard AWS SDK env vars)
+    const hasAWS = Boolean(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+
+    // Check for Google credentials
+    // Check for Google credentials
+    const hasGoogleAppCreds = await hasGoogleDefaultCredentials();
+    const hasGoogle = hasGoogleAppCreds || Boolean(process.env.GOOGLE_API_KEY);
+
+    res.json({
+      openai: hasOpenAI,
+      anthropic: hasAnthropic,
+      google: hasGoogle,
+      aws: hasAWS,
+      azure: hasAzure,
+      mistral: hasMistral,
+    });
+  } catch (error) {
+    logger.error(
+      `Error checking available providers: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    res.status(500).json({ error: 'Failed to check available providers' });
+  }
+});
 
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
