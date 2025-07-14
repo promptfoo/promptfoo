@@ -33,11 +33,11 @@ export async function importModule(modulePath: string, functionName?: string) {
     logger.debug(`Attempting ESM import from: ${resolvedPathStr}`);
 
     // IMPORTANT: Use eval() to bypass dynamic import interception in both dev and production
-    // 
+    //
     // Problem: Dynamic imports get converted to require() calls by:
     // 1. ts-node during development (@cspotcode/source-map-support)
     // 2. TypeScript compiler during production build (when module: "commonjs")
-    // 
+    //
     // This breaks ES module loading because:
     // 1. require() can't load ES modules (throws ERR_REQUIRE_ESM)
     // 2. require() doesn't understand file:// URLs (throws MODULE_NOT_FOUND)
@@ -46,7 +46,7 @@ export async function importModule(modulePath: string, functionName?: string) {
     // so neither ts-node nor the TypeScript compiler can intercept and transform it.
     // This ensures the import goes through Node.js's native ES module loader.
     const importedModule = await eval(`import('${resolvedPathStr}')`);
-      
+
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
     logger.debug(
       `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
@@ -64,7 +64,7 @@ export async function importModule(modulePath: string, functionName?: string) {
     if ((err as any).stack) {
       logger.debug((err as any).stack);
     }
-    
+
     logger.debug('Attempting CommonJS require fallback...');
     try {
       const importedModule = require(safeResolve(modulePath));
