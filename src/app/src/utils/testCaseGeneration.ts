@@ -1,9 +1,17 @@
 import { callApi } from '@app/utils/api';
-import type { TestCase } from '@promptfoo/types';
+import type { TestCase, Assertion } from '@promptfoo/types';
 
 interface GenerateTestCaseWithAssertionsOptions {
   prompts: string[];
   existingTests: TestCase[];
+  provider?: string;
+  assertionOptions?: AssertionGenerationOptions;
+}
+
+interface AssertionGenerationOptions {
+  type?: 'pi' | 'g-eval' | 'llm-rubric';
+  numQuestions?: number;
+  instructions?: string;
   provider?: string;
 }
 
@@ -15,6 +23,7 @@ export async function generateTestCaseWithAssertions({
   prompts,
   existingTests,
   provider,
+  assertionOptions = {},
 }: GenerateTestCaseWithAssertionsOptions): Promise<TestCase> {
   // First, generate the test case
   const testResponse = await callApi('/generate/dataset', {
@@ -54,9 +63,10 @@ export async function generateTestCaseWithAssertions({
         prompts: prompts.map((p) => ({ raw: p })),
         tests: [newTestCase],
         options: {
-          type: 'llm-rubric',
-          numQuestions: 2,
-          provider,
+          type: assertionOptions.type || 'llm-rubric',
+          numQuestions: assertionOptions.numQuestions || 2,
+          instructions: assertionOptions.instructions,
+          provider: assertionOptions.provider || provider,
         },
       }),
     });
@@ -81,10 +91,12 @@ export async function generateAssertionsForTestCase({
   prompts,
   testCase,
   provider,
+  options = {},
 }: {
   prompts: string[];
   testCase: TestCase;
   provider?: string;
+  options?: AssertionGenerationOptions;
 }): Promise<TestCase> {
   try {
     const assertionResponse = await callApi('/generate/assertions', {
@@ -94,9 +106,10 @@ export async function generateAssertionsForTestCase({
         prompts: prompts.map((p) => ({ raw: p })),
         tests: [testCase],
         options: {
-          type: 'llm-rubric',
-          numQuestions: 2,
-          provider,
+          type: options.type || 'llm-rubric',
+          numQuestions: options.numQuestions || 2,
+          instructions: options.instructions,
+          provider: options.provider || provider,
         },
       }),
     });
@@ -112,4 +125,43 @@ export async function generateAssertionsForTestCase({
   }
 
   return testCase;
+}
+
+/**
+ * Generates assertions for multiple test cases
+ */
+export async function generateAssertionsForTestCases({
+  prompts,
+  testCases,
+  options = {},
+}: {
+  prompts: string[];
+  testCases: TestCase[];
+  options?: AssertionGenerationOptions;
+}): Promise<Assertion[]> {
+  try {
+    const response = await callApi('/generate/assertions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompts: prompts.map((p) => ({ raw: p })),
+        tests: testCases,
+        options: {
+          type: options.type || 'llm-rubric',
+          numQuestions: options.numQuestions || 5,
+          instructions: options.instructions,
+          provider: options.provider,
+        },
+      }),
+    });
+
+    if (response.ok) {
+      const { results } = await response.json();
+      return results || [];
+    }
+  } catch (_error) {
+    // Return empty array if generation fails
+  }
+
+  return [];
 }

@@ -33,6 +33,7 @@ import {
 import { usePromptNormalization } from '../hooks/usePromptNormalization';
 import ErrorBoundary from './ErrorBoundary';
 import GenerateTestCasesDialog from './GenerateTestCasesDialog';
+import GenerateAssertionsDialog from './GenerateAssertionsDialog';
 import TestCaseDialogV2 from './TestCaseDialogV2';
 import TestCasesTable from './TestCasesTable';
 import TestCasesCardView from './TestCasesCardView';
@@ -74,6 +75,9 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     current: number;
     total: number;
   }>({ isGenerating: false, current: 0, total: 0 });
+  const [assertionGenerationTarget, setAssertionGenerationTarget] = React.useState<number | null>(
+    null,
+  );
 
   // Custom hooks
   const normalizedPrompts = usePromptNormalization(prompts);
@@ -336,25 +340,28 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   }, [normalizedPrompts, testCases, setTestCases]);
 
   const handleGenerateAssertionsForTestCase = useCallback(
-    async (index: number) => {
+    (index: number) => {
       if (normalizedPrompts.length === 0 || !testCases[index]) {
         return;
       }
-
-      try {
-        const updatedTestCase = await generateAssertionsForTestCase({
-          prompts: normalizedPrompts,
-          testCase: testCases[index],
-        });
-
-        const updatedTestCases = [...testCases];
-        updatedTestCases[index] = updatedTestCase;
-        setTestCases(updatedTestCases);
-      } catch (_error) {
-        // Error handling - could show a toast or notification here
-      }
+      setAssertionGenerationTarget(index);
     },
-    [normalizedPrompts, testCases, setTestCases],
+    [normalizedPrompts, testCases],
+  );
+
+  const handleAssertionsGenerated = useCallback(
+    (newAssertions: any[]) => {
+      if (assertionGenerationTarget !== null && testCases[assertionGenerationTarget]) {
+        const updatedTestCases = [...testCases];
+        updatedTestCases[assertionGenerationTarget] = {
+          ...updatedTestCases[assertionGenerationTarget],
+          assert: [...(updatedTestCases[assertionGenerationTarget].assert || []), ...newAssertions],
+        };
+        setTestCases(updatedTestCases);
+      }
+      setAssertionGenerationTarget(null);
+    },
+    [assertionGenerationTarget, testCases, setTestCases],
   );
 
   const fileInputId = React.useId();
@@ -580,6 +587,18 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         onGenerated={handleGeneratedTestCases}
         onGenerationStarted={handleGenerationStarted}
       />
+
+      {/* Generate Assertions Dialog */}
+      {assertionGenerationTarget !== null && (
+        <GenerateAssertionsDialog
+          open={true}
+          onClose={() => setAssertionGenerationTarget(null)}
+          onAssertionsGenerated={handleAssertionsGenerated}
+          prompts={normalizedPrompts}
+          testCase={testCases[assertionGenerationTarget]}
+          existingAssertions={testCases[assertionGenerationTarget]?.assert || []}
+        />
+      )}
 
       {/* Clear All Confirmation Dialog */}
       <Dialog

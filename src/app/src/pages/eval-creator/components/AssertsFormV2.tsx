@@ -191,7 +191,9 @@ const AssertsFormV2: React.FC<AssertsFormV2Props> = ({
   };
 
   const getAssertionIcon = (type: AssertionType) => {
-    if (type.includes('not-')) { return <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />; }
+    if (type.includes('not-')) {
+      return <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />;
+    }
     if (['contains', 'equals', 'icontains'].includes(type)) {
       return <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />;
     }

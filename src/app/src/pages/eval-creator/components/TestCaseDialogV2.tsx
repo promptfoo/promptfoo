@@ -40,8 +40,8 @@ import type { Assertion, TestCase } from '@promptfoo/types';
 import VarsFormV2 from './VarsFormV2';
 import AssertsFormV2 from './AssertsFormV2';
 import TestCasePreview from './TestCasePreview';
+import GenerateAssertionsDialog from './GenerateAssertionsDialog';
 import { useErrorNotification } from '../hooks/useErrorNotification';
-import { generateAssertionsForTestCase } from '@app/utils/testCaseGeneration';
 
 interface TestCaseDialogV2Props {
   open: boolean;
@@ -72,7 +72,7 @@ const TestCaseDialogV2: React.FC<TestCaseDialogV2Props> = ({
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues?.assert || []);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [isGeneratingAssertions, setIsGeneratingAssertions] = useState(false);
+  const [showGenerateAssertionsDialog, setShowGenerateAssertionsDialog] = useState(false);
 
   // Reset state when dialog opens/closes or initialValues change
   useEffect(() => {
@@ -154,35 +154,25 @@ const TestCaseDialogV2: React.FC<TestCaseDialogV2Props> = ({
     }
   };
 
-  const handleGenerateAssertions = async () => {
+  const handleGenerateAssertions = () => {
     if (!prompts.length) {
       showError('Please add prompts first to generate assertions', 'Missing Prompts');
       return;
     }
 
-    setIsGeneratingAssertions(true);
-    try {
-      const testCaseForGeneration: TestCase = {
-        ...(description && { description }),
-        vars,
-      };
-
-      const updatedTestCase = await generateAssertionsForTestCase({
-        prompts,
-        testCase: testCaseForGeneration,
-      });
-
-      if (updatedTestCase.assert && updatedTestCase.assert.length > 0) {
-        setAsserts([...asserts, ...updatedTestCase.assert]);
-        setActiveTab('assertions');
-      } else {
-        showError('No assertions were generated. Please try again.', 'Generation Failed');
-      }
-    } catch (_error) {
-      showError('Failed to generate assertions', 'Generation Error');
-    } finally {
-      setIsGeneratingAssertions(false);
+    if (varsList.length > 0 && Object.keys(vars).some((v) => !vars[v])) {
+      showError('Please fill in all variables before generating assertions', 'Missing Variables');
+      setActiveTab('variables');
+      return;
     }
+
+    setShowGenerateAssertionsDialog(true);
+  };
+
+  const handleAssertionsGenerated = (newAssertions: Assertion[]) => {
+    setAsserts([...asserts, ...newAssertions]);
+    setActiveTab('assertions');
+    setShowGenerateAssertionsDialog(false);
   };
 
   const handleClose = () => {
@@ -327,22 +317,16 @@ const TestCaseDialogV2: React.FC<TestCaseDialogV2Props> = ({
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Stack direction="row" spacing={1}>
           {varsList.length > 0 && (
-            <Tooltip title="Generate test case with AI">
+            <Tooltip title="Generate assertions with AI">
               <Button
-                startIcon={
-                  isGeneratingAssertions ? <CircularProgress size={16} /> : <AutoFixHighIcon />
-                }
+                startIcon={<AutoFixHighIcon />}
                 variant="outlined"
                 size="small"
                 onClick={handleGenerateAssertions}
-                disabled={
-                  isGeneratingAssertions ||
-                  varsList.length === 0 ||
-                  Object.keys(vars).some((v) => !vars[v])
-                }
+                disabled={varsList.length === 0}
                 sx={{ textTransform: 'none' }}
               >
-                {isGeneratingAssertions ? 'Generating...' : 'AI Generate'}
+                AI Generate
               </Button>
             </Tooltip>
           )}
@@ -374,6 +358,16 @@ const TestCaseDialogV2: React.FC<TestCaseDialogV2Props> = ({
           </Button>
         </Stack>
       </Box>
+
+      {/* Generate Assertions Dialog */}
+      <GenerateAssertionsDialog
+        open={showGenerateAssertionsDialog}
+        onClose={() => setShowGenerateAssertionsDialog(false)}
+        onAssertionsGenerated={handleAssertionsGenerated}
+        prompts={prompts}
+        testCase={{ description, vars }}
+        existingAssertions={asserts}
+      />
     </Dialog>
   );
 };

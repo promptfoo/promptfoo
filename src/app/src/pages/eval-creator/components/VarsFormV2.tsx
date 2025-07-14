@@ -113,7 +113,9 @@ const VarsFormV2: React.FC<VarsFormV2Props> = ({
   };
 
   const validateJSON = (value: string): boolean => {
-    if (!value.trim()) { return true; }
+    if (!value.trim()) {
+      return true;
+    }
     try {
       JSON.parse(value);
       return true;
@@ -354,16 +356,36 @@ const VarsFormV2: React.FC<VarsFormV2Props> = ({
 // Helper function to provide contextual examples
 function getExampleForVariable(varName: string): string {
   const lowerName = varName.toLowerCase();
-  if (lowerName.includes('name')) { return 'John Doe'; }
-  if (lowerName.includes('email')) { return 'user@example.com'; }
-  if (lowerName.includes('age')) { return '25'; }
-  if (lowerName.includes('url')) { return 'https://example.com'; }
-  if (lowerName.includes('date')) { return '2024-01-15'; }
-  if (lowerName.includes('phone')) { return '+1-555-0123'; }
-  if (lowerName.includes('address')) { return '123 Main St'; }
-  if (lowerName.includes('city')) { return 'San Francisco'; }
-  if (lowerName.includes('country')) { return 'United States'; }
-  if (lowerName.includes('description')) { return 'A brief description'; }
+  if (lowerName.includes('name')) {
+    return 'John Doe';
+  }
+  if (lowerName.includes('email')) {
+    return 'user@example.com';
+  }
+  if (lowerName.includes('age')) {
+    return '25';
+  }
+  if (lowerName.includes('url')) {
+    return 'https://example.com';
+  }
+  if (lowerName.includes('date')) {
+    return '2024-01-15';
+  }
+  if (lowerName.includes('phone')) {
+    return '+1-555-0123';
+  }
+  if (lowerName.includes('address')) {
+    return '123 Main St';
+  }
+  if (lowerName.includes('city')) {
+    return 'San Francisco';
+  }
+  if (lowerName.includes('country')) {
+    return 'United States';
+  }
+  if (lowerName.includes('description')) {
+    return 'A brief description';
+  }
   return 'Sample value';
 }
 
