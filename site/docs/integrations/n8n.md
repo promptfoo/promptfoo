@@ -146,6 +146,6 @@ the failure.
    into multi‑step RAG pipelines.
 2. Use **n8n Insights** (self‑hosted EE) to monitor historical pass‑rates and
    surface regressions.
-3. Check out the other [CI integrations](/./ci-cd) ([GitHub Actions](./github-action.md), [CircleCI](./circle-ci.md), …) in the Promptfoo docs for inspiration.
+3. Check out the other [CI integrations](./ci-cd) ([GitHub Actions](./github-action.md), [CircleCI](./circle-ci.md), …) in the Promptfoo docs for inspiration.
 
 Happy automating!
