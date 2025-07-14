@@ -94,5 +94,15 @@ jobs:
           # The script to run Vitest tests for individual files
           testScript: 'npx vitest run {{file}} --reporter=basic'
 
+          coverageScript: |
+            npx vitest run {{testFilePaths}} \
+              --coverage \
+              --coverage.reportsDirectory=coverage \
+              --coverage.reporter=json-summary \
+              --coverage.reporter=json \
+              --coverage.reportOnFailure \
+              --coverage.include="**/*.{ts,tsx}" \
+              --coverage.exclude="**/*.{test,spec}.{ts,tsx}"
+
           # Max concurrency is set to 1 because we need to run tsc with incremental build
           maxConcurrency: 1
