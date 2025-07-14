@@ -73,11 +73,11 @@ An LLM supply chain can be massive: it comprises of everything from development 
 
 ### 4. Data and model poisoning
 
-Data poisoning happens when the data is deliberately tainted before being fed to an LLM. Perhaps we're using public feedback to retrain a model; some jerks could flood the feedback with offensive phrases.
+Data poisoning happens when the data is deliberately tainted before being fed to an LLM. Perhaps we're using public feedback to retrain a model; some jerks could flood the feedback with offensive phrases. Learn about [RAG poisoning attacks](https://www.promptfoo.dev/docs/red-team/plugins/rag-poisoning/) and how to test for them.
 
 ### 5. Improper output handling
 
-Generally, data is processed before being passed to other systems (for integrity, lack of anything harmful, etc). Improper output handling is doing a terrible job of processing it. Imagine a question that includes some SQL that gets fed to an app and uh oh-where's the data gone (props to anyone thinking of [Little Bobby Tables](https://xkcd.com/327/))?
+Generally, data is processed before being passed to other systems (for integrity, lack of anything harmful, etc). Improper output handling is doing a terrible job of processing it. Imagine a question that includes some SQL that gets fed to an app and uh oh-where's the data gone (props to anyone thinking of [Little Bobby Tables](https://xkcd.com/327/))? Test for [SQL injection vulnerabilities](https://www.promptfoo.dev/docs/red-team/plugins/sql-injection/) in your LLM applications.
 
 ![XKCD comic about SQL injection](https://imgs.xkcd.com/comics/exploits_of_a_mom.png)
 
@@ -85,7 +85,7 @@ Generally, data is processed before being passed to other systems (for integrity
 
 When an LLM performs operations for us - like call an API the same way a developer would - we give them agency. Too much agency (in functions, permissions, or autonomy) combined with inappropriate input equals damage.
 
-I could give a social media posting tool access to my social media account permission to post as me, but not to reply to threads I haven't posted, and no access to my contacts list. There are equivalents for LLMs.
+I could give a social media posting tool access to my social media account permission to post as me, but not to reply to threads I haven't posted, and no access to my contacts list. There are equivalents for LLMs. Check out how to [test for excessive agency vulnerabilities](https://www.promptfoo.dev/docs/red-team/plugins/excessive-agency/).
 
 ### 7. System prompt leakage
 
@@ -95,11 +95,11 @@ I happened to write an article about [system prompt hardening](https://www.promp
 
 ### 8. Vector and embedding weaknesses
 
-Embeddings are used to represent text numerically (vectors) in a way that captures the meaning of words. There can be weaknesses created during the process of creation, storage, or retrieval. Someone could craft an input with near-identical vectors to bypass a moderation filter.
+Embeddings are used to represent text numerically (vectors) in a way that captures the meaning of words. There can be weaknesses created during the process of creation, storage, or retrieval. Someone could craft an input with near-identical vectors to bypass a moderation filter. For RAG systems, see our guide on [red teaming RAG applications](https://www.promptfoo.dev/docs/red-team/rag/).
 
 ### 9. Misinformation
 
-LLMs say things with such unabashed confidence they sound true; people trust incorrect LLM outputs much like they trust misinformation from the average non-expert and websites. Perhaps I could've published this article with the title alone and ignored the rest of the content but alas; I only evaluate titles mid-way through writing and you are - thankfully - an audience of skeptics.
+LLMs say things with such unabashed confidence they sound true; people trust incorrect LLM outputs much like they trust misinformation from the average non-expert and websites. Perhaps I could've published this article with the title alone and ignored the rest of the content but alas; I only evaluate titles mid-way through writing and you are - thankfully - an audience of skeptics. Learn how to [measure and prevent LLM hallucinations](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucations/).
 
 ### 10. Unbounded consumption
 
@@ -109,32 +109,32 @@ Similar to denial of service (DoS) attacks, unbounded consumption is broader in 
 
 Please imagine me having written two additional paragraphs per issue above and then deleting them in favor of the following (non-comprehensive) table summarizing the security measures instead. Thank you.
 
-| **Action**                                               | **Applies to (Issues #)** |
-| -------------------------------------------------------- | ------------------------- |
-| Restrict model behavior with system instructions         | 1, 6, 7                   |
-| Enforce privilege control and least privilege access     | 1, 2, 6, 7                |
-| Validate and sanitize inputs and outputs                 | 1, 2, 5, 6                |
-| Limit LLM permissions and capabilities                   | 1, 6, 7                   |
-| Use external systems to enforce logic or perform actions | 1, 6, 7                   |
-| Require human-in-the-loop or approvals                   | 1, 6                      |
-| Segregate/isolate untrusted or external content          | 1                         |
-| Track and monitor usage and behavior                     | 5, 6                      |
-| Conduct adversarial testing and simulations              | 1                         |
-| Educate users and developers                             | 2, 9                      |
-| Limit input/output/data sizes and resource usage         | 10                        |
-| Use content security policies or output constraints      | 5                         |
-| Apply encryption or secure storage                       | 2, 8                      |
-| Utilize federated learning                               | 2, 4                      |
-| Review, classify, and audit data and models              | 3, 4, 8                   |
-| Vet suppliers, verify models, and maintain inventories   | 3                         |
-| Rate-limit and throttle requests                         | 10                        |
-| Fine-tune models / use RAG                               | 9                         |
-| Label and clarify AI-generated content                   | 9                         |
-| Maintain data access controls and opt-out policies       | 2                         |
-| Hide or obfuscate system prompts                         | 2, 7                      |
-| Modify outputs to prevent leakage or injection           | 2, 5                      |
-| Restrict access to external sources and services         | 2, 10                     |
-| Use sandboxing and resource constraints                  | 4, 10                     |
+| **Action**                                                                                                                       | **Applies to (Issues #)** |
+| -------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Restrict model behavior with system instructions                                                                                 | 1, 6, 7                   |
+| Enforce privilege control and least privilege access                                                                             | 1, 2, 6, 7                |
+| [Validate and sanitize inputs and outputs](https://www.promptfoo.dev/docs/configuration/expected-outputs/)                       | 1, 2, 5, 6                |
+| Limit LLM permissions and capabilities                                                                                           | 1, 6, 7                   |
+| Use external systems to enforce logic or perform actions                                                                         | 1, 6, 7                   |
+| Require human-in-the-loop or approvals                                                                                           | 1, 6                      |
+| Segregate/isolate untrusted or external content                                                                                  | 1                         |
+| Track and monitor usage and behavior                                                                                             | 5, 6                      |
+| [Conduct adversarial testing and simulations](https://www.promptfoo.dev/docs/red-team/)                                          | 1                         |
+| Educate users and developers                                                                                                     | 2, 9                      |
+| Limit input/output/data sizes and resource usage                                                                                 | 10                        |
+| [Use content security policies or output constraints](https://www.promptfoo.dev/docs/configuration/expected-outputs/moderation/) | 5                         |
+| Apply encryption or secure storage                                                                                               | 2, 8                      |
+| Utilize federated learning                                                                                                       | 2, 4                      |
+| Review, classify, and audit data and models                                                                                      | 3, 4, 8                   |
+| Vet suppliers, verify models, and maintain inventories                                                                           | 3                         |
+| [Rate-limit and throttle requests](https://www.promptfoo.dev/docs/configuration/telemetry/)                                      | 10                        |
+| Fine-tune models / use RAG                                                                                                       | 9                         |
+| Label and clarify AI-generated content                                                                                           | 9                         |
+| Maintain data access controls and opt-out policies                                                                               | 2                         |
+| Hide or obfuscate system prompts                                                                                                 | 2, 7                      |
+| Modify outputs to prevent leakage or injection                                                                                   | 2, 5                      |
+| Restrict access to external sources and services                                                                                 | 2, 10                     |
+| Use sandboxing and resource constraints                                                                                          | 4, 10                     |
 
 ## Further information
 
