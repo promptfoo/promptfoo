@@ -1186,9 +1186,13 @@ function ResultsTable({
                 <Select
                   value={pagination.pageSize}
                   onChange={(e) => {
+                    const newPageSize = Number(e.target.value);
+                    const newPageCount = Math.ceil(filteredResultsCount / newPageSize);
+
                     setPagination((prev) => ({
-                      ...prev,
-                      pageSize: Number(e.target.value),
+                      pageSize: newPageSize,
+                      // Reset to page 0 if current page would be out of bounds
+                      pageIndex: prev.pageIndex >= newPageCount ? 0 : prev.pageIndex,
                     }));
                     window.scrollTo(0, 0);
                   }}
@@ -1247,6 +1251,7 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
+                  aria-label="Previous page"
                 >
                   <ArrowBackIcon />
                 </IconButton>
@@ -1260,6 +1265,7 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+                  aria-label="Next page"
                 >
                   <ArrowForwardIcon />
                 </IconButton>

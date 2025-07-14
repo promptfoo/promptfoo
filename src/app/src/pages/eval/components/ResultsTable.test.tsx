@@ -1223,7 +1223,7 @@ describe('ResultsTable Pagination Display', () => {
 
 describe('ResultsTable Page Size Change', () => {
   const mockTable = {
-    body: Array(30).fill({
+    body: Array(120).fill({
       outputs: [
         {
           pass: true,
@@ -1258,7 +1258,6 @@ describe('ResultsTable Page Size Change', () => {
   };
 
   beforeEach(() => {
-    const setPaginationMock = vi.fn();
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
@@ -1266,43 +1265,93 @@ describe('ResultsTable Page Size Change', () => {
       table: mockTable,
       version: 4,
       fetchEvalData: vi.fn(),
-      filteredResultsCount: 30,
+      filteredResultsCount: 120,
       isFetching: false,
       setFilteredResultsCount: vi.fn(),
       setTotalResultsCount: vi.fn(),
-      pagination: {
-        pageIndex: 2,
-        pageSize: 10,
-      },
-      setPagination: setPaginationMock,
     }));
   });
 
-  it('should adjust page index when changing to a smaller page size that invalidates the current page', async () => {
+  it('should reset page index to 0 when changing to a larger page size that reduces the total number of pages', async () => {
     render(<ResultsTable {...defaultProps} />);
 
-    // Find the select element by its role and aria-label
+    // Initial state: 120 results with default 50 per page = 3 pages
+    // Navigate to page 3 (pageIndex 2) first
+    const nextPageButton = screen.getByRole('button', { name: 'Next page' });
+
+    // Click twice to go from page 1 to page 3
+    await act(async () => {
+      await userEvent.click(nextPageButton);
+    });
+    await act(async () => {
+      await userEvent.click(nextPageButton);
+    });
+
+    // Verify we're on page 3 of 3
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+
+    // Find the page size select element
     const pageSizeSelect = screen.getByRole('combobox', { name: 'Results per page' });
     expect(pageSizeSelect).toBeInTheDocument();
+    expect(pageSizeSelect).toHaveTextContent('50'); // Should start at 50
 
-    // For Material-UI Select, we need to click on it first to open the dropdown
+    // Open the dropdown
     await act(async () => {
       await userEvent.click(pageSizeSelect);
     });
 
-    // Wait for the dropdown to open and find the option
-    const option50 = await screen.findByRole('option', { name: '50' });
-
-    // Click on the option
+    // Select 100 items per page
+    const option100 = await screen.findByRole('option', { name: '100' });
     await act(async () => {
-      await userEvent.click(option50);
+      await userEvent.click(option100);
     });
 
-    // The pagination should be reset when page size changes
-    // Note: The component uses local state for pagination, not the store's pagination
-    // We need to verify the onChange handler was called on the Select component
-    // Since we can't directly access the component's internal state, we can verify
-    // that the page size select now shows '50'
-    expect(pageSizeSelect).toHaveTextContent('50');
+    // The page size select should now show '100'
+    expect(pageSizeSelect).toHaveTextContent('100');
+
+    // With 120 results and 100 per page, we have 2 pages
+    // Since we were on page 3 (pageIndex 2), it should reset to page 1 (pageIndex 0)
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
+  it('should maintain current page index when changing to a smaller page size that increases the total number of pages', async () => {
+    // Start with 120 results
+    render(<ResultsTable {...defaultProps} />);
+
+    // Initial state: 120 results with default 50 per page = 3 pages
+    // We're on page 1 (pageIndex 0)
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+
+    // Find the page size select element
+    const pageSizeSelect = screen.getByRole('combobox', { name: 'Results per page' });
+
+    // Open dropdown
+    await act(async () => {
+      await userEvent.click(pageSizeSelect);
+    });
+
+    // Select smaller page size (10)
+    const option10 = await screen.findByRole('option', { name: '10' });
+    await act(async () => {
+      await userEvent.click(option10);
+    });
+
+    // The page size select should now show '10'
+    expect(pageSizeSelect).toHaveTextContent('10');
+
+    // With 120 results and 10 per page, we have 12 pages
+    // Should still be on page 1 (pageIndex 0)
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
   });
 });
