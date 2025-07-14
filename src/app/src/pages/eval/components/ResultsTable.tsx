@@ -1149,7 +1149,7 @@ function ResultsTable({
               borderColor: 'divider',
               zIndex: 1000,
               width: '100vw',
-              boxShadow: 2,
+              boxShadow: 3,
             }}
           >
             <Box>
