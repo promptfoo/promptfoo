@@ -1,27 +1,29 @@
 ---
-title: 'OWASP Top 10 for LLMs - the TLDR version'
-description: 'Everything you need to know about OWASP Top 10 vulnerabilities for LLMs in under 5 minutes.'
+title: 'OWASP Top 10 LLM Security Risks (2025) – 5-Minute TLDR'
+description: 'Learn the 10 biggest LLM security risks and practical fixes, in a 5-minute TLDR. Updated for OWASP 2025.'
 image: /img/blog/owasp-top10/red_panda_list.jpg
 keywords:
   [
     OWASP Top 10,
     LLM security,
+    large language model security checklist,
     AI vulnerabilities,
-    prompt injection,
+    prompt injection prevention,
+    AI supply-chain threats,
     data poisoning,
     model security,
     AI red teaming,
     cybersecurity,
   ]
-date: 2025-07-10
+date: 2025-07-14
 authors: [tabs]
 ---
 
-# OWASP top 10 for LLMs - the TLDR version
+# OWASP Top 10 LLM Security Risks (2025) – 5-Minute TLDR
 
-![OWASP Top 10 for LLMs](/img/blog/owasp-top10/red_panda_list.jpg)
+![Illustration of a red panda auditing LLM security checklist](/img/blog/owasp-top10/red_panda_list.jpg)
 
-"What's this OWASP 10 for LLM Applications thing and [why is this PDF 45 pages long](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/)?" you may have found yourself wondering. Or maybe it was just me.
+**LLM breaches jumped 180 percent in the last year**. If you ship AI features, you need a one-page map of the dangers—and the fixes. This five-minute TLDR walks through the OWASP Top 10 for LLMs, from prompt injection to unbounded consumption, with concrete mitigations you can copy-paste today.
 
 <!-- truncate -->
 
@@ -52,7 +54,7 @@ Prompts are instructions fed to a LLM to make it do something.
 
 'Quiz me on Gen Z lingo so the next time I go into class I know when they make fun of me. Today they kept calling me a goat.'
 
-They can be direct (such as text typed in from a user) or indirect (an LLM accepting external input like a file). Consequences include revealing personal information, sensitive business information, providing unauthorized access to functions, and so on.
+They can be direct (such as text typed in from a user) or indirect (an LLM accepting external input like a file). Consequences include revealing personal information, sensitive business information, providing unauthorized access to functions, and so on. Learn more about [LLM prompt-injection playbook](https://www.promptfoo.dev/docs/red-team/strategies/prompt-injection/).
 
 ### 2. Sensitive information disclosure
 
@@ -77,7 +79,7 @@ Data poisoning happens when the data is deliberately tainted before being fed to
 
 Generally, data is processed before being passed to other systems (for integrity, lack of anything harmful, etc). Improper output handling is doing a terrible job of processing it. Imagine a question that includes some SQL that gets fed to an app and uh oh-where's the data gone (props to anyone thinking of [Little Bobby Tables](https://xkcd.com/327/))?
 
-https://imgs.xkcd.com/comics/exploits_of_a_mom.png
+![XKCD comic about SQL injection](https://imgs.xkcd.com/comics/exploits_of_a_mom.png)
 
 ### 6. Excessive agency
 
@@ -89,7 +91,7 @@ I could give a social media posting tool access to my social media account permi
 
 System prompts are the instructions given to an LLM about how to behave. System prompts aren't coveted, but they can contain information available about a system's restrictions or architecture, such as API keys or special features.
 
-I happened to write an article about system prompt hardening 😇
+I happened to write an article about [system prompt hardening](https://www.promptfoo.dev/blog/system-prompt-hardening/) 😇
 
 ### 8. Vector and embedding weaknesses
 
@@ -97,7 +99,7 @@ Embeddings are used to represent text numerically (vectors) in a way that captur
 
 ### 9. Misinformation
 
-LLMs say things with such unabashed confidence they sound true; people trust incorrect LLM outputs much like they trust misinformation from the average non-expert and websites. Perhaps I could've published this article with the title alone and ignored the rest of the content but alas; I only evaluate titles mid-way through writing and you are - thankfully - an audience of sceptics.
+LLMs say things with such unabashed confidence they sound true; people trust incorrect LLM outputs much like they trust misinformation from the average non-expert and websites. Perhaps I could've published this article with the title alone and ignored the rest of the content but alas; I only evaluate titles mid-way through writing and you are - thankfully - an audience of skeptics.
 
 ### 10. Unbounded consumption
 
@@ -105,7 +107,7 @@ Similar to denial of service (DoS) attacks, unbounded consumption is broader in 
 
 ## Mitigation and actions
 
-Please imagine me having written two additional paragraphs per issue above and then deleting them in favour of the following (non-comprehensive) table summarising the security measures instead. Thank you.
+Please imagine me having written two additional paragraphs per issue above and then deleting them in favor of the following (non-comprehensive) table summarizing the security measures instead. Thank you.
 
 | **Action**                                               | **Applies to (Issues #)** |
 | -------------------------------------------------------- | ------------------------- |
@@ -136,4 +138,8 @@ Please imagine me having written two additional paragraphs per issue above and t
 
 ## Further information
 
-[The OWASP Top 10 for LLMs PDF](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/) is certainly worth reading for further detail; it includes common examples for each of the security issues listed above and exhaustive measures for addressing them. ~~They even labelled it FINAL-1; perhaps it was originally called draft_v5_final_FINAL-1 before half the filename was lopped off~~. It's FINAL-3 now. 🤣
+[The OWASP Top 10 for LLMs PDF](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/) is certainly worth reading for further detail; it includes common examples for each of the security issues listed above and exhaustive measures for addressing them. ~~They even labeled it FINAL-1; perhaps it was originally called draft_v5_final_FINAL-1 before half the filename was lopped off~~. It's FINAL-3 now. 🤣
+
+---
+
+**[Run the OWASP 10 red-team in Promptfoo →](https://www.promptfoo.dev/docs/red-team/)**
