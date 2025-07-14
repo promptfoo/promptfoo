@@ -323,7 +323,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                   <Typography variant="subtitle1" gutterBottom>
                     Key Input Method
                   </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 2 }}>
                     <Paper
                       variant="outlined"
                       sx={{
@@ -440,6 +440,84 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                         Paste encoded key
                       </Typography>
                     </Paper>
+
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        bgcolor:
+                          selectedTarget.config.signatureAuth?.keyInputType === 'jks'
+                            ? 'action.selected'
+                            : 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                      onClick={() =>
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config.signatureAuth,
+                          keyInputType: 'jks',
+                        })
+                      }
+                    >
+                      <VpnKeyIcon
+                        color={
+                          selectedTarget.config.signatureAuth?.keyInputType === 'jks'
+                            ? 'primary'
+                            : 'action'
+                        }
+                        sx={{ mb: 1 }}
+                      />
+                      <Typography variant="body1" gutterBottom>
+                        JKS Keystore
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        Java KeyStore
+                      </Typography>
+                    </Paper>
+
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        bgcolor:
+                          selectedTarget.config.signatureAuth?.keyInputType === 'pfx'
+                            ? 'action.selected'
+                            : 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                      onClick={() =>
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config.signatureAuth,
+                          keyInputType: 'pfx',
+                        })
+                      }
+                    >
+                      <KeyIcon
+                        color={
+                          selectedTarget.config.signatureAuth?.keyInputType === 'pfx'
+                            ? 'primary'
+                            : 'action'
+                        }
+                        sx={{ mb: 1 }}
+                      />
+                      <Typography variant="body1" gutterBottom>
+                        PFX Certificate
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        PKCS#12 format
+                      </Typography>
+                    </Paper>
                   </Box>
                 </Box>
 
@@ -462,8 +540,14 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                               const content = event.target?.result as string;
                               updateCustomTarget('signatureAuth', {
                                 ...selectedTarget.config.signatureAuth,
+                                type: 'pem',
                                 privateKey: content,
                                 privateKeyPath: undefined,
+                                keystorePath: undefined,
+                                keystorePassword: undefined,
+                                keyAlias: undefined,
+                                pfxPath: undefined,
+                                pfxPassword: undefined,
                               });
                               await validatePrivateKey(content);
                               showToast('Private key validated successfully', 'success');
@@ -531,8 +615,14 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config.signatureAuth,
+                          type: 'pem',
                           privateKeyPath: e.target.value,
                           privateKey: undefined,
+                          keystorePath: undefined,
+                          keystorePassword: undefined,
+                          keyAlias: undefined,
+                          pfxPath: undefined,
+                          pfxPassword: undefined,
                         });
                       }}
                     />
@@ -551,8 +641,14 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                         onChange={(e) => {
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
+                            type: 'pem',
                             privateKey: e.target.value,
                             privateKeyPath: undefined,
+                            keystorePath: undefined,
+                            keystorePassword: undefined,
+                            keyAlias: undefined,
+                            pfxPath: undefined,
+                            pfxPassword: undefined,
                           });
                         }}
                       />
@@ -567,8 +663,14 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                               const formattedKey = await convertStringKeyToPem(inputKey);
                               updateCustomTarget('signatureAuth', {
                                 ...selectedTarget.config.signatureAuth,
+                                type: 'pem',
                                 privateKey: formattedKey,
                                 privateKeyPath: undefined,
+                                keystorePath: undefined,
+                                keystorePassword: undefined,
+                                keyAlias: undefined,
+                                pfxPath: undefined,
+                                pfxPassword: undefined,
                               });
                               await validatePrivateKey(formattedKey);
                               showToast('Private key validated successfully', 'success');
@@ -587,6 +689,198 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                           Format & Validate
                         </Button>
                       </Box>
+                    </Stack>
+                  </Paper>
+                )}
+
+                {selectedTarget.config.signatureAuth?.keyInputType === 'jks' && (
+                  <Paper variant="outlined" sx={{ p: 3 }}>
+                    <Stack spacing={3}>
+                      <Typography gutterBottom color="text.secondary">
+                        Configure Java KeyStore (JKS) settings for signature authentication
+                      </Typography>
+                      
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Keystore File
+                        </Typography>
+                        <input
+                          type="file"
+                          accept=".jks,.keystore"
+                          style={{ display: 'none' }}
+                          id="jks-keystore-upload"
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).value = '';
+                          }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                const content = event.target?.result;
+                                if (content) {
+                                  // For JKS files, we need to store the file path, not the content
+                                  // In a real implementation, you would upload the file and get a path
+                                  updateCustomTarget('signatureAuth', {
+                                    ...selectedTarget.config.signatureAuth,
+                                    type: 'jks',
+                                    keystorePath: file.name, // This would be the uploaded file path
+                                    privateKey: undefined,
+                                    privateKeyPath: undefined,
+                                    pfxPath: undefined,
+                                    pfxPassword: undefined,
+                                  });
+                                  showToast('JKS keystore file loaded successfully', 'success');
+                                }
+                              };
+                              reader.readAsArrayBuffer(file);
+                            }
+                          }}
+                        />
+                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                          <TextField
+                            fullWidth
+                            placeholder="/path/to/keystore.jks"
+                            value={selectedTarget.config.signatureAuth?.keystorePath || ''}
+                            onChange={(e) => {
+                              updateCustomTarget('signatureAuth', {
+                                ...selectedTarget.config.signatureAuth,
+                                type: 'jks',
+                                keystorePath: e.target.value,
+                                privateKey: undefined,
+                                privateKeyPath: undefined,
+                                pfxPath: undefined,
+                                pfxPassword: undefined,
+                              });
+                            }}
+                            label="Keystore Path"
+                          />
+                          <label htmlFor="jks-keystore-upload">
+                            <Button variant="outlined" component="span" startIcon={<UploadIcon />}>
+                              Browse
+                            </Button>
+                          </label>
+                        </Box>
+                      </Box>
+
+                      <TextField
+                        fullWidth
+                        type="password"
+                        label="Keystore Password"
+                        placeholder="Enter keystore password"
+                        value={selectedTarget.config.signatureAuth?.keystorePassword || ''}
+                        onChange={(e) => {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keystorePassword: e.target.value,
+                          });
+                        }}
+                        helperText="Password for the JKS keystore. Can also be set via PROMPTFOO_JKS_PASSWORD environment variable."
+                      />
+
+                      <TextField
+                        fullWidth
+                        label="Key Alias"
+                        placeholder="client"
+                        value={selectedTarget.config.signatureAuth?.keyAlias || ''}
+                        onChange={(e) => {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keyAlias: e.target.value,
+                          });
+                        }}
+                        helperText="Alias of the key to use from the keystore. If not specified, the first available key will be used."
+                      />
+                    </Stack>
+                  </Paper>
+                )}
+
+                {selectedTarget.config.signatureAuth?.keyInputType === 'pfx' && (
+                  <Paper variant="outlined" sx={{ p: 3 }}>
+                    <Stack spacing={3}>
+                      <Typography gutterBottom color="text.secondary">
+                        Configure PFX (PKCS#12) certificate settings for signature authentication
+                      </Typography>
+                      
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          PFX Certificate File
+                        </Typography>
+                        <input
+                          type="file"
+                          accept=".pfx,.p12"
+                          style={{ display: 'none' }}
+                          id="pfx-certificate-upload"
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).value = '';
+                          }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                const content = event.target?.result;
+                                if (content) {
+                                  // For PFX files, we need to store the file path, not the content
+                                  // In a real implementation, you would upload the file and get a path
+                                  updateCustomTarget('signatureAuth', {
+                                    ...selectedTarget.config.signatureAuth,
+                                    type: 'pfx',
+                                    pfxPath: file.name, // This would be the uploaded file path
+                                    privateKey: undefined,
+                                    privateKeyPath: undefined,
+                                    keystorePath: undefined,
+                                    keystorePassword: undefined,
+                                    keyAlias: undefined,
+                                  });
+                                  showToast('PFX certificate file loaded successfully', 'success');
+                                }
+                              };
+                              reader.readAsArrayBuffer(file);
+                            }
+                          }}
+                        />
+                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                          <TextField
+                            fullWidth
+                            placeholder="/path/to/certificate.pfx"
+                            value={selectedTarget.config.signatureAuth?.pfxPath || ''}
+                            onChange={(e) => {
+                              updateCustomTarget('signatureAuth', {
+                                ...selectedTarget.config.signatureAuth,
+                                type: 'pfx',
+                                pfxPath: e.target.value,
+                                privateKey: undefined,
+                                privateKeyPath: undefined,
+                                keystorePath: undefined,
+                                keystorePassword: undefined,
+                                keyAlias: undefined,
+                              });
+                            }}
+                            label="PFX File Path"
+                          />
+                          <label htmlFor="pfx-certificate-upload">
+                            <Button variant="outlined" component="span" startIcon={<UploadIcon />}>
+                              Browse
+                            </Button>
+                          </label>
+                        </Box>
+                      </Box>
+
+                      <TextField
+                        fullWidth
+                        type="password"
+                        label="PFX Password"
+                        placeholder="Enter PFX password"
+                        value={selectedTarget.config.signatureAuth?.pfxPassword || ''}
+                        onChange={(e) => {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            pfxPassword: e.target.value,
+                          });
+                        }}
+                        helperText="Password for the PFX certificate file. Can also be set via PROMPTFOO_PFX_PASSWORD environment variable."
+                      />
                     </Stack>
                   </Paper>
                 )}

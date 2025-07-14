@@ -181,6 +181,15 @@ export async function generateSignature(
       case 'pfx': {
         logger.debug(`[Signature Auth] Loading PFX file: ${signatureAuth.pfxPath}`);
 
+        // Check for PFX password in config first, then fallback to environment variable
+        const pfxPassword = signatureAuth.pfxPassword || getEnvString('PROMPTFOO_PFX_PASSWORD');
+
+        if (!pfxPassword) {
+          throw new Error(
+            'PFX certificate password is required. Provide it via config pfxPassword or PROMPTFOO_PFX_PASSWORD environment variable',
+          );
+        }
+
         try {
           // Use eval to avoid TypeScript static analysis of the dynamic import
           const pemModule = await import('pem').catch(() => {
@@ -195,7 +204,7 @@ export async function generateSignature(
           const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
             pem.readPkcs12(
               signatureAuth.pfxPath,
-              { p12Password: signatureAuth.pfxPassword },
+              { p12Password: pfxPassword },
               (err: any, data: any) => {
                 if (err) {
                   reject(err);
@@ -293,7 +302,7 @@ const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
 const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   type: z.literal('pfx'),
   pfxPath: z.string(),
-  pfxPassword: z.string(),
+  pfxPassword: z.string().optional(),
 });
 
 // Legacy signature auth schema (for backward compatibility)
