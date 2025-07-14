@@ -28,6 +28,15 @@ vi.mock('prismjs/themes/prism.css', () => ({
 vi.mock('prismjs/components/prism-clike', () => ({}));
 vi.mock('prismjs/components/prism-javascript', () => ({}));
 
+vi.mock('../../utils/crypto', () => ({
+  convertStringKeyToPem: vi.fn(),
+  validatePrivateKey: vi.fn(),
+}));
+
+vi.mock('dedent', () => ({
+  default: vi.fn((strings: TemplateStringsArray) => strings.join('')),
+}));
+
 const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme({ palette: { mode: 'light' } });
   return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
@@ -164,12 +173,13 @@ describe('HttpAdvancedConfiguration', () => {
     expect(multiplierInput).toBeNull();
   });
 
-  it('should display JKS Keystore and PFX Certificate as key input methods when signature authentication is enabled', () => {
+  it('should display certificate type selection when signature authentication is enabled', () => {
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
       config: {
         signatureAuth: {
           enabled: true,
+          certificateType: 'pem',
         },
       },
     };
@@ -184,23 +194,21 @@ describe('HttpAdvancedConfiguration', () => {
     const accordionHeader = screen.getByRole('button', {
       name: /Digital Signature Authentication/i,
     });
-    fireEvent.click(accordionHeader);
+    expect(accordionHeader).toBeInTheDocument();
 
-    const jksKeystore = screen.getByText(/JKS Keystore/i);
-    expect(jksKeystore).toBeInTheDocument();
-
-    const pfxCertificate = screen.getByText(/PFX Certificate/i);
-    expect(pfxCertificate).toBeInTheDocument();
+    // Check that PEM is selected by default
+    const pemOption = screen.getByDisplayValue('pem');
+    expect(pemOption).toBeInTheDocument();
   });
 
   describe('JKS Keystore Configuration', () => {
-    it('should render fields for JKS keystore file upload, keystore path, password, and key alias when JKS Keystore is selected', () => {
+    it('should render fields for JKS keystore file upload, keystore path, password, and key alias when JKS certificateType is selected', () => {
       const selectedTarget: ProviderOptions = {
         id: 'http-provider',
         config: {
           signatureAuth: {
             enabled: true,
-            keyInputType: 'jks',
+            certificateType: 'jks',
           },
         },
       };
@@ -219,13 +227,13 @@ describe('HttpAdvancedConfiguration', () => {
     });
   });
 
-  it('should render fields for PFX certificate file upload, PFX file path, and password when PFX Certificate is selected', () => {
+  it('should render fields for PFX certificate file upload, PFX file path, and password when PFX certificateType is selected', () => {
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
       config: {
         signatureAuth: {
           enabled: true,
-          keyInputType: 'pfx',
+          certificateType: 'pfx',
         },
       },
     };
@@ -237,12 +245,9 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    const accordionButton = screen.getByText('Digital Signature Authentication');
-    fireEvent.click(accordionButton);
-
     expect(screen.getByLabelText('PFX File Path')).toBeInTheDocument();
 
-    const fileUploadLabel = screen.getByText('PFX Certificate File');
+    const fileUploadLabel = screen.getByText('PFX/P12 Certificate File');
     expect(fileUploadLabel).toBeVisible();
 
     const passwordLabel = screen.getByLabelText('PFX Password');
@@ -255,7 +260,7 @@ describe('HttpAdvancedConfiguration', () => {
       config: {
         signatureAuth: {
           enabled: true,
-          keyInputType: 'pfx',
+          certificateType: 'pfx',
         },
       },
     };
@@ -272,7 +277,7 @@ describe('HttpAdvancedConfiguration', () => {
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
-      keyInputType: 'pfx',
+      certificateType: 'pfx',
       pfxPassword: 'test-password',
     });
   });
@@ -283,7 +288,7 @@ describe('HttpAdvancedConfiguration', () => {
       config: {
         signatureAuth: {
           enabled: true,
-          keyInputType: 'jks',
+          certificateType: 'jks',
         },
       },
     };
@@ -303,13 +308,13 @@ describe('HttpAdvancedConfiguration', () => {
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
-      keyInputType: 'jks',
+      certificateType: 'jks',
       keystorePassword: 'testPassword',
     });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
-      keyInputType: 'jks',
+      certificateType: 'jks',
       keyAlias: 'testAlias',
     });
   });
@@ -320,7 +325,7 @@ describe('HttpAdvancedConfiguration', () => {
       config: {
         signatureAuth: {
           enabled: true,
-          keyInputType: 'jks',
+          certificateType: 'jks',
         },
       },
     };
@@ -340,17 +345,18 @@ describe('HttpAdvancedConfiguration', () => {
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
-      keyInputType: 'jks',
+      certificateType: 'jks',
       keystorePassword: envVar,
     });
   });
 
-  it('should clear unrelated fields when selecting JKS key input type', () => {
+  it('should clear unrelated fields when selecting JKS certificate type', () => {
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
       config: {
         signatureAuth: {
           enabled: true,
+          certificateType: 'pem',
           keyInputType: 'upload',
           privateKey: 'some key',
           privateKeyPath: 'some path',
@@ -367,25 +373,35 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    const jksKeystoreButton = screen.getByText('JKS Keystore').parentElement;
-    fireEvent.click(jksKeystoreButton as Element);
+    // Change certificate type to JKS
+    const certificateTypeSelect = screen.getByDisplayValue('pem');
+    fireEvent.change(certificateTypeSelect, { target: { value: 'jks' } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
-      keyInputType: 'jks',
+      certificateType: 'jks',
+      keyInputType: undefined,
       privateKey: undefined,
       privateKeyPath: undefined,
+      keystorePath: undefined,
+      keystorePassword: undefined,
+      keyAlias: undefined,
       pfxPath: undefined,
       pfxPassword: undefined,
+      certPath: undefined,
+      keyPath: undefined,
+      pfxMode: undefined,
+      type: 'jks',
     });
   });
 
-  it('should clear unrelated fields when selecting PFX key input type', () => {
+  it('should clear unrelated fields when selecting PFX certificate type', () => {
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
       config: {
         signatureAuth: {
           enabled: true,
+          certificateType: 'pem',
           keyInputType: 'upload',
           privateKey: 'some key',
           privateKeyPath: 'some path',
@@ -402,16 +418,25 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    const pfxCertificateButton = screen.getByText('PFX Certificate').parentElement;
-    fireEvent.click(pfxCertificateButton as Element);
+    // Change certificate type to PFX
+    const certificateTypeSelect = screen.getByDisplayValue('pem');
+    fireEvent.change(certificateTypeSelect, { target: { value: 'pfx' } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
-      keyInputType: 'pfx',
+      certificateType: 'pfx',
+      keyInputType: undefined,
       privateKey: undefined,
       privateKeyPath: undefined,
+      keystorePath: undefined,
+      keystorePassword: undefined,
+      keyAlias: undefined,
       pfxPath: undefined,
       pfxPassword: undefined,
+      certPath: undefined,
+      keyPath: undefined,
+      pfxMode: undefined,
+      type: 'pfx',
     });
   });
 });
