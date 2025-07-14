@@ -184,7 +184,7 @@ export default function ResultsView({
     setComparisonEvalIds,
   } = useResultsViewSettingsStore();
 
-  const { setStateFromConfig } = useMainStore();
+  const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
@@ -657,7 +657,7 @@ export default function ResultsView({
                 <Tooltip title="Edit this eval in the web UI" placement="left">
                   <MenuItem
                     onClick={() => {
-                      setStateFromConfig(config);
+                      updateConfig(config);
                       navigate('/setup/');
                     }}
                   >

@@ -7,6 +7,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 const RunTestSuiteButton: React.FC = () => {
   const navigate = useNavigate();
+  const { config } = useStore();
   const {
     defaultTest,
     derivedMetrics,
@@ -16,8 +17,8 @@ const RunTestSuiteButton: React.FC = () => {
     prompts,
     providers,
     scenarios,
-    testCases,
-  } = useStore();
+    tests,
+  } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -33,7 +34,7 @@ const RunTestSuiteButton: React.FC = () => {
       prompts,
       providers,
       scenarios,
-      tests: testCases,
+      tests, // Note: This is 'tests' in the API, not 'testCases'
     };
 
     try {
