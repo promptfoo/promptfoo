@@ -15,6 +15,7 @@ import {
   Collapse,
   alpha,
   useTheme,
+  CircularProgress,
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import HistoryIcon from '@mui/icons-material/History';
@@ -25,6 +26,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import type { TestCase } from '@promptfoo/types';
+import { callApi } from '@app/utils/api';
+import { useErrorNotification } from '../hooks/useErrorNotification';
 
 interface VarsFormV2Props {
   vars: Record<string, string>;
@@ -32,6 +35,7 @@ interface VarsFormV2Props {
   onChange: (vars: Record<string, string>) => void;
   validationErrors?: Record<string, string>;
   existingTestCases?: TestCase[];
+  prompts?: string[];
 }
 
 type InputMode = 'text' | 'json' | 'multiline';
@@ -42,16 +46,33 @@ const VarsFormV2: React.FC<VarsFormV2Props> = ({
   onChange,
   validationErrors = {},
   existingTestCases = [],
+  prompts = [],
 }) => {
   const theme = useTheme();
+  const { showError } = useErrorNotification();
   const [inputModes, setInputModes] = useState<Record<string, InputMode>>({});
   const [expandedVars, setExpandedVars] = useState<Set<string>>(new Set());
+  const [isGeneratingVars, setIsGeneratingVars] = useState(false);
   const [historyMenuAnchor, setHistoryMenuAnchor] = useState<{
     element: HTMLElement | null;
     varName: string;
   }>({ element: null, varName: '' });
 
   const handleVarChange = (varName: string, value: string) => {
+    // Don't update if in JSON mode and value is invalid JSON
+    const mode = inputModes[varName] || 'text';
+    if (mode === 'json' && value.trim() !== '') {
+      // Allow empty values, but validate non-empty JSON
+      try {
+        if (value.trim()) {
+          JSON.parse(value);
+        }
+      } catch {
+        // Still update the value to show the invalid state
+        // But the form should prevent saving
+      }
+    }
+
     onChange({
       ...vars,
       [varName]: value,
@@ -144,6 +165,61 @@ const VarsFormV2: React.FC<VarsFormV2Props> = ({
     setExpandedVars(newExpanded);
   };
 
+  const fillWithExamples = () => {
+    const newVars = { ...vars };
+    varsList.forEach((varName) => {
+      if (!newVars[varName] || newVars[varName].trim() === '') {
+        newVars[varName] = getExampleForVariable(varName);
+      }
+    });
+    onChange(newVars);
+  };
+
+  const handleFillWithAI = async () => {
+    if (prompts.length === 0) {
+      showError('Please add prompts first to generate variable values', 'Missing Prompts');
+      return;
+    }
+
+    setIsGeneratingVars(true);
+    try {
+      const response = await callApi('/generate/dataset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompts: prompts.map((p) => ({ raw: p })),
+          tests: existingTestCases,
+          options: {
+            numPersonas: 1,
+            numTestCasesPerPersona: 1,
+            instructions: `Generate realistic test values for variables: ${varsList.join(', ')}`,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate variable values');
+      }
+
+      const { results } = await response.json();
+      if (results && results.length > 0) {
+        const generatedVars = results[0];
+        // Merge generated values with existing values (only fill empty ones)
+        const newVars = { ...vars };
+        Object.keys(generatedVars).forEach((key) => {
+          if (!newVars[key] || newVars[key].trim() === '') {
+            newVars[key] = String(generatedVars[key]);
+          }
+        });
+        onChange(newVars);
+      }
+    } catch (_error) {
+      showError('Failed to generate variable values with AI', 'Generation Error');
+    } finally {
+      setIsGeneratingVars(false);
+    }
+  };
+
   if (varsList.length === 0) {
     return (
       <Alert
@@ -167,15 +243,52 @@ const VarsFormV2: React.FC<VarsFormV2Props> = ({
         <Typography variant="subtitle1" fontWeight={600}>
           Variable Values
         </Typography>
-        <Button
-          size="small"
-          startIcon={<AutoAwesomeIcon />}
-          disabled
-          sx={{ textTransform: 'none' }}
-        >
-          Fill with AI
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={fillWithExamples}
+            sx={{ textTransform: 'none' }}
+            disabled={varsList.every((v) => vars[v]?.trim())}
+          >
+            Fill Examples
+          </Button>
+          <Tooltip
+            title={
+              prompts.length === 0
+                ? 'Add prompts first to enable AI generation'
+                : 'Generate realistic values for all variables using AI'
+            }
+          >
+            <span>
+              <Button
+                size="small"
+                startIcon={isGeneratingVars ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+                disabled={isGeneratingVars || prompts.length === 0}
+                onClick={handleFillWithAI}
+                sx={{ textTransform: 'none' }}
+              >
+                {isGeneratingVars ? 'Generating...' : 'Fill with AI'}
+              </Button>
+            </span>
+          </Tooltip>
+        </Stack>
       </Box>
+
+      {prompts.length === 0 && varsList.length > 0 && (
+        <Alert
+          severity="info"
+          sx={{
+            mb: 2,
+            backgroundColor: alpha(theme.palette.info.main, 0.08),
+          }}
+        >
+          <Typography variant="body2">
+            To use AI generation, first add prompts in the Prompts section. The AI will analyze your
+            prompts to generate realistic test values.
+          </Typography>
+        </Alert>
+      )}
 
       {varsList.map((varName) => {
         const error = validationErrors[`var_${varName}`];
