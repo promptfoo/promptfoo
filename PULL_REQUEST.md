@@ -46,6 +46,13 @@ This PR implements visual indicators for AI-generated content in the eval creato
 - Improved accessibility with ARIA labels and keyboard navigation
 - Better TypeScript type safety throughout
 
+### 6. Config Cleanup
+
+- Automatically removes empty arrays and objects from config
+- Keeps config files clean and minimal
+- Prevents saving unnecessary keys like `scenarios: []`
+- Reduces config file size and improves readability
+
 ## Test Instructions
 
 ### Prerequisites

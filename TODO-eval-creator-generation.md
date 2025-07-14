@@ -280,6 +280,14 @@ This document outlines the implementation plan for adding dataset and assertion 
   - "Generate Multiple" - outlined button opens configuration dialog
   - Better visual hierarchy and clearer intent
 
+### Config Cleanup (Completed 2025-07-13)
+
+- [x] Remove empty arrays and objects from config
+  - Created cleanConfig utility to filter out empty values
+  - Applied to setConfig, updateConfig, reset, and getTestSuite
+  - Removes keys like scenarios: [], extensions: [], derivedMetrics: []
+  - Keeps only meaningful data in the config
+
 ### Next Priority Tasks
 
 1. **Generation History Tracking**

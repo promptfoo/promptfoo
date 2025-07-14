@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types';
+import { cleanConfig } from '../utils/cleanConfig';
 
 export interface EvalConfigState {
   config: Partial<UnifiedConfig>;
@@ -15,48 +16,45 @@ export interface EvalConfigState {
 }
 
 export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
-  description: '',
   providers: [],
   prompts: [],
   tests: [],
   defaultTest: {},
-  derivedMetrics: [],
   env: {},
   evaluateOptions: {},
-  scenarios: [],
-  extensions: [],
 };
 
 export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
-      config: { ...DEFAULT_CONFIG },
+      config: cleanConfig({ ...DEFAULT_CONFIG }),
 
-      setConfig: (config) => set({ config }),
+      setConfig: (config) => set({ config: cleanConfig(config) }),
 
       updateConfig: (updates) =>
         set((state) => ({
-          config: { ...state.config, ...updates },
+          config: cleanConfig({ ...state.config, ...updates }),
         })),
 
-      reset: () => set({ config: { ...DEFAULT_CONFIG } }),
+      reset: () => set({ config: cleanConfig({ ...DEFAULT_CONFIG }) }),
 
       getTestSuite: () => {
         const { config } = get();
+        const cleaned = cleanConfig(config);
 
         // Transform config to match the expected EvaluateTestSuiteWithEvaluateOptions format
         // Note: The 'tests' field in UnifiedConfig maps to 'testCases' in the old store
         return {
-          description: config.description,
-          env: config.env,
-          extensions: config.extensions,
-          prompts: config.prompts,
-          providers: config.providers,
-          scenarios: config.scenarios,
-          tests: config.tests || [], // This is what was 'testCases' before
-          evaluateOptions: config.evaluateOptions,
-          defaultTest: config.defaultTest,
-          derivedMetrics: config.derivedMetrics,
+          description: cleaned.description,
+          env: cleaned.env,
+          extensions: cleaned.extensions,
+          prompts: cleaned.prompts,
+          providers: cleaned.providers,
+          scenarios: cleaned.scenarios,
+          tests: cleaned.tests || [], // This is what was 'testCases' before
+          evaluateOptions: cleaned.evaluateOptions,
+          defaultTest: cleaned.defaultTest,
+          derivedMetrics: cleaned.derivedMetrics,
         } as EvaluateTestSuiteWithEvaluateOptions;
       },
     }),
