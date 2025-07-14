@@ -1132,6 +1132,9 @@ function ResultsTable({
           mx={1}
           sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
         >
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {filteredResultsCount} results
+          </Typography>
           <Button
             onClick={() => {
               setPagination((prev) => ({
