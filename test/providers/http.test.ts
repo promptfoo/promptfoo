@@ -3186,7 +3186,7 @@ describe('RSA signature authentication', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
-      // Ensure environment variables are restored
+    // Ensure environment variables are restored
     if (process.env.PROMPTFOO_JKS_PASSWORD === 'env-password') {
       delete process.env.PROMPTFOO_JKS_PASSWORD;
     }
@@ -3468,7 +3468,6 @@ describe('RSA signature authentication', () => {
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(Buffer.from('mock-keystore-data'));
 
-
     const provider = new HttpProvider('http://example.com', {
       config: {
         method: 'POST',
@@ -3728,7 +3727,7 @@ describe('Token Estimation', () => {
   describe('HttpProvider with token estimation', () => {
     beforeEach(() => {
       jest.resetModules();
-      jest.clearAllMocks(); 
+      jest.clearAllMocks();
     });
     afterEach(() => {
       delete cliState.config;
