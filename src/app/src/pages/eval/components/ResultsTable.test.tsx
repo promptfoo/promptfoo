@@ -3,6 +3,7 @@ import { act } from 'react-dom/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -1088,5 +1089,212 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     expect(expectedGradingResult.componentResults[1].score).toBe(0);
     expect(expectedGradingResult.componentResults[1].reason).toBe('Some other assertion');
     expect(expectedGradingResult.componentResults[1].assertion?.type).toBe('contains');
+  });
+});
+
+describe('ResultsTable Pagination Footer', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 15,
+      isFetching: false,
+    }));
+  });
+
+  it('should display the pagination footer with the correct "Showing X to Y of Z results" text when filteredResultsCount is greater than 10', () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    const expectedText = 'Showing 1 to 15 of 15 results';
+    expect(
+      screen.getByText((content, element) => {
+        if (!element) {
+          return false;
+        }
+        return element.textContent === expectedText;
+      }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Pagination - Zero Results', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: 'test',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 0,
+      isFetching: false,
+    }));
+  });
+
+  it('should display "No results found for the current filters." and not display pagination when filteredResultsCount is 0 and a filter is applied', () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    const noResultsText = screen.getByText('No results found for the current filters.');
+    expect(noResultsText).toBeInTheDocument();
+
+    const paginationElement = screen.queryByText(/Showing/);
+    expect(paginationElement).not.toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Pagination Display', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 10,
+      isFetching: false,
+    }));
+  });
+
+  it('should not display pagination when filteredResultsCount is exactly 10', () => {
+    render(<ResultsTable {...defaultProps} />);
+    const paginationElement = screen.queryByRole('navigation', { name: 'pagination' });
+    expect(paginationElement).not.toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Page Size Change', () => {
+  const mockTable = {
+    body: Array(30).fill({
+      outputs: [
+        {
+          pass: true,
+          score: 1,
+          text: 'test output',
+        },
+      ],
+      test: {},
+      vars: [],
+    }),
+    head: {
+      prompts: [
+        {
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    const setPaginationMock = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 30,
+      isFetching: false,
+      setFilteredResultsCount: vi.fn(),
+      setTotalResultsCount: vi.fn(),
+      pagination: {
+        pageIndex: 2,
+        pageSize: 10,
+      },
+      setPagination: setPaginationMock,
+    }));
+  });
+
+  it('should adjust page index when changing to a smaller page size that invalidates the current page', async () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    const pageSizeSelect = screen.getByRole('combobox', { name: 'Results per page' });
+    expect(pageSizeSelect).toBeInTheDocument();
+
+    await act(async () => {
+      await userEvent.selectOptions(pageSizeSelect, '50');
+    });
+
+    const setPaginationMock = vi.mocked(useTableStore).mock.results[0].value.setPagination;
+    expect(setPaginationMock).toHaveBeenCalledTimes(1);
+    expect(setPaginationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageIndex: 0,
+        pageSize: 50,
+      }),
+    );
   });
 });
