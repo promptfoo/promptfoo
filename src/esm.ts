@@ -29,8 +29,24 @@ export async function importModule(modulePath: string, functionName?: string) {
     }
 
     const resolvedPath = pathToFileURL(safeResolve(modulePath));
-    logger.debug(`Attempting ESM import from: ${resolvedPath.toString()}`);
-    const importedModule = await import(resolvedPath.toString());
+    const resolvedPathStr = resolvedPath.toString();
+    logger.debug(`Attempting ESM import from: ${resolvedPathStr}`);
+
+    // IMPORTANT: Use eval() to bypass ts-node's dynamic import interception
+    // 
+    // Problem: When running under ts-node, `await import()` statements get intercepted
+    // by @cspotcode/source-map-support and converted to `require()` calls during 
+    // transpilation. This breaks ES module loading because:
+    // 1. require() can't load ES modules (throws ERR_REQUIRE_ESM)
+    // 2. require() doesn't understand file:// URLs (throws MODULE_NOT_FOUND)
+    //
+    // Solution: eval() executes the import at runtime, after static analysis is complete,
+    // so ts-node can't intercept and transform it. This ensures the import goes through
+    // Node.js's native ES module loader instead of being converted to require().
+    //
+    // This works in plain Node.js because there's no transpilation/interception layer.
+    const importedModule = await eval(`import('${resolvedPathStr}')`);
+      
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
     logger.debug(
       `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
