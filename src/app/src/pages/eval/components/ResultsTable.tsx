@@ -367,8 +367,16 @@ function ResultsTable({
   };
 
   React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+
+  // Validate page index when filteredResultsCount changes
+  React.useEffect(() => {
+    const maxPageIndex = Math.max(0, Math.ceil(filteredResultsCount / pagination.pageSize) - 1);
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((prev) => ({ ...prev, pageIndex: maxPageIndex }));
+    }
+  }, [filteredResultsCount, pagination.pageSize, pagination.pageIndex]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -868,7 +876,7 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
-  const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
+  const pageCount = Math.max(1, Math.ceil(filteredResultsCount / pagination.pageSize));
   const reactTable = useReactTable({
     data: tableBody,
     columns,
