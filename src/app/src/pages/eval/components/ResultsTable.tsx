@@ -1015,6 +1015,8 @@ function ResultsTable({
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
           wordBreak,
+          // Ensure the fixed pagination does not overlap with the table.
+          marginBottom: '100px',
         }}
       >
         <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
@@ -1131,14 +1133,23 @@ function ResultsTable({
         filteredResultsCount > 10 && (
           <Box
             className="pagination"
-            mx={1}
-            mb={2}
+            px={2}
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: 2,
               flexWrap: 'wrap',
               justifyContent: 'space-between',
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: 'background.paper',
+              borderTop: '1px solid',
+              borderColor: 'divider',
+              zIndex: 1000,
+              width: '100vw',
+              boxShadow: 2,
             }}
           >
             <Box>
