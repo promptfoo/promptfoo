@@ -46,7 +46,6 @@ Let's unpack them in an orderly fashion.
 
 ## The vulnerabilities
 
-
 ### 1. Prompt injection
 
 Prompts are instructions fed to a LLM to make it do something.
@@ -57,13 +56,14 @@ They can be direct (such as text typed in from a user) or indirect (an LLM accep
 
 ### 2. Sensitive information disclosure
 
-Sensitive information includes data that can identify a person, financial records, health records, legal documents, source code, and so on. LLMs can leak it, and users are often *far* too lax with this information. Some situations feel private when they're not.
+Sensitive information includes data that can identify a person, financial records, health records, legal documents, source code, and so on. LLMs can leak it, and users are often _far_ too lax with this information. Some situations feel private when they're not.
 
 Sometimes users are simply providing information as requested, such as addresses to chat support, and an LLM gets trained on those transcripts - this is risky as well.
 
 ### 3. Supply chain vulnerabilities
 
 An LLM supply chain can be massive: it comprises of everything from development to the distribution of LLM models. There are many types of issues that can affect the chain:
+
 - Outdated models without security patches
 - Third-party software with security holes
 - Model merging - using multiple model services
@@ -105,13 +105,12 @@ Similar to denial of service (DoS) attacks, unbounded consumption is broader in 
 
 ## Mitigation and actions
 
-Please imagine me having written two additional paragraphs per issue above and then deleting them in favour of the following  (non-comprehensive) table summarising the security measures instead. Thank you.
-
+Please imagine me having written two additional paragraphs per issue above and then deleting them in favour of the following (non-comprehensive) table summarising the security measures instead. Thank you.
 
 | **Action**                                               | **Applies to (Issues #)** |
 | -------------------------------------------------------- | ------------------------- |
 | Restrict model behavior with system instructions         | 1, 6, 7                   |
-| Enforce privilege control and least privilege access     | 1, 2, 6, 7                   |
+| Enforce privilege control and least privilege access     | 1, 2, 6, 7                |
 | Validate and sanitize inputs and outputs                 | 1, 2, 5, 6                |
 | Limit LLM permissions and capabilities                   | 1, 6, 7                   |
 | Use external systems to enforce logic or perform actions | 1, 6, 7                   |
@@ -123,7 +122,7 @@ Please imagine me having written two additional paragraphs per issue above and t
 | Limit input/output/data sizes and resource usage         | 10                        |
 | Use content security policies or output constraints      | 5                         |
 | Apply encryption or secure storage                       | 2, 8                      |
-| Utilize federated learning                              | 2, 4                      |
+| Utilize federated learning                               | 2, 4                      |
 | Review, classify, and audit data and models              | 3, 4, 8                   |
 | Vet suppliers, verify models, and maintain inventories   | 3                         |
 | Rate-limit and throttle requests                         | 10                        |
