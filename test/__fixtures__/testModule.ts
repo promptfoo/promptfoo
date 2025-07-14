@@ -12,4 +12,4 @@ const defaultExport: TestModule = {
   defaultProp: 'ts default property',
 };
 
-export default defaultExport; 
+export default defaultExport;

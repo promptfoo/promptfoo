@@ -5,4 +5,4 @@ module.exports = {
   default: {
     testFunction: () => 'js default test result',
   },
-}; 
+};
