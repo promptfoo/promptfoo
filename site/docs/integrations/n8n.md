@@ -64,7 +64,7 @@ Below is the minimal pattern most teams start with:
 ```sh
 promptfoo eval \
  -c /data/promptfooconfig.yaml \
- --prompts /data/prompts/\*_/_.json \
+ --prompts "/data/prompts/**/*.json" \
  --output /tmp/pf-results.json \
  --share --fail-on-error
 cat /tmp/pf-results.json
