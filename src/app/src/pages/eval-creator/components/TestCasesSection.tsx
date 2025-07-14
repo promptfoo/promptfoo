@@ -26,7 +26,10 @@ import { useTheme } from '@mui/material/styles';
 import { callApi } from '@app/utils/api';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase, ProviderOptions } from '@promptfoo/types';
-import { generateTestCaseWithAssertions } from '@app/utils/testCaseGeneration';
+import {
+  generateTestCaseWithAssertions,
+  generateAssertionsForTestCase,
+} from '@app/utils/testCaseGeneration';
 import { usePromptNormalization } from '../hooks/usePromptNormalization';
 import ErrorBoundary from './ErrorBoundary';
 import GenerateTestCasesDialog from './GenerateTestCasesDialog';
@@ -332,6 +335,28 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     }
   }, [normalizedPrompts, testCases, setTestCases]);
 
+  const handleGenerateAssertionsForTestCase = useCallback(
+    async (index: number) => {
+      if (normalizedPrompts.length === 0 || !testCases[index]) {
+        return;
+      }
+
+      try {
+        const updatedTestCase = await generateAssertionsForTestCase({
+          prompts: normalizedPrompts,
+          testCase: testCases[index],
+        });
+
+        const updatedTestCases = [...testCases];
+        updatedTestCases[index] = updatedTestCase;
+        setTestCases(updatedTestCases);
+      } catch (_error) {
+        // Error handling - could show a toast or notification here
+      }
+    },
+    [normalizedPrompts, testCases, setTestCases],
+  );
+
   const fileInputId = React.useId();
 
   return (
@@ -490,6 +515,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           onDuplicate={handleDuplicateTestCase}
           onDelete={handleRemoveTestCase}
           onUpdateVariable={handleUpdateVariable}
+          onGenerateAssertions={handleGenerateAssertionsForTestCase}
         />
       ) : filteredTestCases.length > 50 ? (
         <VirtualizedTestCasesTable
@@ -505,6 +531,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           onDuplicate={handleDuplicateTestCase}
           onDelete={handleRemoveTestCase}
           onUpdateVariable={handleUpdateVariable}
+          onGenerateAssertions={handleGenerateAssertionsForTestCase}
         />
       )}
 

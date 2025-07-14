@@ -15,6 +15,7 @@ import {
   alpha,
   useTheme,
 } from '@mui/material';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -26,6 +27,7 @@ interface TestCasesCardViewProps {
   onDuplicate: (index: number) => void;
   onDelete: (index: number) => void;
   onUpdateVariable?: (testCaseIndex: number, varName: string, newValue: string) => void;
+  onGenerateAssertions?: (index: number) => void;
 }
 
 const TestCasesCardView: React.FC<TestCasesCardViewProps> = ({
@@ -34,6 +36,7 @@ const TestCasesCardView: React.FC<TestCasesCardViewProps> = ({
   onDuplicate,
   onDelete,
   onUpdateVariable,
+  onGenerateAssertions,
 }) => {
   const theme = useTheme();
 
@@ -232,6 +235,20 @@ const TestCasesCardView: React.FC<TestCasesCardViewProps> = ({
                   <ContentCopyIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
+              {onGenerateAssertions && (!testCase.assert || testCase.assert.length === 0) && (
+                <Tooltip title="Generate assertions">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGenerateAssertions(index);
+                    }}
+                    aria-label={`Generate assertions for test case ${index + 1}`}
+                  >
+                    <AutoAwesomeIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
               <Tooltip title="Delete test case">
                 <IconButton
                   size="small"

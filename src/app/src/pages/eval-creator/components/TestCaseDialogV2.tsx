@@ -25,6 +25,7 @@ import {
   useTheme,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import CircularProgress from '@mui/material/CircularProgress';
 import VariablesIcon from '@mui/icons-material/Code';
 import AssertionIcon from '@mui/icons-material/FactCheck';
 import PreviewIcon from '@mui/icons-material/Visibility';
@@ -40,6 +41,7 @@ import VarsFormV2 from './VarsFormV2';
 import AssertsFormV2 from './AssertsFormV2';
 import TestCasePreview from './TestCasePreview';
 import { useErrorNotification } from '../hooks/useErrorNotification';
+import { generateAssertionsForTestCase } from '@app/utils/testCaseGeneration';
 
 interface TestCaseDialogV2Props {
   open: boolean;
@@ -70,6 +72,7 @@ const TestCaseDialogV2: React.FC<TestCaseDialogV2Props> = ({
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues?.assert || []);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [isGeneratingAssertions, setIsGeneratingAssertions] = useState(false);
 
   // Reset state when dialog opens/closes or initialValues change
   useEffect(() => {
@@ -148,6 +151,37 @@ const TestCaseDialogV2: React.FC<TestCaseDialogV2Props> = ({
       setAsserts([]);
       setActiveTab('variables');
       setHasUnsavedChanges(false);
+    }
+  };
+
+  const handleGenerateAssertions = async () => {
+    if (!prompts.length) {
+      showError('Please add prompts first to generate assertions', 'Missing Prompts');
+      return;
+    }
+
+    setIsGeneratingAssertions(true);
+    try {
+      const testCaseForGeneration: TestCase = {
+        ...(description && { description }),
+        vars,
+      };
+
+      const updatedTestCase = await generateAssertionsForTestCase({
+        prompts,
+        testCase: testCaseForGeneration,
+      });
+
+      if (updatedTestCase.assert && updatedTestCase.assert.length > 0) {
+        setAsserts([...asserts, ...updatedTestCase.assert]);
+        setActiveTab('assertions');
+      } else {
+        showError('No assertions were generated. Please try again.', 'Generation Failed');
+      }
+    } catch (_error) {
+      showError('Failed to generate assertions', 'Generation Error');
+    } finally {
+      setIsGeneratingAssertions(false);
     }
   };
 
@@ -295,13 +329,20 @@ const TestCaseDialogV2: React.FC<TestCaseDialogV2Props> = ({
           {varsList.length > 0 && (
             <Tooltip title="Generate test case with AI">
               <Button
-                startIcon={<AutoFixHighIcon />}
+                startIcon={
+                  isGeneratingAssertions ? <CircularProgress size={16} /> : <AutoFixHighIcon />
+                }
                 variant="outlined"
                 size="small"
-                disabled
+                onClick={handleGenerateAssertions}
+                disabled={
+                  isGeneratingAssertions ||
+                  varsList.length === 0 ||
+                  Object.keys(vars).some((v) => !vars[v])
+                }
                 sx={{ textTransform: 'none' }}
               >
-                AI Generate
+                {isGeneratingAssertions ? 'Generating...' : 'AI Generate'}
               </Button>
             </Tooltip>
           )}

@@ -101,8 +101,6 @@ const assertionCategories = {
   },
 };
 
-type CategoryKey = keyof typeof assertionCategories;
-
 interface AssertionTemplate {
   name: string;
   description: string;
@@ -144,7 +142,7 @@ const AssertsFormV2: React.FC<AssertsFormV2Props> = ({
   prompts = [],
 }) => {
   const theme = useTheme();
-  const [activeTab, setActiveTab] = useState(0);
+  const [_activeTab, _setActiveTab] = useState(0);
   const [showTemplates, setShowTemplates] = useState(false);
   const [expandedAssertions, setExpandedAssertions] = useState<Set<number>>(new Set());
 
@@ -182,7 +180,7 @@ const AssertsFormV2: React.FC<AssertsFormV2Props> = ({
     setShowTemplates(false);
   };
 
-  const toggleExpanded = (index: number) => {
+  const _toggleExpanded = (index: number) => {
     const newExpanded = new Set(expandedAssertions);
     if (newExpanded.has(index)) {
       newExpanded.delete(index);
@@ -193,15 +191,19 @@ const AssertsFormV2: React.FC<AssertsFormV2Props> = ({
   };
 
   const getAssertionIcon = (type: AssertionType) => {
-    if (type.includes('not-')) return <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />;
-    if (['contains', 'equals', 'icontains'].includes(type))
+    if (type.includes('not-')) { return <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />; }
+    if (['contains', 'equals', 'icontains'].includes(type)) {
       return <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />;
-    if (['llm-rubric', 'model-graded-closedqa'].includes(type))
+    }
+    if (['llm-rubric', 'model-graded-closedqa'].includes(type)) {
       return <AutoAwesomeIcon sx={{ fontSize: 16, color: 'primary.main' }} />;
-    if (['latency', 'cost'].includes(type))
+    }
+    if (['latency', 'cost'].includes(type)) {
       return <InfoIcon sx={{ fontSize: 16, color: 'info.main' }} />;
-    if (['moderation', 'pi'].includes(type))
+    }
+    if (['moderation', 'pi'].includes(type)) {
       return <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />;
+    }
     return <CheckCircleIcon sx={{ fontSize: 16, color: 'action.active' }} />;
   };
 

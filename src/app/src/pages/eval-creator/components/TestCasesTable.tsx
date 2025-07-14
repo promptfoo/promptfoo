@@ -1,4 +1,5 @@
 import React from 'react';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
@@ -23,10 +24,11 @@ interface TestCasesTableProps {
   onDuplicate: (index: number) => void;
   onDelete: (index: number) => void;
   onUpdateVariable?: (testCaseIndex: number, varName: string, newValue: string) => void;
+  onGenerateAssertions?: (index: number) => void;
 }
 
 const TestCasesTable = React.memo<TestCasesTableProps>(
-  ({ testCases, onEdit, onDuplicate, onDelete, onUpdateVariable }) => {
+  ({ testCases, onEdit, onDuplicate, onDelete, onUpdateVariable, onGenerateAssertions }) => {
     // State for inline editing
     const [editingCell, setEditingCell] = React.useState<{
       testCaseIndex: number;
@@ -335,6 +337,20 @@ const TestCasesTable = React.memo<TestCasesTableProps>(
                       <Copy />
                     </IconButton>
                   </Tooltip>
+                  {onGenerateAssertions && (!testCase.assert || testCase.assert.length === 0) && (
+                    <Tooltip title="Generate assertions">
+                      <IconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onGenerateAssertions(index);
+                        }}
+                        aria-label={`Generate assertions for test case ${index + 1}`}
+                      >
+                        <AutoAwesomeIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Tooltip title="Delete test case">
                     <IconButton
                       onClick={(e) => {
