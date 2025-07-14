@@ -19,7 +19,7 @@ Let's demystify MCP servers first. MCP servers are wrappers around existing APIs
 The LLM doesn't call MCP servers directly. Application code passes messages between the MCP servers and LLMs.
 :::
 
-When an LLM wants to use an MCP server, it returns a structured response like this:
+When an LLM wants to use an MCP server, it returns a structured response:
 
 ```json
 {
@@ -342,6 +342,6 @@ It's essential to ensure sensitive data isn't sent to inappropriate locations. T
 
 ## Conclusion
 
-MCP servers offer tremendous potential for enhancing LLM capabilities, but they also introduce significant security risks that must be carefully managed. Through proper whitelisting, access controls, and data monitoring, enterprises can safely harness the power of MCP servers while protecting their sensitive information.
+MCP servers offer tremendous potential for enhancing LLM capabilities, but they introduce significant security risks that must be carefully managed. The 2025 landscape demands proactive security measures—from implementing the [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) guidelines to following [CISA's AI security recommendations](https://www.cisa.gov/ai).
 
-Our MCP proxy solution provides the visibility and control needed to make MCP servers safe for enterprise use. By implementing these safeguards, organizations can confidently deploy MCP-powered applications without compromising security.
+The Promptfoo MCP Proxy provides the visibility and control needed to make MCP servers safe for enterprise use. By implementing these safeguards, organizations can confidently deploy MCP-powered applications without compromising security.
