@@ -1224,10 +1224,18 @@ function ResultsTable({
                   sx={{ m: 1, minWidth: 80 }}
                 >
                   <MenuItem value={10}>10</MenuItem>
-                  <MenuItem value={50}>50</MenuItem>
-                  <MenuItem value={100}>100</MenuItem>
-                  <MenuItem value={500}>500</MenuItem>
-                  <MenuItem value={1000}>1000</MenuItem>
+                  <MenuItem value={50} disabled={filteredResultsCount < 10}>
+                    50
+                  </MenuItem>
+                  <MenuItem value={100} disabled={filteredResultsCount < 50}>
+                    100
+                  </MenuItem>
+                  <MenuItem value={500} disabled={filteredResultsCount < 100}>
+                    500
+                  </MenuItem>
+                  <MenuItem value={1000} disabled={filteredResultsCount < 500}>
+                    1000
+                  </MenuItem>
                 </Select>
                 <span>results per page</span>
               </Typography>
