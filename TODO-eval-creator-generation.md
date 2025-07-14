@@ -216,16 +216,15 @@ This document outlines the implementation plan for adding dataset and assertion 
   - One-click selection adds prompt to list
   - Clean, minimal UI that works in all themes
 
-### Metadata Storage Optimization (Completed 2025-07-13)
+### Metadata Storage Optimization (Completed 2025-07-13, Simplified 2025-07-13)
 
-- [x] Optimized metadata storage to reduce verbosity
-  - Replaced repeating metadata (isGenerated, generatedAt, generatedBy) with batch ID reference
-  - Created GenerationBatch type to store generation information once
-  - Test cases now only store generationBatchId in metadata
-  - TestCasesSection tracks generation batches in a Map
-- [x] Updated visual indicators to use batch information
-  - Generated chip tooltip shows batch generation time and provider
-  - Properly handles duplicated test cases by removing batch reference
+- [x] Simplified metadata to just use isGenerated flag
+  - Removed complex batch tracking system
+  - Test cases now only have metadata: { isGenerated: true }
+  - Much simpler and cleaner implementation
+- [x] Updated visual indicators to use simple flag
+  - Generated chip shows "AI-generated test case" tooltip
+  - Duplicated test cases properly remove the isGenerated flag
 
 ### Code Refactoring for Maintainability (Completed 2025-07-13)
 
@@ -269,6 +268,17 @@ This document outlines the implementation plan for adding dataset and assertion 
   - VirtualizedTestCasesTable using react-window (needs npm install)
   - Handles large lists efficiently
   - Maintains accessibility features
+
+### Quick Generation Feature (Completed 2025-07-13)
+
+- [x] Added "Quick Generate" button for instant test case creation
+  - Generates single test case without opening configuration dialog
+  - Uses default settings (1 persona, 1 test case)
+  - Much faster workflow for quick iterations
+- [x] Updated button layout
+  - "Quick Generate" - small text button for single test case
+  - "Generate Multiple" - outlined button opens configuration dialog
+  - Better visual hierarchy and clearer intent
 
 ### Next Priority Tasks
 

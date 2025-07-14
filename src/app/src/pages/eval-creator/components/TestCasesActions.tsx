@@ -12,12 +12,13 @@ interface TestCasesActionsProps {
   hasPrompts: boolean;
   onAddExample: () => void;
   onGenerate: () => void;
+  onQuickGenerate: () => void;
   onAdd: () => void;
   onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 const TestCasesActions = React.memo<TestCasesActionsProps>(
-  ({ hasTestCases, hasPrompts, onAddExample, onGenerate, onAdd, onUpload }) => {
+  ({ hasTestCases, hasPrompts, onAddExample, onGenerate, onQuickGenerate, onAdd, onUpload }) => {
     const fileInputId = React.useId();
 
     return (
@@ -50,13 +51,25 @@ const TestCasesActions = React.memo<TestCasesActionsProps>(
 
           <Button
             color="primary"
+            onClick={onQuickGenerate}
+            variant="text"
+            startIcon={<AutoAwesome />}
+            disabled={!hasPrompts}
+            sx={{ mr: 0.5 }}
+            size="small"
+          >
+            Quick Generate
+          </Button>
+          
+          <Button
+            color="primary"
             onClick={onGenerate}
             variant="outlined"
             startIcon={<AutoAwesome />}
             disabled={!hasPrompts}
             sx={{ mr: 1 }}
           >
-            Generate Test Cases
+            Generate Multiple
           </Button>
 
           <Button color="primary" onClick={onAdd} variant="contained">

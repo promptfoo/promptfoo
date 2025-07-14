@@ -20,8 +20,6 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { TestCase, ProviderOptions } from '@promptfoo/types';
-import { v4 as uuidv4 } from 'uuid';
-import type { GenerationBatch } from '../types';
 
 interface GenerateTestCasesDialogProps {
   open: boolean;
@@ -134,35 +132,13 @@ const GenerateTestCasesDialog: React.FC<GenerateTestCasesDialogProps> = ({
             clearInterval(intervalId);
             const { results } = jobStatus.result || {};
             if (results && Array.isArray(results)) {
-              // Create a unique batch ID for this generation
-              const batchId = uuidv4();
-
-              // Store the batch information (in a real app, this would be saved to a database)
-              const generationBatch: GenerationBatch = {
-                id: batchId,
-                generatedAt: new Date().toISOString(),
-                generatedBy: options.provider || 'default',
-                type: 'dataset',
-                generationOptions: {
-                  numPersonas: options.numPersonas,
-                  numTestCasesPerPersona: options.numTestCasesPerPersona,
-                  instructions: options.instructions,
-                },
-              };
-
-              // Create test cases with just the batch ID reference
+              // Create test cases with simple isGenerated flag
               const newTestCases: TestCase[] = results.map((varMapping) => ({
                 vars: varMapping,
                 metadata: {
-                  generationBatchId: batchId,
+                  isGenerated: true,
                 },
               }));
-
-              // In a real implementation, we'd store the batch info somewhere
-              // For now, we'll attach it to the first test case for the UI to use
-              if (newTestCases.length > 0) {
-                (newTestCases[0].metadata as any)._generationBatch = generationBatch;
-              }
 
               onGenerated(newTestCases);
               handleClose();

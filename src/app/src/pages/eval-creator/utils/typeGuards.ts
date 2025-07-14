@@ -1,5 +1,4 @@
 import type { TestCase, ProviderOptions } from '@promptfoo/types';
-import type { GenerationMetadata, GenerationBatch } from '../types';
 
 /**
  * Type guard to check if a value is a valid TestCase
@@ -23,25 +22,11 @@ export function isProviderOptions(value: unknown): value is ProviderOptions {
 /**
  * Type guard to check if metadata contains generation info
  */
-export function hasGenerationMetadata(metadata: unknown): metadata is GenerationMetadata {
+export function hasGenerationMetadata(metadata: unknown): metadata is { isGenerated: boolean } {
   return (
     typeof metadata === 'object' &&
     metadata !== null &&
-    ('generationBatchId' in metadata || 'duplicatedFrom' in metadata)
-  );
-}
-
-/**
- * Type guard for GenerationBatch
- */
-export function isGenerationBatch(value: unknown): value is GenerationBatch {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    'generatedAt' in value &&
-    'generatedBy' in value &&
-    'type' in value
+    'isGenerated' in metadata
   );
 }
 

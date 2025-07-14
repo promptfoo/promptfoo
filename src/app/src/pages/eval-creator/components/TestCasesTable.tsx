@@ -15,19 +15,16 @@ import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { TestCase } from '@promptfoo/types';
-import type { GenerationBatch } from '../types';
-import { hasGenerationMetadata } from '../utils/typeGuards';
 
 interface TestCasesTableProps {
   testCases: TestCase[];
-  generationBatches: Map<string, GenerationBatch>;
   onEdit: (index: number) => void;
   onDuplicate: (index: number) => void;
   onDelete: (index: number) => void;
 }
 
 const TestCasesTable = React.memo<TestCasesTableProps>(
-  ({ testCases, generationBatches, onEdit, onDuplicate, onDelete }) => {
+  ({ testCases, onEdit, onDuplicate, onDelete }) => {
     const handleRowClick = (index: number) => {
       onEdit(index);
     };
@@ -40,23 +37,12 @@ const TestCasesTable = React.memo<TestCasesTableProps>(
     };
 
     const renderGenerationChip = (testCase: TestCase) => {
-      if (!hasGenerationMetadata(testCase.metadata)) {
-        return null;
-      }
-
-      const batchId = testCase.metadata.generationBatchId;
-      const batch = batchId ? generationBatches.get(batchId) : null;
-
-      if (!batch) {
+      if (!testCase.metadata?.isGenerated) {
         return null;
       }
 
       return (
-        <Tooltip
-          title={`Generated on ${new Date(batch.generatedAt).toLocaleString()} by ${
-            batch.generatedBy
-          }`}
-        >
+        <Tooltip title="AI-generated test case">
           <Chip
             icon={<AutoAwesome />}
             label="Generated"

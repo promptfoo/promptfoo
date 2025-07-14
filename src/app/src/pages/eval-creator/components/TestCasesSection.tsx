@@ -6,12 +6,10 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import { callApi } from '@app/utils/api';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase, ProviderOptions } from '@promptfoo/types';
-import type { GenerationMetadata, GenerationBatch } from '../types';
-import { useGenerationBatches } from '../hooks/useGenerationBatches';
 import { usePromptNormalization } from '../hooks/usePromptNormalization';
-import { hasGenerationMetadata } from '../utils/typeGuards';
 import ErrorBoundary from './ErrorBoundary';
 import GenerateTestCasesDialog from './GenerateTestCasesDialog';
 import TestCaseDialog from './TestCaseDialog';
@@ -59,7 +57,6 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
 
   // Custom hooks
-  const { batches: generationBatches, addBatch } = useGenerationBatches();
   const normalizedPrompts = usePromptNormalization(prompts);
 
   const handleAddTestCase = useCallback(
@@ -125,17 +122,9 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const handleDuplicateTestCase = useCallback(
     (index: number) => {
       const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
-      // Update generation metadata for duplicated test case
-      if (hasGenerationMetadata(duplicatedTestCase.metadata)) {
-        const metadata = duplicatedTestCase.metadata;
-        if (metadata.generationBatchId) {
-          duplicatedTestCase.metadata = {
-            ...duplicatedTestCase.metadata,
-            generationBatchId: undefined, // Remove batch reference
-            duplicatedFrom: 'generated',
-            duplicatedAt: new Date().toISOString(),
-          } as GenerationMetadata;
-        }
+      // Remove generation metadata from duplicated test case
+      if (duplicatedTestCase.metadata?.isGenerated) {
+        delete duplicatedTestCase.metadata.isGenerated;
       }
       setTestCases([...testCases, duplicatedTestCase]);
     },
@@ -144,22 +133,10 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   const handleGeneratedTestCases = useCallback(
     (newTestCases: TestCase[]) => {
-      // Extract generation batch from the first test case if present
-      if (newTestCases.length > 0) {
-        const firstTestCase = newTestCases[0];
-        const batchInfo = (firstTestCase.metadata as any)?._generationBatch;
-        if (batchInfo) {
-          // Store the batch information
-          addBatch(batchInfo);
-          // Remove the temporary batch info from the test case
-          delete (firstTestCase.metadata as any)._generationBatch;
-        }
-      }
-
       setTestCases([...testCases, ...newTestCases]);
       setGenerateDialogOpen(false);
     },
-    [testCases, setTestCases, addBatch],
+    [testCases, setTestCases],
   );
 
   const handleAddExample = useCallback(() => {
@@ -171,6 +148,43 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     setTestCaseDialogOpen(true);
   }, []);
 
+  const handleQuickGenerate = useCallback(async () => {
+    if (normalizedPrompts.length === 0) {
+      return;
+    }
+    
+    try {
+      // Quick generation - single test case, no configuration
+      const response = await callApi('/generate/dataset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompts: normalizedPrompts.map((p) => ({ raw: p })),
+          tests: testCases,
+          options: {
+            numPersonas: 1,
+            numTestCasesPerPersona: 1,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Generation failed');
+      }
+
+      const { results } = await response.json();
+      if (results && results.length > 0) {
+        const newTestCase: TestCase = {
+          vars: results[0],
+          metadata: { isGenerated: true },
+        };
+        setTestCases([...testCases, newTestCase]);
+      }
+    } catch (error) {
+      console.error('Quick generation failed:', error);
+    }
+  }, [normalizedPrompts, testCases, setTestCases]);
+
   return (
     <ErrorBoundary>
       <TestCasesActions
@@ -178,12 +192,12 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         hasPrompts={normalizedPrompts.length > 0}
         onAddExample={handleAddExample}
         onGenerate={() => setGenerateDialogOpen(true)}
+        onQuickGenerate={handleQuickGenerate}
         onAdd={() => setTestCaseDialogOpen(true)}
         onUpload={handleAddTestCaseFromFile}
       />
       <TestCasesTable
         testCases={testCases}
-        generationBatches={generationBatches}
         onEdit={handleEditTestCase}
         onDuplicate={handleDuplicateTestCase}
         onDelete={handleRemoveTestCase}

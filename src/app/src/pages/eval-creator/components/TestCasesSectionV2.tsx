@@ -1,5 +1,6 @@
 import React, { useCallback, Suspense, useTransition, useMemo, lazy } from 'react';
 import { useStore } from '@app/stores/evalConfig';
+import { callApi } from '@app/utils/api';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -10,8 +11,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase, ProviderOptions } from '@promptfoo/types';
-import type { GenerationBatch } from '../types';
-import { useGenerationBatches } from '../hooks/useGenerationBatches';
 import { usePromptNormalization } from '../hooks/usePromptNormalization';
 import { useTestCasesReducer } from '../hooks/useTestCasesReducer';
 import { hasGenerationMetadata } from '../utils/typeGuards';
@@ -74,7 +73,6 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
 
   // Custom hooks
-  const { batches: generationBatches, addBatch } = useGenerationBatches();
   const normalizedPrompts = usePromptNormalization(prompts);
 
   // Sync reducer state with store
@@ -161,22 +159,12 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   const handleGeneratedTestCases = useCallback(
     (newTestCases: TestCase[]) => {
-      // Extract generation batch from the first test case if present
-      if (newTestCases.length > 0) {
-        const firstTestCase = newTestCases[0];
-        const batchInfo = (firstTestCase.metadata as any)?._generationBatch;
-        if (batchInfo) {
-          addBatch(batchInfo);
-          delete (firstTestCase.metadata as any)._generationBatch;
-        }
-      }
-
       startTransition(() => {
         actions.addMultipleTestCases(newTestCases);
       });
       setGenerateDialogOpen(false);
     },
-    [actions, addBatch],
+    [actions],
   );
 
   const handleAddExample = useCallback(() => {
@@ -193,6 +181,45 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     [actions],
   );
 
+  const handleQuickGenerate = useCallback(async () => {
+    if (normalizedPrompts.length === 0) {
+      return;
+    }
+    
+    try {
+      // Quick generation - single test case, no configuration
+      const response = await callApi('/generate/dataset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompts: normalizedPrompts.map((p) => ({ raw: p })),
+          tests: state.testCases,
+          options: {
+            numPersonas: 1,
+            numTestCasesPerPersona: 1,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Generation failed');
+      }
+
+      const { results } = await response.json();
+      if (results && results.length > 0) {
+        const newTestCase: TestCase = {
+          vars: results[0],
+          metadata: { isGenerated: true },
+        };
+        startTransition(() => {
+          actions.addTestCase(newTestCase);
+        });
+      }
+    } catch (error) {
+      console.error('Quick generation failed:', error);
+    }
+  }, [normalizedPrompts, state.testCases, actions]);
+
   return (
     <ErrorBoundary>
       <TestCasesActions
@@ -200,13 +227,13 @@ const TestCasesSectionV2: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         hasPrompts={normalizedPrompts.length > 0}
         onAddExample={handleAddExample}
         onGenerate={() => setGenerateDialogOpen(true)}
+        onQuickGenerate={handleQuickGenerate}
         onAdd={() => setTestCaseDialogOpen(true)}
         onUpload={handleAddTestCaseFromFile}
       />
 
       <TestCasesTable
         testCases={state.testCases}
-        generationBatches={generationBatches}
         onEdit={handleEditTestCase}
         onDuplicate={handleDuplicateTestCase}
         onDelete={handleRemoveTestCase}

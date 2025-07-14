@@ -13,12 +13,9 @@ import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { TestCase } from '@promptfoo/types';
-import type { GenerationBatch } from '../types';
-import { hasGenerationMetadata } from '../utils/typeGuards';
 
 interface VirtualizedTestCasesTableProps {
   testCases: TestCase[];
-  generationBatches: Map<string, GenerationBatch>;
   onEdit: (index: number) => void;
   onDuplicate: (index: number) => void;
   onDelete: (index: number) => void;
@@ -30,7 +27,6 @@ interface RowProps {
   style: React.CSSProperties;
   data: {
     testCases: TestCase[];
-    generationBatches: Map<string, GenerationBatch>;
     onEdit: (index: number) => void;
     onDuplicate: (index: number) => void;
     onDelete: (index: number) => void;
@@ -38,7 +34,7 @@ interface RowProps {
 }
 
 const Row = React.memo<RowProps>(({ index, style, data }) => {
-  const { testCases, generationBatches, onEdit, onDuplicate, onDelete } = data;
+  const { testCases, onEdit, onDuplicate, onDelete } = data;
   const testCase = testCases[index];
 
   const handleRowClick = useCallback(() => {
@@ -56,23 +52,12 @@ const Row = React.memo<RowProps>(({ index, style, data }) => {
   );
 
   const renderGenerationChip = () => {
-    if (!hasGenerationMetadata(testCase.metadata)) {
-      return null;
-    }
-
-    const batchId = testCase.metadata.generationBatchId;
-    const batch = batchId ? generationBatches.get(batchId) : null;
-
-    if (!batch) {
+    if (!testCase.metadata?.isGenerated) {
       return null;
     }
 
     return (
-      <Tooltip
-        title={`Generated on ${new Date(batch.generatedAt).toLocaleString()} by ${
-          batch.generatedBy
-        }`}
-      >
+      <Tooltip title="AI-generated test case">
         <Chip
           icon={<AutoAwesome />}
           label="Generated"
@@ -170,7 +155,6 @@ Row.displayName = 'VirtualizedRow';
 
 const VirtualizedTestCasesTable: React.FC<VirtualizedTestCasesTableProps> = ({
   testCases,
-  generationBatches,
   onEdit,
   onDuplicate,
   onDelete,
@@ -186,7 +170,6 @@ const VirtualizedTestCasesTable: React.FC<VirtualizedTestCasesTableProps> = ({
 
   const itemData = {
     testCases,
-    generationBatches,
     onEdit,
     onDuplicate,
     onDelete,

@@ -51,13 +51,8 @@ function testCasesReducer(state: TestCasesState, action: TestCasesAction): TestC
     case 'DUPLICATE_TEST_CASE': {
       const duplicated = JSON.parse(JSON.stringify(state.testCases[action.index]));
       // Remove generation metadata from duplicated test case
-      if (duplicated.metadata?.generationBatchId) {
-        duplicated.metadata = {
-          ...duplicated.metadata,
-          generationBatchId: undefined,
-          duplicatedFrom: 'generated',
-          duplicatedAt: new Date().toISOString(),
-        };
+      if (duplicated.metadata?.isGenerated) {
+        delete duplicated.metadata.isGenerated;
       }
       return { ...state, testCases: [...state.testCases, duplicated] };
     }
