@@ -78,6 +78,21 @@ describe('userRouter', () => {
       });
     });
 
+    it('should detect enterprise deployment even for unauthenticated users', async () => {
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://enterprise.company.com');
+
+      const response = await request(app).get('/api/user/cloud/status').expect(200);
+
+      expect(response.body).toEqual({
+        isAuthenticated: false,
+        hasApiKey: false,
+        appUrl: null, // Should not expose URL when not authenticated
+        isEnterprise: true, // Should still detect enterprise deployment
+      });
+    });
+
     it('should handle errors gracefully', async () => {
       jest.mocked(cloudConfig.isEnabled).mockImplementation(() => {
         throw new Error('Test error');
