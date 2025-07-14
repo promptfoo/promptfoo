@@ -67,7 +67,7 @@ jobs:
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
 
           # Vitest for the React app tests
-          testFramework: 'Vitest'
+          testFramework: 'vitest'
 
           # Test file regex to match Vitest test files in src/app
           testFileRegex: '^src/app/.*\.(test|spec)\.(js|jsx|ts|tsx)$'
