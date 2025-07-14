@@ -44,6 +44,9 @@ let allPrompts: PromptWithMetadata[] | null = null;
 // JavaScript file extensions that need proper MIME type
 const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
+// Express middleware limits
+const REQUEST_SIZE_LIMIT = '100mb';
+
 /**
  * Middleware to set proper MIME types for JavaScript files.
  * This is necessary because some browsers (especially Arc) enforce strict MIME type checking
@@ -68,7 +71,7 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
   if (error.code === 'EADDRINUSE') {
     logger.error(`Port ${port} is already in use. Do you have another Promptfoo instance running?`);
   } else {
-    logger.error(`Failed to start server: ${error.message || error}`);
+    logger.error(`Failed to start server: ${error instanceof Error ? error.message : error}`);
   }
   process.exit(1);
 }
@@ -80,8 +83,8 @@ export function createApp() {
 
   app.use(cors());
   app.use(compression());
-  app.use(express.json({ limit: '100mb' }));
-  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+  app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
+  app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
@@ -133,12 +136,13 @@ export function createApp() {
   });
 
   app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
-    const { tagName, tagValue, description } = req.query;
-    const tag =
-      tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
+    const tagName = req.query.tagName as string | undefined;
+    const tagValue = req.query.tagValue as string | undefined;
+    const description = req.query.description as string | undefined;
+    const tag = tagName && tagValue ? { key: tagName, value: tagValue } : undefined;
     const results = await getStandaloneEvals({
       tag,
-      description: description as string | undefined,
+      description,
     });
     res.json({
       data: results,
@@ -156,8 +160,9 @@ export function createApp() {
   });
 
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
-    const id = String(req.query.id);
-    if (!id) {
+    const id = req.query.id as string | undefined;
+    if (!id || id === 'undefined') {
+      logger.warn(`Missing or invalid id parameter in ${req.method} ${req.path}`);
       res.status(400).json({ error: 'Missing id parameter' });
       return;
     }
@@ -176,7 +181,7 @@ export function createApp() {
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.body;
-    logger.debug(`Share request for eval ID: ${id || 'undefined'}`);
+    logger.debug(`[${req.method} ${req.path}] Share request for eval ID: ${id || 'undefined'}`);
 
     const result = await readResult(id);
     if (!result) {
@@ -291,7 +296,7 @@ export async function startServer(
       logger.info(`Server running at ${url} and monitoring for new evals.`);
       openBrowser(browserBehavior, port).catch((error) => {
         logger.error(
-          `Failed to handle browser behavior: ${error instanceof Error ? error.message : error}`,
+          `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
         );
       });
     })
