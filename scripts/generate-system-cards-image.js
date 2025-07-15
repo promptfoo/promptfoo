@@ -33,7 +33,7 @@ async function generateImage() {
   const data = JSON.stringify({
     model: 'gpt-image-1',
     prompt: prompt,
-    size: '1536x1024', // landscape format for blog hero
+    size: '1024x1024',
     quality: 'high',
     n: 1
   });
