@@ -1,8 +1,22 @@
 ---
 description: "Detailed comparison of Promptfoo and Microsoft's PyRIT for LLM security testing. Covers attack methods, RAG testing, CI/CD integration, and selection criteria."
 image: /img/blog/pyrit/promptfoo-vs-pyrit.jpg
+keywords:
+  [
+    promptfoo,
+    PyRIT,
+    LLM security,
+    AI red teaming,
+    prompt injection,
+    RAG testing,
+    CI/CD integration,
+    AI security comparison,
+    Microsoft PyRIT,
+    LLM vulnerability testing,
+  ]
 date: 2025-06-27
 authors: [ian]
+tags: [comparison, security, red-teaming, tools]
 ---
 
 # Promptfoo vs PyRIT: A Practical Comparison of LLM Red Teaming Tools
@@ -184,15 +198,15 @@ The enterprise version also includes a web-based dashboard where teams can:
 
 In general, Promptfoo is a good choice if you:
 
-✅ Want comprehensive coverage without heavy custom code  
-✅ Need continuous security testing in CI/CD  
-✅ Prefer automated scanning with reporting
-✅ Need compliance reporting (OWASP, NIST)
+- Want comprehensive coverage without heavy custom code
+- Need continuous security testing in CI/CD
+- Prefer automated scanning with reporting
+- Need compliance reporting (OWASP, NIST)
 
 PyRIT is a good choice if you:
 
-✅ Have dedicated security researchers  
-✅ Prefer programmatic control
-✅ Enjoy writing Python and building tools
+- Have dedicated security researchers
+- Prefer programmatic control
+- Enjoy writing Python and building tools
 
 The tools are ultimately quite different. Promptfoo's adversarial models remove the need to manually come up with hundreds of test cases yourself. PyRIT provides a lot of scripting power, whereas Promptfoo is extensible but easier to integrate up-front.

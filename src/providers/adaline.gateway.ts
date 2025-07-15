@@ -52,7 +52,7 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VoyageEmbeddingProvider } from './voyage';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
-class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
+export class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
   async get(key: string): Promise<T | undefined> {
     const cache = await getCache();
     return cache.get(key);
@@ -136,7 +136,7 @@ type GatewayChatOptions = GatewayBaseOptions & {
   safetySettings?: { category: string; threshold: string }[];
 };
 
-export class AdalineGatewayGenericProvider implements ApiProvider {
+class AdalineGatewayGenericProvider implements ApiProvider {
   gateway: Gateway;
 
   modelName: string;
@@ -709,5 +709,3 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
     }
   }
 }
-
-export { AdalineGatewayCachePlugin, adalineGateway };

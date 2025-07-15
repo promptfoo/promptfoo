@@ -33,7 +33,7 @@ export default function Defcon2025(): JSX.Element {
   return (
     <Layout
       title="Promptfoo Party at DEFCON 33"
-      description="Join the Promptfoo crew for an epic party at DEFCON 33. Network with AI security researchers, hackers, and the open source community. Free drinks, great vibes, and security war stories."
+      description="Join the Promptfoo crew for a party at DEFCON 33. Network with AI security researchers, hackers, and the open source community. Free drinks, great vibes, and security war stories."
     >
       <Head>
         <meta property="og:title" content="Promptfoo Party at DEFCON 33 | AI Security Community" />
@@ -84,7 +84,7 @@ export default function Defcon2025(): JSX.Element {
               </p>
               <div className={styles.heroButtons}>
                 <a
-                  href="https://lu.ma/ljm23pj6?tk=qGE9ez"
+                  href="https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web"
                   className={styles.primaryButton}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -253,7 +253,7 @@ export default function Defcon2025(): JSX.Element {
               </div>
               <div className={styles.stat}>
                 <div className={styles.statNumber}>1</div>
-                <div className={styles.statLabel}>Epic Party</div>
+                <div className={styles.statLabel}>Party</div>
               </div>
             </div>
           </div>
@@ -270,7 +270,7 @@ export default function Defcon2025(): JSX.Element {
             </p>
             <div className={styles.ctaButtons}>
               <a
-                href="https://lu.ma/ljm23pj6?tk=qGE9ez"
+                href="https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web"
                 className={styles.primaryButton}
                 target="_blank"
                 rel="noopener noreferrer"

@@ -1,6 +1,11 @@
 import React, { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
 import { callApi } from '@app/utils/api';
-import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Link from '@mui/material/Link';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import {
   DataGrid,
   type GridColDef,
@@ -11,6 +16,7 @@ import {
   GridToolbarQuickFilter,
   type GridRowSelectionModel,
   type GridRenderCellParams,
+  type GridCellParams,
   GridToolbarExportContainer,
   GridCsvExportMenuItem,
   type GridToolbarQuickFilterProps,
@@ -168,7 +174,7 @@ export default function EvalsDataGrid({
     return rows_;
   }, [evals, filterByDatasetId, focusedEvalId]);
 
-  const handleCellClick = (params: any) => onEvalSelected(params.row.evalId);
+  const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
@@ -249,7 +255,7 @@ export default function EvalsDataGrid({
           flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [],
+    [focusedEvalId, onEvalSelected],
   );
 
   return (

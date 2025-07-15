@@ -28,7 +28,9 @@ const PromptsSection: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
 
-  const { prompts, setPrompts } = useStore();
+  const { config, updateConfig } = useStore();
+  const prompts = (config.prompts || []) as string[];
+  const setPrompts = (p: string[]) => updateConfig({ prompts: p });
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

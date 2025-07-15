@@ -62,9 +62,9 @@ export default function EventsBanner(): JSX.Element | null {
             <div className={styles.eventBadge}>DEFCON 33</div>
             <div className={styles.eventDetails}>
               <span className={styles.eventDate}>AUG 9</span>
-              <span className={styles.eventLocation}>EPIC PARTY</span>
+              <span className={styles.eventLocation}>PARTY</span>
             </div>
-            <span className={styles.eventCta}>RSVP FREE →</span>
+            <span className={styles.eventCta}>RSVP →</span>
           </Link>
         </div>
 
