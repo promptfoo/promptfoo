@@ -221,7 +221,7 @@ export default class EvalResult {
   metadata: Record<string, any>;
   failureReason: ResultFailureReason;
   persisted: boolean;
-  pluginId: string;
+  pluginId?: string;
 
   constructor(opts: {
     id: string;
