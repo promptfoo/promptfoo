@@ -253,13 +253,24 @@ if __name__ == "__main__":
 
 Open the generated `promptfooconfig.yaml` and update it like this:
 
+Notice:
+
+- We **wrap it inside triple backticks with yaml**,  
+  so Docusaurus knows this is just **code**, not something to parse.
+
+---
+
+### Edit `promptfooconfig.yaml`
+
+Open the generated `promptfooconfig.yaml` and update it like this:
+
 ```yaml
 # Description of this evaluation job
 description: 'LangGraph Research Agent Evaluation'
 
 # List of input prompts to test the provider with
 prompts:
-  - "{{input_prompt}}"
+  - '{{input_prompt}}'
 
 # Provider configuration
 providers:
