@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
 Open the generated `promptfooconfig.yaml` and update it like this:
 
-```python
+```yaml
 # Description of this evaluation job
 description: 'LangGraph Research Agent Evaluation'
 
