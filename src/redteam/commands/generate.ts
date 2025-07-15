@@ -419,6 +419,7 @@ export async function doGenerateRedteam(
     // since the providers are re-initialized when running the red team,
     // hence it's safe and necessary to clean-up, particularly for MCP servers
     try {
+      logger.debug('Cleaning up provider');
       const provider = testSuite.providers[0] as ApiProvider;
       if (provider && typeof provider.cleanup === 'function') {
         const cleanupResult = provider.cleanup();
