@@ -329,7 +329,7 @@ Defined call_api() function
 - Returns a dictionary with the result.
 - Handles and reports any errors.
 
-Added a test block (if __name__ == "__main__":)
+Added a test block (if **name** == "**main**":)
 → Allows running this file directly to test if the provider works.
 
 ### YAML Config File (Evaluation Setup)
