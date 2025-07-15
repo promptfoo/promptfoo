@@ -51,6 +51,7 @@ import SettingsModal from './TableSettings/TableSettingsModal';
 import { useTableStore, useResultsViewSettingsStore } from './store';
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
+import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -464,6 +465,8 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
+  const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -542,16 +545,22 @@ export default function ResultsView({
           />
         </Box>
 
-        <FiltersButton
-          appliedFiltersCount={filters.appliedCount}
-          onClick={() => setFiltersFormOpen(true)}
-          ref={filtersButtonRef}
-        />
-        <FiltersForm
-          open={filtersFormOpen}
-          onClose={() => setFiltersFormOpen(false)}
-          anchorEl={filtersButtonRef.current}
-        />
+        {isMultiFilteringEnabled ? (
+          <>
+            <FiltersButton
+              appliedFiltersCount={filters.appliedCount}
+              onClick={() => setFiltersFormOpen(true)}
+              ref={filtersButtonRef}
+            />
+            <FiltersForm
+              open={filtersFormOpen}
+              onClose={() => setFiltersFormOpen(false)}
+              anchorEl={filtersButtonRef.current}
+            />
+          </>
+        ) : (
+          <MetricFilterSelector />
+        )}
 
         <Box
           sx={{
