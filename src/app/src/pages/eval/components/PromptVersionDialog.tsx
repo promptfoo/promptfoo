@@ -54,7 +54,7 @@ export default function PromptVersionDialog({
   const [rerunning, setRerunning] = useState(false);
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { setStateFromConfig } = useMainStore();
+  const { updateConfig } = useMainStore();
 
   useEffect(() => {
     if (open) {
@@ -68,19 +68,17 @@ export default function PromptVersionDialog({
       // Extract managed prompts from the eval
       const managedPromptRefs = evalTable.head.prompts
         .map((prompt, idx) => {
-          if (prompt.raw?.startsWith('pf://')) {
-            const match = prompt.raw.match(/^pf:\/\/([^:]+)(?::(.+))?$/);
-            if (match) {
-              return {
-                index: idx,
-                promptId: match[1],
-                versionOrEnv: match[2] || 'current',
-              };
-            }
+          const ref = prompt.label?.match(/managed:([^@]+)(?:@(.+))?/);
+          if (!ref) {
+            return null;
           }
-          return null;
+          return {
+            promptId: ref[1],
+            versionOrEnv: ref[2] || 'current',
+            promptIdx: idx,
+          };
         })
-        .filter(Boolean);
+        .filter((ref): ref is NonNullable<typeof ref> => ref !== null);
 
       if (managedPromptRefs.length === 0) {
         showToast('No managed prompts found in this evaluation', 'info');
@@ -103,16 +101,17 @@ export default function PromptVersionDialog({
               currentVersion = `v${prompt.currentVersion}`;
             } else if (!/^v?\d+$/.test(currentVersion)) {
               // It's an environment name, find the deployed version
-              const deployment = prompt.deployments?.find((d) => d.environment === currentVersion);
-              if (deployment) {
-                currentVersion = `v${deployment.version}`;
+              const deployments = prompt.deployments || {};
+              const deployedVersion = deployments[currentVersion];
+              if (deployedVersion) {
+                currentVersion = `v${deployedVersion}`;
               }
             }
 
             // Get environment deployments
-            const environments = (prompt.deployments || []).map((d) => ({
-              name: d.environment,
-              version: d.version,
+            const environments = Object.entries(prompt.deployments || {}).map(([env, version]) => ({
+              name: env,
+              version,
             }));
 
             selections.push({
@@ -178,7 +177,7 @@ export default function PromptVersionDialog({
       });
 
       // Use the eval config store to set the configuration
-      setStateFromConfig(updatedConfig);
+      updateConfig(updatedConfig);
 
       showToast('Configuration updated. Redirecting to setup...', 'success');
 

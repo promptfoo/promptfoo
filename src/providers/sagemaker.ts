@@ -28,7 +28,7 @@ const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'c
 /**
  * Zod schema for validating SageMaker options
  */
-export const SageMakerConfigSchema = z
+const SageMakerConfigSchema = z
   .object({
     // AWS credentials options
     accessKeyId: z.string().optional(),
@@ -78,7 +78,7 @@ interface SageMakerOptions extends ProviderOptions {
 /**
  * Base class for SageMaker providers with common functionality
  */
-export abstract class SageMakerGenericProvider {
+abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
   config: SageMakerConfig;

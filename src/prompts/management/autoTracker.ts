@@ -151,7 +151,7 @@ class PromptAutoTracker {
     // This would require extending the PromptManager API to support
     // updating specific version fields. For now, we'll skip this.
     // In a full implementation, we'd update the database directly.
-    logger.debug(`Would update metadata for ${promptId}:`, analysis);
+    logger.debug(`Would update metadata for ${promptId}: ${JSON.stringify(analysis)}`);
   }
 }
 

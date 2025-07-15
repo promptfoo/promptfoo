@@ -4,7 +4,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import RedteamCrescendoProvider from '../redteam/providers/crescendo';
+import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
@@ -980,6 +980,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
+      // Preserve the original path as the provider ID
+      const providerId = providerOptions.id ?? providerPath;
+
       if (providerPath.startsWith('file://')) {
         providerPath = providerPath.slice('file://'.length);
       }
@@ -989,7 +992,7 @@ export const providerMap: ProviderFactory[] = [
         : path.join(context.basePath || process.cwd(), providerPath);
 
       const CustomApiProvider = await importModule(modulePath);
-      return new CustomApiProvider(providerOptions);
+      return new CustomApiProvider({ ...providerOptions, id: providerId });
     },
   },
   {

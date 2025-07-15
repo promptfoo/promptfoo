@@ -14,43 +14,11 @@ assert:
     threshold: 0.8 # Score from 0 to 1
 ```
 
-## Providing context
+:::note
 
-You can provide context in two ways:
+This assertion requires `query`, context, and the LLM's output to evaluate relevance. See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
 
-### Using context variables
-
-Include both query and context as variables in your test case:
-
-```yaml
-tests:
-  - vars:
-      query: 'What is the capital of France?'
-      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
-    assert:
-      - type: context-relevance
-        threshold: 0.8
-```
-
-### Extracting from provider responses
-
-If your provider returns context within the response, use `contextTransform`:
-
-```yaml
-assert:
-  - type: context-relevance
-    contextTransform: 'output.context'
-    threshold: 0.8
-```
-
-For complex response structures:
-
-```yaml
-assert:
-  - type: context-relevance
-    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
-    threshold: 0.8
-```
+:::
 
 ### How it works
 
@@ -62,4 +30,5 @@ The context relevance checker:
 
 # Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.
+- See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
+- See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.

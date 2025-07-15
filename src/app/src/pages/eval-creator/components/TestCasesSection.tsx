@@ -29,7 +29,9 @@ interface TestCasesSectionProps {
 }
 
 const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
-  const { testCases, setTestCases } = useStore();
+  const { config, updateConfig } = useStore();
+  const testCases = (config.tests || []) as TestCase[];
+  const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);

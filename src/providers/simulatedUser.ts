@@ -17,7 +17,7 @@ export type Message = {
   content: string;
 };
 
-export type AgentProviderOptions = ProviderOptions & {
+type AgentProviderOptions = ProviderOptions & {
   config?: {
     userProvider?: ProviderOptions;
     instructions?: string;

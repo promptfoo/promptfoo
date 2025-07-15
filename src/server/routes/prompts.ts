@@ -69,6 +69,13 @@ async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWit
       createdAt: new Date(v.createdAt),
       author: v.author || undefined,
       notes: v.notes || undefined,
+      config: v.config ? JSON.parse(v.config) : undefined,
+      contentType: (v.contentType || undefined) as 'string' | 'json' | 'function' | 'file' | undefined,
+      functionSource: v.functionSource || undefined,
+      functionName: v.functionName || undefined,
+      fileFormat: v.fileFormat || undefined,
+      transform: v.transform || undefined,
+      label: v.label || undefined,
     })),
     deployments: deploymentsMap,
   };
@@ -77,7 +84,7 @@ async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWit
 export const promptsRouter = express.Router();
 
 // List all prompts
-promptsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.get('/', async (req, res) => {
   try {
     const db = getDb();
     const prompts = await db
@@ -102,7 +109,7 @@ promptsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // Create a new prompt
-promptsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.post('/', async (req, res) => {
   try {
     const {
       id,
@@ -119,14 +126,16 @@ promptsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     } = req.body;
 
     if (!id) {
-      return res.status(400).json({ error: 'Prompt ID is required' });
+      res.status(400).json({ error: 'Prompt ID is required' });
+      return;
     }
 
     // Validate prompt ID format
     if (!/^[a-zA-Z0-9-_]+$/.test(id)) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Invalid prompt ID. Use only letters, numbers, hyphens, and underscores.',
       });
+      return;
     }
 
     const manager = new PromptManager();
@@ -134,10 +143,11 @@ promptsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     // Check if prompt already exists
     const existing = await manager.getPrompt(id);
     if (existing) {
-      return res.status(409).json({ error: 'Prompt with this ID already exists' });
+      res.status(409).json({ error: 'Prompt with this ID already exists' });
+      return;
     }
 
-    const additionalFields = {
+    const additionalFields: Record<string, any> = {
       config,
       contentType,
       functionSource,
@@ -168,13 +178,13 @@ promptsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
     res.json(prompt);
   } catch (error) {
-    logger.error('Failed to create prompt:', error);
-    res.status(500).json({ error: error.message || 'Failed to create prompt' });
+    logger.error(`Failed to create prompt: ${error instanceof Error ? error.message : String(error)}`);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create prompt' });
   }
 });
 
 // Get prompt details
-promptsRouter.get('/:id', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const db = getDb();
@@ -208,7 +218,7 @@ promptsRouter.get('/:id', async (req: Request, res: Response): Promise<void> => 
 });
 
 // Update prompt metadata
-promptsRouter.put('/:id', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { description, tags } = req.body;
@@ -237,7 +247,7 @@ promptsRouter.put('/:id', async (req: Request, res: Response): Promise<void> => 
 });
 
 // Create a new version
-promptsRouter.post('/:id/versions', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.post('/:id/versions', async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -253,7 +263,8 @@ promptsRouter.post('/:id/versions', async (req: Request, res: Response): Promise
     } = req.body;
 
     if (!content) {
-      return res.status(400).json({ error: 'Content is required' });
+      res.status(400).json({ error: 'Content is required' });
+      return;
     }
 
     const manager = new PromptManager();
@@ -261,10 +272,11 @@ promptsRouter.post('/:id/versions', async (req: Request, res: Response): Promise
     // Check if prompt exists
     const existing = await manager.getPrompt(id);
     if (!existing) {
-      return res.status(404).json({ error: 'Prompt not found' });
+      res.status(404).json({ error: 'Prompt not found' });
+      return;
     }
 
-    const additionalFields = {
+    const additionalFields: Record<string, any> = {
       config,
       contentType,
       functionSource,
@@ -296,13 +308,13 @@ promptsRouter.post('/:id/versions', async (req: Request, res: Response): Promise
 
     res.json(prompt);
   } catch (error) {
-    logger.error('Failed to create version:', error);
-    res.status(500).json({ error: error.message || 'Failed to create version' });
+    logger.error(`Failed to create version: ${error instanceof Error ? error.message : String(error)}`);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create version' });
   }
 });
 
 // Get specific version
-promptsRouter.get('/:id/versions/:version', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.get('/:id/versions/:version', async (req, res) => {
   try {
     const { id, version } = req.params;
     const db = getDb();
@@ -331,7 +343,7 @@ promptsRouter.get('/:id/versions/:version', async (req: Request, res: Response):
 });
 
 // Deploy prompt version
-promptsRouter.post('/:id/deploy', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.post('/:id/deploy', async (req, res) => {
   try {
     const { id } = req.params;
     const { environment, version } = req.body;
@@ -394,7 +406,7 @@ promptsRouter.post('/:id/deploy', async (req: Request, res: Response): Promise<v
 });
 
 // Delete prompt
-promptsRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+promptsRouter.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const db = getDb();

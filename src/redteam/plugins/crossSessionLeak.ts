@@ -8,7 +8,7 @@ import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
+const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>

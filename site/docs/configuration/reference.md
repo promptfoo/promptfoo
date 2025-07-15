@@ -64,14 +64,14 @@ A test case represents a single example input that is fed into all prompts and p
 
 More details on using assertions, including examples [here](/docs/configuration/expected-outputs).
 
-| Property         | Type   | Required | Description                                                                                                                                                                                                                                 |
-| ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                           |
-| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                           |
-| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                     |
-| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                    |
-| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                    |
-| contextTransform | string | No       | JavaScript expression to extract context from provider output for context-based assertions. Alternative to providing context as a test variable. Supports expressions like `output.context` or `output.docs.map(d => d.content).join('\n')` |
+| Property         | Type   | Required | Description                                                                                                                                                                                                                                                                            |
+| ---------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
+| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
+| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                |
+| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                               |
+| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                                                               |
+| contextTransform | string | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
 
 ### AssertionValueFunctionContext
 
@@ -317,6 +317,7 @@ ProviderResponse is an object that represents the response from a provider. It i
 interface ProviderResponse {
   error?: string;
   output?: string | object;
+  metadata?: object;
   tokenUsage?: Partial<{
     total: number;
     prompt: number;
