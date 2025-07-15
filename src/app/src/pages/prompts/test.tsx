@@ -57,10 +57,10 @@ export default function PromptTestPage() {
   const { promptId } = useParams<{ promptId: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  
+
   // Get the centralized provider list
   const providerOptions = toSimpleProviderList();
-  
+
   const [prompt, setPrompt] = useState<ManagedPromptWithVersions | null>(null);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -69,20 +69,26 @@ export default function PromptTestPage() {
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
-  
+
   // Extract variables from the selected version's content
   const currentVersion = useMemo(() => {
-    if (!prompt || !selectedVersion) {return null;}
-    return prompt.versions.find(v => v.version === selectedVersion);
+    if (!prompt || !selectedVersion) {
+      return null;
+    }
+    return prompt.versions.find((v) => v.version === selectedVersion);
   }, [prompt, selectedVersion]);
-  
+
   const templateVariables = useMemo(() => {
-    if (!currentVersion) {return [];}
+    if (!currentVersion) {
+      return [];
+    }
     return extractVariables(currentVersion.content);
   }, [currentVersion]);
-  
+
   const renderedPrompt = useMemo(() => {
-    if (!currentVersion) {return '';}
+    if (!currentVersion) {
+      return '';
+    }
     return renderPrompt(currentVersion.content, variableValues);
   }, [currentVersion, variableValues]);
 
@@ -106,18 +112,18 @@ export default function PromptTestPage() {
       loadPrompt();
     }
   }, [promptId]);
-  
+
   // Initialize variable values when version changes
   useEffect(() => {
     if (templateVariables.length > 0) {
       const initialValues: Record<string, string> = {};
-      templateVariables.forEach(varName => {
+      templateVariables.forEach((varName) => {
         if (!variableValues[varName]) {
           initialValues[varName] = '';
         }
       });
       if (Object.keys(initialValues).length > 0) {
-        setVariableValues(prev => ({ ...prev, ...initialValues }));
+        setVariableValues((prev) => ({ ...prev, ...initialValues }));
       }
     }
   }, [templateVariables]);
@@ -129,7 +135,7 @@ export default function PromptTestPage() {
     }
 
     // Check if all variables have values
-    const missingVars = templateVariables.filter(varName => !variableValues[varName]?.trim());
+    const missingVars = templateVariables.filter((varName) => !variableValues[varName]?.trim());
     if (missingVars.length > 0) {
       showToast(`Please provide values for: ${missingVars.join(', ')}`, 'warning');
       return;
@@ -164,13 +170,13 @@ export default function PromptTestPage() {
       setTesting(false);
     }
   };
-  
+
   const handleVariableChange = (varName: string, value: string) => {
-    setVariableValues(prev => ({ ...prev, [varName]: value }));
+    setVariableValues((prev) => ({ ...prev, [varName]: value }));
   };
-  
+
   const handleApplySuggestions = (suggestions: Record<string, string>) => {
-    setVariableValues(prev => ({ ...prev, ...suggestions }));
+    setVariableValues((prev) => ({ ...prev, ...suggestions }));
   };
 
   if (loading) {
@@ -213,11 +219,7 @@ export default function PromptTestPage() {
 
           <FormControl fullWidth>
             <InputLabel>Provider</InputLabel>
-            <Select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              label="Provider"
-            >
+            <Select value={provider} onChange={(e) => setProvider(e.target.value)} label="Provider">
               {providerOptions.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
                   {option.label}
@@ -227,9 +229,7 @@ export default function PromptTestPage() {
           </FormControl>
 
           {templateVariables.length === 0 ? (
-            <Alert severity="info">
-              This prompt has no variables. You can test it directly.
-            </Alert>
+            <Alert severity="info">This prompt has no variables. You can test it directly.</Alert>
           ) : (
             <>
               <Box>
@@ -257,7 +257,7 @@ export default function PromptTestPage() {
                   ))}
                 </Stack>
               </Box>
-              
+
               {/* Smart Variable Suggestions */}
               {currentVersion && (
                 <SmartVariableSuggestions
@@ -281,7 +281,9 @@ export default function PromptTestPage() {
             </Button>
             <Button
               variant="contained"
-              startIcon={testing ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />}
+              startIcon={
+                testing ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
+              }
               onClick={handleRunTest}
               disabled={testing || !currentVersion}
               fullWidth
@@ -294,7 +296,9 @@ export default function PromptTestPage() {
 
       {testResult && (
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Test Result</Typography>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Test Result
+          </Typography>
           {testResult.error ? (
             <Alert severity="error" sx={{ mb: 2 }}>
               {testResult.error}
@@ -318,7 +322,7 @@ export default function PromptTestPage() {
                   {testResult.providerResponse?.output || 'No output received'}
                 </Box>
               </Box>
-              
+
               {testResult.providerResponse?.metadata && (
                 <Box>
                   <Typography variant="subtitle2" color="text.secondary">
@@ -333,7 +337,7 @@ export default function PromptTestPage() {
                     {testResult.providerResponse.tokenUsage && (
                       <Typography variant="body2">
                         Tokens: {testResult.providerResponse.tokenUsage.total || 'N/A'}
-                        {testResult.providerResponse.tokenUsage.prompt && 
+                        {testResult.providerResponse.tokenUsage.prompt &&
                           ` (prompt: ${testResult.providerResponse.tokenUsage.prompt}, completion: ${testResult.providerResponse.tokenUsage.completion || 'N/A'})`}
                       </Typography>
                     )}
@@ -351,12 +355,7 @@ export default function PromptTestPage() {
       )}
 
       {/* Preview Dialog */}
-      <Dialog 
-        open={showPreview} 
-        onClose={() => setShowPreview(false)}
-        maxWidth="md"
-        fullWidth
-      >
+      <Dialog open={showPreview} onClose={() => setShowPreview(false)} maxWidth="md" fullWidth>
         <DialogTitle>Prompt Preview</DialogTitle>
         <DialogContent>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
@@ -374,14 +373,14 @@ export default function PromptTestPage() {
           >
             {renderedPrompt || '(No prompt content)'}
           </Box>
-          
+
           {templateVariables.length > 0 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">
                 Variable values:
               </Typography>
               <Box sx={{ mt: 1 }}>
-                {templateVariables.map(varName => (
+                {templateVariables.map((varName) => (
                   <Typography key={varName} variant="body2">
                     <strong>{varName}:</strong> {variableValues[varName] || '(empty)'}
                   </Typography>
@@ -396,4 +395,4 @@ export default function PromptTestPage() {
       </Dialog>
     </Box>
   );
-} 
+}

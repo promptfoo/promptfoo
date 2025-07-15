@@ -9,6 +9,7 @@ This implementation extends the managed prompts system to support ALL features a
 ### 1. Extended Prompt Storage
 
 The prompt versions table and types now support:
+
 - **config**: Prompt-specific configuration (temperature, max_tokens, etc.)
 - **contentType**: Type of content (string, json, function, file)
 - **functionSource**: Source code for function prompts
@@ -20,6 +21,7 @@ The prompt versions table and types now support:
 ### 2. Full Configuration Support
 
 Managed prompts can now store and apply:
+
 ```yaml
 prompts:
   - id: pf://my-prompt
@@ -36,14 +38,15 @@ prompts:
 ### 3. Function Prompt Support
 
 JavaScript and Python functions can be stored as managed prompts:
+
 ```javascript
 // Stored with contentType: 'function'
 module.exports = async ({ vars, provider }) => {
   return {
     prompt: `Hello ${vars.name}`,
     config: {
-      temperature: vars.formal ? 0.3 : 0.8
-    }
+      temperature: vars.formal ? 0.3 : 0.8,
+    },
   };
 };
 ```
@@ -51,25 +54,28 @@ module.exports = async ({ vars, provider }) => {
 ### 4. Auto-Tracking System
 
 New `PromptAutoTracker` class that:
+
 - Automatically detects unmanaged prompts during evaluation
 - Generates unique IDs based on content/label
 - Creates managed versions with all features preserved
 - Configurable via `PROMPTFOO_AUTO_TRACK_PROMPTS=true`
 
 Configuration options:
+
 ```yaml
 promptAutoTracking:
   enabled: true
   excludePatterns:
-    - "pf://*"      # Already managed
-    - "*.test.*"    # Test files
-    - "*test*"      # Test-related
+    - 'pf://*' # Already managed
+    - '*.test.*' # Test files
+    - '*test*' # Test-related
   includeMetadata: true
 ```
 
 ### 5. Enhanced CLI Commands
 
 Updated `prompt create` command supports:
+
 ```bash
 # With configuration
 promptfoo prompt create weather \
@@ -89,6 +95,7 @@ promptfoo prompt create chat \
 ### 6. Enhanced API Support
 
 REST API endpoints now accept all prompt features:
+
 ```json
 POST /api/managed-prompts
 {
@@ -105,6 +112,7 @@ POST /api/managed-prompts
 ### 7. Backward Compatibility
 
 All existing managed prompts continue to work. New fields are optional and default to:
+
 - contentType: 'string'
 - No config
 - No additional metadata
@@ -114,8 +122,9 @@ All existing managed prompts continue to work. New fields are optional and defau
 ### Database Schema Changes
 
 New migration `0017_prompt_features.sql` adds columns to `prompt_versions`:
+
 - config TEXT
-- content_type TEXT 
+- content_type TEXT
 - function_source TEXT
 - function_name TEXT
 - file_format TEXT
@@ -137,6 +146,7 @@ New migration `0017_prompt_features.sql` adds columns to `prompt_versions`:
 ## Usage Examples
 
 ### Example 1: Dynamic Function Prompt
+
 ```javascript
 // Create
 promptfoo prompt create greeting --from-file greeting.js --function
@@ -154,6 +164,7 @@ prompts:
 ```
 
 ### Example 2: Structured Output Prompt
+
 ```bash
 # Create with schema
 promptfoo prompt create analyzer \
@@ -176,6 +187,7 @@ promptfoo prompt create analyzer \
 ```
 
 ### Example 3: Auto-Tracked Prompts
+
 ```yaml
 # First run - prompts are auto-tracked
 prompts:
@@ -208,13 +220,14 @@ prompts:
 2. Enable auto-tracking: `export PROMPTFOO_AUTO_TRACK_PROMPTS=true`
 3. Run evaluations normally - prompts will be auto-tracked
 4. Use `promptfoo prompt list` to see tracked prompts
-5. Reference via `pf://prompt-id` in configs 
+5. Reference via `pf://prompt-id` in configs
 
 ## Testing Results
 
 Successfully tested all new features:
 
 ### 1. Configuration Support
+
 ```bash
 $ PROMPTFOO_PROMPT_LOCAL_MODE=true npx promptfoo prompt create test-config-prompt \
     --content "You are a helpful assistant" \
@@ -227,6 +240,7 @@ $ PROMPTFOO_PROMPT_LOCAL_MODE=true npx promptfoo prompt create test-config-promp
 ```
 
 Stored YAML:
+
 ```yaml
 versions:
   - version: 1
@@ -238,6 +252,7 @@ versions:
 ```
 
 ### 2. Function Prompt Support
+
 ```bash
 $ echo 'module.exports = ({ vars }) => `Hello ${vars.name}!`;' > test.js
 $ PROMPTFOO_PROMPT_LOCAL_MODE=true npx promptfoo prompt create test-function \
@@ -249,6 +264,7 @@ $ PROMPTFOO_PROMPT_LOCAL_MODE=true npx promptfoo prompt create test-function \
 ```
 
 Stored YAML:
+
 ```yaml
 versions:
   - version: 1
@@ -259,13 +275,15 @@ versions:
 ```
 
 ### 3. Database Migration
+
 Successfully applied migration `0017_prompt_features.sql` adding:
+
 - config TEXT
-- content_type TEXT 
+- content_type TEXT
 - function_source TEXT
 - function_name TEXT
 - file_format TEXT
 - transform TEXT
 - label TEXT
 
-All features are working correctly and ready for use! 
+All features are working correctly and ready for use!

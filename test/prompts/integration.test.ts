@@ -80,8 +80,8 @@ describe('Managed prompts integration', () => {
       {
         raw: 'pf://greeting-prompt',
         label: 'Custom Greeting',
-        config: { temperature: 0.9 }
-      }
+        config: { temperature: 0.9 },
+      },
     ]);
 
     expect(prompts).toHaveLength(1);
@@ -89,14 +89,15 @@ describe('Managed prompts integration', () => {
       raw: 'Hello {{name}}, how can I help you today?',
       label: 'Custom Greeting',
       display: 'Greeting Prompt (v1)',
-      config: { temperature: 0.9 }
+      config: { temperature: 0.9 },
     });
   });
 
   it('should handle errors gracefully', async () => {
     mockPromptManager.prototype.getPrompt.mockResolvedValue(null);
 
-    await expect(readPrompts('pf://nonexistent'))
-      .rejects.toThrow('Managed prompt not found: nonexistent');
+    await expect(readPrompts('pf://nonexistent')).rejects.toThrow(
+      'Managed prompt not found: nonexistent',
+    );
   });
-}); 
+});

@@ -3,16 +3,18 @@
 Get up and running with Promptfoo's prompt management system in just 5 minutes! This guide will walk you through creating, testing, and deploying your first managed prompt.
 
 :::tip Prerequisites
+
 - Promptfoo installed (`npm install -g promptfoo`)
 - A text editor
 - 5 minutes of your time
-:::
+  :::
 
 ![Quickstart Overview](../assets/prompt-quickstart-overview.png)
 
 ## 📋 What You'll Learn
 
 By the end of this guide, you'll know how to:
+
 - ✅ Initialize prompt management
 - ✅ Create and version prompts
 - ✅ Deploy prompts to environments
@@ -53,14 +55,15 @@ Let's create a simple customer support prompt:
 ```bash
 promptfoo prompt create customer-support \
   --description "Friendly customer support assistant" \
-  --content "You are a helpful and friendly customer support agent for {{company}}. 
-Always be polite, empathetic, and solution-focused. 
+  --content "You are a helpful and friendly customer support agent for {{company}}.
+Always be polite, empathetic, and solution-focused.
 Current date: {{date}}"
 ```
 
 ![Create Prompt Command](../assets/prompt-create-command.png)
 
 You should see:
+
 ```
 ✅ Created prompt "customer-support"
    Description: Friendly customer support assistant
@@ -84,6 +87,7 @@ promptfoo prompt show customer-support
 ```
 
 Output:
+
 ```
 Prompt: customer-support
 Description: Friendly customer support assistant
@@ -92,8 +96,8 @@ Created: 2024-01-15 10:30:00
 Author: user@example.com
 
 Content:
-You are a helpful and friendly customer support agent for {{company}}. 
-Always be polite, empathetic, and solution-focused. 
+You are a helpful and friendly customer support agent for {{company}}.
+Always be polite, empathetic, and solution-focused.
 Current date: {{date}}
 ```
 
@@ -104,29 +108,29 @@ Create a test file `customer-support-test.yaml`:
 ```yaml
 # customer-support-test.yaml
 prompts:
-  - pf://customer-support  # References your managed prompt
+  - pf://customer-support # References your managed prompt
 
 providers:
   - openai:gpt-4o-mini
 
 tests:
   - vars:
-      company: "TechCorp"
-      date: "2024-01-15"
-      query: "How do I reset my password?"
+      company: 'TechCorp'
+      date: '2024-01-15'
+      query: 'How do I reset my password?'
     assert:
       - type: icontains
         value: password
       - type: llm-rubric
-        value: "Response should be helpful and mention password reset steps"
-        
+        value: 'Response should be helpful and mention password reset steps'
+
   - vars:
-      company: "TechCorp"
-      date: "2024-01-15"
-      query: "I want to cancel my subscription"
+      company: 'TechCorp'
+      date: '2024-01-15'
+      query: 'I want to cancel my subscription'
     assert:
       - type: llm-rubric
-        value: "Response should be empathetic and offer alternatives"
+        value: 'Response should be empathetic and offer alternatives'
 ```
 
 ### Step 5: Run the Evaluation
@@ -148,8 +152,8 @@ promptfoo prompt edit customer-support
 This opens your default editor. Make your changes:
 
 ```
-You are a helpful and friendly customer support agent for {{company}}. 
-Always be polite, empathetic, and solution-focused. 
+You are a helpful and friendly customer support agent for {{company}}.
+Always be polite, empathetic, and solution-focused.
 
 Guidelines:
 - Acknowledge the customer's concern first
@@ -161,6 +165,7 @@ Current date: {{date}}
 ```
 
 Save and exit. You'll see:
+
 ```
 ✅ Updated prompt "customer-support" to version 2
    Notes: Added detailed guidelines for better responses
@@ -182,7 +187,7 @@ Update your test configuration to use the production version:
 
 ```yaml
 prompts:
-  - pf://customer-support:production  # Uses the production deployment
+  - pf://customer-support:production # Uses the production deployment
 ```
 
 ### Step 9: Compare Versions
@@ -250,12 +255,13 @@ Now that you've mastered the basics, explore these advanced features:
 ## 💡 Pro Tips
 
 :::tip Best Practices
+
 1. **Use semantic versioning** for your prompts (e.g., v1.0.0, v1.1.0)
 2. **Test before deploying** - Always run evaluations on new versions
 3. **Document changes** - Use meaningful commit messages
 4. **Monitor performance** - Track metrics across versions
 5. **Automate workflows** - Integrate with CI/CD pipelines
-:::
+   :::
 
 ## 🆘 Common Issues
 
@@ -263,32 +269,39 @@ Now that you've mastered the basics, explore these advanced features:
 <summary>Can't find my prompts?</summary>
 
 Make sure you're in the right directory and have initialized prompt management:
+
 ```bash
 promptfoo prompts init
 promptfoo prompts list
 ```
+
 </details>
 
 <details>
 <summary>Evaluation not finding managed prompt?</summary>
 
 Check that you're using the correct `pf://` prefix:
+
 ```yaml
 prompts:
-  - pf://prompt-name      # Latest version
-  - pf://prompt-name:v2   # Specific version
+  - pf://prompt-name # Latest version
+  - pf://prompt-name:v2 # Specific version
   - pf://prompt-name:prod # Environment
 ```
+
 </details>
 
 <details>
 <summary>Want to use existing prompts?</summary>
 
 Enable auto-tracking to discover and manage existing prompts:
+
 ```bash
 promptfoo prompts auto-track enable
 ```
+
 See the [Auto-Tracking Guide](auto-tracking) for details.
+
 </details>
 
 ## 📝 Example Project Structure
@@ -299,7 +312,7 @@ After following this guide, your project might look like:
 my-project/
 ├── promptfoo.yaml         # Main config with auto-tracking
 ├── prompts/              # Optional: file-based prompts
-│   └── unmanaged.txt    
+│   └── unmanaged.txt
 ├── examples/             # Test cases
 │   └── customer-data.csv
 └── .promptfoo/          # Managed prompts database
@@ -311,4 +324,4 @@ my-project/
 <div className="alert alert--success margin-top--lg">
   <h4>🎉 Congratulations!</h4>
   <p>You've successfully set up prompt management! Continue exploring with our <a href="concepts">Core Concepts</a> guide or dive into <a href="configuration">advanced configuration</a>.</p>
-</div> 
+</div>

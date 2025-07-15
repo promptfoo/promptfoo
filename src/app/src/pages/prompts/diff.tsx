@@ -35,7 +35,7 @@ export default function PromptDiffPage() {
   const { promptId } = useParams<{ promptId: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  
+
   const [prompt, setPrompt] = useState<ManagedPromptWithVersions | null>(null);
   const [loading, setLoading] = useState(true);
   const [versionA, setVersionA] = useState<number | null>(null);
@@ -47,7 +47,7 @@ export default function PromptDiffPage() {
       const response = await callApi(`/managed-prompts/${promptId}`);
       const data = await response.json();
       setPrompt(data);
-      
+
       // Set default versions
       if (data.versions.length >= 2) {
         setVersionA(data.versions[data.versions.length - 2].version);
@@ -78,8 +78,8 @@ export default function PromptDiffPage() {
     return <Box sx={{ p: 3 }}>Prompt not found or insufficient versions</Box>;
   }
 
-  const versionDataA = prompt.versions.find(v => v.version === versionA);
-  const versionDataB = prompt.versions.find(v => v.version === versionB);
+  const versionDataA = prompt.versions.find((v) => v.version === versionA);
+  const versionDataB = prompt.versions.find((v) => v.version === versionB);
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
@@ -90,7 +90,7 @@ export default function PromptDiffPage() {
           </IconButton>
           <Typography variant="h4">{prompt.name} - Compare Versions</Typography>
         </Stack>
-        
+
         <Stack direction="row" spacing={2}>
           <FormControl sx={{ minWidth: 150 }}>
             <InputLabel>Version A</InputLabel>
@@ -106,9 +106,11 @@ export default function PromptDiffPage() {
               ))}
             </Select>
           </FormControl>
-          
-          <Typography variant="h6" sx={{ alignSelf: 'center' }}>vs</Typography>
-          
+
+          <Typography variant="h6" sx={{ alignSelf: 'center' }}>
+            vs
+          </Typography>
+
           <FormControl sx={{ minWidth: 150 }}>
             <InputLabel>Version B</InputLabel>
             <Select
@@ -132,25 +134,25 @@ export default function PromptDiffPage() {
             Version {versionA}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            {versionDataA ? `${new Date(versionDataA.createdAt).toLocaleString()} by ${versionDataA.author}` : ''}
+            {versionDataA
+              ? `${new Date(versionDataA.createdAt).toLocaleString()} by ${versionDataA.author}`
+              : ''}
           </Typography>
-          <DiffPane>
-            {versionDataA?.content || ''}
-          </DiffPane>
+          <DiffPane>{versionDataA?.content || ''}</DiffPane>
         </Box>
-        
+
         <Box>
           <Typography variant="h6" sx={{ mb: 1 }}>
             Version {versionB}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            {versionDataB ? `${new Date(versionDataB.createdAt).toLocaleString()} by ${versionDataB.author}` : ''}
+            {versionDataB
+              ? `${new Date(versionDataB.createdAt).toLocaleString()} by ${versionDataB.author}`
+              : ''}
           </Typography>
-          <DiffPane>
-            {versionDataB?.content || ''}
-          </DiffPane>
+          <DiffPane>{versionDataB?.content || ''}</DiffPane>
         </Box>
       </DiffContainer>
     </Box>
   );
-} 
+}

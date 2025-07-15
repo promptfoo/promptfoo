@@ -38,9 +38,9 @@ describe('PromptManager', () => {
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('test-prompt.yaml'),
         expect.stringContaining('Hello world'),
-        'utf-8'
+        'utf-8',
       );
-      
+
       expect(result).toMatchObject({
         id: 'test-prompt',
         name: 'test-prompt',
@@ -56,24 +56,27 @@ describe('PromptManager', () => {
 
       const manager = new PromptManager();
 
-      await expect(manager.createPrompt('existing-prompt'))
-        .rejects.toThrow('Prompt with id "existing-prompt" already exists');
+      await expect(manager.createPrompt('existing-prompt')).rejects.toThrow(
+        'Prompt with id "existing-prompt" already exists',
+      );
     });
 
     it('should list prompts from local files', async () => {
       mockFs.readdir.mockResolvedValue(['prompt1.yaml', 'prompt2.yaml', 'other.txt'] as any);
-      
+
       const promptYaml: PromptYaml = {
         id: 'prompt1',
         description: 'First prompt',
         currentVersion: 1,
-        versions: [{
-          version: 1,
-          author: 'test@example.com',
-          createdAt: '2024-01-01T00:00:00Z',
-          content: 'Content 1',
-          notes: 'Initial',
-        }],
+        versions: [
+          {
+            version: 1,
+            author: 'test@example.com',
+            createdAt: '2024-01-01T00:00:00Z',
+            content: 'Content 1',
+            notes: 'Initial',
+          },
+        ],
         deployments: {},
       };
 
@@ -128,13 +131,15 @@ describe('PromptManager', () => {
       const existingYaml: PromptYaml = {
         id: 'test-prompt',
         currentVersion: 1,
-        versions: [{
-          version: 1,
-          author: 'test@example.com',
-          createdAt: '2024-01-01T00:00:00Z',
-          content: 'Version 1',
-          notes: 'Initial',
-        }],
+        versions: [
+          {
+            version: 1,
+            author: 'test@example.com',
+            createdAt: '2024-01-01T00:00:00Z',
+            content: 'Version 1',
+            notes: 'Initial',
+          },
+        ],
         deployments: {},
       };
 
@@ -147,7 +152,7 @@ describe('PromptManager', () => {
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('test-prompt.yaml'),
         expect.stringContaining('Version 2'),
-        'utf-8'
+        'utf-8',
       );
       expect(result.currentVersion).toBe(2);
     });
@@ -191,9 +196,7 @@ describe('PromptManager', () => {
       const manager = new PromptManager();
       await manager.deletePrompt('test-prompt');
 
-      expect(mockFs.unlink).toHaveBeenCalledWith(
-        expect.stringContaining('test-prompt.yaml')
-      );
+      expect(mockFs.unlink).toHaveBeenCalledWith(expect.stringContaining('test-prompt.yaml'));
     });
   });
 
@@ -213,11 +216,13 @@ describe('PromptManager', () => {
           name: 'test-prompt',
           description: 'Test description',
           currentVersion: 1,
-          versions: [{
-            id: 'v1',
-            version: 1,
-            content: 'Hello world',
-          }],
+          versions: [
+            {
+              id: 'v1',
+              version: 1,
+              content: 'Hello world',
+            },
+          ],
         }),
       };
 
@@ -231,10 +236,10 @@ describe('PromptManager', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Authorization': 'Bearer test-api-key',
+            Authorization: 'Bearer test-api-key',
           }),
         }),
-        30000
+        30000,
       );
 
       expect(result).toMatchObject({
@@ -248,8 +253,7 @@ describe('PromptManager', () => {
 
       const manager = new PromptManager();
 
-      await expect(manager.createPrompt('test'))
-        .rejects.toThrow('Not authenticated');
+      await expect(manager.createPrompt('test')).rejects.toThrow('Not authenticated');
     });
 
     it('should handle API errors', async () => {
@@ -262,8 +266,9 @@ describe('PromptManager', () => {
 
       const manager = new PromptManager();
 
-      await expect(manager.createPrompt('test'))
-        .rejects.toThrow('Failed to create prompt: API Error');
+      await expect(manager.createPrompt('test')).rejects.toThrow(
+        'Failed to create prompt: API Error',
+      );
     });
   });
 
@@ -326,4 +331,4 @@ describe('PromptManager', () => {
       expect(diff).toMatch(/[+-]/); // Should contain diff markers
     });
   });
-}); 
+});

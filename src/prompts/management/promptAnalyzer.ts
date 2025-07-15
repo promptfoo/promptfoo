@@ -59,15 +59,14 @@ export function analyzePrompt(prompt: Prompt): PromptAnalysis {
  * Converts a managed prompt version back to a Prompt object
  */
 export function versionToPrompt(version: PromptVersion): Prompt {
-  let prompt: Prompt = {
+  const prompt: Prompt = {
     raw: version.content,
     label: version.label || version.promptId,
   };
 
   if (version.config) {
-    prompt.config = typeof version.config === 'string' 
-      ? JSON.parse(version.config) 
-      : version.config;
+    prompt.config =
+      typeof version.config === 'string' ? JSON.parse(version.config) : version.config;
   }
 
   if (version.contentType === 'function' && version.functionSource) {
@@ -92,4 +91,4 @@ function isJsonString(str: string): boolean {
   } catch {
     return false;
   }
-} 
+}

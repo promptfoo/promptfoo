@@ -11,7 +11,9 @@ export default function PromptsPage() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <PromptList onPromptSelect={(promptId) => window.location.href = `/prompts/${promptId}/edit`} />
+      <PromptList
+        onPromptSelect={(promptId) => (window.location.href = `/prompts/${promptId}/edit`)}
+      />
     </Container>
   );
 }

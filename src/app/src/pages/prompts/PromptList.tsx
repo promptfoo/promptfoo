@@ -48,14 +48,14 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
     try {
       setLoading(true);
       const response = await callApi('/managed-prompts');
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to load prompts');
       }
-      
+
       const data = await response.json();
-      
+
       // Ensure data is an array
       if (Array.isArray(data)) {
         setPrompts(data);
@@ -99,9 +99,10 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
     }
   };
 
-  const filteredPrompts = prompts.filter(prompt =>
-    prompt.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    prompt.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredPrompts = prompts.filter(
+    (prompt) =>
+      prompt.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      prompt.description?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -186,19 +187,14 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
                     </Typography>
                   </TableCell>
                   <TableCell>v{prompt.currentVersion}</TableCell>
-                  <TableCell>
-                    {(prompt as any).metadata?.usageCount || 0} uses
-                  </TableCell>
+                  <TableCell>{(prompt as any).metadata?.usageCount || 0} uses</TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={0.5}>
-                      {prompt.tags?.map((tag) => (
-                        <Chip key={tag} label={tag} size="small" />
-                      )) || '-'}
+                      {prompt.tags?.map((tag) => <Chip key={tag} label={tag} size="small" />) ||
+                        '-'}
                     </Stack>
                   </TableCell>
-                  <TableCell>
-                    {new Date(prompt.updatedAt).toLocaleDateString()}
-                  </TableCell>
+                  <TableCell>{new Date(prompt.updatedAt).toLocaleDateString()}</TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <Tooltip title="View History">
@@ -256,4 +252,4 @@ export default function PromptList({ onPromptSelect }: PromptListProps) {
       </TableContainer>
     </Box>
   );
-} 
+}

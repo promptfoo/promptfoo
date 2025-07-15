@@ -261,12 +261,8 @@ export const managedPromptsTable = sqliteTable(
     description: text('description'),
     tags: text('tags', { mode: 'json' }).$type<string[]>(),
     currentVersion: integer('current_version').notNull().default(1),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`(unixepoch())`),
-    updatedAt: integer('updated_at')
-      .notNull()
-      .default(sql`(unixepoch())`),
+    createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+    updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
     author: text('author'),
     // Metadata fields
     metadata: text('metadata', { mode: 'json' }).$type<{
@@ -295,9 +291,7 @@ export const promptVersionsTable = sqliteTable(
     version: integer('version').notNull(),
     content: text('content').notNull(),
     author: text('author'),
-    createdAt: integer('created_at', { mode: 'timestamp' })
-      .notNull()
-      .default(sql`(unixepoch())`),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     notes: text('notes'),
     // New columns for prompt features
     config: text('config'), // JSON stored as text
@@ -326,9 +320,7 @@ export const promptDeploymentsTable = sqliteTable(
     versionId: text('version_id')
       .notNull()
       .references(() => promptVersionsTable.id),
-    updatedAt: integer('updated_at')
-      .notNull()
-      .default(sql`(unixepoch())`),
+    updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
     updatedBy: text('updated_by'),
   },
   (table) => ({

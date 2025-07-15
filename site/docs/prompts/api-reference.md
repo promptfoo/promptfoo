@@ -395,13 +395,13 @@ import { PromptManagementClient } from '@promptfoo/sdk';
 
 const client = new PromptManagementClient({
   apiKey: process.env.PROMPTFOO_API_KEY,
-  baseUrl: 'https://api.promptfoo.dev'
+  baseUrl: 'https://api.promptfoo.dev',
 });
 
 // List prompts
 const prompts = await client.prompts.list({
   tags: ['production'],
-  limit: 50
+  limit: 50,
 });
 
 // Create a prompt
@@ -409,20 +409,20 @@ const newPrompt = await client.prompts.create({
   id: 'welcome-message',
   content: 'Welcome to {{product}}!',
   config: {
-    temperature: 0.8
-  }
+    temperature: 0.8,
+  },
 });
 
 // Update a prompt
 const updated = await client.prompts.update('welcome-message', {
   content: 'Welcome to {{product}}! How can I help you today?',
-  notes: 'Added follow-up question'
+  notes: 'Added follow-up question',
 });
 
 // Deploy to production
 await client.prompts.deploy('welcome-message', {
   environment: 'production',
-  version: 2
+  version: 2,
 });
 ```
 
@@ -553,6 +553,7 @@ API rate limits vary by plan:
 | Enterprise | Custom        | Custom |
 
 Rate limit headers:
+
 - `X-RateLimit-Limit`: Maximum requests
 - `X-RateLimit-Remaining`: Remaining requests
 - `X-RateLimit-Reset`: Reset timestamp
@@ -620,4 +621,4 @@ query GetPromptWithVersions($id: String!) {
 - [SDK Documentation](https://github.com/promptfoo/promptfoo-sdk)
 - [OpenAPI Specification](https://api.promptfoo.dev/openapi.json)
 - [Postman Collection](https://www.postman.com/promptfoo/workspace/prompt-management)
-- [API Playground](https://api.promptfoo.dev/playground) 
+- [API Playground](https://api.promptfoo.dev/playground)

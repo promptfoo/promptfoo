@@ -16,16 +16,18 @@ Auto-tracking monitors your evaluation runs and automatically:
 ## Why Use Auto-Tracking?
 
 ### Before Auto-Tracking
+
 ```yaml
 # Prompts scattered across files and configs
 prompts:
-  - "You are a helpful assistant"
+  - 'You are a helpful assistant'
   - file://prompts/customer-support.txt
   - label: api-handler
-    raw: "Handle this API request: {{request}}"
+    raw: 'Handle this API request: {{request}}'
 ```
 
 ### After Auto-Tracking
+
 ```yaml
 # Clean, versioned references
 prompts:
@@ -66,6 +68,7 @@ promptfoo eval --auto-track-prompts
 ### 1. Detection Phase
 
 During evaluation, auto-tracking scans for:
+
 - Inline prompt strings
 - File-based prompts
 - Function prompts
@@ -82,12 +85,14 @@ No label? → Use content hash (prompt-{8-char-hash})
 ```
 
 Examples:
+
 - Label: `"Customer Support"` → ID: `customer-support`
 - No label: `"You are..."` → ID: `prompt-a5f3c2d1`
 
 ### 3. Storage Phase
 
 Each tracked prompt is stored with:
+
 - Original content
 - Configuration
 - Content type
@@ -97,6 +102,7 @@ Each tracked prompt is stored with:
 ### 4. Reference Update
 
 Future runs can use the managed reference:
+
 ```yaml
 # Original
 prompts:
@@ -115,9 +121,9 @@ prompts:
 promptAutoTracking:
   enabled: true
   excludePatterns:
-    - "*.test.*"      # Exclude test files
-    - "examples/*"    # Exclude examples
-    - "pf://*"        # Don't track already managed
+    - '*.test.*' # Exclude test files
+    - 'examples/*' # Exclude examples
+    - 'pf://*' # Don't track already managed
 ```
 
 ### Advanced Configuration
@@ -125,36 +131,36 @@ promptAutoTracking:
 ```yaml
 promptAutoTracking:
   enabled: true
-  
+
   # ID generation
   idStrategy:
-    type: "label-first"    # Prefer labels for IDs
-    hashLength: 8          # Hash length for auto IDs
-    prefix: "auto-"        # Prefix for auto-generated IDs
-    
+    type: 'label-first' # Prefer labels for IDs
+    hashLength: 8 # Hash length for auto IDs
+    prefix: 'auto-' # Prefix for auto-generated IDs
+
   # Filtering
   includePatterns:
-    - "src/prompts/**"     # Only track from specific dirs
-    - "config/*.yaml"      
-    
+    - 'src/prompts/**' # Only track from specific dirs
+    - 'config/*.yaml'
+
   excludePatterns:
-    - "**/*.test.*"
-    - "**/node_modules/**"
-    - "**/.git/**"
-    
+    - '**/*.test.*'
+    - '**/node_modules/**'
+    - '**/.git/**'
+
   # Behavior
   behavior:
-    updateExisting: false   # Don't update existing prompts
-    createVersions: true    # Create new versions for changes
-    preserveLabels: true    # Keep original labels
-    trackFunctions: true    # Track function prompts
-    trackConfigs: true      # Track prompt configurations
-    
+    updateExisting: false # Don't update existing prompts
+    createVersions: true # Create new versions for changes
+    preserveLabels: true # Keep original labels
+    trackFunctions: true # Track function prompts
+    trackConfigs: true # Track prompt configurations
+
   # Notifications
   notifications:
-    onTrack: true          # Show when prompts are tracked
-    summary: true          # Show summary after evaluation
-    verbose: false         # Detailed tracking logs
+    onTrack: true # Show when prompts are tracked
+    summary: true # Show summary after evaluation
+    verbose: false # Detailed tracking logs
 ```
 
 ## Tracking Examples
@@ -162,20 +168,23 @@ promptAutoTracking:
 ### Example 1: Simple String Prompt
 
 **Before:**
+
 ```yaml
 prompts:
-  - "You are a helpful AI assistant"
+  - 'You are a helpful AI assistant'
 ```
 
 **Tracked as:**
+
 ```yaml
 id: prompt-a5f3c2d1
-content: "You are a helpful AI assistant"
+content: 'You are a helpful AI assistant'
 contentType: string
 createdAt: 2024-01-20T10:00:00Z
 ```
 
 **Future reference:**
+
 ```yaml
 prompts:
   - pf://prompt-a5f3c2d1
@@ -184,19 +193,21 @@ prompts:
 ### Example 2: Labeled Prompt with Config
 
 **Before:**
+
 ```yaml
 prompts:
   - label: customer-analyzer
-    raw: "Analyze customer sentiment: {{message}}"
+    raw: 'Analyze customer sentiment: {{message}}'
     config:
       temperature: 0.3
       max_tokens: 200
 ```
 
 **Tracked as:**
+
 ```yaml
 id: customer-analyzer
-content: "Analyze customer sentiment: {{message}}"
+content: 'Analyze customer sentiment: {{message}}'
 contentType: string
 config:
   temperature: 0.3
@@ -205,6 +216,7 @@ label: customer-analyzer
 ```
 
 **Future reference:**
+
 ```yaml
 prompts:
   - pf://customer-analyzer
@@ -213,12 +225,14 @@ prompts:
 ### Example 3: Function Prompt
 
 **Before:**
+
 ```yaml
 prompts:
   - file://generate-prompt.js
 ```
 
 Where `generate-prompt.js`:
+
 ```javascript
 module.exports = ({ vars }) => {
   return `Process ${vars.type} request: ${vars.content}`;
@@ -226,12 +240,13 @@ module.exports = ({ vars }) => {
 ```
 
 **Tracked as:**
+
 ```yaml
 id: generate-prompt
-content: "module.exports = ({ vars }) => { ... }"
+content: 'module.exports = ({ vars }) => { ... }'
 contentType: function
 fileFormat: .js
-functionSource: "module.exports = ({ vars }) => { ... }"
+functionSource: 'module.exports = ({ vars }) => { ... }'
 ```
 
 ## Exclude Patterns
@@ -243,19 +258,19 @@ Use glob patterns to exclude files:
 ```yaml
 excludePatterns:
   # Exact matches
-  - "test-prompt.yaml"
-  
+  - 'test-prompt.yaml'
+
   # Wildcards
-  - "*.test.*"
-  - "temp-*"
-  
+  - '*.test.*'
+  - 'temp-*'
+
   # Directories
-  - "tests/*"
-  - "examples/**/*"
-  
+  - 'tests/*'
+  - 'examples/**/*'
+
   # Specific patterns
-  - "pf://*"           # Already managed
-  - "**/__tests__/**"  # Test directories
+  - 'pf://*' # Already managed
+  - '**/__tests__/**' # Test directories
 ```
 
 ### Common Exclusions
@@ -263,29 +278,29 @@ excludePatterns:
 ```yaml
 excludePatterns:
   # Development
-  - "*.test.*"
-  - "*.spec.*"
-  - "examples/*"
-  - "sandbox/*"
-  
+  - '*.test.*'
+  - '*.spec.*'
+  - 'examples/*'
+  - 'sandbox/*'
+
   # Dependencies
-  - "node_modules/**"
-  - "vendor/**"
-  - ".venv/**"
-  
+  - 'node_modules/**'
+  - 'vendor/**'
+  - '.venv/**'
+
   # Version control
-  - ".git/**"
-  - ".svn/**"
-  
+  - '.git/**'
+  - '.svn/**'
+
   # Build artifacts
-  - "dist/**"
-  - "build/**"
-  - "*.min.js"
-  
+  - 'dist/**'
+  - 'build/**'
+  - '*.min.js'
+
   # Temporary
-  - "tmp/*"
-  - "*.tmp"
-  - "*.bak"
+  - 'tmp/*'
+  - '*.tmp'
+  - '*.bak'
 ```
 
 ## Workflow Integration
@@ -302,18 +317,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Track prompts
         env:
           PROMPTFOO_AUTO_TRACK_PROMPTS: true
           PROMPTFOO_API_KEY: ${{ secrets.PROMPTFOO_API_KEY }}
         run: |
           npx promptfoo@latest eval --no-watch
-          
+
       - name: Export tracked prompts
         run: |
           npx promptfoo@latest prompt export > prompts-manifest.json
-          
+
       - name: Upload manifest
         uses: actions/upload-artifact@v3
         with:
@@ -354,7 +369,7 @@ git add ./prompts/*.yaml
 prompts:
   - label: customer-support-greeting
     raw: "Welcome to our support..."
-    
+
   - label: error-handler-api
     raw: "An error occurred..."
 
@@ -435,6 +450,7 @@ promptfoo eval
 ```
 
 Output:
+
 ```
 [Auto-Track] Scanning prompts...
 [Auto-Track] Found: "You are a helpful..." (no label)
@@ -464,15 +480,17 @@ Auto-Tracking Statistics:
 ### Prompts Not Being Tracked
 
 1. **Check if enabled**:
+
    ```bash
    echo $PROMPTFOO_AUTO_TRACK_PROMPTS
    ```
 
 2. **Check exclude patterns**:
+
    ```yaml
    # May be too broad
    excludePatterns:
-     - "*"  # This excludes everything!
+     - '*' # This excludes everything!
    ```
 
 3. **Check permissions** (local mode):
@@ -500,9 +518,9 @@ For large projects:
 ```yaml
 promptAutoTracking:
   performance:
-    batchSize: 50        # Track in batches
-    maxConcurrent: 5     # Parallel tracking
-    debounceMs: 100      # Debounce rapid changes
+    batchSize: 50 # Track in batches
+    maxConcurrent: 5 # Parallel tracking
+    debounceMs: 100 # Debounce rapid changes
 ```
 
 ## Security Considerations
@@ -514,11 +532,11 @@ promptAutoTracking:
   security:
     # Don't track prompts with sensitive patterns
     sensitivePatterns:
-      - "*api[_-]key*"
-      - "*secret*"
-      - "*password*"
-      - "*token*"
-    
+      - '*api[_-]key*'
+      - '*secret*'
+      - '*password*'
+      - '*token*'
+
     # Redact sensitive variables
     redactVariables:
       - apiKey
@@ -532,8 +550,8 @@ promptAutoTracking:
 promptAutoTracking:
   permissions:
     # Who can view auto-tracked prompts
-    defaultVisibility: "team"  # or "private", "public"
-    
+    defaultVisibility: 'team' # or "private", "public"
+
     # Require approval for auto-tracked prompts
     requireApproval: true
 ```
@@ -543,4 +561,4 @@ promptAutoTracking:
 - [Configuration Reference](configuration#auto-tracking-configuration) - Detailed configuration
 - [Best Practices](best-practices#auto-tracking) - Production patterns
 - [API Reference](api-reference#auto-tracking-api) - Programmatic control
-- [Examples](examples/auto-tracking) - Real-world scenarios 
+- [Examples](examples/auto-tracking) - Real-world scenarios

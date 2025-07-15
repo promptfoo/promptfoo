@@ -23,7 +23,7 @@ export default function PromptHistoryPage() {
   const { promptId } = useParams<{ promptId: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  
+
   const [prompt, setPrompt] = useState<ManagedPromptWithVersions | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -112,17 +112,20 @@ export default function PromptHistoryPage() {
                       {version.version === prompt.currentVersion && (
                         <Chip label="Current" size="small" color="primary" />
                       )}
-                      {Object.entries(prompt.deployments || {}).map(([env, v]) => 
-                        v === version.version && (
-                          <Chip key={env} label={env} size="small" variant="outlined" />
-                        )
+                      {Object.entries(prompt.deployments || {}).map(
+                        ([env, v]) =>
+                          v === version.version && (
+                            <Chip key={env} label={env} size="small" variant="outlined" />
+                          ),
                       )}
                     </Stack>
                   </TableCell>
                   <TableCell align="right">
                     <Button
                       size="small"
-                      onClick={() => navigate(`/prompts/${promptId}/edit?version=${version.version}`)}
+                      onClick={() =>
+                        navigate(`/prompts/${promptId}/edit?version=${version.version}`)
+                      }
                     >
                       View
                     </Button>
@@ -134,4 +137,4 @@ export default function PromptHistoryPage() {
       </TableContainer>
     </Box>
   );
-} 
+}

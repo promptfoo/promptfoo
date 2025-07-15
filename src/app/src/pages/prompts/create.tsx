@@ -25,21 +25,23 @@ const parseCsvContent = async (content: string): Promise<string[]> => {
   // Simple CSV parsing for browser
   const lines = content.split(/\r?\n/).filter((line) => line.trim());
   const delimiter = ',';
-  
+
   // Check if it has headers
   const hasHeaders = lines[0]?.toLowerCase().includes('prompt');
   const startIndex = hasHeaders ? 1 : 0;
-  
+
   // Check if it's a simple single-column CSV
-  if (!lines.some(line => line.includes(delimiter))) {
+  if (!lines.some((line) => line.includes(delimiter))) {
     return lines.slice(startIndex);
   }
-  
+
   // Parse as multi-column CSV
   try {
     const prompts: string[] = [];
     for (let i = startIndex; i < lines.length; i++) {
-      const columns = lines[i].split(delimiter).map(col => col.trim().replace(/^["']|["']$/g, ''));
+      const columns = lines[i]
+        .split(delimiter)
+        .map((col) => col.trim().replace(/^["']|["']$/g, ''));
       if (columns[0]) {
         prompts.push(columns[0]);
       }
@@ -54,22 +56,22 @@ const parseCsvContent = async (content: string): Promise<string[]> => {
 const parseJsonContent = (content: string): string | string[] => {
   try {
     const parsed = JSON.parse(content);
-    
+
     // Handle chat format
     if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].role) {
       return JSON.stringify(parsed, null, 2);
     }
-    
+
     // Handle array of prompts
     if (Array.isArray(parsed)) {
       return parsed;
     }
-    
+
     // Handle single prompt object
     if (typeof parsed === 'object' && parsed.prompt) {
       return parsed.prompt;
     }
-    
+
     return content;
   } catch {
     return content;
@@ -108,14 +110,14 @@ export default function PromptCreatePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [promptId, setPromptId] = useState(generateDefaultPromptId());
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [fileType, setFileType] = useState<string | null>(null);
-  
+
   // Extract variables from content
   const detectedVariables = useMemo(() => {
     return extractVariables(content);
@@ -123,17 +125,19 @@ export default function PromptCreatePage() {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {return;}
+    if (!file) {
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (e) => {
       const fileContent = e.target?.result as string;
       const fileName = file.name.toLowerCase();
-      
+
       try {
         let processedContent = fileContent;
         let detectedType = 'text';
-        
+
         // Process based on file type
         if (fileName.endsWith('.json') || fileName.endsWith('.jsonl')) {
           const result = parseJsonContent(fileContent);
@@ -157,34 +161,40 @@ export default function PromptCreatePage() {
           detectedType = 'jinja2';
         } else if (fileName.endsWith('.md')) {
           detectedType = 'markdown';
-        } else if (fileName.endsWith('.js') || fileName.endsWith('.mjs') || fileName.endsWith('.ts')) {
+        } else if (
+          fileName.endsWith('.js') ||
+          fileName.endsWith('.mjs') ||
+          fileName.endsWith('.ts')
+        ) {
           detectedType = 'javascript';
-          showToast('JavaScript/TypeScript files should export a function. Content loaded as reference.', 'info');
+          showToast(
+            'JavaScript/TypeScript files should export a function. Content loaded as reference.',
+            'info',
+          );
         } else if (fileName.endsWith('.py')) {
           detectedType = 'python';
           showToast('Python files should contain a function. Content loaded as reference.', 'info');
         }
-        
+
         setContent(processedContent);
         setUploadedFileName(file.name);
         setFileType(detectedType);
-        
+
         // Auto-populate prompt ID from filename if it's still the default
         if (promptId.startsWith('prompt-') && /prompt-\d{4}-\d{2}-\d{2}-\d{6}/.test(promptId)) {
           const baseFileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
           setPromptId(baseFileName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase());
         }
-        
       } catch (error) {
         showToast('Failed to parse file content', 'error');
         console.error('Error parsing file:', error);
       }
     };
-    
+
     reader.onerror = () => {
       showToast('Failed to read file', 'error');
     };
-    
+
     reader.readAsText(file);
   };
 
@@ -193,7 +203,7 @@ export default function PromptCreatePage() {
       showToast('Please enter a prompt ID', 'warning');
       return;
     }
-    
+
     if (!content.trim()) {
       showToast('Please enter prompt content', 'warning');
       return;
@@ -237,12 +247,7 @@ export default function PromptCreatePage() {
           </IconButton>
           <Typography variant="h4">Create New Prompt</Typography>
         </Stack>
-        <Button
-          variant="contained"
-          startIcon={<SaveIcon />}
-          onClick={handleSave}
-          disabled={saving}
-        >
+        <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={saving}>
           Create Prompt
         </Button>
       </Stack>
@@ -273,7 +278,7 @@ export default function PromptCreatePage() {
               ),
             }}
           />
-          
+
           <TextField
             label="Description"
             placeholder="Describe what this prompt is for..."
@@ -283,33 +288,31 @@ export default function PromptCreatePage() {
             multiline
             rows={2}
           />
-          
+
           <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-              <Typography variant="subtitle1">
-                Prompt Content *
-              </Typography>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+              sx={{ mb: 1 }}
+            >
+              <Typography variant="subtitle1">Prompt Content *</Typography>
               <Stack direction="row" spacing={2} alignItems="center">
                 {uploadedFileName && (
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Typography variant="body2" color="text.secondary">
                       Loaded from:
                     </Typography>
-                    <Chip 
-                      label={uploadedFileName} 
-                      size="small" 
+                    <Chip
+                      label={uploadedFileName}
+                      size="small"
                       onDelete={() => {
                         setUploadedFileName(null);
                         setFileType(null);
                       }}
                     />
                     {fileType && (
-                      <Chip 
-                        label={fileType} 
-                        size="small" 
-                        color="primary" 
-                        variant="outlined" 
-                      />
+                      <Chip label={fileType} size="small" color="primary" variant="outlined" />
                     )}
                   </Stack>
                 )}
@@ -329,7 +332,7 @@ export default function PromptCreatePage() {
                 >
                   Upload File
                 </Button>
-                <Tooltip 
+                <Tooltip
                   title={
                     <Box sx={{ p: 1 }}>
                       <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
@@ -360,7 +363,7 @@ export default function PromptCreatePage() {
                 </Tooltip>
               </Stack>
             </Stack>
-            
+
             <Box sx={{ height: '400px', border: 1, borderColor: 'divider', borderRadius: 1 }}>
               <CodeEditor
                 value={content}
@@ -373,13 +376,14 @@ export default function PromptCreatePage() {
               Tip: Use {'{{variables}}'} for dynamic values in your prompts
             </Typography>
           </Box>
-          
+
           {/* Variable Detection */}
           {detectedVariables.length > 0 && (
             <Alert severity="info" icon={<InfoOutlinedIcon />}>
               <Stack spacing={1}>
                 <Typography variant="subtitle2">
-                  Detected {detectedVariables.length} variable{detectedVariables.length > 1 ? 's' : ''}:
+                  Detected {detectedVariables.length} variable
+                  {detectedVariables.length > 1 ? 's' : ''}:
                 </Typography>
                 <Stack direction="row" spacing={1} flexWrap="wrap">
                   {detectedVariables.map((variable) => (
@@ -402,4 +406,4 @@ export default function PromptCreatePage() {
       </Paper>
     </Box>
   );
-} 
+}

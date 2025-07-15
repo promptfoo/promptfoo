@@ -27,10 +27,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
-import type { 
-  ManagedPromptWithVersions, 
-  PromptVersion 
-} from '@promptfoo/types/prompt-management';
+import type { ManagedPromptWithVersions, PromptVersion } from '@promptfoo/types/prompt-management';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -46,11 +43,7 @@ interface TabPanelProps {
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      {...other}
-    >
+    <div role="tabpanel" hidden={value !== index} {...other}>
       {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
     </div>
   );
@@ -76,11 +69,23 @@ export default function PromptEditor() {
     try {
       setLoading(true);
       const response = await callApi(`/managed-prompts/${promptId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch prompt');
+      }
       const data = await response.json();
+
+      // Validate the response has the expected structure
+      if (!data || !data.versions || !Array.isArray(data.versions)) {
+        console.error('Invalid prompt data structure:', data);
+        throw new Error('Invalid prompt data received');
+      }
+
       setPrompt(data);
-      
+
       // Set initial content from latest version
-      const latestVersion = data.versions.find((v: PromptVersion) => v.version === data.currentVersion);
+      const latestVersion = data?.versions?.find(
+        (v: PromptVersion) => v.version === data.currentVersion,
+      );
       if (latestVersion) {
         setContent(latestVersion.content);
         setSelectedVersion(latestVersion.version);
@@ -106,7 +111,7 @@ export default function PromptEditor() {
     }
 
     // Check if content changed
-    const currentVersion = prompt.versions.find(v => v.version === selectedVersion);
+    const currentVersion = prompt?.versions?.find((v) => v.version === selectedVersion);
     if (currentVersion && currentVersion.content === content) {
       showToast('No changes detected', 'info');
       return;
@@ -145,9 +150,9 @@ export default function PromptEditor() {
       const response = await callApi(`/managed-prompts/${promptId}/deploy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          environment: deployEnvironment, 
-          version: deployVersion 
+        body: JSON.stringify({
+          environment: deployEnvironment,
+          version: deployVersion,
         }),
       });
 
@@ -167,7 +172,7 @@ export default function PromptEditor() {
   };
 
   const handleVersionChange = (version: number) => {
-    const versionData = prompt?.versions.find(v => v.version === version);
+    const versionData = prompt?.versions.find((v) => v.version === version);
     if (versionData) {
       setContent(versionData.content);
       setSelectedVersion(version);
@@ -244,7 +249,7 @@ export default function PromptEditor() {
               onChange={(e) => handleVersionChange(Number(e.target.value))}
               label="Version"
             >
-              {prompt.versions.map((version) => (
+              {prompt?.versions?.map((version) => (
                 <MenuItem key={version.version} value={version.version}>
                   Version {version.version} - {new Date(version.createdAt).toLocaleDateString()}
                   {version.notes && ` - ${version.notes}`}
@@ -254,11 +259,7 @@ export default function PromptEditor() {
           </FormControl>
 
           <Box sx={{ height: '500px' }}>
-            <CodeEditor
-              value={content}
-              onChange={setContent}
-              language="markdown"
-            />
+            <CodeEditor value={content} onChange={setContent} language="markdown" />
           </Box>
 
           <TextField
@@ -277,30 +278,42 @@ export default function PromptEditor() {
           <Stack spacing={2}>
             <Typography variant="h6">Prompt Information</Typography>
             <Box>
-              <Typography variant="body2" color="text.secondary">ID</Typography>
+              <Typography variant="body2" color="text.secondary">
+                ID
+              </Typography>
               <Typography>{prompt.id}</Typography>
             </Box>
             <Box>
-              <Typography variant="body2" color="text.secondary">Name</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Name
+              </Typography>
               <Typography>{prompt.name}</Typography>
             </Box>
             <Box>
-              <Typography variant="body2" color="text.secondary">Created</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Created
+              </Typography>
               <Typography>{new Date(prompt.createdAt).toLocaleString()}</Typography>
             </Box>
             <Box>
-              <Typography variant="body2" color="text.secondary">Last Updated</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Last Updated
+              </Typography>
               <Typography>{new Date(prompt.updatedAt).toLocaleString()}</Typography>
             </Box>
             <Box>
-              <Typography variant="body2" color="text.secondary">Author</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Author
+              </Typography>
               <Typography>{prompt.author || 'Unknown'}</Typography>
             </Box>
             {prompt.tags && prompt.tags.length > 0 && (
               <Box>
-                <Typography variant="body2" color="text.secondary">Tags</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Tags
+                </Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                  {prompt.tags.map((tag) => (
+                  {prompt?.tags?.map((tag) => (
                     <Chip key={tag} label={tag} size="small" />
                   ))}
                 </Stack>
@@ -333,39 +346,43 @@ export default function PromptEditor() {
         </StyledPaper>
       </TabPanel>
 
-      <Dialog open={deployDialogOpen} onClose={() => setDeployDialogOpen(false)}>
-        <DialogTitle>Deploy Prompt</DialogTitle>
-        <DialogContent sx={{ minWidth: 400 }}>
-          <Stack spacing={3} sx={{ mt: 2 }}>
-            <TextField
-              label="Environment"
-              placeholder="e.g., production, staging, development"
-              value={deployEnvironment}
-              onChange={(e) => setDeployEnvironment(e.target.value)}
-              fullWidth
-            />
-            <FormControl fullWidth>
-              <InputLabel>Version</InputLabel>
-              <Select
-                value={deployVersion || ''}
-                onChange={(e) => setDeployVersion(Number(e.target.value))}
-                label="Version"
-              >
-                {prompt.versions.map((version) => (
-                  <MenuItem key={version.version} value={version.version}>
-                    Version {version.version}
-                    {version.version === prompt.currentVersion && ' (latest)'}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeployDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDeploy} variant="contained">Deploy</Button>
-        </DialogActions>
-      </Dialog>
+      {prompt && (
+        <Dialog open={deployDialogOpen} onClose={() => setDeployDialogOpen(false)}>
+          <DialogTitle>Deploy Prompt</DialogTitle>
+          <DialogContent sx={{ minWidth: 400 }}>
+            <Stack spacing={3} sx={{ mt: 2 }}>
+              <TextField
+                label="Environment"
+                placeholder="e.g., production, staging, development"
+                value={deployEnvironment}
+                onChange={(e) => setDeployEnvironment(e.target.value)}
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Version</InputLabel>
+                <Select
+                  value={deployVersion || ''}
+                  onChange={(e) => setDeployVersion(Number(e.target.value))}
+                  label="Version"
+                >
+                  {prompt.versions?.map((version) => (
+                    <MenuItem key={version.version} value={version.version}>
+                      Version {version.version}
+                      {version.version === prompt.currentVersion && ' (latest)'}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeployDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleDeploy} variant="contained">
+              Deploy
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
-} 
+}

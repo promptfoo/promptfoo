@@ -10,10 +10,15 @@ describe('processManagedPrompt', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Mock trackUsage to return a resolved promise
-    jest.spyOn(mockPromptManager.prototype, 'trackUsage').mockImplementation().mockResolvedValue(undefined);
+    jest
+      .spyOn(mockPromptManager.prototype, 'trackUsage')
+      .mockImplementation()
+      .mockResolvedValue(undefined);
   });
 
-  const createMockPrompt = (overrides?: Partial<ManagedPromptWithVersions>): ManagedPromptWithVersions => ({
+  const createMockPrompt = (
+    overrides?: Partial<ManagedPromptWithVersions>,
+  ): ManagedPromptWithVersions => ({
     id: 'test-prompt',
     name: 'Test Prompt',
     description: 'A test prompt',
@@ -93,54 +98,59 @@ describe('processManagedPrompt', () => {
     const mockPrompt = createMockPrompt();
     mockPromptManager.prototype.getPrompt.mockResolvedValue(mockPrompt);
 
-    const result = await processManagedPrompt({ 
+    const result = await processManagedPrompt({
       raw: 'pf://test-prompt',
-      config: { temperature: 0.7 }
+      config: { temperature: 0.7 },
     });
 
     expect(result[0].config).toEqual({ temperature: 0.7 });
   });
 
   it('should throw error for invalid prompt format', async () => {
-    await expect(processManagedPrompt({ raw: 'managed:test' }))
-      .rejects.toThrow('Invalid managed prompt format: managed:test');
+    await expect(processManagedPrompt({ raw: 'managed:test' })).rejects.toThrow(
+      'Invalid managed prompt format: managed:test',
+    );
   });
 
   it('should throw error for invalid prompt ID', async () => {
-    await expect(processManagedPrompt({ raw: 'pf://test prompt with spaces' }))
-      .rejects.toThrow('Invalid prompt ID: test prompt with spaces');
+    await expect(processManagedPrompt({ raw: 'pf://test prompt with spaces' })).rejects.toThrow(
+      'Invalid prompt ID: test prompt with spaces',
+    );
   });
 
   it('should throw error when prompt not found', async () => {
     mockPromptManager.prototype.getPrompt.mockResolvedValue(null);
 
-    await expect(processManagedPrompt({ raw: 'pf://nonexistent' }))
-      .rejects.toThrow('Managed prompt not found: nonexistent');
+    await expect(processManagedPrompt({ raw: 'pf://nonexistent' })).rejects.toThrow(
+      'Managed prompt not found: nonexistent',
+    );
   });
 
   it('should throw error for invalid version', async () => {
     const mockPrompt = createMockPrompt();
     mockPromptManager.prototype.getPrompt.mockResolvedValue(mockPrompt);
 
-    await expect(processManagedPrompt({ raw: 'pf://test-prompt:999' }))
-      .rejects.toThrow('Version 999 not found for prompt: test-prompt');
+    await expect(processManagedPrompt({ raw: 'pf://test-prompt:999' })).rejects.toThrow(
+      'Version 999 not found for prompt: test-prompt',
+    );
   });
 
   it('should throw error for nonexistent environment', async () => {
     const mockPrompt = createMockPrompt();
     mockPromptManager.prototype.getPrompt.mockResolvedValue(mockPrompt);
 
-    await expect(processManagedPrompt({ raw: 'pf://test-prompt:development' }))
-      .rejects.toThrow('No deployment found for environment: development');
+    await expect(processManagedPrompt({ raw: 'pf://test-prompt:development' })).rejects.toThrow(
+      'No deployment found for environment: development',
+    );
   });
 
   it('should use custom label if provided', async () => {
     const mockPrompt = createMockPrompt();
     mockPromptManager.prototype.getPrompt.mockResolvedValue(mockPrompt);
 
-    const result = await processManagedPrompt({ 
+    const result = await processManagedPrompt({
       raw: 'pf://test-prompt',
-      label: 'Custom Label'
+      label: 'Custom Label',
     });
 
     expect(result[0].label).toBe('Custom Label');

@@ -41,6 +41,7 @@ The prompt management system works in two modes:
 - **Cloud Mode**: Stores prompts in the Promptfoo cloud (default when logged in via `promptfoo auth login`)
 
 To force local mode even when logged into cloud, set the environment variable:
+
 ```bash
 export PROMPTFOO_PROMPT_LOCAL_MODE=true
 ```
@@ -80,6 +81,7 @@ promptfoo prompt delete customer-support --force
 Access the prompt management UI at `http://localhost:15500/prompts` when running the Promptfoo server.
 
 The UI provides:
+
 - Visual prompt editor with syntax highlighting
 - Version history browser
 - Side-by-side version comparison
@@ -114,6 +116,7 @@ The prompt management system supports all Promptfoo prompt formats when creating
 - **Code** (`.js`, `.ts`, `.py`): Dynamic prompt generation functions
 
 Example usage:
+
 ```bash
 # From chat conversation JSON
 promptfoo prompt create chat-agent --from-file templates/chat.json
@@ -151,6 +154,7 @@ When creating or editing prompts, the system automatically detects variables in 
 - **Usage Guidance**: Indicates which values will be needed during testing
 
 This feature helps you:
+
 - Quickly identify all variables in complex prompts
 - Ensure consistent variable naming
 - Document requirements for prompt users
@@ -249,17 +253,17 @@ Reference managed prompts in your evaluation configs:
 ```yaml
 # promptfooconfig.yaml
 prompts:
-  - pf://customer-support       # Uses current version
-  - pf://customer-support:2     # Uses specific version
-  - pf://customer-support:prod  # Uses production deployment
+  - pf://customer-support # Uses current version
+  - pf://customer-support:2 # Uses specific version
+  - pf://customer-support:prod # Uses production deployment
 
 providers:
   - openai:gpt-4
-  
+
 tests:
   - vars:
-      query: "How do I reset my password?"
-      company: "Acme Corp"
+      query: 'How do I reset my password?'
+      company: 'Acme Corp'
 ```
 
 ### Re-running Evaluations with Different Prompt Versions
@@ -275,6 +279,7 @@ When viewing evaluation results that use managed prompts, you can easily re-run 
 3. **Re-run**: Click "Re-run with Selected Versions" to update the configuration and navigate to the setup page
 
 This feature is particularly useful for:
+
 - **A/B Testing**: Compare how different prompt versions perform on the same test cases
 - **Regression Testing**: Ensure new prompt versions don't break existing functionality
 - **Performance Comparison**: Evaluate improvements between prompt iterations
@@ -320,18 +325,21 @@ The testing interface includes an intelligent variable suggestion feature that h
 - **Intelligent Fallbacks**: Works even without LLM access using pattern matching
 
 For example, if your prompt contains:
+
 ```text
 You are a {{role}} assistant helping with {{task}}.
 The user's name is {{userName}} and they work at {{company}}.
 ```
 
 The system might suggest:
+
 - **role**: "customer support", "technical", "sales", "general"
 - **task**: "troubleshooting", "product information", "billing inquiry"
 - **userName**: "Alice Johnson", "Bob Smith", "Charlie Brown"
 - **company**: "Acme Corp", "Tech Solutions Inc", "Global Enterprises"
 
 To use smart suggestions:
+
 1. Navigate to a prompt and click "Test"
 2. Click "Generate" in the Smart Variable Suggestions section
 3. Review the AI-generated suggestions for each variable
@@ -339,6 +347,7 @@ To use smart suggestions:
 5. Apply individual suggestions or click "Apply All"
 
 The test feature properly handles:
+
 - Multiple variables with individual inputs
 - Complex templates with conditional logic
 - Different provider configurations
@@ -346,6 +355,7 @@ The test feature properly handles:
 - Automatic variable detection and suggestions
 
 The provider selection includes models from:
+
 - OpenAI (GPT-4.1, GPT-4o, o3/o4 with thinking capabilities)
 - Anthropic (Claude 4, Claude 3.7, Claude 3.5 families)
 - AWS Bedrock (Claude, Llama, Amazon Nova models)
@@ -445,10 +455,11 @@ promptfoo prompt create chat-assistant \
 ```
 
 Where `chat-prompt.json` contains:
+
 ```json
 [
-  {"role": "system", "content": "You are a helpful assistant"},
-  {"role": "user", "content": "{{query}}"}
+  { "role": "system", "content": "You are a helpful assistant" },
+  { "role": "user", "content": "{{query}}" }
 ]
 ```
 
@@ -479,21 +490,24 @@ Promptfoo can automatically track prompts that aren't managed yet. This helps yo
 #### Enable Auto-Tracking
 
 Set the environment variable:
+
 ```bash
 export PROMPTFOO_AUTO_TRACK_PROMPTS=true
 ```
 
 Or in your config:
+
 ```yaml
 promptAutoTracking:
   enabled: true
   excludePatterns:
-    - "*.test.*"
-    - "*test*"
+    - '*.test.*'
+    - '*test*'
   includeMetadata: true
 ```
 
 When enabled, any prompt used in evaluations will be automatically:
+
 1. Assigned a unique ID based on content hash or label
 2. Stored in the prompt management system
 3. Available for future reference via `pf://prompt-id`
@@ -536,6 +550,7 @@ When creating prompts from files, all standard formats are supported:
 - **Function formats**: `.js`, `.mjs`, `.ts`, `.py`
 
 Example:
+
 ```bash
 # Each format is properly detected and stored
 promptfoo prompt create my-prompt --from-file prompt.yaml
@@ -553,12 +568,12 @@ prompts:
     config:
       # OpenAI specific
       temperature: 0.7
-      response_format: { type: "json_object" }
-      
-      # Anthropic specific  
+      response_format: { type: 'json_object' }
+
+      # Anthropic specific
       max_tokens: 1000
-      system: "You are Claude"
-      
+      system: 'You are Claude'
+
       # Custom transforms
       transform: |
         return `[INST] ${prompt} [/INST]`
@@ -592,7 +607,7 @@ const prompt = await manager.getPrompt('customer-support');
 const newVersion = await manager.updatePrompt(
   'customer-support',
   'Updated content...',
-  'Added new features'
+  'Added new features',
 );
 
 // Deploy
@@ -619,16 +634,19 @@ export PROMPTFOO_DEFAULT_ENV=staging
 ### Common Issues
 
 **Prompt not found**: Ensure the prompt ID exists:
+
 ```bash
 promptfoo prompt list
 ```
 
 **Version conflicts**: If working in teams, pull latest changes:
+
 ```bash
 promptfoo prompt sync
 ```
 
 **Deployment fails**: Check version exists and environment is valid:
+
 ```bash
 promptfoo prompt show my-prompt
 ```
@@ -675,15 +693,16 @@ When using managed prompts, there are important considerations regarding file re
    - Document any required files in the prompt description
 
 4. **Example**:
+
    ```yaml
    # This prompt contains a file reference
    prompts:
      - |
        {{#include file://templates/system.txt}}
-       
+
        User: {{query}}
    ```
-   
+
    When this prompt is stored as a managed prompt, the `file://templates/system.txt` reference is preserved. Anyone using this prompt needs to have that file available at the expected path.
 
 ### Version Control Integration
@@ -704,4 +723,4 @@ While managed prompts provide built-in versioning, they are not currently backed
 
 - Learn about [prompt testing strategies](../guides/prompt-testing)
 - Explore [CI/CD integration](../integrations/ci-cd)
-- Set up [team workflows](../guides/team-collaboration) 
+- Set up [team workflows](../guides/team-collaboration)

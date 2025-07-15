@@ -91,7 +91,7 @@ Generate diverse, realistic test values that would help test different aspects o
       }
 
       const data = await response.json();
-      
+
       // Parse the LLM response
       let parsedSuggestions;
       try {
@@ -107,7 +107,7 @@ Generate diverse, realistic test values that would help test different aspects o
         console.error('Failed to parse LLM response:', parseError);
         // Fallback to simple suggestions
         parsedSuggestions = {
-          suggestions: variables.map(v => ({
+          suggestions: variables.map((v) => ({
             variable: v,
             suggestions: generateFallbackSuggestions(v, promptContent),
             explanation: 'Generated based on variable name',
@@ -116,7 +116,7 @@ Generate diverse, realistic test values that would help test different aspects o
       }
 
       setSuggestions(parsedSuggestions.suggestions);
-      
+
       // Auto-select first suggestion for each variable
       const initialSelections: Record<string, string> = {};
       parsedSuggestions.suggestions.forEach((s: VariableSuggestion) => {
@@ -125,18 +125,20 @@ Generate diverse, realistic test values that would help test different aspects o
         }
       });
       setSelectedValues(initialSelections);
-      
     } catch (error) {
       console.error('Error generating suggestions:', error);
       // Generate fallback suggestions
-      const fallbackSuggestions = variables.map(v => ({
+      const fallbackSuggestions = variables.map((v) => ({
         variable: v,
         suggestions: generateFallbackSuggestions(v, promptContent),
         explanation: 'Generated based on variable name and context',
       }));
       setSuggestions(fallbackSuggestions);
-      
-      showToast('Using fallback suggestions. For better results, configure an LLM provider.', 'warning');
+
+      showToast(
+        'Using fallback suggestions. For better results, configure an LLM provider.',
+        'warning',
+      );
     } finally {
       setLoading(false);
     }
@@ -164,8 +166,8 @@ Generate diverse, realistic test values that would help test different aspects o
         return [
           'How do I reset my password?',
           'What is your refund policy?',
-          'My order hasn\'t arrived yet',
-          'How can I contact support?'
+          "My order hasn't arrived yet",
+          'How can I contact support?',
         ];
       }
       return ['What is this?', 'How does it work?', 'Can you help me?', 'Tell me more'];
@@ -175,22 +177,26 @@ Generate diverse, realistic test values that would help test different aspects o
         'This is a test message',
         'Lorem ipsum dolor sit amet',
         'Please process this request',
-        'Hello, I need assistance'
+        'Hello, I need assistance',
       ];
     }
     if (lowerVar.includes('url') || lowerVar.includes('link')) {
       return ['https://example.com', 'https://test.org/page', 'https://demo.site/api'];
     }
     if (lowerVar.includes('code')) {
-      return ['console.log("test");', 'function hello() { return "world"; }', 'SELECT * FROM users;'];
+      return [
+        'console.log("test");',
+        'function hello() { return "world"; }',
+        'SELECT * FROM users;',
+      ];
     }
-    
+
     // Generic fallback
     return [`test_${variable}_1`, `sample_${variable}`, `example ${variable}`, variable];
   };
 
   const handleSelectValue = (variable: string, value: string) => {
-    setSelectedValues(prev => ({
+    setSelectedValues((prev) => ({
       ...prev,
       [variable]: value,
     }));
@@ -249,7 +255,8 @@ Generate diverse, realistic test values that would help test different aspects o
 
         {suggestions.length === 0 && !loading && (
           <Typography variant="body2" color="text.secondary">
-            Click "Generate" to get AI-powered suggestions for your variables based on the prompt context.
+            Click "Generate" to get AI-powered suggestions for your variables based on the prompt
+            context.
           </Typography>
         )}
 
@@ -267,13 +274,13 @@ Generate diverse, realistic test values that would help test different aspects o
                 Apply
               </Button>
             </Stack>
-            
+
             {suggestion.explanation && (
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 {suggestion.explanation}
               </Typography>
             )}
-            
+
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {suggestion.suggestions.map((value) => (
                 <Chip
@@ -297,4 +304,4 @@ Generate diverse, realistic test values that would help test different aspects o
       </CardContent>
     </Card>
   );
-} 
+}

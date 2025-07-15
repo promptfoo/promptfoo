@@ -4,4 +4,4 @@ export interface GlobalConfig {
     excludePatterns?: string[];
     includeMetadata?: boolean;
   };
-} 
+}

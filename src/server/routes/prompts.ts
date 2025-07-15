@@ -13,8 +13,6 @@ import { PromptManager } from '../../prompts/management/PromptManager';
 import telemetry from '../../telemetry';
 import type { ManagedPromptWithVersions } from '../../types/prompt-management';
 
-const VALID_ID_REGEX = /^[a-zA-Z0-9-_]+$/;
-
 // Helper function to get prompt with versions
 async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWithVersions | null> {
   const db = getDb();
@@ -70,7 +68,12 @@ async function getPromptWithVersions(promptId: string): Promise<ManagedPromptWit
       author: v.author || undefined,
       notes: v.notes || undefined,
       config: v.config ? JSON.parse(v.config) : undefined,
-      contentType: (v.contentType || undefined) as 'string' | 'json' | 'function' | 'file' | undefined,
+      contentType: (v.contentType || undefined) as
+        | 'string'
+        | 'json'
+        | 'function'
+        | 'file'
+        | undefined,
       functionSource: v.functionSource || undefined,
       functionName: v.functionName || undefined,
       fileFormat: v.fileFormat || undefined,
@@ -115,7 +118,6 @@ promptsRouter.post('/', async (req, res) => {
       id,
       description,
       content,
-      notes,
       config,
       contentType,
       functionSource,
@@ -178,8 +180,12 @@ promptsRouter.post('/', async (req, res) => {
 
     res.json(prompt);
   } catch (error) {
-    logger.error(`Failed to create prompt: ${error instanceof Error ? error.message : String(error)}`);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create prompt' });
+    logger.error(
+      `Failed to create prompt: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    res
+      .status(500)
+      .json({ error: error instanceof Error ? error.message : 'Failed to create prompt' });
   }
 });
 
@@ -308,8 +314,12 @@ promptsRouter.post('/:id/versions', async (req, res) => {
 
     res.json(prompt);
   } catch (error) {
-    logger.error(`Failed to create version: ${error instanceof Error ? error.message : String(error)}`);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create version' });
+    logger.error(
+      `Failed to create version: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    res
+      .status(500)
+      .json({ error: error instanceof Error ? error.message : 'Failed to create version' });
   }
 });
 

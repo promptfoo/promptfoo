@@ -48,7 +48,7 @@ class PromptAutoTracker {
 
     // Generate a unique ID for this prompt
     const promptId = this.generatePromptId(prompt);
-    
+
     // Skip if we've already tracked this prompt in this session
     if (this.trackedPrompts.has(promptId)) {
       return;
@@ -64,17 +64,12 @@ class PromptAutoTracker {
 
       // Analyze the prompt to extract features
       const analysis = analyzePrompt(prompt);
-      
-      // Create the managed prompt
-      const content = typeof prompt.raw === 'object' 
-        ? JSON.stringify(prompt.raw, null, 2) 
-        : prompt.raw;
 
-      await this.manager.createPrompt(
-        promptId,
-        prompt.label || 'Auto-tracked prompt',
-        content
-      );
+      // Create the managed prompt
+      const content =
+        typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw, null, 2) : prompt.raw;
+
+      await this.manager.createPrompt(promptId, prompt.label || 'Auto-tracked prompt', content);
 
       // Update the prompt with additional metadata
       if (analysis.config || analysis.contentType !== 'string') {
@@ -100,7 +95,7 @@ class PromptAutoTracker {
     const batchSize = 5;
     for (let i = 0; i < prompts.length; i += batchSize) {
       const batch = prompts.slice(i, i + batchSize);
-      await Promise.all(batch.map(p => this.trackPrompt(p)));
+      await Promise.all(batch.map((p) => this.trackPrompt(p)));
     }
   }
 
@@ -108,22 +103,16 @@ class PromptAutoTracker {
    * Generate a unique ID for a prompt based on its content
    */
   private generatePromptId(prompt: Prompt): string {
-    const content = typeof prompt.raw === 'object' 
-      ? JSON.stringify(prompt.raw) 
-      : prompt.raw;
-    
+    const content = typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw;
+
     // Create a hash of the content
-    const hash = crypto
-      .createHash('sha256')
-      .update(content)
-      .digest('hex')
-      .substring(0, 8);
-    
+    const hash = crypto.createHash('sha256').update(content).digest('hex').substring(0, 8);
+
     // Use label if available, otherwise use hash
-    const baseId = prompt.label 
+    const baseId = prompt.label
       ? prompt.label.toLowerCase().replace(/[^a-z0-9-_]/g, '-')
       : `prompt-${hash}`;
-    
+
     return baseId;
   }
 
@@ -135,11 +124,9 @@ class PromptAutoTracker {
       return false;
     }
 
-    return this.config.excludePatterns.some(pattern => {
+    return this.config.excludePatterns.some((pattern) => {
       // Simple glob pattern matching
-      const regex = pattern
-        .replace(/\*/g, '.*')
-        .replace(/\?/g, '.');
+      const regex = pattern.replace(/\*/g, '.*').replace(/\?/g, '.');
       return new RegExp(`^${regex}$`).test(promptStr);
     });
   }
@@ -190,4 +177,4 @@ export async function autoTrackPrompt(prompt: Prompt): Promise<void> {
 export async function autoTrackPrompts(prompts: Prompt[]): Promise<void> {
   const tracker = getAutoTracker();
   await tracker.trackPrompts(prompts);
-} 
+}

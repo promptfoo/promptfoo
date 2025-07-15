@@ -16,23 +16,23 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
   const parts = url.split(':');
   const promptId = parts[0];
   const versionOrEnv = parts[1];
-  
+
   // Validate prompt ID format
   if (!promptId || promptId.trim() === '') {
     throw new Error('Invalid managed prompt reference: missing prompt ID');
   }
 
   const manager = new PromptManager();
-  
+
   try {
     const managedPrompt = await manager.getPrompt(promptId);
-    
+
     if (!managedPrompt) {
       throw new Error(`Managed prompt not found: ${promptId}`);
     }
 
     let targetVersion: number;
-    
+
     if (versionOrEnv) {
       // Check if it's a number (version) or string (environment)
       const versionNum = Number.parseInt(versionOrEnv);
@@ -52,19 +52,19 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
     }
 
     // Find the specific version
-    const version = managedPrompt.versions.find(v => v.version === targetVersion);
+    const version = managedPrompt.versions.find((v) => v.version === targetVersion);
     if (!version) {
       throw new Error(`Version ${targetVersion} not found for prompt: ${promptId}`);
     }
 
     // Track usage asynchronously
-    manager.trackUsage(promptId).catch(err => 
-      logger.debug(`Failed to track usage for prompt ${promptId}: ${err}`)
-    );
+    manager
+      .trackUsage(promptId)
+      .catch((err) => logger.debug(`Failed to track usage for prompt ${promptId}: ${err}`));
 
     // Convert version to prompt object with all features
     const resultPrompt = versionToPrompt(version);
-    
+
     // Merge any additional properties from the original prompt
     if (prompt.config) {
       resultPrompt.config = { ...resultPrompt.config, ...prompt.config };
@@ -91,4 +91,4 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
     logger.error(`Error processing managed prompt ${promptId}: ${error}`);
     throw error;
   }
-} 
+}

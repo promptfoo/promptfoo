@@ -9,13 +9,14 @@ Promptfoo's Prompt Management system transforms how teams develop, test, and dep
 ### Why Prompt Management?
 
 :::info Key Benefits
+
 - **🔄 Version Control**: Track every change with full history and rollback capabilities
 - **🚀 Deployment Tracking**: Know exactly which prompts are running in production
 - **🧪 A/B Testing**: Compare prompt versions side-by-side with comprehensive metrics
 - **🤝 Team Collaboration**: Share, review, and improve prompts together
 - **📊 Performance Analytics**: Monitor prompt effectiveness over time
 - **🔒 Security**: Control access and audit prompt usage across your organization
-:::
+  :::
 
 ## 🚀 Quick Links
 
@@ -92,6 +93,7 @@ Automatically discover and track prompts used in your evaluations, making it eas
 ### 🔧 Full Feature Support
 
 Managed prompts support all Promptfoo features:
+
 - Configuration (temperature, max_tokens, etc.)
 - Function prompts (JavaScript/Python)
 - Chat formats
@@ -130,9 +132,9 @@ Use different prompt versions for different environments.
 
 ```yaml
 prompts:
-  - pf://assistant:development  # Verbose logging
-  - pf://assistant:staging      # Standard behavior  
-  - pf://assistant:production   # Optimized for performance
+  - pf://assistant:development # Verbose logging
+  - pf://assistant:staging # Standard behavior
+  - pf://assistant:production # Optimized for performance
 ```
 
 ### 3. Compliance and Auditing
@@ -154,7 +156,7 @@ graph LR
     C --> D[Monitor Performance]
     D --> E[Iterate & Improve]
     E --> B
-    
+
     style A fill:#e1f5e1
     style C fill:#e3f2fd
     style D fill:#fff3e0
@@ -196,4 +198,4 @@ graph LR
     <li><a href="https://github.com/promptfoo/promptfoo/issues">GitHub Issues</a> - Report bugs or request features</li>
     <li><a href="mailto:support@promptfoo.dev">Email Support</a> - Enterprise support</li>
   </ul>
-</div> 
+</div>

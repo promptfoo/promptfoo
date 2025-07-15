@@ -42,29 +42,29 @@ Create a `.promptfoorc` file in your project root:
 ```yaml
 # .promptfoorc
 promptManagement:
-  mode: local  # or 'cloud'
+  mode: local # or 'cloud'
   localPath: ./prompts
-  
+
   # Auto-tracking configuration
   autoTracking:
     enabled: true
     excludePatterns:
-      - "*.test.*"
-      - "temp/*"
-      - "examples/*"
+      - '*.test.*'
+      - 'temp/*'
+      - 'examples/*'
     includeMetadata: true
-    
+
   # Default prompt settings
   defaults:
-    author: "${USER}"
+    author: '${USER}'
     tags:
       - team-alpha
       - v2-migration
-      
+
   # Cloud mode settings (if applicable)
   cloud:
-    syncInterval: 300  # seconds
-    offlineMode: true  # Continue working offline
+    syncInterval: 300 # seconds
+    offlineMode: true # Continue working offline
 ```
 
 ![Configuration Hierarchy](../assets/prompt-config-file-hierarchy.png)
@@ -83,7 +83,7 @@ config:
   top_p: 0.95
   frequency_penalty: 0.0
   presence_penalty: 0.0
-  stop: ["\n\n", "END"]
+  stop: ["\n\n", 'END']
 ```
 
 ### Response Formats
@@ -93,26 +93,26 @@ Configure structured output formats:
 ```yaml
 config:
   response_format:
-    type: "json_schema"
+    type: 'json_schema'
     json_schema:
-      name: "customer_analysis"
+      name: 'customer_analysis'
       strict: true
       schema:
-        type: "object"
+        type: 'object'
         properties:
           sentiment:
-            type: "string"
-            enum: ["positive", "neutral", "negative"]
+            type: 'string'
+            enum: ['positive', 'neutral', 'negative']
           intent:
-            type: "string"
+            type: 'string'
           entities:
-            type: "array"
+            type: 'array'
             items:
-              type: "object"
+              type: 'object'
               properties:
-                name: { type: "string" }
-                type: { type: "string" }
-        required: ["sentiment", "intent"]
+                name: { type: 'string' }
+                type: { type: 'string' }
+        required: ['sentiment', 'intent']
         additionalProperties: false
 ```
 
@@ -123,44 +123,47 @@ config:
 Different providers support different configuration options:
 
 #### OpenAI
+
 ```yaml
 config:
   # OpenAI specific
-  model: "gpt-4-turbo-preview"
+  model: 'gpt-4-turbo-preview'
   temperature: 0.7
   max_tokens: 2000
-  response_format: { type: "json_object" }
-  seed: 12345  # For reproducibility
+  response_format: { type: 'json_object' }
+  seed: 12345 # For reproducibility
   tools:
-    - type: "function"
+    - type: 'function'
       function:
-        name: "get_weather"
-        description: "Get weather information"
+        name: 'get_weather'
+        description: 'Get weather information'
         parameters:
-          type: "object"
+          type: 'object'
           properties:
-            location: { type: "string" }
+            location: { type: 'string' }
 ```
 
 #### Anthropic
+
 ```yaml
 config:
   # Anthropic specific
-  model: "claude-3-opus-20240229"
+  model: 'claude-3-opus-20240229'
   max_tokens: 4000
   temperature: 0.7
-  system: "You are Claude, an AI assistant"
+  system: 'You are Claude, an AI assistant'
   metadata:
-    user_id: "user-123"
+    user_id: 'user-123'
 ```
 
 #### Custom Providers
+
 ```yaml
 config:
   # Custom provider configuration
-  endpoint: "https://api.custom-llm.com/v1/chat"
+  endpoint: 'https://api.custom-llm.com/v1/chat'
   headers:
-    X-API-Key: "${CUSTOM_API_KEY}"
+    X-API-Key: '${CUSTOM_API_KEY}'
   transform: |
     return {
       messages: [{
@@ -185,26 +188,26 @@ module.exports = ({ vars }) => {
 // Function with configuration
 module.exports = ({ vars, provider }) => {
   const isGPT4 = provider.id.includes('gpt-4');
-  
+
   return {
     prompt: `Process this request: ${vars.request}`,
     config: {
       temperature: isGPT4 ? 0.7 : 0.5,
       max_tokens: isGPT4 ? 2000 : 1000,
       response_format: {
-        type: "json_schema",
+        type: 'json_schema',
         json_schema: {
-          name: "response",
+          name: 'response',
           schema: {
-            type: "object",
+            type: 'object',
             properties: {
-              result: { type: "string" },
-              confidence: { type: "number" }
-            }
-          }
-        }
-      }
-    }
+              result: { type: 'string' },
+              confidence: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
   };
 };
 ```
@@ -221,9 +224,9 @@ def prompt(context):
 def prompt_with_config(context):
     vars = context["vars"]
     provider = context.get("provider", {})
-    
+
     is_gpt4 = "gpt-4" in provider.get("id", "")
-    
+
     return {
         "prompt": f"Process this request: {vars['request']}",
         "config": {
@@ -269,11 +272,12 @@ config:
 ```
 
 Where `transforms/llama-format.js`:
+
 ```javascript
 module.exports = (prompt, context) => {
   // Add system message if not present
-  const systemMessage = context.vars.systemMessage || "You are a helpful assistant";
-  
+  const systemMessage = context.vars.systemMessage || 'You are a helpful assistant';
+
   return `<s>[INST] <<SYS>>
 ${systemMessage}
 <</SYS>>
@@ -292,10 +296,10 @@ Configure automatic prompt discovery and tracking:
 promptAutoTracking:
   enabled: true
   excludePatterns:
-    - "pf://*"        # Already managed prompts
-    - "*.test.*"      # Test files
-    - "temp/*"        # Temporary files
-    - "node_modules/*" # Dependencies
+    - 'pf://*' # Already managed prompts
+    - '*.test.*' # Test files
+    - 'temp/*' # Temporary files
+    - 'node_modules/*' # Dependencies
 ```
 
 ### Advanced Configuration
@@ -303,33 +307,33 @@ promptAutoTracking:
 ```yaml
 promptAutoTracking:
   enabled: true
-  
+
   # ID generation strategy
   idStrategy:
-    type: "label-first"  # or "hash-only", "sequential"
-    prefix: "auto-"
-    
+    type: 'label-first' # or "hash-only", "sequential"
+    prefix: 'auto-'
+
   # What to track
   includePatterns:
-    - "prompts/**/*"
-    - "src/prompts/*"
-    
+    - 'prompts/**/*'
+    - 'src/prompts/*'
+
   excludePatterns:
-    - "**/*.test.*"
-    - "**/examples/*"
-    
+    - '**/*.test.*'
+    - '**/examples/*'
+
   # Metadata to capture
   captureMetadata:
-    - source: "file"
+    - source: 'file'
     - variables: true
     - config: true
     - usage: true
-    
+
   # Behavior
   behavior:
-    createVersions: true  # Create new versions for changes
+    createVersions: true # Create new versions for changes
     updateExisting: false # Update existing prompts
-    notifyOnTrack: true  # Show notifications
+    notifyOnTrack: true # Show notifications
 ```
 
 ![Auto-Tracking Configuration](../assets/prompt-auto-tracking-config.png)
@@ -356,16 +360,16 @@ Configure CLI behavior and defaults:
 cli:
   prompt:
     create:
-      defaultAuthor: "${USER}"
-      defaultTags: ["cli-created"]
-      
+      defaultAuthor: '${USER}'
+      defaultTags: ['cli-created']
+
     deploy:
       requireConfirmation: true
-      defaultNotes: "Deployed via CLI"
-      
+      defaultNotes: 'Deployed via CLI'
+
     list:
-      format: "table"  # or "json", "yaml"
-      sortBy: "updated"
+      format: 'table' # or "json", "yaml"
+      sortBy: 'updated'
       limit: 20
 ```
 
@@ -377,20 +381,20 @@ Configure the web interface behavior:
 webui:
   prompts:
     # Display settings
-    defaultView: "grid"  # or "list"
+    defaultView: 'grid' # or "list"
     itemsPerPage: 20
-    
+
     # Editor settings
     editor:
-      theme: "vs-dark"
+      theme: 'vs-dark'
       fontSize: 14
       wordWrap: true
-      
+
     # Diff viewer
     diff:
       sideBySide: true
       ignoreWhitespace: false
-      
+
     # Permissions (cloud mode)
     permissions:
       allowDelete: false
@@ -410,14 +414,14 @@ api:
   rateLimit:
     enabled: true
     requests: 100
-    window: 60  # seconds
-    
+    window: 60 # seconds
+
   # CORS settings
   cors:
     enabled: true
     origins:
-      - "https://app.example.com"
-      - "http://localhost:3000"
+      - 'https://app.example.com'
+      - 'http://localhost:3000'
 ```
 
 ### Authentication
@@ -425,13 +429,13 @@ api:
 ```yaml
 api:
   auth:
-    type: "bearer"  # or "basic", "oauth2"
+    type: 'bearer' # or "basic", "oauth2"
     tokenExpiry: 3600
-    
+
   # API keys (for programmatic access)
   apiKeys:
     enabled: true
-    rotation: 90  # days
+    rotation: 90 # days
 ```
 
 ## Integration Configuration
@@ -445,8 +449,8 @@ integrations:
   git:
     enabled: true
     autoCommit: true
-    commitMessage: "Update prompt: {{promptId}} v{{version}}"
-    branch: "prompts/{{promptId}}"
+    commitMessage: 'Update prompt: {{promptId}} v{{version}}'
+    branch: 'prompts/{{promptId}}'
 ```
 
 ### CI/CD Integration
@@ -454,11 +458,11 @@ integrations:
 ```yaml
 integrations:
   ci:
-    provider: "github"  # or "gitlab", "jenkins"
+    provider: 'github' # or "gitlab", "jenkins"
     triggers:
-      - event: "prompt.deployed"
-        action: "workflow_dispatch"
-        workflow: "validate-prompts.yml"
+      - event: 'prompt.deployed'
+        action: 'workflow_dispatch'
+        workflow: 'validate-prompts.yml'
 ```
 
 ### Monitoring Integration
@@ -466,14 +470,14 @@ integrations:
 ```yaml
 integrations:
   monitoring:
-    provider: "datadog"  # or "prometheus", "cloudwatch"
+    provider: 'datadog' # or "prometheus", "cloudwatch"
     metrics:
-      - "prompt.usage"
-      - "prompt.latency"
-      - "prompt.errors"
+      - 'prompt.usage'
+      - 'prompt.latency'
+      - 'prompt.errors'
     tags:
-      environment: "${ENV}"
-      service: "prompt-management"
+      environment: '${ENV}'
+      service: 'prompt-management'
 ```
 
 ## Security Configuration
@@ -486,13 +490,13 @@ Configure security settings:
 security:
   encryption:
     atRest: true
-    algorithm: "AES-256-GCM"
-    keyRotation: 30  # days
-    
+    algorithm: 'AES-256-GCM'
+    keyRotation: 30 # days
+
   # Access logs
   audit:
     enabled: true
-    retention: 90  # days
+    retention: 90 # days
     includeReadOps: false
 ```
 
@@ -502,16 +506,16 @@ security:
 security:
   rbac:
     enabled: true
-    defaultRole: "viewer"
+    defaultRole: 'viewer'
     roles:
       viewer:
-        - "prompt:read"
+        - 'prompt:read'
       developer:
-        - "prompt:read"
-        - "prompt:write"
-        - "prompt:test"
+        - 'prompt:read'
+        - 'prompt:write'
+        - 'prompt:test'
       admin:
-        - "prompt:*"
+        - 'prompt:*'
 ```
 
 ## Performance Configuration
@@ -524,17 +528,17 @@ performance:
   cache:
     enabled: true
     ttl: 3600
-    maxSize: "100MB"
-    
+    maxSize: '100MB'
+
   # Connection pooling
   database:
     maxConnections: 20
     idleTimeout: 30
-    
+
   # Batch operations
   batch:
     maxSize: 100
-    timeout: 5000  # ms
+    timeout: 5000 # ms
 ```
 
 ## Example: Complete Configuration
@@ -544,34 +548,34 @@ Here's a complete configuration example:
 ```yaml
 # .promptfoorc
 promptManagement:
-  mode: hybrid  # Use cloud with local fallback
-  
+  mode: hybrid # Use cloud with local fallback
+
   local:
     path: ./prompts
     backup: true
-    
+
   cloud:
     syncInterval: 300
     offlineMode: true
-    
+
   autoTracking:
     enabled: true
-    excludePatterns: ["*.test.*", "temp/*"]
-    
+    excludePatterns: ['*.test.*', 'temp/*']
+
   defaults:
     config:
       temperature: 0.7
       max_tokens: 1000
-    tags: ["${TEAM}", "${PROJECT}"]
-    
+    tags: ['${TEAM}', '${PROJECT}']
+
   security:
     encryption: true
     audit: true
-    
+
   integrations:
     git: true
-    monitoring: "datadog"
-    
+    monitoring: 'datadog'
+
   performance:
     cache: true
     batchSize: 50
@@ -582,4 +586,4 @@ promptManagement:
 - [API Reference](api-reference) - Programmatic configuration
 - [Best Practices](best-practices) - Configuration patterns
 - [Troubleshooting](troubleshooting/) - Common configuration issues
-- [Examples](examples/) - Real-world configurations 
+- [Examples](examples/) - Real-world configurations
