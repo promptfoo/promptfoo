@@ -186,6 +186,7 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
+    totalResultsCount,
     fetchEvalData,
     isFetching,
     filters,
@@ -1196,8 +1197,10 @@ function ResultsTable({
       </div>
 
       {
+        // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
+        // filters does not hide the pagination controls.
         // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
-        filteredResultsCount > 10 && (
+        totalResultsCount > 10 && (
           <Box
             ref={paginationContainerRef}
             className="pagination"
