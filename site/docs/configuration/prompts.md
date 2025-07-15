@@ -133,7 +133,7 @@ When using wildcards with Python or JavaScript files, you can specify a function
 prompts:
   # Call generate_prompt() in all Python files
   - file://prompts/**/*.py:generate_prompt
-  
+
   # Call getPrompt() in all JavaScript files
   - file://prompts/**/*.js:getPrompt
 ```
