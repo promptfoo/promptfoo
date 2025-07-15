@@ -20,6 +20,7 @@ export const ProviderOptionsSchema = z
     transform: z.string().optional(),
     delay: z.number().optional(),
     env: ProviderEnvOverridesSchema.optional(),
+    testGenerationInstructions: z.string().optional(),
   })
   .strict();
 

@@ -47,7 +47,12 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     logger.debug(`Provider fetched from cloud: ${id}`);
     logger.debug(`Provider from cloud: ${JSON.stringify(body, null, 2)}`);
 
-    const provider = ProviderOptionsSchema.parse(body.config);
+    const providerData = ProviderOptionsSchema.safeParse(body.config);
+    if (!providerData.success) {
+      logger.error(`[Cloud] Failed to parse provider from cloud: ${JSON.stringify(providerData.error, null, 2)}`);
+      throw new Error(`Failed to parse provider from cloud: ${JSON.stringify(providerData.error, null, 2)}`);
+    }
+    const provider = providerData.data;
     // The provider options schema has ID field as optional but we know it's required for cloud providers
     invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
     return { ...provider, id: provider.id };
