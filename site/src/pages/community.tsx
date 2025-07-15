@@ -334,7 +334,45 @@ const CommunityContent = () => {
   ];
 
   const blogPosts = [
+    // 2025 Red-Teaming & Security
+    {
+      title: 'Promptfoo vs DeepTeam vs PyRIT vs Garak — The Ultimate Red-Teaming Showdown',
+      author: 'DEV Community',
+      date: '2025',
+      description: '2025 head-to-head review comparing top red-teaming tools. Promptfoo wins in test-coverage and CLI UX.',
+      link: 'https://dev.to/ayush7614/promptfoo-vs-deepteam-vs-pyrit-vs-garak-the-ultimate-red-teaming-showdown-for-llms-48if',
+      category: 'Comparison',
+      featured: true,
+      isNew: true,
+    },
+    {
+      title: 'Attacking LLMs with Promptfoo',
+      author: 'watson0x90',
+      date: 'August 2024',
+      description: 'Security-focused tutorial demonstrating red-team techniques using Promptfoo\'s adversarial testing capabilities.',
+      link: 'https://medium.com/@watson0x90/attacking-llms-with-promptfoo-362970935552',
+      category: 'Security',
+    },
     // 2025 Practitioner Articles
+    {
+      title: 'From OpenAI to Ollama: Visual LLM Evaluations with Promptfoo',
+      author: 'DEV Community',
+      date: 'May 2025',
+      description: 'Practical, image-rich tutorial showing visual model evaluation across different providers.',
+      link: 'https://dev.to/ayush7614/from-openai-to-ollama-visual-llm-evaluations-with-promptfoo-2k03',
+      category: 'Tutorial',
+      isNew: true,
+    },
+    {
+      title: 'Evaluating LLMs at Scale with Promptfoo',
+      author: 'Towards AI',
+      date: 'April 2025',
+      description: 'Walk-through of YAML evaluations plus GitHub Actions integration for CI/CD pipelines.',
+      link: 'https://medium.com/towards-artificial-intelligence/evaluating-llms-at-scale-with-promptfoo-0cf3fa20e1eb',
+      category: 'Enterprise Guide',
+      featured: true,
+      isNew: true,
+    },
     {
       title: 'Understanding Promptfoo: LLM Evaluation Made Easy',
       author: 'NashTech Global',
@@ -422,6 +460,44 @@ const CommunityContent = () => {
       link: 'https://simonwillison.net/2025/Apr/24/exploring-promptfoo/',
       category: 'Deep Dive',
       featured: true,
+    },
+    // Enterprise & Architecture
+    {
+      title: 'Context Engineering: Elevating AI Strategy from Prompt Crafting to Enterprise Competence',
+      author: 'Adnan Masood',
+      date: '2025',
+      description: 'Enterprise-architecture piece lists Promptfoo first among test frameworks for production AI systems.',
+      link: 'https://medium.com/@adnanmasood/context-engineering-elevating-ai-strategy-from-prompt-crafting-to-enterprise-competence-b036d3f7f76f',
+      category: 'Enterprise Strategy',
+      isNew: true,
+    },
+    {
+      title: 'Prompt Testing Frameworks: What\'s Worth Using in 2025',
+      author: 'Confedo AI',
+      date: '2025',
+      description: 'LinkedIn Pulse analysis recommends Promptfoo and LangSmith as the two A/B-testing leaders.',
+      link: 'https://www.linkedin.com/pulse/prompt-testing-frameworks-whats-worth-using-2025-confedo-ai-avugf',
+      category: 'Analysis',
+      isNew: true,
+    },
+    // Tools & Comparisons
+    {
+      title: 'LLM Observability Tools Comparison',
+      author: 'davidpp.com',
+      date: '2024',
+      description: 'Ranks Promptfoo best-in-class for "live diff view" in self-hosted stacks.',
+      link: 'https://www.davidpp.com/ai/llm-observability-tools',
+      category: 'Comparison',
+      isNew: true,
+    },
+    {
+      title: 'Ragas vs. Promptfoo Comparison',
+      author: 'SourceForge',
+      date: '2024',
+      description: 'Product comparison highlighting Promptfoo\'s superior feature depth and adoption.',
+      link: 'https://sourceforge.net/software/compare/Ragas-vs-promptfoo/',
+      category: 'Comparison',
+      isNew: true,
     },
     // 2024 Case Studies
     {
@@ -535,7 +611,8 @@ const CommunityContent = () => {
                       { name: 'DoorDash', color: 'success.main' },
                       { name: 'Shopify', color: 'warning.main' },
                       { name: 'Semgrep', color: 'secondary.main' },
-                      { name: 'Google Cloud', color: 'info.main' }
+                      { name: 'Google Cloud', color: 'info.main' },
+                      { name: 'Langfuse', color: 'secondary.main' }
                     ].map((company) => (
                       <Box
                         key={company.name}
@@ -697,6 +774,81 @@ const CommunityContent = () => {
             </Grid>
           </Grid>
         </Paper>
+
+        {/* Social Proof - New Section */}
+        <Box mb={8}>
+          <Grid container spacing={3}>
+            {/* Paige Bailey Endorsement */}
+            <Grid item xs={12} md={6}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  background: 'linear-gradient(135deg, #4285f4 0%, #34a853 100%)',
+                  color: 'white'
+                }}
+              >
+                <CardContent sx={{ p: 4 }}>
+                  <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                    <FormatQuoteIcon sx={{ fontSize: 40, opacity: 0.3 }} />
+                    <Box>
+                      <Typography variant="h6" fontWeight="bold">
+                        Paige Bailey
+                      </Typography>
+                      <Typography variant="body2">
+                        Google Gen-AI Developer Relations
+                      </Typography>
+                    </Box>
+                  </Stack>
+                  <Typography variant="body1" paragraph sx={{ fontStyle: 'italic' }}>
+                    "Having access to the terminal in Google Colab makes running Promptfoo evaluations 
+                    seamless for in-notebook testing"
+                  </Typography>
+                  <Chip 
+                    label="Internal Google Usage" 
+                    sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
+                    size="small"
+                  />
+                  <Box mt={2}>
+                    <Link 
+                      href="https://www.linkedin.com/posts/dynamicwebpaige_having-access-to-the-terminal-in-google-activity-7267567281361084417-7usr"
+                      target="_blank"
+                      style={{ color: 'white', textDecoration: 'underline' }}
+                    >
+                      View LinkedIn Post →
+                    </Link>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            {/* Industry Analysis */}
+            <Grid item xs={12} md={6}>
+              <Card sx={{ height: '100%', bgcolor: 'action.hover' }}>
+                <CardContent sx={{ p: 4 }}>
+                  <Typography variant="h6" gutterBottom>
+                    2025 Framework Analysis
+                  </Typography>
+                  <Box sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 1, mb: 2 }}>
+                    <Typography variant="body2" paragraph>
+                      <strong>LinkedIn Pulse:</strong> "Promptfoo and LangSmith are the two A/B-testing leaders"
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      - Confedo AI Industry Analysis
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+                    <Typography variant="body2" paragraph>
+                      <strong>DEV.to:</strong> "Promptfoo wins in test-coverage and CLI UX"
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      - Red-Teaming Tools Comparison 2025
+                    </Typography>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        </Box>
 
         {/* Vendor Adoption Section */}
         <Box id="vendor-adoption" mb={10}>
@@ -1082,35 +1234,136 @@ const CommunityContent = () => {
             <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <BusinessIcon /> Cloud & Infrastructure
             </Typography>
-            <Card sx={{ bgcolor: 'action.hover' }}>
-              <CardContent sx={{ p: 4 }}>
-                <Grid container alignItems="center" spacing={3}>
-                  <Grid item xs={12} md={8}>
-                    <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-                      <Typography variant="h5" fontWeight="bold">
+            <Grid container spacing={3}>
+              {/* AWS Bedrock Prompt Flows */}
+              <Grid item xs={12} md={6}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    border: '2px solid',
+                    borderColor: 'warning.main',
+                    position: 'relative'
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                      <Typography variant="h5" fontWeight="bold" sx={{ color: 'warning.dark' }}>
+                        AWS Bedrock Prompt Flows
+                      </Typography>
+                      <Chip label="Official Blog" size="small" color="warning" />
+                    </Stack>
+                    <Typography variant="body1" paragraph>
+                      AWS ML Blog demonstrates automated evaluation pipeline:
+                    </Typography>
+                    <Box sx={{ bgcolor: 'warning.light', p: 2, borderRadius: 1, mb: 2, opacity: 0.3 }}>
+                      <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.primary' }}>
+                        "We use <strong>Promptfoo</strong> to score each candidate prompt and gate releases in Bedrock Prompt Flows"
+                      </Typography>
+                    </Box>
+                    <Button 
+                      variant="outlined" 
+                      color="warning"
+                      href="https://aws.amazon.com/blogs/machine-learning/evaluating-prompts-at-scale-with-prompt-management-and-prompt-flows-for-amazon-bedrock/"
+                      target="_blank"
+                      size="small"
+                    >
+                      Read AWS Guide →
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Google Cloud Vertex AI */}
+              <Grid item xs={12} md={6}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    border: '2px solid',
+                    borderColor: 'info.main'
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                      <Typography variant="h5" fontWeight="bold" sx={{ color: 'info.dark' }}>
                         Google Cloud (Vertex AI)
                       </Typography>
                       <Chip label="Developer Advocate" size="small" color="info" />
                     </Stack>
                     <Typography variant="body1" paragraph>
-                      Google Developer Advocate Mete Atamel published a comprehensive guide:
+                      Multiple guides from Google Developer Advocate Mete Atamel:
                     </Typography>
-                    <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                      "Promptfoo + Vertex AI" - Step-by-step use of Promptfoo to test models on Vertex
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={4} textAlign="center">
-                    <Button 
-                      variant="outlined"
-                      href="https://atamel.dev/posts/2024/11-04_promptfoo_vertexai/"
-                      target="_blank"
-                    >
-                      Read Google Guide →
-                    </Button>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          • "Promptfoo + Vertex AI" integration guide
+                        </Typography>
+                        <Typography variant="body2" fontWeight="medium">
+                          • "LLM Guard and Vertex AI" comparison
+                        </Typography>
+                      </Box>
+                      <Button 
+                        variant="outlined"
+                        color="info"
+                        href="https://atamel.dev/posts/2024/11-04_promptfoo_vertexai/"
+                        target="_blank"
+                        size="small"
+                        fullWidth
+                      >
+                        Read Google Guides →
+                      </Button>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Langfuse */}
+              <Grid item xs={12}>
+                <Card sx={{ bgcolor: 'action.hover', position: 'relative', overflow: 'hidden' }}>
+                  <CardContent sx={{ p: 4 }}>
+                    <Grid container alignItems="center" spacing={3}>
+                      <Grid item xs={12} md={8}>
+                        <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                          <Typography variant="h5" fontWeight="bold">
+                            Langfuse
+                          </Typography>
+                          <Chip label="Official Integration" size="small" color="secondary" />
+                          <Chip label="Community Request" size="small" variant="outlined" />
+                        </Stack>
+                        <Typography variant="body1" paragraph>
+                          Official docs ship dedicated Promptfoo integration guide:
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>
+                          "Integrate <strong>Promptfoo</strong> with Langfuse to run structured evals straight from your prompt vault"
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          GitHub Discussion #3375 shows grassroots demand for deeper integration
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={4} textAlign="center">
+                        <Stack spacing={2}>
+                          <Button 
+                            variant="contained"
+                            color="secondary"
+                            href="https://langfuse.com/docs/integrations/promptfoo"
+                            target="_blank"
+                          >
+                            View Integration →
+                          </Button>
+                          <Button 
+                            variant="text"
+                            size="small"
+                            href="https://github.com/orgs/langfuse/discussions/3375"
+                            target="_blank"
+                          >
+                            See Community Discussion
+                          </Button>
+                        </Stack>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
           </Box>
 
           {/* Summary Stats */}
@@ -1442,6 +1695,58 @@ const CommunityContent = () => {
               </Card>
             </Grid>
           </Grid>
+
+          {/* Featured New Articles - Always Visible */}
+          <Box mt={4}>
+            <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <ArticleIcon />
+              Latest Articles & Comparisons
+              <Chip label="NEW" size="small" color="error" />
+            </Typography>
+            <Grid container spacing={3}>
+              {blogPosts.filter(p => p.featured && p.isNew).map((post, index) => (
+                <Grid item xs={12} md={4} key={index}>
+                  <Card 
+                    sx={{ 
+                      height: '100%',
+                      position: 'relative',
+                      border: '2px solid',
+                      borderColor: 'error.light',
+                      transition: 'all 0.2s',
+                      '&:hover': { 
+                        borderColor: 'error.main',
+                        transform: 'translateY(-4px)'
+                      }
+                    }}
+                  >
+                    <CardContent>
+                      <Stack direction="row" justifyContent="space-between" alignItems="start" mb={2}>
+                        <Chip label={post.category} size="small" />
+                        <Chip label="NEW" size="small" color="error" />
+                      </Stack>
+                      <Typography variant="h6" gutterBottom sx={{ minHeight: 60 }}>
+                        {post.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                        {post.author} • {post.date}
+                      </Typography>
+                      <Typography variant="body2" paragraph>
+                        {post.description}
+                      </Typography>
+                      <Button 
+                        variant="text" 
+                        href={post.link} 
+                        target="_blank"
+                        fullWidth
+                      >
+                        Read Article →
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
         </Box>
 
         {/* Expandable Sections */}
