@@ -213,11 +213,156 @@ html {
   outline-offset: 2px;
 }
 
+/* Enterprise cards */
+.enterpriseCard {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.enterpriseCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--ifm-color-primary) 0%, var(--ifm-color-secondary) 100%);
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+}
+
+.enterpriseCard:hover::before {
+  transform: translateX(0);
+}
+
+/* Quote styling */
+.quoteBox {
+  position: relative;
+  padding-left: 2rem;
+  font-style: italic;
+}
+
+.quoteBox::before {
+  content: '"';
+  position: absolute;
+  left: 0;
+  top: -0.5rem;
+  font-size: 3rem;
+  opacity: 0.2;
+  font-family: Georgia, serif;
+}
+
+/* Company logo styling */
+.companyLogo {
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.companyLogo:hover {
+  transform: scale(1.1) rotate(-2deg);
+}
+
+/* Success metric highlight */
+.metricHighlight {
+  display: inline-block;
+  background: linear-gradient(120deg, transparent 0%, rgba(76, 175, 80, 0.2) 50%, transparent 100%);
+  padding: 0 0.5rem;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* Sector headers */
+.sectorHeader {
+  position: relative;
+  padding-left: 3rem;
+}
+
+.sectorHeader::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2rem;
+  height: 2px;
+  background: var(--ifm-color-primary);
+}
+
+/* Gradient text effect */
+.gradientText {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Card hover lift effect */
+.liftCard {
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.liftCard::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  z-index: -1;
+  opacity: 0;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  transition: opacity 0.3s ease;
+}
+
+.liftCard:hover {
+  transform: translateY(-8px);
+}
+
+.liftCard:hover::after {
+  opacity: 1;
+}
+
+/* Badge animations */
+@keyframes badgePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+  }
+}
+
+.pulseBadge {
+  animation: badgePulse 2s infinite;
+}
+
+/* Mobile optimization for enterprise section */
+@media (max-width: 768px) {
+  .enterpriseCard {
+    margin-bottom: 1rem;
+  }
+  
+  .companyLogo {
+    font-size: 1.5rem;
+  }
+  
+  .sectorHeader {
+    font-size: 1.25rem;
+    padding-left: 2rem;
+  }
+}
+
 /* Print styles */
 @media print {
   .heroContent,
   .ctaButton,
-  .accordionHeader {
+  .accordionHeader,
+  .enterpriseCard {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }

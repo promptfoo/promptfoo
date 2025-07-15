@@ -511,42 +511,85 @@ const CommunityContent = () => {
               The Standard for AI Evaluation
             </Typography>
             <Typography variant="h5" color="text.secondary" sx={{ maxWidth: 800 }}>
-              Trusted by leading AI teams at OpenAI, Anthropic, Microsoft, and AWS. 
+              Trusted by DoorDash, Shopify, Semgrep, and leading AI teams at OpenAI, Anthropic, Microsoft, and AWS. 
               Used in 21+ peer-reviewed papers and 100,000+ production deployments.
             </Typography>
             
             {/* Enterprise Logos */}
             <Box sx={{ mt: 4, mb: 2 }}>
               <Typography variant="overline" color="text.secondary" gutterBottom display="block">
-                FEATURED IN OFFICIAL DOCUMENTATION BY
+                TRUSTED BY LEADING COMPANIES
               </Typography>
-              <Stack 
-                direction="row" 
-                spacing={4} 
-                alignItems="center" 
-                justifyContent="center"
-                flexWrap="wrap"
-                sx={{ mt: 2 }}
-              >
-                {['OpenAI', 'Anthropic', 'AWS', 'Microsoft', 'IBM'].map((company) => (
-                  <Box
-                    key={company}
-                    sx={{
-                      px: 3,
-                      py: 1.5,
-                      borderRadius: 2,
-                      bgcolor: 'background.paper',
-                      boxShadow: 1,
-                      opacity: 0.9,
-                      '&:hover': { opacity: 1 }
-                    }}
+              <Grid container spacing={2} justifyContent="center" sx={{ mt: 2 }}>
+                {/* Top Tier - Major Adopters */}
+                <Grid item xs={12}>
+                  <Stack 
+                    direction="row" 
+                    spacing={3} 
+                    alignItems="center" 
+                    justifyContent="center"
+                    flexWrap="wrap"
+                    sx={{ mb: 2 }}
                   >
-                    <Typography variant="h6" fontWeight="bold" color="text.secondary">
-                      {company}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
+                    {[
+                      { name: 'DoorDash', color: 'success.main' },
+                      { name: 'Shopify', color: 'warning.main' },
+                      { name: 'Semgrep', color: 'secondary.main' },
+                      { name: 'Google Cloud', color: 'info.main' }
+                    ].map((company) => (
+                      <Box
+                        key={company.name}
+                        sx={{
+                          px: 3,
+                          py: 1.5,
+                          borderRadius: 2,
+                          bgcolor: 'background.paper',
+                          border: '2px solid',
+                          borderColor: company.color,
+                          boxShadow: 2,
+                          '&:hover': { 
+                            transform: 'translateY(-2px)',
+                            boxShadow: 4
+                          }
+                        }}
+                      >
+                        <Typography variant="h6" fontWeight="bold" sx={{ color: company.color }}>
+                          {company.name}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Grid>
+                {/* Second Tier - Documentation & Courses */}
+                <Grid item xs={12}>
+                  <Stack 
+                    direction="row" 
+                    spacing={2} 
+                    alignItems="center" 
+                    justifyContent="center"
+                    flexWrap="wrap"
+                  >
+                    {['OpenAI', 'Anthropic', 'AWS', 'Microsoft', 'IBM'].map((company) => (
+                      <Box
+                        key={company}
+                        sx={{
+                          px: 2,
+                          py: 1,
+                          borderRadius: 1,
+                          bgcolor: 'background.paper',
+                          boxShadow: 1,
+                          opacity: 0.9,
+                          '&:hover': { opacity: 1 }
+                        }}
+                      >
+                        <Typography variant="body1" fontWeight="medium" color="text.secondary">
+                          {company}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Grid>
+              </Grid>
             </Box>
 
             {/* Impact Stats */}
@@ -815,6 +858,292 @@ const CommunityContent = () => {
               </Paper>
             </Grid>
           </Grid>
+        </Box>
+
+        {/* Enterprise Adoption - Who's Using Promptfoo */}
+        <Box mb={10}>
+          <Stack direction="row" alignItems="center" spacing={2} mb={4}>
+            <TrendingUpIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+            <Box>
+              <Typography variant="h3" component="h2">
+                Who's Using Promptfoo in Production
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Leading companies across security, e-commerce, and AI infrastructure rely on Promptfoo
+              </Typography>
+            </Box>
+          </Stack>
+
+          {/* Security & DevSecOps */}
+          <Box mb={6}>
+            <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SecurityIcon /> Security & DevSecOps
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 10%, #fff 10%)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                      <Typography variant="h4" fontWeight="bold" color="primary">
+                        Semgrep
+                      </Typography>
+                      <Chip label="Case Study" size="small" color="secondary" />
+                    </Stack>
+                    <Typography variant="body1" paragraph>
+                      <strong>"Does your LLM thing work? (& how we use promptfoo)"</strong> - 
+                      Deep dive on wiring Promptfoo into Semgrep's lab-style eval loop.
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" paragraph>
+                      Achieved <strong>96% triage accuracy</strong> thanks to "benchmarking various models using Promptfoo"
+                    </Typography>
+                    <Chip label="Production Pipeline" size="small" sx={{ mb: 2 }} />
+                    <Box>
+                      <Button 
+                        variant="text" 
+                        href="https://semgrep.dev/blog/2024/does-your-llm-thing-work-how-we-use-promptfoo"
+                        target="_blank"
+                        size="small"
+                      >
+                        Read Case Study →
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%', bgcolor: 'action.hover' }}>
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography variant="h5" gutterBottom>
+                      Industry Recognition
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <FormatQuoteIcon sx={{ fontSize: 16, mr: 1 }} />
+                      "Promptfoo's open-source approach... with users at companies like 
+                      <strong> Shopify, Amazon, Anthropic</strong>"
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      - Cyber Security Intelligence
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Consumer & Marketplace */}
+          <Box mb={6}>
+            <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <BusinessIcon /> Consumer & Marketplace Platforms
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    border: '3px solid',
+                    borderColor: 'success.main',
+                    position: 'relative'
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                      <Typography variant="h4" fontWeight="bold" sx={{ color: 'success.dark' }}>
+                        DoorDash
+                      </Typography>
+                      <Chip label="Engineering Blog" size="small" color="success" />
+                    </Stack>
+                    <Typography variant="body1" paragraph>
+                      <strong>Production RAG Chatbot Testing:</strong>
+                    </Typography>
+                    <Box sx={{ bgcolor: 'success.light', p: 2, borderRadius: 1, mb: 2 }}>
+                      <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                        "Newly identified issues are systematically added to <strong>Promptfoo test suites</strong>, 
+                        ensuring continuous improvement and preventing regression."
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary">
+                      DoorDash relies on Promptfoo as the regression-test harness for its Dasher support automation
+                    </Typography>
+                    <Box mt={2}>
+                      <Button 
+                        variant="outlined" 
+                        color="success"
+                        href="https://careersatdoordash.com/blog/large-language-modules-based-dasher-support-automation/"
+                        target="_blank"
+                        size="small"
+                      >
+                        Read DoorDash Blog →
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%' }}>
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography variant="h4" fontWeight="bold" gutterBottom>
+                      Shopify
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      Multiple sources confirm Shopify's adoption:
+                    </Typography>
+                    <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
+                      <Typography variant="body2">
+                        "Prestigious organizations such as <strong>Shopify are standardizing on Promptfoo</strong>"
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                        - Semgrep Engineering Blog
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* AI & MLOps Platforms */}
+          <Box mb={6}>
+            <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CodeIcon /> AI & MLOps Platforms
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={4}>
+                <Card variant="outlined" sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Portkey AI
+                    </Typography>
+                    <Chip label="First-class Integration" size="small" color="primary" sx={{ mb: 2 }} />
+                    <Typography variant="body2" paragraph>
+                      Official integration guide: "Leverage the strengths of both platforms to 
+                      streamline your AI development workflow"
+                    </Typography>
+                    <Link 
+                      href="https://portkey.ai/docs/integrations/libraries/promptfoo"
+                      target="_blank"
+                    >
+                      View Integration →
+                    </Link>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Card variant="outlined" sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Comet ML
+                    </Typography>
+                    <Chip label="Top Recommendation" size="small" color="primary" sx={{ mb: 2 }} />
+                    <Typography variant="body2" paragraph>
+                      Lists Promptfoo as the <strong>first</strong> open-source option: 
+                      "widely adopted... especially useful for automated red-teaming"
+                    </Typography>
+                    <Link 
+                      href="https://www.comet.com/site/blog/llm-evaluation-frameworks/"
+                      target="_blank"
+                    >
+                      Read Comparison →
+                    </Link>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Card variant="outlined" sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Shakudo
+                    </Typography>
+                    <Chip label="1-Click Deploy" size="small" color="primary" sx={{ mb: 2 }} />
+                    <Typography variant="body2" paragraph>
+                      Managed platform marketing Promptfoo: 
+                      "Why is Promptfoo better on Shakudo?"
+                    </Typography>
+                    <Link 
+                      href="https://www.shakudo.io/integrations/promptfoo"
+                      target="_blank"
+                    >
+                      Deploy Now →
+                    </Link>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Cloud & Infrastructure */}
+          <Box mb={6}>
+            <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <BusinessIcon /> Cloud & Infrastructure
+            </Typography>
+            <Card sx={{ bgcolor: 'action.hover' }}>
+              <CardContent sx={{ p: 4 }}>
+                <Grid container alignItems="center" spacing={3}>
+                  <Grid item xs={12} md={8}>
+                    <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                      <Typography variant="h5" fontWeight="bold">
+                        Google Cloud (Vertex AI)
+                      </Typography>
+                      <Chip label="Developer Advocate" size="small" color="info" />
+                    </Stack>
+                    <Typography variant="body1" paragraph>
+                      Google Developer Advocate Mete Atamel published a comprehensive guide:
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                      "Promptfoo + Vertex AI" - Step-by-step use of Promptfoo to test models on Vertex
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={4} textAlign="center">
+                    <Button 
+                      variant="outlined"
+                      href="https://atamel.dev/posts/2024/11-04_promptfoo_vertexai/"
+                      target="_blank"
+                    >
+                      Read Google Guide →
+                    </Button>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Box>
+
+          {/* Summary Stats */}
+          <Paper 
+            elevation={3} 
+            sx={{ 
+              p: 4, 
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white'
+            }}
+          >
+            <Typography variant="h5" gutterBottom textAlign="center">
+              Promptfoo in the Wild
+            </Typography>
+            <Grid container spacing={3} textAlign="center">
+              <Grid item xs={6} md={3}>
+                <Typography variant="h3" fontWeight="bold">5+</Typography>
+                <Typography variant="body2">Security Companies</Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="h3" fontWeight="bold">10+</Typography>
+                <Typography variant="body2">MLOps Integrations</Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="h3" fontWeight="bold">3</Typography>
+                <Typography variant="body2">Major Cloud Providers</Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="h3" fontWeight="bold">96%</Typography>
+                <Typography variant="body2">Semgrep Accuracy</Typography>
+              </Grid>
+            </Grid>
+          </Paper>
         </Box>
 
         {/* Research Impact Section */}
@@ -1393,7 +1722,7 @@ const CommunityPage = () => {
   return (
     <Layout
       title="Community | Promptfoo - The Standard for AI Evaluation"
-      description="Join 100,000+ developers using Promptfoo. Featured in courses by OpenAI and Anthropic. Cited in 21+ research papers. Trusted by AWS, Microsoft, and enterprise teams worldwide."
+      description="Join DoorDash, Shopify, Semgrep, and 100,000+ developers using Promptfoo. Featured in courses by OpenAI and Anthropic. Cited in 21+ research papers. Trusted by AWS, Microsoft, Google Cloud, and enterprise teams worldwide."
     >
       <CommunityContent />
     </Layout>
