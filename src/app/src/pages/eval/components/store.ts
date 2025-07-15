@@ -123,6 +123,11 @@ interface TableState {
   removeAllFilters: () => void;
 
   /**
+   * Resets all filters to their initial state.
+   */
+  resetFilters: () => void;
+
+  /**
    * Updates a filter in the filters array.
    * @param filter - The filter to update.
    */
@@ -424,6 +429,16 @@ export const useTableStore = create<TableState>()((set, get) => ({
   },
 
   removeAllFilters: () => {
+    set((prevState) => ({
+      filters: {
+        ...prevState.filters,
+        values: {},
+        appliedCount: 0,
+      },
+    }));
+  },
+
+  resetFilters: () => {
     set((prevState) => ({
       filters: {
         ...prevState.filters,
