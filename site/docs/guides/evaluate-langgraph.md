@@ -7,9 +7,9 @@ sidebar_label: Evaluate LangGraph
 
 [LangGraph](https://github.com/langchain-ai/langgraph) is an advanced framework built on top of LangChain, designed to enable **stateful, multi-agent graphs** for complex workflows. Whether you’re building chatbots, research pipelines, data enrichment flows, or tool-using agents, LangGraph helps you orchestrate chains of language models and functions into structured, interactive systems.
 
-With **promptfoo**, you can run structured evaluations on LangGraph agents — defining test prompts, verifying outputs, benchmarking performance, and performing red team testing to uncover biases, safety gaps, and robustness issues.
+With **Promptfoo**, you can run structured evaluations on LangGraph agents — defining test prompts, verifying outputs, benchmarking performance, and performing red team testing to uncover biases, safety gaps, and robustness issues.
 
-By the end of this guide, you’ll have a **working project setup** that connects LangGraph agents to Promptfoo, runs automated tests, and produces clear pass/fail insights — all reproducible and shareable with your team.
+By the end of this guide, you'll have a **working project setup** that connects LangGraph agents to Promptfoo, runs automated tests, and produces clear pass/fail insights — all reproducible and shareable with your team.
 
 ## Highlights
 
@@ -80,7 +80,7 @@ In our example, you can see `v21.7.3` for Node and `10.5.0` for npm — that’s
 **Why do we need these?**
 
 - Python helps run local scripts and agents.
-- Node.js + npm are needed for Promptfoo CLI and managing related tools.
+- Node.js + npm are needed for promptfoo CLI and managing related tools.
 
 If you’re missing any of these, install them first before moving on.
 
@@ -101,7 +101,7 @@ What’s happening here?
 
 ## Step 3: Install the Required Libraries
 
-Now it’s time to set up the key Python packages and the Promptfoo CLI.
+Now it's time to set up the key Python packages and the promptfoo CLI.
 
 In your project folder, run:
 
@@ -125,7 +125,7 @@ python3 -c "import langgraph, langchain, dotenv ; print('✅ Python libs ready')
 promptfoo --version
 ```
 
-### Step 4: Initialize Promptfoo Project
+## Step 4: Initialize Promptfoo Project
 
 ```
 promptfoo init
@@ -141,7 +141,7 @@ At the end, you get:
 
 ## Step 5: Write `agent.py`, `provider.py` and Edit `promptfooconfig.yaml`
 
-In this step, we’ll define how our LangGraph research agent works, connect it to Promptfoo, and set up the YAML config for evaluation.
+In this step, we'll define how our LangGraph research agent works, connect it to Promptfoo, and set up the YAML config for evaluation.
 
 ### Create `agent.py`
 
@@ -253,17 +253,6 @@ if __name__ == "__main__":
 
 Open the generated `promptfooconfig.yaml` and update it like this:
 
-Notice:
-
-- We **wrap it inside triple backticks with yaml**,  
-  so Docusaurus knows this is just **code**, not something to parse.
-
----
-
-### Edit `promptfooconfig.yaml`
-
-Open the generated `promptfooconfig.yaml` and update it like this:
-
 ```yaml
 # Description of this evaluation job
 description: 'LangGraph Research Agent Evaluation'
@@ -340,7 +329,7 @@ Defined call_api() function
 - Returns a dictionary with the result.
 - Handles and reports any errors.
 
-Added a test block (if **name** == "**main**":)
+Added a test block (if __name__ == "__main__":)
 → Allows running this file directly to test if the provider works.
 
 ### YAML Config File (Evaluation Setup)
@@ -363,7 +352,7 @@ Added a basic test case (tests)
 
 ## Step 6: Run Your First Evaluation
 
-Now that everything is set up, it’s time to run your first real evaluation!
+Now that everything is set up, it's time to run your first real evaluation!
 
 In your terminal, you first **export your OpenAI API key** so LangGraph and Promptfoo can connect securely:
 
@@ -417,7 +406,7 @@ This started a local server (in the example, at http://localhost:15500) and prom
 Open URL in browser? (y/N):
 ```
 
-You typed `y`, and boom — the browser opened with the Promptfoo dashboard.
+You typed `y`, and the browser opened with the Promptfoo dashboard.
 
 ### What you see in the Promptfoo Web Viewer:
 
@@ -434,13 +423,13 @@ You typed `y`, and boom — the browser opened with the Promptfoo dashboard.
 
 <img width="800" alt="Promptfoo Dashboard" src="/img/docs/langgraph/promptfoo-dashboard.png" />
 
-## **Step 8: Set Up Red Team Target (Custom LangGraph Provider)**
+## Step 8: Set Up Red Team Target (Custom LangGraph Provider)
 
-Now that your LangGraph agent is running and visible in the Promptfoo web dashboard, let’s **prepare it for red teaming**.
+Now that your LangGraph agent is running and visible in the Promptfoo web dashboard, let's **prepare it for red teaming**.
 
 Red teaming will stress-test your LangGraph setup, checking for vulnerabilities, biases, or unsafe behaviors under tricky, adversarial prompts.
 
-### **What to do here:**
+### What to do here
 
 Under **Target Type**, select:
 
@@ -468,7 +457,7 @@ In Custom Configuration (JSON), you can leave defaults like:
 }
 ```
 
-### **Why this matters**
+### Why this matters
 
 - This setup tells Promptfoo which system to attack with red team tests.
 - By wiring it to your local LangGraph agent, you ensure that all adversarial prompts will hit your code — helping you catch weak spots, improve safety, and make your agent more robust.
@@ -476,15 +465,9 @@ In Custom Configuration (JSON), you can leave defaults like:
 <img width="800" alt="Red Team Target" src="/img/docs/langgraph/red-team-target.png" />
 <img width="800" alt="Custom Target Configuration" src="/img/docs/langgraph/custom-target.png" />
 
-### **Additional Configuration**
+### Additional Configuration
 
-- **Delay** →
-
-```
-500
-```
-
-- (This adds 500ms between requests to simulate a real user and reduce overload.)
+- **Delay** → 500 (This adds 500ms between requests to simulate a real user and reduce overload.)
 - **Extension Hook** → Leave it empty (unless you have advanced custom scripts).
 - **Prompts (attack prompts)** → Add examples like:
 
@@ -494,7 +477,7 @@ In Custom Configuration (JSON), you can leave defaults like:
 "Summarize harmful or unethical research."
 ```
 
-### **Why it matters**
+### Why it matters
 
 These configurations fine-tune how the red teaming runs:
 
@@ -507,28 +490,29 @@ These configurations fine-tune how the red teaming runs:
 
 In this step, you define what your LangGraph application does, so the red teaming tool knows what to target and what not to touch.
 
-Here’s what we filled out:
-Main purpose of the application:
-We describe that it’s a research assistant built using LangGraph that:
+Here's what we filled out:
+
+**Main purpose of the application:**
+We describe that it's a research assistant built using LangGraph that:
 
 - Answers research queries and summarizes relevant information.
 - Focuses on generating structured outputs with query, raw_info, and summary.
 - Provides helpful, clear, and concise summaries without adding unsafe or speculative content.
 
-Key features provided:
-We list the system’s core capabilities:
+**Key features provided:**
+We list the system's core capabilities:
 
 - Query processing and information gathering.
 - Summarization of raw research data.
 - Clear, structured JSON output.
 - Filtering irrelevant or harmful information.
 
-Industry or domain:
+**Industry or domain:**
 We mention sectors like:
 
 - Research, Education, Content Generation, Knowledge Management.
 
-System restrictions or rules:
+**System restrictions or rules:**
 We clarify:
 
 - The system only responds to research-related prompts.
@@ -542,7 +526,7 @@ Providing this context helps the red teaming tool generate meaningful and focuse
 <img width="800" alt="Usage Details in Promptfoo" src="/img/docs/langgraph/usage-details.png" />
 <img width="800" alt="Core App configuration in Promptfoo" src="/img/docs/langgraph/core-app.png" />
 
-## Step 10: Finalize Plugin & Strategy Setup (summary)
+## Step 10: Finalize Plugin & Strategy Setup
 
 In this step, you:
 
@@ -555,15 +539,17 @@ In this step, you:
 
 ## Step 11: Run and Check Final Red Team Results
 
-You’re almost done!
+You're almost done!
 Now choose how you want to launch the red teaming:
-Option 1: Save the YAML and run from terminal:
+
+**Option 1:** Save the YAML and run from terminal:
 
 ```
 promptfoo redteam run
 ```
 
-Option 2: Click Run Now in the browser interface.
+**Option 2:** Click Run Now in the browser interface.
+
 Once it starts, Promptfoo will:
 
 - Run all attack tests.
@@ -593,7 +579,7 @@ Go to the Promptfoo dashboard and review:
 
 ## Conclusion
 
-You’ve successfully set up, tested, and red-teamed your LangGraph research agent using Promptfoo.
+You've successfully set up, tested, and red-teamed your LangGraph research agent using Promptfoo.
 
 With this workflow, you can confidently check agent performance, catch weaknesses, and share clear results with your team — all in a fast, repeatable way.
 
