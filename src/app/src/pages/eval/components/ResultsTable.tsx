@@ -44,6 +44,7 @@ import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 import ButtonGroup from '@mui/material/ButtonGroup';
+import useViewportHeight from '@app/hooks/useViewportHeight';
 
 const VARIABLE_COLUMN_SIZE_PX = 100;
 const PROMPT_COLUMN_SIZE_PX = 300;
@@ -987,6 +988,22 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
+  const paginationContainerRef = React.useRef<HTMLDivElement>(null);
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  const viewportHeight = useViewportHeight();
+  
+  /**
+   * The table container's height is dynamically constructed such that the pagination footer
+   * is always pinned to the bottom of the viewport. This enables the table to scroll horizontally
+   * within the table container, enabling the sticky header to function as expected.
+   */
+  const tableContainerHeight = React.useMemo(() => {
+    const tableStart = tableContainerRef.current?.getBoundingClientRect().top ?? 0;
+    const paginationContainerHeight = paginationContainerRef.current?.getBoundingClientRect().height ?? 0;
+    const tableHeight = viewportHeight - tableStart - paginationContainerHeight;
+    return tableHeight;
+  }, [tableContainerRef.current, paginationContainerRef.current, viewportHeight]);
+
   return (
     <div>
       {isSearching && searchText && (
@@ -1027,14 +1044,12 @@ function ResultsTable({
           </Box>
         )}
 
-      <div className="results-table-container">
+      <div className="results-table-container" ref={tableContainerRef} style={{ height: tableContainerHeight }}>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
             wordBreak,
             width: `${tableWidth}px`,
-            // Ensure the fixed pagination does not overlap with the table.
-            marginBottom: '100px',
           }}
         >
           <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
@@ -1151,22 +1166,19 @@ function ResultsTable({
         // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
         filteredResultsCount > 10 && (
           <Box
+            ref={paginationContainerRef}
             className="pagination"
             px={2}
+            mx={-2}
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: 2,
               flexWrap: 'wrap',
               justifyContent: 'space-between',
-              position: 'fixed',
-              bottom: 0,
-              left: 0,
-              right: 0,
               backgroundColor: 'background.paper',
               borderTop: '1px solid',
               borderColor: 'divider',
-              zIndex: 1000,
               width: '100vw',
               boxShadow: 3,
             }}

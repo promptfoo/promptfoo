@@ -7,8 +7,8 @@ pre {
 }
 
 .results-table-container {
-  overflow-x: scroll;
-  margin: 0 -1rem;
+  overflow: scroll;
+  margin: 1rem -1rem 0 -1rem;
   padding: 0 1rem;
 }
 
@@ -16,7 +16,6 @@ table.results-table,
 .divTable {
   border-collapse: collapse;
   min-width: 100%;
-  margin: 1rem 0;
   background-color: #fff;
 }
 
