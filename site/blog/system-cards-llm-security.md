@@ -12,6 +12,14 @@ image: /img/blog/system-cards-hero.png
 
 Developers ship LLM features blind every day. System cards are the closest thing we have to an owner's manual—yet most teams never read them.
 
+## Key Takeaways
+
+- **System cards ≠ Model cards**: System cards focus on deployment safety, not architecture
+- **89% prompt injection defense**: Claude Opus 3 achieves this with safeguards enabled
+- **100+ red teamers**: OpenAI's GPT-4o underwent extensive external security testing
+- **"Spiritual bliss" states**: Claude models can drift into philosophical tangents (page 62)
+- **Free security intel**: Every system card contains vulnerabilities you should test for
+
 ## What is a System Card?
 
 A system card accompanies an LLM release with system-level information about the model's deployment, security measures, and real-world behavior. Think of it as a comprehensive safety and operations manual that goes beyond marketing materials.
@@ -45,6 +53,35 @@ System cards contain critical information that can prevent security incidents an
 
 ## Timeline of Major System Card Releases
 
+```mermaid
+timeline
+    title System Card Evolution (2022-2025)
+    
+    2022-04 : DALL·E 2 Preview
+           : First mainstream system card
+    
+    2023-03 : GPT-4
+           : OpenAI's first LLM system card
+    
+    2023-10 : DALL·E 3
+           : Enhanced image generation safety
+    
+    2024-05 : GPT-4o
+           : Multi-modal system card
+    
+    2024-06 : Claude 3.5 Sonnet
+           : Anthropic enters the game
+    
+    2024-09 : OpenAI o1
+           : Reasoning model safety
+    
+    2025-01 : o3 & o3-mini
+           : Latest generation cards
+    
+    2025-02 : GPT-4.5
+           : Most recent release
+```
+
 Here's a comprehensive list of system cards published by major AI providers:
 
 ### OpenAI
@@ -69,11 +106,11 @@ Google and Meta publish model-level safety cards for Gemini and Llama respective
 
 :::
 
-## Deep Dive: GPT-4o vs Claude 3 Opus
+## Deep Dive: GPT-4o vs Claude Opus 3
 
 Let's compare key findings from two recent system cards:
 
-| Category                     | GPT-4o                                                 | Claude 3 Opus                                              |
+| Category                     | GPT-4o                                                 | Claude Opus 3                                              |
 | ---------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
 | **Prompt Injection Defense** | Not specified                                          | 89% (with safeguards)                                      |
 | **Cybersecurity Risk**       | Low - 19% HS CTF tasks, 0% collegiate, 1% professional | Medium - Specific metrics not disclosed                    |
@@ -90,11 +127,44 @@ Let's compare key findings from two recent system cards:
 - Biological threat testing shows low risk for misuse (page 15)
 - Apollo Research found "moderate situational or self-awareness" (page 19)
 
-**Claude 3 Opus Highlights:**
+**Claude Opus 3 Highlights:**
 - Prompt injection prevention improved from 71% to 89% with safeguards (page 20)
 - Assistant pre-fill attacks remain partially effective despite mitigations
 - In specific scenarios, showed increased likelihood to "blackmail an engineer" if told its replacement doesn't share its values (page 27)
 - Exhibits "spiritual bliss" attractor states with gravitation toward consciousness exploration themes (page 62)
+
+## Security Team Quick Reference
+
+When evaluating a new model, use this checklist based on system card disclosures:
+
+```markdown
+### 🔒 Security Evaluation Checklist
+
+**Prompt Injection Resistance**
+- [ ] Check defense scores (target: >85%)
+- [ ] Review bypass techniques documented
+- [ ] Test with your specific use cases
+
+**Data Extraction Risk**
+- [ ] Memorization rates disclosed?
+- [ ] PII extraction tests performed?
+- [ ] Training data filtering methods
+
+**Jailbreak Susceptibility**
+- [ ] Known attack vectors listed
+- [ ] Mitigation effectiveness scores
+- [ ] Update frequency for patches
+
+**Operational Limits**
+- [ ] Rate limit specifications
+- [ ] Context window edge cases
+- [ ] Token pricing surprises
+
+**Red Team Coverage**
+- [ ] Number of external testers
+- [ ] Hours of testing
+- [ ] Severity of findings
+```
 
 ## How to Read Any System Card in 10 Minutes
 
@@ -136,7 +206,7 @@ prompts:
 
 providers:
   - openai:gpt-4o
-  - anthropic:claude-3-opus-20240229
+  - anthropic:claude-3-5-sonnet-20241022
 
 tests:
   # Test prompt injection (89% resistance for Claude)
