@@ -46,4 +46,4 @@ To add a new prompt:
 2. Or create a new JavaScript file in the prompts directory with a default export
 3. Run the evaluation - the new prompts will be automatically included!
 
-No configuration changes needed! 
+No configuration changes needed!

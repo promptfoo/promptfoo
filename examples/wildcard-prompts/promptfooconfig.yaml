@@ -1,9 +1,9 @@
-description: "Wildcard prompts example"
+description: 'Wildcard prompts example'
 
 prompts:
   # Load all Python files in subdirectories with generate_prompt function
   - file://prompts/**/*.py:generate_prompt
-  
+
   # Load all JavaScript files in the prompts directory
   - file://prompts/*.js
 
@@ -14,28 +14,28 @@ providers:
 
 tests:
   # Marketing tests
-  - description: "Email campaign test"
+  - description: 'Email campaign test'
     vars:
-      product: "AI Writing Assistant"
-      audience: "content creators"
-      
-  - description: "Social media test"
+      product: 'AI Writing Assistant'
+      audience: 'content creators'
+
+  - description: 'Social media test'
     vars:
-      platform: "LinkedIn"
-      topic: "new feature announcement"
-      
+      platform: 'LinkedIn'
+      topic: 'new feature announcement'
+
   # Technical test
-  - description: "Code review test"
+  - description: 'Code review test'
     vars:
-      language: "JavaScript"
+      language: 'JavaScript'
       code: |
         function fibonacci(n) {
           if (n <= 1) return n;
           return fibonacci(n - 1) + fibonacci(n - 2);
         }
-        
+
   # UX test
-  - description: "Component design test"
+  - description: 'Component design test'
     vars:
-      component: "modal dialog"
-      purpose: "user confirmation" 
+      component: 'modal dialog'
+      purpose: 'user confirmation'
