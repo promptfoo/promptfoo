@@ -1,126 +1,224 @@
-/* Community page specific styles */
+.communityPage {
+  min-height: 100vh;
+}
 
-.accordionSection {
-  margin-bottom: 1rem;
-  border-radius: 8px;
+/* Hero section animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.heroContent {
+  animation: fadeInUp 0.8s ease-out;
+}
+
+/* Card hover effects */
+.featureCard {
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.featureCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* Stats counter animation */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.statValue {
+  animation: countUp 0.6s ease-out;
+}
+
+/* Enterprise logo hover */
+.enterpriseLogo {
+  transition: all 0.3s ease;
+}
+
+.enterpriseLogo:hover {
+  transform: scale(1.05);
+  opacity: 1;
+}
+
+/* Gradient backgrounds */
+.gradientBg {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradientBgLight {
+  background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+}
+
+/* Section dividers */
+.sectionDivider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.1), transparent);
+  margin: 4rem 0;
+}
+
+/* Research paper cards */
+.paperCard {
+  border-left: 4px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.paperCard:hover {
+  border-left-color: var(--ifm-color-primary);
+  background-color: var(--ifm-hover-overlay);
+}
+
+/* Accordion improvements */
+.accordionHeader {
+  transition: all 0.3s ease;
+}
+
+.accordionHeader:hover {
+  background-color: var(--ifm-hover-overlay);
+}
+
+/* CTA buttons */
+.ctaButton {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.ctaButton::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: left 0.3s ease;
+}
+
+.ctaButton:hover::before {
+  left: 100%;
+}
+
+/* Testimonial cards */
+.testimonialCard {
+  position: relative;
+  padding-left: 3rem;
+}
+
+.testimonialCard::before {
+  content: '"';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  font-size: 3rem;
+  opacity: 0.2;
+  font-family: Georgia, serif;
+}
+
+/* Dataset highlight */
+.datasetHighlight {
+  position: relative;
   overflow: hidden;
 }
 
-.accordionSection:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.sectionIcon {
-  color: var(--ifm-color-primary);
-  margin-right: 1rem;
-}
-
-.courseCard {
-  height: 100%;
-  transition: all 0.2s ease;
-}
-
-.courseCard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.featuredBadge {
+.datasetHighlight::after {
+  content: '';
   position: absolute;
-  top: 1rem;
-  right: 1rem;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+  animation: pulse 4s ease-in-out infinite;
 }
 
-.statCard {
-  text-align: center;
-  padding: 1.5rem;
-  border-radius: 8px;
-  transition: transform 0.2s ease;
-}
-
-.statCard:hover {
-  transform: scale(1.02);
-}
-
-.researchPaper {
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-  position: relative;
-}
-
-.researchPaper.featured {
-  border-left: 4px solid var(--ifm-color-primary);
-  background-color: var(--ifm-color-emphasis-100);
-}
-
-.citationCount {
-  font-size: 0.875rem;
-  color: var(--ifm-color-emphasis-700);
-}
-
-.communityButton {
-  width: 100%;
-  margin-top: 1rem;
-}
-
-.testimonialCard {
-  padding: 1.5rem;
-  height: 100%;
-  position: relative;
-}
-
-.testimonialQuote {
-  font-style: italic;
-  margin-bottom: 1rem;
-  line-height: 1.6;
-}
-
-.testimonialQuote::before {
-  content: '"';
-  font-size: 2rem;
-  color: var(--ifm-color-primary);
-  opacity: 0.3;
-  position: absolute;
-  top: 0.5rem;
-  left: 0.5rem;
-}
-
-.ctaSection {
-  background-color: var(--ifm-color-emphasis-100);
-  padding: 3rem;
-  border-radius: 12px;
-  text-align: center;
-  margin-top: 3rem;
-}
-
-.expandIcon {
-  transition: transform 0.3s ease;
-}
-
-.expandIcon.expanded {
-  transform: rotate(180deg);
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .statCard {
-    padding: 1rem;
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
   }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.7;
+  }
+}
 
-  .ctaSection {
-    padding: 2rem 1rem;
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .heroContent h1 {
+    font-size: 2rem;
+  }
+  
+  .statCard {
+    margin-bottom: 1rem;
+  }
+  
+  .enterpriseLogo {
+    margin: 0.5rem;
   }
 }
 
 /* Dark mode adjustments */
-[data-theme='dark'] .accordionSection {
-  background-color: var(--ifm-background-surface-color);
+[data-theme='dark'] .gradientBg {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
 }
 
-[data-theme='dark'] .researchPaper.featured {
-  background-color: rgba(var(--ifm-color-primary-rgb), 0.1);
+[data-theme='dark'] .featureCard {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
-[data-theme='dark'] .ctaSection {
-  background-color: var(--ifm-background-surface-color);
+[data-theme='dark'] .paperCard:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Loading skeleton */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus states for accessibility */
+.ctaButton:focus,
+.featureCard:focus {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .heroContent,
+  .ctaButton,
+  .accordionHeader {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
