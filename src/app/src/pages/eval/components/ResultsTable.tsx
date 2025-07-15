@@ -991,7 +991,7 @@ function ResultsTable({
   const paginationContainerRef = React.useRef<HTMLDivElement>(null);
   const tableContainerRef = React.useRef<HTMLDivElement>(null);
   const viewportHeight = useViewportHeight();
-  
+
   /**
    * The table container's height is dynamically constructed such that the pagination footer
    * is always pinned to the bottom of the viewport. This enables the table to scroll horizontally
@@ -999,7 +999,8 @@ function ResultsTable({
    */
   const tableContainerHeight = React.useMemo(() => {
     const tableStart = tableContainerRef.current?.getBoundingClientRect().top ?? 0;
-    const paginationContainerHeight = paginationContainerRef.current?.getBoundingClientRect().height ?? 0;
+    const paginationContainerHeight =
+      paginationContainerRef.current?.getBoundingClientRect().height ?? 0;
     const tableHeight = viewportHeight - tableStart - paginationContainerHeight;
     return tableHeight;
   }, [tableContainerRef.current, paginationContainerRef.current, viewportHeight]);
@@ -1044,7 +1045,11 @@ function ResultsTable({
           </Box>
         )}
 
-      <div className="results-table-container" ref={tableContainerRef} style={{ height: tableContainerHeight }}>
+      <div
+        className="results-table-container"
+        ref={tableContainerRef}
+        style={{ height: tableContainerHeight }}
+      >
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1066,24 +1071,30 @@ function ResultsTable({
             )}
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    colSpan={header.colSpan}
-                    style={{
-                      width: header.getSize(),
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                    <div
-                      onMouseDown={header.getResizeHandler()}
-                      onTouchStart={header.getResizeHandler()}
-                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                    />
-                  </th>
-                ))}
+                {headerGroup.headers.map((header) => {
+                  const isMetadataCol = header.column.id.startsWith('Variable') || header.column.id === 'description';
+                  const isFinalRow = headerGroup.depth === 1
+
+                  return (
+                    <th
+                      key={header.id}
+                      colSpan={header.colSpan}
+                      style={{
+                        width: header.getSize(),
+                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                      }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                      />
+                    </th>
+                  );
+                })}
               </tr>
             ))}
           </thead>
@@ -1100,7 +1111,6 @@ function ResultsTable({
                     if (shouldDrawColBorder) {
                       colBorderDrawn = true;
                     }
-                    const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
 
                     let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
                     const value = cell.getValue();
@@ -1147,9 +1157,7 @@ function ResultsTable({
                         style={{
                           width: cell.column.getSize(),
                         }}
-                        className={`${isMetadataCol ? 'variable' : ''} ${
-                          shouldDrawRowBorder ? 'first-prompt-row' : ''
-                        } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
+                        className={`${isMetadataCol ? 'variable' : ''}${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
                       >
                         {cellContent}
                       </td>
