@@ -1082,6 +1082,7 @@ function ResultsTable({
                       style={{
                         width: header.getSize(),
                         borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                        height: isFinalRow ? 'fit-content' : 'auto',
                       }}
                     >
                       {header.isPlaceholder
