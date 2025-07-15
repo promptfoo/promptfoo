@@ -1,0 +1,126 @@
+/* Community page specific styles */
+
+.accordionSection {
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.accordionSection:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.sectionIcon {
+  color: var(--ifm-color-primary);
+  margin-right: 1rem;
+}
+
+.courseCard {
+  height: 100%;
+  transition: all 0.2s ease;
+}
+
+.courseCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.featuredBadge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.statCard {
+  text-align: center;
+  padding: 1.5rem;
+  border-radius: 8px;
+  transition: transform 0.2s ease;
+}
+
+.statCard:hover {
+  transform: scale(1.02);
+}
+
+.researchPaper {
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.researchPaper.featured {
+  border-left: 4px solid var(--ifm-color-primary);
+  background-color: var(--ifm-color-emphasis-100);
+}
+
+.citationCount {
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.communityButton {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.testimonialCard {
+  padding: 1.5rem;
+  height: 100%;
+  position: relative;
+}
+
+.testimonialQuote {
+  font-style: italic;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.testimonialQuote::before {
+  content: '"';
+  font-size: 2rem;
+  color: var(--ifm-color-primary);
+  opacity: 0.3;
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+}
+
+.ctaSection {
+  background-color: var(--ifm-color-emphasis-100);
+  padding: 3rem;
+  border-radius: 12px;
+  text-align: center;
+  margin-top: 3rem;
+}
+
+.expandIcon {
+  transition: transform 0.3s ease;
+}
+
+.expandIcon.expanded {
+  transform: rotate(180deg);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .statCard {
+    padding: 1rem;
+  }
+
+  .ctaSection {
+    padding: 2rem 1rem;
+  }
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .accordionSection {
+  background-color: var(--ifm-background-surface-color);
+}
+
+[data-theme='dark'] .researchPaper.featured {
+  background-color: rgba(var(--ifm-color-primary-rgb), 0.1);
+}
+
+[data-theme='dark'] .ctaSection {
+  background-color: var(--ifm-background-surface-color);
+}
