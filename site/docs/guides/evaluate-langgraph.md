@@ -259,7 +259,7 @@ description: 'LangGraph Research Agent Evaluation'
 
 # List of input prompts to test the provider with
 prompts:
-  - '{{input_prompt}}'
+  - '{{input_prompt}}'  # Uses a variable
 
 # Provider configuration
 providers:
