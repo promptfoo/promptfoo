@@ -1643,6 +1643,13 @@ class Evaluator {
     // Start OTLP receiver if tracing is enabled
     await startOtlpReceiverIfNeeded(this.testSuite);
 
+    // Log telemetry if tracing is enabled
+    if (isOtlpReceiverStarted()) {
+      telemetry.record('feature_used', {
+        feature: 'tracing',
+      });
+    }
+
     // Wrap the rest of the evaluation in try-finally to ensure OTLP receiver cleanup
     try {
       return await this._runEvaluation();
