@@ -290,6 +290,7 @@ tests:
       - type: python
         value: "'summary' in output"
 ```
+This YAML block is **inside code fences** so Docusaurus will not try to parse `{{input_prompt}}`.
 
 **What did we just do?**
 
