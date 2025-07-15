@@ -4,7 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-// You'll need to set your OpenAI API key
+// Load environment variables from .env file
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+// Get OpenAI API key from environment
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 if (!OPENAI_API_KEY) {
