@@ -1072,8 +1072,9 @@ function ResultsTable({
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
                 {headerGroup.headers.map((header) => {
-                  const isMetadataCol = header.column.id.startsWith('Variable') || header.column.id === 'description';
-                  const isFinalRow = headerGroup.depth === 1
+                  const isMetadataCol =
+                    header.column.id.startsWith('Variable') || header.column.id === 'description';
+                  const isFinalRow = headerGroup.depth === 1;
 
                   return (
                     <th
