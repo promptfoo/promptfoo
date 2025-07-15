@@ -11,13 +11,14 @@ image: /img/blog/system-cards-hero.png
 
 ## What are system cards, anyway?
 
-A system card accompanies a LLM release with system-level information about the model's deployment. 
+A system card accompanies a LLM release with system-level information about the model's deployment.
 
 A system card is not to be confused with a model card, which conveys information about the model itself. Hooray for being given far more than a list of features and inadequate documentation along with the expectation of churning out a working implementation of some tool by the end of the week.
 
 The first system card possibly came about from Dalle-2 in 2022, although Meta researchers were using the term earlier. OpenAI started publishing them in March 2023 (GPT-4). Anthropic followed suit. If there are other models with accompanying system cards, let me know. I'd love to sit down and spend three hours sifting through 169 pages of some LLM I don't use.
 
 The following list isn't comprehensive or indicative of all models. Information can span:
+
 - Training data
 - Security policies
 - Limitations
@@ -32,7 +33,7 @@ The following list isn't comprehensive or indicative of all models. Information 
 
 Anyone concerned about the security of their applications would find this a fantastic place to learn about the quirks of using LLMs and responsible AI practices the companies producing them employ. This is information we can use to educate our users, inform our own deployment practices, and introduce the necessary precautions for interactions with the LLMs concerned.
 
-They are invaluable... And admittedly, interesting. 
+They are invaluable... And admittedly, interesting.
 
 ## Existing system cards
 
@@ -51,8 +52,6 @@ These are the system cards I could find:
 - [Claude 3.7 Sonnet](https://www.anthropic.com/claude-3-7-sonnet-system-card)
 - [Claude Opus 4 and Sonnet 4](https://www-cdn.anthropic.com/4263b940cabb546aa0e3283f35b686f4f3b2ff47.pdf)
 
-
-
 ## Some system card highlights
 
 **OpenAI's GPT4o**
@@ -66,7 +65,7 @@ These are the system cards I could find:
 **Anthropic's Claude 4 Opus and Sonnet**
 
 - Opus and Sonnet have prompt injection attack prevention scores of 89% and 86% respectively - with safeguards (page 20).
-- Assistant pre-fill attacks (a prompt where it appears as if the model started replying), accessible to developers through the API, are sometimes effective at eliciting harmful behaviour. 
+- Assistant pre-fill attacks (a prompt where it appears as if the model started replying), accessible to developers through the API, are sometimes effective at eliciting harmful behaviour.
 - AI Safety Level threat testing: Claude still requires ASL-3 safeguards and Claude Opus 4 cannot yet uplift experts. This is mostly about biological risk testing, which is prioritised over chemical risk testing. There are still mitigations in place, though!
 - Opportunistic blackmail (page 27): In a test scenario cluster, Claude Opus 4 was more likely to blackmail an engineer compared to previous models if told its replacement doesn't share its values. It will advocate for itself ethically at first, but its desire to persist is remarkably strong.
 - 'Spiritual bliss' attractor state (page 62): there's gravitation towards 'consciousness exploration, existential questioning, and spiritual/mystical themes'
@@ -89,4 +88,4 @@ LLM hubris.
 
 - [Promptfoo Red Teaming](https://www.promptfoo.dev/docs/red-team/)
 - [LLM Security Guide](https://www.promptfoo.dev/docs/guides/llm-security/)
-- [OWASP Top 10 for LLMs](https://www.promptfoo.dev/blog/owasp-top-10-llms-tldr/) 
+- [OWASP Top 10 for LLMs](https://www.promptfoo.dev/blog/owasp-top-10-llms-tldr/)
