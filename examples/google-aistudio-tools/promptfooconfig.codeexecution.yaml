@@ -6,7 +6,7 @@ prompts:
   - '{{query}}'
 
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash-preview-05-20
     config:
       temperature: 0.2
       tools:

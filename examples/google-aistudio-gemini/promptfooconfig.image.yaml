@@ -1,10 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Image captioning with Gemini
 
-prompts: |
-  {{imageFile1}}
-  {{imageFile2}}
-  Compare the two images.
+prompts:
+  - |
+    {{imageFile1}}
+    {{imageFile2}}
+    Compare the two images.
 
 providers:
   - id: google:gemini-2.5-flash
