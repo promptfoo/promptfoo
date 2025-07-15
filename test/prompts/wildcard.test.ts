@@ -76,7 +76,7 @@ describe('Wildcard prompt support', () => {
 
   describe('Python wildcards', () => {
     it('should expand wildcard patterns and preserve function names', async () => {
-      const prompts = await processPrompts(['file://test/prompts/**/*.py:get_prompt'], {});
+      const prompts = await processPrompts(['file://test/prompts/**/*.py:get_prompt']);
 
       // Should create one prompt for each matched file
       expect(prompts.length).toBe(3);
@@ -88,7 +88,7 @@ describe('Wildcard prompt support', () => {
     });
 
     it('should work without function names', async () => {
-      const prompts = await processPrompts(['file://test/prompts/**/*.py'], {});
+      const prompts = await processPrompts(['file://test/prompts/**/*.py']);
 
       expect(prompts.length).toBe(3);
 
@@ -101,7 +101,7 @@ describe('Wildcard prompt support', () => {
 
   describe('JavaScript wildcards', () => {
     it('should expand wildcard patterns for JavaScript files', async () => {
-      const prompts = await processPrompts(['file://test/prompts/**/*.js'], {});
+      const prompts = await processPrompts(['file://test/prompts/**/*.js']);
 
       expect(prompts.length).toBe(2);
 
@@ -111,7 +111,7 @@ describe('Wildcard prompt support', () => {
     });
 
     it('should preserve function names for JavaScript', async () => {
-      const prompts = await processPrompts(['file://test/prompts/**/*.js:myFunction'], {});
+      const prompts = await processPrompts(['file://test/prompts/**/*.js:myFunction']);
 
       expect(prompts.length).toBe(2);
 
@@ -132,10 +132,10 @@ describe('Wildcard prompt support', () => {
         return true;
       });
 
-      const prompts = await processPrompts(
-        ['file://test/prompts/**/*.py:get_prompt', 'file://test/explicit.py:another_function'],
-        {},
-      );
+      const prompts = await processPrompts([
+        'file://test/prompts/**/*.py:get_prompt',
+        'file://test/explicit.py:another_function',
+      ]);
 
       // 3 from wildcard + 1 explicit
       expect(prompts.length).toBe(4);
