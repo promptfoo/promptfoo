@@ -423,7 +423,7 @@ describe('EvalResult', () => {
       const result = await EvalResult.createFromEvaluateResult(
         'test-eval-id',
         evaluateResultWithPlugin,
-        { persist: false }
+        { persist: false },
       );
 
       expect(result.pluginId).toBe('eval-result-plugin');

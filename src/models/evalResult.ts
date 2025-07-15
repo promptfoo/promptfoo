@@ -243,7 +243,6 @@ export default class EvalResult {
     metadata?: Record<string, any> | null;
     failureReason: ResultFailureReason;
     persisted?: boolean;
-
   }) {
     this.id = opts.id;
     this.evalId = opts.evalId;
