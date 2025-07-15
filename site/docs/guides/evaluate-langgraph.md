@@ -253,13 +253,13 @@ if __name__ == "__main__":
 
 Open the generated `promptfooconfig.yaml` and update it like this:
 
-```yaml
+```python
 # Description of this evaluation job
 description: 'LangGraph Research Agent Evaluation'
 
 # List of input prompts to test the provider with
 prompts:
-  - '{{input_prompt}}'
+  - "{{input_prompt}}"
 
 # Provider configuration
 providers:
@@ -290,7 +290,6 @@ tests:
       - type: python
         value: "'summary' in output"
 ```
-This YAML block is **inside code fences** so Docusaurus will not try to parse `{{input_prompt}}`.
 
 **What did we just do?**
 
