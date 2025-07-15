@@ -9,6 +9,8 @@ describe('Managed prompts integration', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Mock trackUsage to return a resolved promise
+    mockPromptManager.prototype.trackUsage = jest.fn().mockResolvedValue(undefined);
   });
 
   const createMockPrompt = (): ManagedPromptWithVersions => ({
@@ -60,6 +62,7 @@ describe('Managed prompts integration', () => {
     expect(prompts).toHaveLength(3);
     expect(prompts[0]).toEqual({
       raw: 'This is a direct prompt',
+      label: 'This is a direct prompt',
     });
     expect(prompts[1]).toEqual({
       raw: 'Hello {{name}}, how can I help you today?',

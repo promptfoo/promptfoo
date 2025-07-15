@@ -8,7 +8,16 @@ import { versionToPrompt } from '../management/promptAnalyzer';
  * Format: pf://prompt-id, pf://prompt-id:version, or pf://prompt-id:environment
  */
 export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Prompt[]> {
-  if (!prompt.raw || !prompt.raw.startsWith('pf://')) {
+  if (!prompt.raw) {
+    return [];
+  }
+
+  // Check if it's attempting to use a managed prompt format
+  if (prompt.raw.includes(':') && !prompt.raw.startsWith('pf://') && !prompt.raw.includes('://')) {
+    throw new Error(`Invalid managed prompt format: ${prompt.raw}`);
+  }
+
+  if (!prompt.raw.startsWith('pf://')) {
     return [];
   }
 
@@ -20,6 +29,11 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
   // Validate prompt ID format
   if (!promptId || promptId.trim() === '') {
     throw new Error('Invalid managed prompt reference: missing prompt ID');
+  }
+
+  // Validate prompt ID doesn't contain spaces or invalid characters
+  if (!/^[a-zA-Z0-9-_]+$/.test(promptId)) {
+    throw new Error(`Invalid prompt ID: ${promptId}`);
   }
 
   const manager = new PromptManager();
@@ -65,11 +79,17 @@ export async function processManagedPrompt(prompt: Partial<Prompt>): Promise<Pro
     // Convert version to prompt object with all features
     const resultPrompt = versionToPrompt(version);
 
+    // Set the label and display fields based on prompt name and version
+    if (!prompt.label) {
+      resultPrompt.label = `${managedPrompt.name} v${version.version}`;
+    }
+    resultPrompt.display = `${managedPrompt.name} (v${version.version})`;
+
     // Merge any additional properties from the original prompt
     if (prompt.config) {
       resultPrompt.config = { ...resultPrompt.config, ...prompt.config };
     }
-    if (prompt.label && !resultPrompt.label) {
+    if (prompt.label) {
       resultPrompt.label = prompt.label;
     }
 

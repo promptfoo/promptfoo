@@ -143,7 +143,26 @@ describe('PromptManager', () => {
         deployments: {},
       };
 
-      mockFs.readFile.mockResolvedValue(yaml.dump(existingYaml));
+      // Mock the first read (before update)
+      mockFs.readFile.mockResolvedValueOnce(yaml.dump(existingYaml));
+      
+      // Mock the second read (after update) to return the updated version
+      const updatedYaml: PromptYaml = {
+        ...existingYaml,
+        currentVersion: 2,
+        versions: [
+          ...existingYaml.versions,
+          {
+            version: 2,
+            author: 'test@example.com',
+            createdAt: new Date().toISOString(),
+            content: 'Version 2',
+            notes: 'Updated',
+          },
+        ],
+      };
+      mockFs.readFile.mockResolvedValueOnce(yaml.dump(updatedYaml));
+      
       mockFs.writeFile.mockResolvedValue();
 
       const manager = new PromptManager();
