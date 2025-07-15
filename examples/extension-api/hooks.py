@@ -79,9 +79,9 @@ def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
         logging.info("Preparing test")
 
         # All languages are now pirate:
-        context["test"]["vars"]["language"] = (
-            f"Pirate {context['test']['vars']['language']}"
-        )
+        context["test"]["vars"][
+            "language"
+        ] = f"Pirate {context['test']['vars']['language']}"
 
         return context
 

@@ -3,7 +3,7 @@ description: 'LangGraph Research Agent Evaluation'
 
 # List of input prompts to test the provider with
 prompts:
-  - '{{input_prompt}}' # Uses a variable for flexibility
+  - '{{input_prompt}}'
 
 # Provider configuration: links to the local Python provider script
 providers:
@@ -15,7 +15,7 @@ defaultTest:
   assert:
     - type: is-json # Check that output is valid JSON
       value:
-        type: object # Ensure the output is a JSON object
+        type: object # Ensure the output is a JSON object Guam
         properties: # Define expected keys and their types
           query:
             type: string

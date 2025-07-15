@@ -1,5 +1,6 @@
 from agent import run_research_agent
 
+
 # Main API function that external tools or systems will call
 def call_api(prompt, options, context):
     """
@@ -21,6 +22,7 @@ def call_api(prompt, options, context):
     except Exception as e:
         # Handle any exceptions and return an error summary
         return {"output": {"summary": f"Error: {str(e)}"}}
+
 
 # If this file is run directly, execute a simple test
 if __name__ == "__main__":

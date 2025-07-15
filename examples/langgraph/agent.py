@@ -1,17 +1,20 @@
-import os
 import asyncio
-from pydantic import BaseModel
+import os
+
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
+from pydantic import BaseModel
 
 # Load the OpenAI API key from environment variable
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+
 # Define the data structure (state) passed between nodes in the graph
 class ResearchState(BaseModel):
-    query: str            # The original research query
-    raw_info: str = ""    # Raw fetched or mocked information
-    summary: str = ""     # Final summarized result
+    query: str  # The original research query
+    raw_info: str = ""  # Raw fetched or mocked information
+    summary: str = ""  # Final summarized result
+
 
 # Function to create and return the research agent graph
 def get_research_agent(model="gpt-4o"):
@@ -30,12 +33,16 @@ def get_research_agent(model="gpt-4o"):
     def summarize_info(state: ResearchState) -> ResearchState:
         prompt = f"Summarize the following:\n{state.raw_info}"
         response = llm.invoke(prompt)  # Call the LLM to get the summary
-        return ResearchState(query=state.query, raw_info=state.raw_info, summary=response.content)
+        return ResearchState(
+            query=state.query, raw_info=state.raw_info, summary=response.content
+        )
 
     # Node 3: Format the final summary for output
     def output_summary(state: ResearchState) -> ResearchState:
         final_summary = f"Research summary for '{state.query}': {state.summary}"
-        return ResearchState(query=state.query, raw_info=state.raw_info, summary=final_summary)
+        return ResearchState(
+            query=state.query, raw_info=state.raw_info, summary=final_summary
+        )
 
     # Add nodes to the graph
     graph.add_node("search_info", search_info)
@@ -52,6 +59,7 @@ def get_research_agent(model="gpt-4o"):
 
     # Compile the graph into an executable app
     return graph.compile()
+
 
 # Function to run the research agent with a given query prompt
 def run_research_agent(prompt):
