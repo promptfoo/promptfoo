@@ -129,8 +129,6 @@ interface ResultsTableProps {
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
-  selectedMetric?: string | null;
-  onMetricFilter?: (metric: string | null) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -180,8 +178,6 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
-  selectedMetric,
-  onMetricFilter,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -190,8 +186,11 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
+    totalResultsCount,
     fetchEvalData,
     isFetching,
+    filters,
+    addFilter,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -373,7 +372,7 @@ function ResultsTable({
 
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -409,7 +408,8 @@ function ResultsTable({
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      selectedMetric,
+      // Only pass the filters that have been applied (have a value).
+      filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -419,8 +419,10 @@ function ResultsTable({
     filterMode,
     comparisonEvalIds,
     debouncedSearchText,
-    selectedMetric,
     fetchEvalData,
+    filters.values,
+    // Ensure this re-triggers for filter CxUD operations.
+    filters.appliedCount,
   ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
@@ -599,13 +601,35 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
-  const handleMetricFilter = React.useCallback(
+  const handleMetricFilterClick = React.useCallback(
     (metric: string | null) => {
-      if (onMetricFilter) {
-        onMetricFilter(metric);
+      if (!metric) {
+        return;
       }
+
+      const filter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: metric,
+        logicOperator: 'or' as const,
+      };
+
+      // If this filter is already applied, do not re-apply it.
+      if (
+        Object.values(filters.values).find(
+          (f) =>
+            f.type === filter.type &&
+            f.value === filter.value &&
+            f.operator === filter.operator &&
+            f.logicOperator === filter.logicOperator,
+        )
+      ) {
+        return;
+      }
+
+      addFilter(filter);
     },
-    [onMetricFilter],
+    [addFilter, filters.values],
   );
 
   const promptColumns = React.useMemo(() => {
@@ -752,7 +776,7 @@ function ResultsTable({
                         counts={prompt.metrics.namedScoresCount}
                         metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
-                        onMetricFilter={handleMetricFilter}
+                        onMetricFilter={handleMetricFilterClick}
                       />
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
@@ -843,8 +867,8 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    selectedMetric,
-    handleMetricFilter,
+    filters.appliedCount,
+    handleMetricFilterClick,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -1030,7 +1054,7 @@ function ResultsTable({
 
       {filteredResultsCount === 0 &&
         !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
+        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
           <Box
             sx={{
               padding: '20px',
@@ -1173,8 +1197,10 @@ function ResultsTable({
       </div>
 
       {
+        // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
+        // filters does not hide the pagination controls.
         // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
-        filteredResultsCount > 10 && (
+        totalResultsCount > 10 && (
           <Box
             ref={paginationContainerRef}
             className="pagination"
