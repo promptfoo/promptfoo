@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 /**
  * Returns the height of the viewport in pixels.
  * Responds to window resize events.
- * 
+ *
  * @returns The height of the viewport in pixels.
- * 
+ *
  * @example
  * const viewportHeight = useViewportHeight();
  * console.log(viewportHeight); // 1000
