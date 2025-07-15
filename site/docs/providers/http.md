@@ -707,6 +707,8 @@ providers:
 
 ## Session management
 
+For detailed guidance on testing stateful APIs and managing conversation history, see the [Stateful API Testing Guide](/docs/guides/stateful-api-testing).
+
 ### Server-side session management
 
 When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
@@ -803,6 +805,77 @@ providers:
       body:
         user_message: '{{prompt}}'
 ```
+
+## Working with Stateful APIs
+
+When testing APIs that maintain conversation history or session state, the HTTP provider offers two approaches:
+
+### Stateful vs Stateless Modes
+
+Configure how multi-turn conversations are handled:
+
+```yaml
+# For APIs that maintain their own conversation history
+strategies:
+  - id: goat
+    config:
+      stateful: true   # Send only latest message
+      
+# For APIs that expect full conversation history
+strategies:
+  - id: crescendo
+    config:
+      stateful: false  # Send entire conversation array (default)
+```
+
+### Session Management
+
+Extract and use session IDs between requests:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/chat'
+      headers:
+        'x-session-id': '{{sessionId}}'
+      body:
+        message: '{{prompt}}'
+      # Extract session ID from response
+      sessionParser: 'data.headers["x-session-id"]'  # From headers
+      # sessionParser: 'data.body.sessionId'         # From body
+      # sessionParser: 'file://parse-session.js'     # Custom logic
+```
+
+### Multi-Turn Example
+
+Complete example for testing a stateful chat API:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/chat'
+      headers:
+        'Session-ID': '{{sessionId}}'
+      body:
+        message: '{{prompt}}'
+      sessionParser: 'data.body.session_id'
+      transformResponse: 'json.response'
+
+# Generate unique session per test
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+
+redteam:
+  strategies:
+    - goat:
+        stateful: true  # API maintains conversation history
+        maxTurns: 5
+```
+
+For more detailed examples and advanced patterns, see the [Stateful API Testing Guide](/docs/guides/stateful-api-testing).
 
 ## Digital Signature Authentication
 
@@ -913,21 +986,7 @@ Supported config options:
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
-| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
-
-### Signature Auth Options
-
-| Option                   | Type   | Required | Default                             | Description                                                                                                           |
-| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
-| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
-| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
-| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
-| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
-| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
-
-\* Either `privateKeyPath` or `privateKey` must be provided
+| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options section above.                                                                                       |
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
