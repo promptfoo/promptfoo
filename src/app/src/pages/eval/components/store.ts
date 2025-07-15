@@ -59,7 +59,7 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric';
+export type ResultsFilterType = 'metric' | 'metadata';
 
 export type ResultsFilter = {
   /**
@@ -248,6 +248,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         ...prevState.filters,
         options: {
           metric: computeAvailableMetrics(table),
+          metadata: [],
         },
       },
     })),
@@ -262,6 +263,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           ...prevState.filters,
           options: {
             metric: computeAvailableMetrics(table),
+            metadata: [],
           },
         },
       }));
@@ -275,6 +277,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           ...prevState.filters,
           options: {
             metric: computeAvailableMetrics(results.table),
+            metadata: [],
           },
         },
       }));
@@ -363,6 +366,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(data.table),
+              metadata: [],
             },
           },
         }));
@@ -384,6 +388,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     appliedCount: 0,
     options: {
       metric: [],
+      metadata: [],
     },
   },
 

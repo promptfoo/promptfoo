@@ -18,6 +18,7 @@ import { useTableStore, type ResultsFilter } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
+  metadata: 'Metadata',
 };
 
 function Dropdown({
@@ -126,7 +127,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
         <Dropdown
           id={`${index}-filter-type-select`}
           label="Filter Type"
-          values={[{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]}
+          values={[{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }, { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' }]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
           width={125}
