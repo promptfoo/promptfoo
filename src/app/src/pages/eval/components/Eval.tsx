@@ -112,7 +112,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Reset filters when navigating to a different eval; necessary because Zustand
     // is a global store.
     resetFilters();
-    
+
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
