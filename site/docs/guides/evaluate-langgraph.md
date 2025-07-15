@@ -259,36 +259,36 @@ description: 'LangGraph Research Agent Evaluation'
 
 # List of input prompts to test the provider with
 prompts:
-  - '{{input_prompt}}' # Uses a variable for flexibility
+  - '{{input_prompt}}'
 
-# Provider configuration: links to the local Python provider script
+# Provider configuration
 providers:
-  - id: file://./provider.py # Local provider file path
-    label: Research Agent # Label to display in results
+  - id: file://./provider.py
+    label: Research Agent
 
-# Default test assertions applied to all tests (unless overridden)
+# Default test assertions
 defaultTest:
   assert:
-    - type: is-json # Check that output is valid JSON
+    - type: is-json
       value:
-        type: object # Ensure the output is a JSON object
-        properties: # Define expected keys and their types
+        type: object
+        properties:
           query:
             type: string
           raw_info:
             type: string
           summary:
             type: string
-        required: ['query', 'raw_info', 'summary'] # All keys must be present
+        required: ['query', 'raw_info', 'summary']
 
 # Specific test cases
 tests:
-  - description: 'Basic research test' # Name/description of this test
+  - description: 'Basic research test'
     vars:
-      input_prompt: 'latest AI research trends' # Value for input_prompt variable
+      input_prompt: 'latest AI research trends'
     assert:
-      - type: python # Custom Python assertion
-        value: "'summary' in output" # Check that 'summary' exists in the output
+      - type: python
+        value: "'summary' in output"
 ```
 
 **What did we just do?**
