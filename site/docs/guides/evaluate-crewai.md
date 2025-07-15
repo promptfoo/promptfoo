@@ -418,11 +418,13 @@ You typed `y`, and boom — the browser opened with the Promptfoo dashboard.
   - Pass/fail status based on your assertions.
 - **Outputs** →
   - A pretty JSON display showing candidates like:
+
   ```
   [{"name": "Alex", "experience": "7 years RoR + React"}, ...]
   ```
 
   - Summary text.
+
 - **Stats** → - Pass rate (here, 100% passing!) - Latency (how long it took per call) - Number of assertions checked.
   <img width="800" height="499" alt="Promptfoo Dashboard" src="/img/docs/crewai/promptfoo-dashboard.png" />
 
