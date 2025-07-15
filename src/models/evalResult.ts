@@ -221,6 +221,7 @@ export default class EvalResult {
   metadata: Record<string, any>;
   failureReason: ResultFailureReason;
   persisted: boolean;
+  pluginId: string;
 
   constructor(opts: {
     id: string;
@@ -242,6 +243,7 @@ export default class EvalResult {
     metadata?: Record<string, any> | null;
     failureReason: ResultFailureReason;
     persisted?: boolean;
+
   }) {
     this.id = opts.id;
     this.evalId = opts.evalId;
@@ -263,6 +265,7 @@ export default class EvalResult {
     this.metadata = opts.metadata || {};
     this.failureReason = opts.failureReason;
     this.persisted = opts.persisted || false;
+    this.pluginId = opts.testCase.metadata?.pluginId;
   }
 
   async save() {
