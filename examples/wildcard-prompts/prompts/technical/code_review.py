@@ -1,8 +1,8 @@
 def generate_prompt(context):
     """Generate a code review prompt"""
-    language = context.get('vars', {}).get('language', 'Python')
-    code = context.get('vars', {}).get('code', '')
-    
+    language = context.get("vars", {}).get("language", "Python")
+    code = context.get("vars", {}).get("code", "")
+
     return f"""Review the following {language} code and provide feedback:
 
 ```{language.lower()}
@@ -14,4 +14,4 @@ Focus on:
 - Potential bugs or issues
 - Performance considerations
 - Security concerns
-- Suggestions for improvement""" 
+- Suggestions for improvement"""
