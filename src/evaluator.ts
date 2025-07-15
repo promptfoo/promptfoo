@@ -1640,26 +1640,16 @@ class Evaluator {
   }
 
   async evaluate(): Promise<Eval> {
-    // Start OTLP receiver if tracing is enabled
     await startOtlpReceiverIfNeeded(this.testSuite);
 
-    // Log telemetry if tracing is enabled
-    if (isOtlpReceiverStarted()) {
-      telemetry.record('feature_used', {
-        feature: 'tracing',
-      });
-    }
-
-    // Wrap the rest of the evaluation in try-finally to ensure OTLP receiver cleanup
     try {
       return await this._runEvaluation();
     } finally {
-      // Add a delay to allow providers to finish exporting spans
       if (isOtlpReceiverStarted()) {
+        // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(1000); // Wait 1 second for any remaining spans to be exported
+        await sleep(1000);
       }
-      // Stop OTLP receiver if it was started
       await stopOtlpReceiverIfNeeded();
     }
   }
