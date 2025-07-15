@@ -139,6 +139,10 @@ The enterprise version also includes a web-based dashboard where teams can:
 - Generate executive-ready compliance reports
 - Set up automated alerts for failed security tests
 
+:::info
+Promptfoo offers ISO 27001 compliance and enterprise support. Garak is pure open-source with community support.
+:::
+
 ## Making the Right Choice
 
 - **Promptfoo** excels at discovering application‑specific vulnerabilities through intelligent, context‑aware testing—especially for complex RAG and agent systems.

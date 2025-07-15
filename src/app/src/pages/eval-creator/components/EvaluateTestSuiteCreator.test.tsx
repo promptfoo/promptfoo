@@ -1,6 +1,6 @@
 import { render, screen, within, waitFor, waitForElementToBeRemoved } from '@testing-library/react';
 import React from 'react';
-import { useStore } from '@app/stores/evalConfig';
+import { useStore, DEFAULT_CONFIG } from '@app/stores/evalConfig';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import type {
   DerivedMetric,
@@ -56,28 +56,11 @@ const renderWithTheme = (component: React.ReactNode) => {
   return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
 };
 
-// Capture the true initial state structure from the store, including functions
-const initialZustandState = useStore.getState();
-
-// Define the default values for state properties based on the store's definition
-const defaultStoreValues = {
-  description: '',
-  providers: [] as ProviderOptions[],
-  prompts: [] as any[],
-  testCases: [] as TestCase[],
-  defaultTest: {} as TestCase,
-  derivedMetrics: [] as DerivedMetric[],
-  env: {} as EnvOverrides,
-  evaluateOptions: {} as EvaluateOptions,
-  scenarios: [] as Scenario[],
-  extensions: [] as string[],
-};
-
 describe('EvaluateTestSuiteCreator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset store to its defined initial state before each test
-    useStore.setState({ ...initialZustandState, ...defaultStoreValues }, true);
+    // Reset store to its default state before each test
+    useStore.getState().reset();
   });
 
   it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
@@ -123,7 +106,7 @@ describe('EvaluateTestSuiteCreator', () => {
   it('should update varsList to empty array after reset', async () => {
     // Arrange
     const initialPrompts = ['Test Prompt {{var}}'];
-    useStore.setState({ prompts: initialPrompts });
+    useStore.getState().updateConfig({ prompts: initialPrompts });
 
     renderWithTheme(<EvaluateTestSuiteCreator />);
 
@@ -146,7 +129,7 @@ describe('EvaluateTestSuiteCreator', () => {
       description: 'Test Description',
       providers: [{ id: 'provider1', label: 'Provider 1' }] as ProviderOptions[],
       prompts: ['Test Prompt {{var}}'],
-      testCases: [{ vars: { var: 'value' } }] as TestCase[],
+      tests: [{ vars: { var: 'value' } }] as TestCase[],
       defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
       derivedMetrics: [{ name: 'precision', value: 'formula' }] as DerivedMetric[],
       env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
@@ -154,7 +137,7 @@ describe('EvaluateTestSuiteCreator', () => {
       scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
       extensions: ['file://path/to/extension.py:function_name'] as string[],
     };
-    useStore.setState(nonEmptyState);
+    useStore.getState().updateConfig(nonEmptyState);
 
     renderWithTheme(<EvaluateTestSuiteCreator />);
 
@@ -168,18 +151,9 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(dialogResetButton);
 
     // Assert: Check if the store state has been reset to default values
-    const currentState = useStore.getState();
+    const currentConfig = useStore.getState().config;
 
-    expect(currentState.description).toBe(defaultStoreValues.description);
-    expect(currentState.providers).toEqual(defaultStoreValues.providers);
-    expect(currentState.prompts).toEqual(defaultStoreValues.prompts);
-    expect(currentState.testCases).toEqual(defaultStoreValues.testCases);
-    expect(currentState.defaultTest).toEqual(defaultStoreValues.defaultTest);
-    expect(currentState.derivedMetrics).toEqual(defaultStoreValues.derivedMetrics);
-    expect(currentState.env).toEqual(defaultStoreValues.env);
-    expect(currentState.evaluateOptions).toEqual(defaultStoreValues.evaluateOptions);
-    expect(currentState.scenarios).toEqual(defaultStoreValues.scenarios);
-    expect(currentState.extensions).toEqual(defaultStoreValues.extensions);
+    expect(currentConfig).toEqual(DEFAULT_CONFIG);
   });
 
   it('should clear persisted state when the Reset button is clicked', async () => {
@@ -188,7 +162,7 @@ describe('EvaluateTestSuiteCreator', () => {
       description: 'Test Description',
       providers: [{ id: 'provider1', label: 'Provider 1' }] as ProviderOptions[],
       prompts: ['Test Prompt {{var}}'],
-      testCases: [{ vars: { var: 'value' } }] as TestCase[],
+      tests: [{ vars: { var: 'value' } }] as TestCase[],
       defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
       derivedMetrics: [{ name: 'precision', value: 'formula' }] as DerivedMetric[],
       env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
@@ -196,7 +170,7 @@ describe('EvaluateTestSuiteCreator', () => {
       scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
       extensions: ['file://path/to/extension.py:function_name'] as string[],
     };
-    useStore.setState(nonEmptyState);
+    useStore.getState().updateConfig(nonEmptyState);
 
     renderWithTheme(<EvaluateTestSuiteCreator />);
 
@@ -210,18 +184,38 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(dialogResetButton);
 
     // Assert: Check if the store state has been reset to default values
-    const currentState = useStore.getState();
+    const currentConfig = useStore.getState().config;
 
-    expect(currentState.description).toBe(defaultStoreValues.description);
-    expect(currentState.providers).toEqual(defaultStoreValues.providers);
-    expect(currentState.prompts).toEqual(defaultStoreValues.prompts);
-    expect(currentState.testCases).toEqual(defaultStoreValues.testCases);
-    expect(currentState.defaultTest).toEqual(defaultStoreValues.defaultTest);
-    expect(currentState.derivedMetrics).toEqual(defaultStoreValues.derivedMetrics);
-    expect(currentState.env).toEqual(defaultStoreValues.env);
-    expect(currentState.evaluateOptions).toEqual(defaultStoreValues.evaluateOptions);
-    expect(currentState.scenarios).toEqual(defaultStoreValues.scenarios);
-    expect(currentState.extensions).toEqual(defaultStoreValues.extensions);
+    expect(currentConfig).toEqual(DEFAULT_CONFIG);
+  });
+
+  it('should update state when interacting with components', async () => {
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    // Find the provider selector
+    const providerSelector = screen.getByTestId('mock-provider-selector');
+    expect(providerSelector).toHaveTextContent('0 providers');
+
+    // Click the clear providers button to trigger onChange
+    const clearButton = within(providerSelector).getByText('Mock Clear Providers');
+    await userEvent.click(clearButton);
+
+    // Verify the state was updated
+    expect(useStore.getState().config.providers).toEqual([]);
+  });
+
+  it('should handle new fields like derivedMetrics automatically', async () => {
+    // This demonstrates that new fields work without any store changes
+    const configWithNewField = {
+      derivedMetrics: [{ name: 'f1', value: '2 * precision * recall / (precision + recall)' }],
+      someNewFieldInFuture: 'This will work automatically!',
+    };
+
+    useStore.getState().updateConfig(configWithNewField);
+
+    const config = useStore.getState().config;
+    expect(config.derivedMetrics).toEqual(configWithNewField.derivedMetrics);
+    expect((config as any).someNewFieldInFuture).toBe('This will work automatically!');
   });
 
   // Future test scenarios will be added here

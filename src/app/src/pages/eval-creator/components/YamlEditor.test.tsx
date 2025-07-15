@@ -72,7 +72,8 @@ describe('YamlEditor', () => {
     render(<YamlEditorComponent />);
 
     expect(screen.getByText('Edit YAML')).toBeInTheDocument();
-    expect(screen.queryByText('Save Changes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Save')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor');
     expect(editor).toHaveAttribute('disabled');
@@ -81,15 +82,14 @@ describe('YamlEditor', () => {
   it('switches to edit mode when Edit button is clicked', () => {
     render(<YamlEditorComponent />);
 
-    fireEvent.click(screen.getByText('Edit YAML'));
+    fireEvent.click(screen.getByRole('button', { name: /Edit YAML/ }));
 
-    expect(screen.getByText('Save Changes')).toBeInTheDocument();
-    expect(screen.queryByText('Edit YAML')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cancel/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Edit YAML/ })).not.toBeInTheDocument();
 
-    const editor = screen.getByTestId('yaml-editor');
-    expect(editor).not.toHaveAttribute('disabled');
-
-    expect(screen.getByText('Editing')).toBeInTheDocument();
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    expect(editor.disabled).toBe(false);
   });
 
   it.skip('handles file upload correctly', () => {

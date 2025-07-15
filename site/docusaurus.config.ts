@@ -104,6 +104,11 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/thumbnail.png',
+    colorMode: {
+      defaultMode: 'light',
+      disableSwitch: true,
+      respectPrefersColorScheme: false,
+    },
     navbar: {
       title: 'promptfoo',
       logo: {
@@ -150,6 +155,10 @@ const config: Config = {
             {
               href: '/blog/',
               label: 'Blog',
+            },
+            {
+              to: '/docs/releases/',
+              label: 'Release Notes',
             },
             {
               href: '/press/',
@@ -302,6 +311,10 @@ const config: Config = {
               to: '/blog/',
             },
             {
+              label: 'Release Notes',
+              to: '/docs/releases/',
+            },
+            {
               label: 'Press',
               to: '/press/',
             },
@@ -349,20 +362,15 @@ const config: Config = {
             {
               html: `
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
-                  <!--
-                  <div style="position: relative;">
-                    <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
-                    <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
-                  </div>
-                  -->
-                  <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:90px; height: auto"/>
+                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>
+                  <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:80px; height: auto"/>
                 </div>
                 `,
             },
           ],
         },
       ],
-      copyright: `© ${new Date().getFullYear()} promptfoo`,
+      copyright: `© ${new Date().getFullYear()} Promptfoo, Inc.`,
     },
     prism: {
       theme: lightCodeTheme,
@@ -482,6 +490,29 @@ const config: Config = {
         },
       };
     },
+    [
+      '@docusaurus/plugin-content-blog',
+      {
+        id: 'releases',
+        routeBasePath: 'releases',
+        path: './releases',
+        authorsMapPath: '../blog/authors.yml',
+        blogTitle: 'Release Notes',
+        blogDescription: 'promptfoo release notes and updates',
+        blogSidebarCount: 0,
+        blogSidebarTitle: 'Recent Releases',
+        postsPerPage: 10,
+        showReadingTime: false,
+        feedOptions: {
+          type: 'all',
+          title: 'promptfoo Release Notes',
+          description: 'Stay updated with the latest promptfoo releases',
+          copyright: `© ${new Date().getFullYear()} promptfoo`,
+          language: 'en',
+        },
+        editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+      },
+    ],
   ],
 
   // Mermaid diagram support

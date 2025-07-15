@@ -19,7 +19,6 @@ import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
@@ -28,6 +27,8 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
@@ -42,6 +43,7 @@ import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
+import ButtonGroup from '@mui/material/ButtonGroup';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -533,7 +535,7 @@ function ResultsTable({
                 return (
                   <div className="cell" data-capture="true">
                     {renderMarkdown ? (
-                      <MarkdownErrorBoundary fallback={<>{value}</>}>
+                      <MarkdownErrorBoundary fallback={value}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
                       </MarkdownErrorBoundary>
                     ) : (
@@ -1013,6 +1015,8 @@ function ResultsTable({
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
           wordBreak,
+          // Ensure the fixed pagination does not overlap with the table.
+          marginBottom: '100px',
         }}
       >
         <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
@@ -1123,87 +1127,147 @@ function ResultsTable({
           })}
         </tbody>
       </table>
-      {pageCount > 1 && (
-        <Box
-          className="pagination"
-          mx={1}
-          sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
-        >
-          <Button
-            onClick={() => {
-              setPagination((prev) => ({
-                ...prev,
-                pageIndex: Math.max(prev.pageIndex - 1, 0),
-              }));
-              clearRowIdFromUrl();
-              window.scrollTo(0, 0);
-            }}
-            disabled={reactTable.getState().pagination.pageIndex === 0}
-            variant="contained"
-          >
-            Previous
-          </Button>
-          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            Page
-            <TextField
-              size="small"
-              type="number"
-              value={reactTable.getState().pagination.pageIndex + 1}
-              onChange={(e) => {
-                const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                setPagination((prev) => ({
-                  ...prev,
-                  pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                }));
-                clearRowIdFromUrl();
-              }}
-              InputProps={{
-                style: { width: '60px', textAlign: 'center' },
-              }}
-              variant="outlined"
-            />
-            <span>of {pageCount}</span>
-          </Typography>
 
-          <Button
-            onClick={() => {
-              setPagination((prev) => ({
-                ...prev,
-                pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
-              }));
-              clearRowIdFromUrl();
-              window.scrollTo(0, 0);
+      {
+        // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
+        filteredResultsCount > 10 && (
+          <Box
+            className="pagination"
+            px={2}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: 'background.paper',
+              borderTop: '1px solid',
+              borderColor: 'divider',
+              zIndex: 1000,
+              width: '100vw',
+              boxShadow: 3,
             }}
-            disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-            variant="contained"
           >
-            Next
-          </Button>
-          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Select
-              value={pagination.pageSize}
-              onChange={(e) => {
-                setPagination((prev) => ({
-                  ...prev,
-                  pageSize: Number(e.target.value),
-                }));
-                window.scrollTo(0, 0);
-              }}
-              displayEmpty
-              inputProps={{ 'aria-label': 'Results per page' }}
-              size="small"
-              sx={{ m: 1, minWidth: 80 }}
-            >
-              <MenuItem value={10}>10</MenuItem>
-              <MenuItem value={50}>50</MenuItem>
-              <MenuItem value={100}>100</MenuItem>
-              <MenuItem value={500}>500</MenuItem>
-              <MenuItem value={1000}>1000</MenuItem>
-            </Select>
-            <span>results per page</span>
-          </Typography>
-        </Box>
-      )}
+            <Box>
+              Showing{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {pagination.pageIndex * pagination.pageSize + 1}
+              </Typography>{' '}
+              to{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredResultsCount)}
+              </Typography>{' '}
+              of{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {filteredResultsCount}
+              </Typography>{' '}
+              results
+            </Box>
+
+            <Box>
+              Page{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {reactTable.getState().pagination.pageIndex + 1}
+              </Typography>{' '}
+              of{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {pageCount}
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {/* PAGE SIZE SELECTOR */}
+              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Results per page:</span>
+                <Select
+                  value={pagination.pageSize}
+                  onChange={(e) => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageSize: Number(e.target.value),
+                    }));
+                    window.scrollTo(0, 0);
+                  }}
+                  displayEmpty
+                  inputProps={{ 'aria-label': 'Results per page' }}
+                  size="small"
+                  sx={{ m: 1, minWidth: 80 }}
+                >
+                  <MenuItem value={10}>10</MenuItem>
+                  <MenuItem value={50} disabled={filteredResultsCount <= 10}>
+                    50
+                  </MenuItem>
+                  <MenuItem value={100} disabled={filteredResultsCount <= 50}>
+                    100
+                  </MenuItem>
+                  <MenuItem value={500} disabled={filteredResultsCount <= 100}>
+                    500
+                  </MenuItem>
+                  <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
+                    1000
+                  </MenuItem>
+                </Select>
+              </Typography>
+
+              {/* PAGE NAVIGATOR */}
+              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Go to:</span>
+                <TextField
+                  size="small"
+                  type="number"
+                  defaultValue={1}
+                  onChange={(e) => {
+                    const page = e.target.value ? Number(e.target.value) - 1 : 0;
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
+                    }));
+                    clearRowIdFromUrl();
+                  }}
+                  sx={{
+                    width: '60px',
+                    textAlign: 'center',
+                  }}
+                />
+              </Typography>
+
+              {/* PAGE NAVIGATION BUTTONS */}
+              <ButtonGroup>
+                <IconButton
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: Math.max(prev.pageIndex - 1, 0),
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={reactTable.getState().pagination.pageIndex === 0}
+                >
+                  <ArrowBackIcon />
+                </IconButton>
+                <IconButton
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+                >
+                  <ArrowForwardIcon />
+                </IconButton>
+              </ButtonGroup>
+            </Box>
+          </Box>
+        )
+      }
     </div>
   );
 }

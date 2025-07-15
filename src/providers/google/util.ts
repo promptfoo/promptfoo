@@ -126,7 +126,6 @@ const ContentSchema = z.object({
 const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
-export type GeminiPart = z.infer<typeof PartSchema>;
 
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;
@@ -396,6 +395,100 @@ export function loadFile(
   return fileContents;
 }
 
+function isValidBase64Image(data: string): boolean {
+  if (!data || data.length < 100) {
+    return false;
+  }
+
+  try {
+    // Verify it's valid base64
+    Buffer.from(data, 'base64');
+
+    // Check for known image format headers
+    return (
+      data.startsWith('/9j/') || // JPEG
+      data.startsWith('iVBORw0KGgo') || // PNG
+      data.startsWith('R0lGODlh') || // GIF
+      data.startsWith('UklGRg') // WebP
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getMimeTypeFromBase64(base64Data: string): string {
+  if (base64Data.startsWith('/9j/')) {
+    return 'image/jpeg';
+  } else if (base64Data.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  } else if (base64Data.startsWith('R0lGODlh')) {
+    return 'image/gif';
+  } else if (base64Data.startsWith('UklGRg')) {
+    return 'image/webp';
+  }
+  // Default to jpeg for unknown formats
+  return 'image/jpeg';
+}
+
+function processImagesInContents(
+  contents: GeminiFormat,
+  contextVars?: Record<string, string | object>,
+): GeminiFormat {
+  if (!contextVars) {
+    return contents;
+  }
+
+  const base64ToVarName = new Map<string, string>();
+
+  for (const [varName, value] of Object.entries(contextVars)) {
+    if (typeof value === 'string' && isValidBase64Image(value)) {
+      base64ToVarName.set(value, varName);
+    }
+  }
+
+  return contents.map((content) => {
+    if (content.parts) {
+      const newParts: Part[] = [];
+
+      for (const part of content.parts) {
+        if (part.text) {
+          const lines = part.text.split('\n');
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+
+            // Check if this line is a base64 image that was loaded from a variable
+            if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
+              const mimeType = getMimeTypeFromBase64(trimmedLine);
+
+              newParts.push({
+                inlineData: {
+                  mimeType,
+                  data: trimmedLine,
+                },
+              });
+            } else if (trimmedLine.length > 0) {
+              // Regular text
+              newParts.push({
+                text: trimmedLine,
+              });
+            }
+          }
+        } else {
+          // Keep non-text parts as is
+          newParts.push(part);
+        }
+      }
+
+      return {
+        ...content,
+        parts: newParts,
+      };
+    }
+    return content;
+  });
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
@@ -454,6 +547,9 @@ export function geminiFormatAndSystemInstructions(
   } else if (configSystemInstruction && systemInstruction) {
     throw new Error(`Template error: system instruction defined in prompt and config.`);
   }
+
+  // Process images in contents
+  contents = processImagesInContents(contents, contextVars);
 
   return { contents, systemInstruction };
 }
