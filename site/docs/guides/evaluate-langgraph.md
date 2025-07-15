@@ -1,5 +1,6 @@
 ---
-sidebar_label: Red teaming a LangGraph Agent
+title: Evaluate LangGraph
+sidebar_label: Evaluate LangGraph
 ---
 
 # Red Teaming a LangGraph Agent
@@ -9,8 +10,6 @@ sidebar_label: Red teaming a LangGraph Agent
 With **promptfoo**, you can run structured evaluations on LangGraph agents — defining test prompts, verifying outputs, benchmarking performance, and performing red team testing to uncover biases, safety gaps, and robustness issues.
 
 By the end of this guide, you’ll have a **working project setup** that connects LangGraph agents to Promptfoo, runs automated tests, and produces clear pass/fail insights — all reproducible and shareable with your team.
-
----
 
 ## Highlights
 
