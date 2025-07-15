@@ -246,6 +246,21 @@
                             "PROMPTFOO_CA_CERT_PATH": {
                               "type": "string"
                             },
+                            "PROMPTFOO_PFX_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_ALIAS": {
+                              "type": "string"
+                            },
                             "PROMPTFOO_INSECURE_SSL": {
                               "type": "string"
                             },
