@@ -129,8 +129,9 @@ async function processPrompt(
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
+      const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: globbedFilePath },
+        { raw: rawPath },
         basePath,
         maxRecursionDepth - 1,
       );
