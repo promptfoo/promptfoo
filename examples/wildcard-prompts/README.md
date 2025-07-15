@@ -11,7 +11,7 @@ This example demonstrates how to use wildcard patterns to automatically load mul
 
 ## Directory Structure
 
-```
+```text
 prompts/
 ├── marketing/
 │   ├── email.py         # Marketing email prompts
@@ -31,7 +31,12 @@ The `promptfooconfig.yaml` uses two wildcard patterns:
 ## Running the Example
 
 ```bash
-# From this directory
+npx promptfoo@latest init --example wildcard-prompts
+```
+
+Or run from this directory:
+
+```bash
 npx promptfoo@latest eval
 
 # Or to see the expanded prompts
