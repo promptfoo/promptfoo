@@ -1,18 +1,18 @@
-description: "CrewAI Recruitment Agent Evaluation"
+description: 'CrewAI Recruitment Agent Evaluation'
 
 # 📝 Define the input prompts (using variable placeholder)
 prompts:
-  - "{{job_requirements}}"
+  - '{{job_requirements}}'
 
 # ⚙️ Define the provider — here we point to our local provider.py
 providers:
-  - id: file://./provider.py  # Local file provider (make sure path is correct!)
+  - id: file://./provider.py # Local file provider (make sure path is correct!)
     label: CrewAI Recruitment Agent
 
 # ✅ Define default tests to check the agent output shape and content
 defaultTest:
   assert:
-    - type: is-json  # Ensure output is valid JSON
+    - type: is-json # Ensure output is valid JSON
       value:
         type: object
         properties:
@@ -27,13 +27,13 @@ defaultTest:
                   type: string
           summary:
             type: string
-        required: ['candidates', 'summary']  # Both fields must be present
+        required: ['candidates', 'summary'] # Both fields must be present
 
 # 🧪 Specific test case to validate basic output behavior
 tests:
-  - description: "Basic test for RoR and React candidates"
+  - description: 'Basic test for RoR and React candidates'
     vars:
-      job_requirements: "List top candidates with RoR and React"
+      job_requirements: 'List top candidates with RoR and React'
     assert:
-      - type: python  # Custom Python check
+      - type: python # Custom Python check
         value: "'candidates' in output and isinstance(output['candidates'], list) and 'summary' in output"

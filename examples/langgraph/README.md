@@ -24,14 +24,17 @@ You can set this in a `.env` file or directly in your environment.
 - An OpenAI API key
 
 Install Python packages:
+
 ```
 pip install langgraph langchain langchain-openai python-dotenv
 ```
 
 Install promptfoo CLI:
+
 ```
 npm install -g promptfoo
 ```
+
 ## Files
 
 - `agent.py`: Defines the LangGraph Research Agent, using a StateGraph that processes user queries and summarizes AI research trends.
@@ -43,11 +46,13 @@ npm install -g promptfoo
 - Check outputs using assertions
 
 Run the evaluation:
+
 ```
 promptfoo eval
 ```
 
 Explore results in browser:
+
 ```
 promptfoo view
 ```

@@ -24,11 +24,13 @@ You can set this in a `.env` file or directly in your environment.
 - An OpenAI API key
 
 Install Python packages:
+
 ```
 pip install crewai openai python-dotenv
 ```
 
 Install promptfoo CLI:
+
 ```
 npm install -g promptfoo
 ```
@@ -40,11 +42,13 @@ npm install -g promptfoo
 - `promptfooconfig.yaml`: Configures prompts, providers, and tests for evaluation
 
 Run the evaluation:
+
 ```
 promptfoo eval
 ```
 
 Explore results in browser:
+
 ```
 promptfoo view
 ```
