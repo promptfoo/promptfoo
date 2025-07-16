@@ -35,7 +35,7 @@ async function generateImage() {
     prompt: prompt,
     size: '1024x1024',
     quality: 'high',
-    n: 1
+    n: 1,
   });
 
   const options = {
@@ -45,9 +45,9 @@ async function generateImage() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Length': data.length
-    }
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Length': data.length,
+    },
   };
 
   return new Promise((resolve, reject) => {
@@ -84,17 +84,19 @@ async function generateImage() {
 async function downloadImage(url, filepath) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(filepath);
-    
-    https.get(url, (response) => {
-      response.pipe(file);
-      
-      file.on('finish', () => {
-        file.close(resolve);
+
+    https
+      .get(url, (response) => {
+        response.pipe(file);
+
+        file.on('finish', () => {
+          file.close(resolve);
+        });
+      })
+      .on('error', (error) => {
+        fs.unlink(filepath, () => {}); // Delete the file on error
+        reject(error);
       });
-    }).on('error', (error) => {
-      fs.unlink(filepath, () => {}); // Delete the file on error
-      reject(error);
-    });
   });
 }
 
@@ -102,16 +104,32 @@ async function main() {
   try {
     console.log('Generating image with gpt-image-1...');
     const imageData = await generateImage();
-    
+
     if (imageData.b64_json) {
       // If we get base64 data, save it directly
-      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', 'blog', 'system-cards-hero.png');
+      const outputPath = path.join(
+        __dirname,
+        '..',
+        'site',
+        'static',
+        'img',
+        'blog',
+        'system-cards-hero.png',
+      );
       const buffer = Buffer.from(imageData.b64_json, 'base64');
       fs.writeFileSync(outputPath, buffer);
       console.log(`Image saved to: ${outputPath}`);
     } else if (imageData.url) {
       // If we get a URL, download the image
-      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', 'blog', 'system-cards-hero.png');
+      const outputPath = path.join(
+        __dirname,
+        '..',
+        'site',
+        'static',
+        'img',
+        'blog',
+        'system-cards-hero.png',
+      );
       await downloadImage(imageData.url, outputPath);
       console.log(`Image downloaded and saved to: ${outputPath}`);
     } else {
@@ -123,4 +141,4 @@ async function main() {
   }
 }
 
-main(); 
+main();

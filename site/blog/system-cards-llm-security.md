@@ -191,14 +191,17 @@ Skip the fluff. Here's what actually matters for your production deployments:
 <summary>🎯 The 3-Step Power Read</summary>
 
 ### 1. **Search for Numbers** (30 seconds)
+
 Ctrl+F: "%" → "jailbreak" → "injection" → "refuse"  
 These keywords jump you to quantified vulnerabilities.
 
 ### 2. **Mine the Appendices** (2 minutes)
+
 Red team results live here. Screenshot attack examples for your test suite.  
 Look for success/failure rate tables.
 
 ### 3. **Find "Future Work"** (30 seconds)
+
 This section reveals unfixed vulnerabilities. If it's in "future work," don't rely on it in production.
 
 </details>

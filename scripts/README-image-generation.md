@@ -5,9 +5,11 @@ This directory contains scripts for generating blog hero images using OpenAI's i
 ## Available Scripts
 
 ### 1. `generate-system-cards-image.js`
+
 Uses the new gpt-image-1 model (if you have access to it).
 
 ### 2. `generate-system-cards-image-dalle3.js`
+
 Uses the standard DALL-E 3 model (recommended for most users).
 
 ## Setup
@@ -45,4 +47,4 @@ To generate images for other blog posts, edit the `prompt` variable in the scrip
 
 - **"Invalid API key"**: Make sure your OPENAI_API_KEY environment variable is set correctly
 - **"Insufficient credits"**: Check your OpenAI account balance at https://platform.openai.com/usage
-- **"Model not found"**: If gpt-image-1 isn't available, use the DALL-E 3 script instead 
+- **"Model not found"**: If gpt-image-1 isn't available, use the DALL-E 3 script instead
