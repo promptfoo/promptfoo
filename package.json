@@ -171,7 +171,7 @@
     "concurrently": "^9.2.0",
     "drizzle-kit": "^0.31.4",
     "ibm-cloud-sdk-core": "^5.4.0",
-    "jest": "^29.7.0",
+    "jest": "^30.0.4",
     "knip": "^5.61.3",
     "langfuse": "^3.38.4",
     "madge": "^8.0.0",
@@ -196,17 +196,17 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "^4.33.0",
-    "@swc/core-linux-x64-gnu": "^1.12.7",
-    "@swc/core-linux-x64-musl": "^1.12.7",
-    "@swc/core-win32-x64-msvc": "^1.12.7",
-    "@swc/core-darwin-x64": "^1.12.7",
-    "@swc/core-darwin-arm64": "^1.12.7",
+    "@biomejs/cli-darwin-arm64": "2.1.1",
+    "@biomejs/cli-darwin-x64": "2.1.1",
     "@biomejs/cli-linux-x64": "2.1.1",
     "@biomejs/cli-linux-x64-musl": "2.1.1",
     "@biomejs/cli-win32-x64": "2.1.1",
-    "@biomejs/cli-darwin-x64": "2.1.1",
-    "@biomejs/cli-darwin-arm64": "2.1.1"
+    "@rollup/rollup-linux-x64-gnu": "^4.33.0",
+    "@swc/core-darwin-arm64": "^1.12.7",
+    "@swc/core-darwin-x64": "^1.12.7",
+    "@swc/core-linux-x64-gnu": "^1.12.7",
+    "@swc/core-linux-x64-musl": "^1.12.7",
+    "@swc/core-win32-x64-msvc": "^1.12.7"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.56.0",

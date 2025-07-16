@@ -226,12 +226,8 @@ describe('RedteamPluginBase', () => {
 
     const result = await plugin.generateTests(5);
 
-    expect(result).toEqual(
-      expect.objectContaining({
-        length: 5,
-        [Symbol.iterator]: expect.any(Function),
-      }),
-    );
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(5);
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
   });
 
