@@ -13,6 +13,7 @@ import {
   Button,
   Stack,
   Divider,
+  TextField,
 } from '@mui/material';
 import { useTableStore, type ResultsFilter } from '../store';
 
@@ -52,6 +53,31 @@ function Dropdown({
   );
 }
 
+function TextField_({
+  id,
+  label,
+  value,
+  onChange,
+  width = 200,
+}: {
+  id: string;
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  width?: number;
+}) {
+  return (
+    <TextField
+      id={id}
+      label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      sx={{ width }}
+      size="small"
+    />
+  );
+}
+
 function Filter({ value, index }: { value: ResultsFilter; index: number }) {
   const { filters, updateFilter, removeFilter } = useTableStore();
 
@@ -61,7 +87,18 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      updateFilter({ ...value, type: filterType, value: '' });
+      updateFilter({ ...value, type: filterType, value: '', field: undefined });
+    },
+    [value, updateFilter],
+  );
+
+  /**
+   * Updates the filter field (for metadata filters).
+   * @param field - The new filter field.
+   */
+  const handleFieldChange = useCallback(
+    (field: string) => {
+      updateFilter({ ...value, field, value: '' });
     },
     [value, updateFilter],
   );
@@ -101,7 +138,38 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
 
   // Find the current field to get its options
   const currentField = filters.fields.find((field) => field.id === value.type);
-  const valueOptions = currentField?.type === 'select' ? currentField.options : [];
+
+  let valueInput = null;
+
+  if (currentField!.type === 'select') {
+    // For metric filters, show dropdown of metric values
+    valueInput = (
+      <Dropdown
+        id={`${index}-value-select`}
+        label={currentField?.label || 'Value'}
+        values={currentField!.options.map((option) => ({
+          label: option.label,
+          value: option.id,
+        }))}
+        value={value.value}
+        onChange={(e) => handleValueChange(e)}
+        width={275}
+      />
+    );
+  } else if (currentField!.type === 'field') {
+    // For metadata filters, show text input only if a field is selected
+    if (value.field) {
+      valueInput = (
+        <TextField_
+          id={`${index}-value-text`}
+          label="Value"
+          value={value.value}
+          onChange={(e) => handleValueChange(e)}
+          width={275}
+        />
+      );
+    }
+  }
 
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
@@ -135,6 +203,20 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
           width={125}
         />
 
+        {currentField!.type === 'field' && (
+          <Dropdown
+            id={`${index}-field-select`}
+            label="Field"
+            values={currentField!.options.map((option) => ({
+              label: option.label,
+              value: option.id,
+            }))}
+            value={value.field || ''}
+            onChange={(e) => handleFieldChange(e)}
+            width={275}
+          />
+        )}
+
         <Dropdown
           id={`${index}-operator-select`}
           label="Operator"
@@ -144,17 +226,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
           width={125}
         />
 
-        <Dropdown
-          id={`${index}-value-select`}
-          label={currentField?.label || 'Value'}
-          values={valueOptions.map((option) => ({
-            label: option.label,
-            value: option.id,
-          }))}
-          value={value.value}
-          onChange={(e) => handleValueChange(e)}
-          width={275}
-        />
+        {valueInput}
       </Box>
     </Box>
   );

@@ -46,6 +46,37 @@ function computeAvailableMetrics(table: EvaluateTable | null): FilterableFieldOp
 }
 
 /**
+ * Given the table, collects the metadata keys from each test case. Returns a sorted list of unique keys.
+ *
+ * TODO: These should really be sub-types of the Metadata filter and the value should be a text field instead of select.
+ * The text field should include wildcard support.
+ * @param table
+ * @returns
+ */
+function computeMetadataOptions(table: EvaluateTable | null): IFilterableField[] {
+  if (!table) {
+    return [];
+  }
+
+  const metadata = new Set<string>();
+
+  table.body.forEach((row) => {
+    Object.keys(row.outputs[0]?.metadata ?? {}).forEach((key) => metadata.add(key));
+  });
+
+  return Array.from(metadata)
+    .sort()
+    .map(
+      (key) =>
+        ({
+          id: key,
+          label: key,
+          type: 'text',
+        }) as FilterableTextField,
+    );
+}
+
+/**
  * Given the table, computes the fields that can be filtered on.
  * @param table
  * @returns
@@ -60,33 +91,21 @@ function makeFilterFields(table: EvaluateTable | null): FilterableField[] {
       label: 'Metric',
       type: 'select',
       options: metrics,
-    });
+    } as FilterableSelectField);
+  }
+
+  const metadata = computeMetadataOptions(table);
+  if (metadata.length > 0) {
+    fields.push({
+      id: 'metadata',
+      label: 'Metadata',
+      type: 'field',
+      options: metadata,
+    } as FilterableFieldField);
   }
 
   return fields;
 }
-
-/**
- * Given the table, collects the metadata keys from each test case. Returns a sorted list of unique keys.
- *
- * TODO: These should really be sub-types of the Metadata filter and the value should be a text field instead of select.
- * The text field should include wildcard support.
- * @param table
- * @returns
- */
-// function computeMetadataSubOptions(table: EvaluateTable | null): string[] {
-//   if (!table) {
-//     return [];
-//   }
-
-//   const metadata = new Set<string>();
-
-//   table.body.forEach((row) => {
-//     Object.keys(row.outputs[0]?.metadata ?? {}).forEach((key) => metadata.add(key));
-//   });
-
-//   return Array.from(metadata).sort();
-// }
 
 interface FetchEvalOptions {
   pageIndex?: number;
@@ -118,6 +137,10 @@ export type ResultsFilter = {
   value: string;
   operator: 'equals';
   logicOperator: 'and' | 'or';
+  /**
+   * For metadata filters, specifies which metadata key to filter on.
+   */
+  field?: string;
 };
 
 type FilterableFieldOption = {
@@ -137,10 +160,14 @@ interface FilterableSelectField extends IFilterableField {
 
 interface FilterableFieldField extends IFilterableField {
   type: 'field';
-  subOptions: IFilterableField[];
+  options: FilterableField[];
 }
 
-type FilterableField = FilterableSelectField | FilterableFieldField;
+interface FilterableTextField extends IFilterableField {
+  type: 'text';
+}
+
+type FilterableField = FilterableSelectField | FilterableFieldField | FilterableTextField;
 
 interface TableState {
   evalId: string | null;
@@ -179,6 +206,7 @@ interface TableState {
     operator: ResultsFilter['operator'];
     value: string;
     logicOperator?: ResultsFilter['logicOperator'];
+    field?: string;
   }) => void;
 
   /**
@@ -462,6 +490,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               id: filterId,
               // Default to 'and' logic operator if not provided.
               logicOperator: filter.logicOperator ?? 'and',
+              field: filter.field,
             },
           },
           appliedCount,
