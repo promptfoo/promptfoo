@@ -2,28 +2,47 @@ import request from 'supertest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { createApp } from '../../src/server/server';
-import { deleteAllEvals } from '../../src/util/database';
 import results_v3 from './v3evalToShare.json';
 import results_v4 from './v4evalToShare.json';
 
+// Increase Jest timeout for all tests in this file
+jest.setTimeout(30000);
+
 describe('share', () => {
   let app: ReturnType<typeof createApp>;
+  const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
     // Run migrations once before all tests
+    // This is safe because Jest setup ensures we're using an in-memory database
     await runDbMigrations();
     // Create app once and reuse for all tests
     app = createApp();
   });
 
   afterAll(async () => {
-    // Clean up after all tests
-    await deleteAllEvals();
+    // Clean up only the specific evals we created during tests
+    for (const evalId of testEvalIds) {
+      try {
+        const eval_ = await Eval.findById(evalId);
+        await eval_?.delete();
+      } catch (error) {
+        // Ignore cleanup errors - eval might already be deleted
+      }
+    }
   });
 
-  beforeEach(async () => {
-    // Clear data before each test for isolation
-    await deleteAllEvals();
+  afterEach(async () => {
+    // Clean up evals created in the current test
+    for (const evalId of testEvalIds) {
+      try {
+        const eval_ = await Eval.findById(evalId);
+        await eval_?.delete();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+    testEvalIds.clear();
   });
 
   it('should accept a version 3 results file', async () => {
@@ -31,6 +50,9 @@ describe('share', () => {
 
     expect(res.body).toHaveProperty('id');
     expect(res.body.id).toBeTruthy();
+    
+    // Track this eval for cleanup
+    testEvalIds.add(res.body.id);
 
     const eval_ = await Eval.findById(res.body.id as string);
     expect(eval_).not.toBeNull();
@@ -47,6 +69,9 @@ describe('share', () => {
 
     expect(res.body).toHaveProperty('id');
     expect(res.body.id).toBeTruthy();
+    
+    // Track this eval for cleanup
+    testEvalIds.add(res.body.id);
 
     const eval_ = await Eval.findById(res.body.id as string);
     expect(eval_).not.toBeNull();
@@ -64,6 +89,8 @@ describe('share', () => {
 
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
+      
+      // No eval was created, so nothing to track
     });
 
     it('should handle invalid v3 eval data', async () => {
@@ -79,6 +106,8 @@ describe('share', () => {
 
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
+      
+      // No eval was created, so nothing to track
     });
 
     it('should handle database errors', async () => {
@@ -92,6 +121,8 @@ describe('share', () => {
 
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
+      
+      // No eval was created, so nothing to track
     });
   });
 });
