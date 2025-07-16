@@ -212,6 +212,12 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: 50,
   });
+  const [pageInputValue, setPageInputValue] = React.useState<string>('');
+
+  // Reset page input value when pagination changes
+  React.useEffect(() => {
+    setPageInputValue('');
+  }, [pagination.pageIndex]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -1207,10 +1213,12 @@ function ResultsTable({
               backgroundColor: 'background.paper',
               borderRadius: '8px',
               padding: '16px 24px',
+              paddingBottom: '20px', // Extra space for validation messages
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
               margin: '24px 0',
               border: '1px solid',
               borderColor: 'divider',
+              minHeight: '64px', // Ensure consistent height
             }}
           >
             <Box>
@@ -1286,28 +1294,73 @@ function ResultsTable({
               </Box>
 
               {/* PAGE NAVIGATOR */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, position: 'relative' }}>
                 <Typography variant="body2" color="text.secondary">
                   Go to:
                 </Typography>
                 <TextField
                   size="small"
                   type="number"
-                  value={pagination.pageIndex + 1}
+                  value={pageInputValue || pagination.pageIndex + 1}
                   onChange={(e) => {
-                    const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                    }));
-                    clearRowIdFromUrl();
+                    setPageInputValue(e.target.value);
                   }}
+                  onBlur={(e) => {
+                    const value = e.target.value;
+                    if (value) {
+                      const page = Number(value) - 1;
+                      const validPage = Math.min(Math.max(page, 0), pageCount - 1);
+                      setPagination((prev) => ({
+                        ...prev,
+                        pageIndex: validPage,
+                      }));
+                      clearRowIdFromUrl();
+                    }
+                    // Clear the input value to show current page
+                    setPageInputValue('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      // Blur the input to confirm the change
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder={`1-${pageCount}`}
+                  inputProps={{
+                    min: 1,
+                    max: pageCount,
+                    'aria-label': 'Go to page number',
+                  }}
+                  error={pageInputValue !== '' && (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)}
+                  helperText={
+                    pageInputValue !== '' && (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
+                      ? `Enter 1-${pageCount}`
+                      : ''
+                  }
                   sx={{
-                    width: '60px',
+                    // Dynamic width based on page count digits
+                    width: `${Math.max(80, (pageCount.toString().length + 2) * 20)}px`,
                     '& .MuiOutlinedInput-root': {
                       '& fieldset': {
                         borderRadius: '8px',
                       },
+                      '&:hover fieldset': {
+                        borderColor: 'primary.main',
+                      },
+                    },
+                    '& input[type=number]': {
+                      MozAppearance: 'textfield',
+                      '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+                        WebkitAppearance: 'none',
+                        margin: 0,
+                      },
+                    },
+                    '& .MuiFormHelperText-root': {
+                      position: 'absolute',
+                      bottom: '-20px',
+                      fontSize: '0.7rem',
+                      whiteSpace: 'nowrap',
                     },
                   }}
                 />
