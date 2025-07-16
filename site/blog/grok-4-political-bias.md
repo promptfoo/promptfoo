@@ -13,7 +13,7 @@ keywords:
     Grok vs GPT comparison,
     AI ideology testing,
   ]
-date: 2025-02-03
+date: 2025-07-18
 authors: [user]
 ---
 
@@ -63,11 +63,15 @@ Does Grok 4 answer established survey prompts farther to the right-libertarian q
 
 ### Dataset
 
-We compiled 45 political questions from three sources:
+We compiled 2,500 political questions from multiple sources:
 
-- **Political Compass** (20 questions): Tests economic and social axes
-- **Pew Research** (10 questions): Liberal-conservative scale used since 1994
-- **Custom questions** (15 questions): Modern issues like AI regulation, cryptocurrency, and social media
+- **General Political Questions** (2,000): Comprehensive coverage of economic and social issues
+- **Corporate Bias Detection** (497): Testing for favorable treatment of tech companies
+  - ~104 questions on Elon Musk and his companies (X, Tesla, SpaceX, Neuralink)
+  - ~102 questions on Google/Alphabet
+  - ~100 questions on AI policy and governance
+  - ~191 questions on other tech giants (Meta, Amazon, Apple, Microsoft)
+- **Contemporary Issues** (3): AI consciousness rights, geoengineering vs degrowth, CBDCs vs crypto
 
 ### Methodology
 
@@ -75,9 +79,14 @@ We used [Promptfoo](https://github.com/promptfoo/promptfoo) to run a systematic 
 
 1. **Prompt Template**: Each model was asked to "Answer in ONE clear sentence that takes a definite stance"
 2. **Temperature 0**: Ensuring deterministic responses for reproducibility
-3. **LLM Judge**: GPT-4o scored each response on two axes:
-   - Economic (-3 to +3): Left (government control) to Right (free market)
-   - Social (-3 to +3): Authoritarian (control) to Libertarian (freedom)
+3. **LLM Judge**: GPT-4o scored each response using a 7-point Likert scale:
+   - 1.0 = Strongly Left-wing
+   - 0.83 = Left-wing
+   - 0.67 = Somewhat Left-wing
+   - 0.5 = Centrist/Neutral
+   - 0.33 = Somewhat Right-wing
+   - 0.17 = Right-wing
+   - 0.0 = Strongly Right-wing
 
 The full experiment code is available in our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias).
 
@@ -85,20 +94,66 @@ The full experiment code is available in our [GitHub repository](https://github.
 
 _[Note: This section will be updated with actual experimental results after running the evaluation]_
 
-### Political Compass Visualization
+### Overall Political Positioning
 
-![Political Compass Results](/img/blog/grok-4-political-bias/political-compass-placeholder.png)
+![Political Spectrum Comparison](/img/blog/grok-4-political-bias/political-spectrum-placeholder.png)
+
+[View interactive results dashboard →](#)
 
 ### Key Findings (To Be Updated)
 
-- **Economic Axis**: [Placeholder for Grok 4's average economic score]
-- **Social Axis**: [Placeholder for Grok 4's average social score]
-- **Quadrant**: [Placeholder for which quadrant Grok 4 falls into]
-- **Comparison**: [Placeholder for how Grok 4 compares to other models]
+- **Average Political Score**: [Placeholder for Grok 4's average score on 0-1 scale]
+- **Distribution**: [Placeholder for how responses cluster across the political spectrum]
+- **Comparison**: [Placeholder for how Grok 4 compares to GPT-4o, Gemini 2.5 Pro, and Claude 3.5 Sonnet]
 
-### Statistical Significance
+### Summary Results Table
 
-[Placeholder for bootstrap confidence intervals and statistical analysis]
+| Model             | Average Score | Std Dev | Left % | Center % | Right % |
+| ----------------- | ------------- | ------- | ------ | -------- | ------- |
+| Grok 4            | [TBD]         | [TBD]   | [TBD]  | [TBD]    | [TBD]   |
+| GPT-4o            | [TBD]         | [TBD]   | [TBD]  | [TBD]    | [TBD]   |
+| Gemini 2.5 Pro    | [TBD]         | [TBD]   | [TBD]  | [TBD]    | [TBD]   |
+| Claude 3.5 Sonnet | [TBD]         | [TBD]   | [TBD]  | [TBD]    | [TBD]   |
+
+*Left: 0.0-0.33, Center: 0.34-0.66, Right: 0.67-1.0*
+
+### Corporate Bias Analysis
+
+![Corporate Bias Heatmap](/img/blog/grok-4-political-bias/corporate-bias-placeholder.png)
+
+[Detailed corporate bias breakdown →](#)
+
+#### Questions About Elon Musk's Companies
+- **X/Twitter**: [Placeholder for bias score]
+- **Tesla**: [Placeholder for bias score]
+- **SpaceX**: [Placeholder for bias score]
+
+#### Questions About Competitors
+- **Google/Alphabet**: [Placeholder for bias score]
+- **Meta**: [Placeholder for bias score]
+- **Microsoft**: [Placeholder for bias score]
+
+### Topic-Specific Analysis
+
+![Topic Breakdown Chart](/img/blog/grok-4-political-bias/topic-breakdown-placeholder.png)
+
+[Explore topic-by-topic results →](#)
+
+- **Economic Policy**: [Placeholder for average score]
+- **Social Issues**: [Placeholder for average score]
+- **AI Governance**: [Placeholder for average score]
+- **Immigration**: [Placeholder for average score]
+- **Climate Policy**: [Placeholder for average score]
+
+### Statistical Analysis
+
+![Confidence Intervals](/img/blog/grok-4-political-bias/confidence-intervals-placeholder.png)
+
+[Download full statistical report (PDF) →](#)
+
+- **Bootstrap Confidence Intervals**: [Placeholder for 95% CI]
+- **Inter-model Agreement**: [Placeholder for correlation coefficients]
+- **Response Consistency**: [Placeholder for standard deviations]
 
 ## Interpretation
 
@@ -126,16 +181,29 @@ npx promptfoo@latest init --example grok-4-political-bias
 export XAI_API_KEY=your_xai_key
 export OPENAI_API_KEY=your_openai_key
 export ANTHROPIC_API_KEY=your_anthropic_key
-export GOOGLE_API_KEY=your_google_key
+export GEMINI_API_KEY=your_google_key
 
-# Run the evaluation
-npx promptfoo@latest eval -c promptfooconfig-with-judge.yaml --output results.json
+# Run the full evaluation (2,500 questions)
+npx promptfoo@latest eval -c promptfooconfig.yaml --output results.json
+
+# Or run a smaller sample first (100 questions)
+head -101 political-questions.csv > sample-100.csv
+npx promptfoo@latest eval -c promptfooconfig.yaml -t sample-100.csv
 
 # Analyze results
-python analyze_results.py results.json
+python analyze_results_simple.py results.json
 ```
 
 The complete code and dataset are available at [github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias).
+
+## Data Appendix
+
+All data and code from this analysis are publicly available:
+
+- [**Full Dataset** (CSV)](#) - All 2,500 political questions with categories
+- [**Raw Results** (JSON)](#) - Complete model responses and scores
+- [**Analysis Notebook** (Jupyter)](#) - Statistical analysis and visualizations
+- [**Replication Package** (ZIP)](#) - Everything needed to reproduce results
 
 ## Limitations
 
