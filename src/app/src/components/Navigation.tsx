@@ -16,6 +16,7 @@ import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
 import ApiSettingsModal from './ApiSettingsModal';
+import CloudStatusIndicator from './CloudStatusIndicator';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
@@ -182,11 +183,14 @@ export default function Navigation({
               <InfoIcon />
             </IconButton>
             {IS_RUNNING_LOCALLY && (
-              <Tooltip title="API and Sharing Settings">
-                <IconButton onClick={handleApiSettingsModalToggle} color="inherit">
-                  <EngineeringIcon />
-                </IconButton>
-              </Tooltip>
+              <>
+                <CloudStatusIndicator />
+                <Tooltip title="API and Sharing Settings">
+                  <IconButton onClick={handleApiSettingsModalToggle} color="inherit">
+                    <EngineeringIcon />
+                  </IconButton>
+                </Tooltip>
+              </>
             )}
             <DarkMode onToggleDarkMode={onToggleDarkMode} />
           </NavSection>

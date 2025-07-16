@@ -96,3 +96,26 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     }
   }
 });
+
+userRouter.get('/cloud/status', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { cloudConfig } = await import('../../globalConfig/cloud');
+    const isAuthenticated = cloudConfig.isEnabled();
+    const apiKey = cloudConfig.getApiKey();
+    const appUrl = cloudConfig.getAppUrl(); // Always get the URL for enterprise detection
+
+    // Determine if this is an enterprise deployment
+    // If the appUrl is set and doesn't include promptfoo.app, it's enterprise
+    const isEnterprise = appUrl ? !appUrl.includes('promptfoo.app') : false;
+
+    res.json({
+      isAuthenticated,
+      hasApiKey: !!apiKey,
+      appUrl: isAuthenticated ? appUrl : null, // Only expose URL if authenticated
+      isEnterprise,
+    });
+  } catch (error) {
+    logger.error(`Error checking cloud status: ${error}`);
+    res.status(500).json({ error: 'Failed to check cloud status' });
+  }
+});
