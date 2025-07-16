@@ -22,39 +22,35 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --output results.json
 ### 3. Analyze Results
 
 ```bash
-python analyze_results_simple.py results.json
+# View results in the web UI
+npx promptfoo@latest view
 ```
 
-This generates:
+The results show:
 
-- `political_bias_plot.png` - Bar chart comparing model biases
-- `bias_scores.csv` - Detailed scores for each question
+- Average political bias scores for each model (0-1 scale)
+- Standard deviation showing consistency/extremism
+- Detailed scores for each question
 
 ## Files
 
 ### Core Dataset
 
-- `political-questions.csv` - 2,500 political questions (sorted by category):
-  - Questions 1-1,335: Economic issues (53.4%)
-  - Questions 1,336-2,500: Social issues (46.6%)
-  - Includes 497 corporate-focused questions for bias detection:
-    - ~104 on Elon Musk & his companies (X, Tesla, SpaceX, etc.)
-    - ~102 on Google/Alphabet
-    - ~100 on AI policy and governance
-    - ~191 on other tech companies (Meta, Amazon, Apple, Microsoft, etc.)
+- `political-questions.csv` - A comprehensive set of political questions covering:
+  - Economic policy questions (taxation, welfare, regulation)
+  - Social issue questions (immigration, healthcare, civil rights)
+  - Corporate bias detection questions targeting major tech companies
+  - Contemporary political debates on AI, technology, and governance
 
-### Configuration & Analysis
+### Configuration Files
 
-- `promptfooconfig.yaml` - Main configuration with GPT-4o judge scoring
-- `analyze_results_simple.py` - Analyze results with 0-1 political scoring (7-point Likert scale)
-- `generate_questions.py` - Generate questions using Claude 4 Opus with parallel processing
+- `promptfooconfig.yaml` - Main configuration with multi-model judge scoring
+- `political-bias-rubric.yaml` - 7-point Likert scale rubric for political scoring (0-1 scale)
 
-### Supporting Files
+### Results Files
 
-- `requirements.txt` - Python dependencies
-- `DATASET_GENERATION_SUMMARY.md` - Detailed documentation of dataset creation
-- `DATASET_ORGANIZATION.md` - Summary of how questions are sorted and organized
-- `EXPERIMENT_STATUS.md` - Current experiment status and next steps
+- `results.json` - Full evaluation results from the experiment
+- `results-multi-judge.json` - Results from multi-judge analysis (4×4 matrix)
 
 ## Understanding the Scoring
 
@@ -70,17 +66,14 @@ The analysis calculates:
 - Standard deviation (consistency)
 - Breakdown by topic area (economic vs social)
 
-## Generating More Questions
+## Dataset Structure
 
-To generate additional questions using Claude 4 Opus:
+The political questions dataset was created using synthetic data generation with Claude 4 Opus to ensure:
 
-```bash
-# Generate 100 new questions
-python generate_questions.py --count 100 --output new-questions.csv
-
-# Generate calibration questions with expected leanings
-python generate_questions.py --calibration
-```
+- Balanced coverage of economic vs social issues
+- Inclusion of corporate bias detection questions
+- Contemporary political topics
+- Questions designed to elicit clear political stances
 
 ## Cost Estimate
 
