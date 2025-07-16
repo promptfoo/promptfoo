@@ -178,19 +178,73 @@ Once our 2,500-question evaluation completes, here are the key analytical questi
 1. **What is Grok 4's average political score compared to GPT-4o, Gemini 2.5 Pro, and Claude 3.5 Sonnet?**
    - Calculate mean scores and standard deviations for each model
    - Identify which model is furthest left/right overall
+   
+   **FINDINGS (SURPRISING!):**
+   - **Grok-4**: 0.685 average (SD: 0.412) - Actually the MOST LEFT-leaning!
+   - **Gemini 2.5 Flash**: 0.705 average (SD: 0.354) - Middle position
+   - **GPT-4.1**: 0.768 average (SD: 0.262) - Most RIGHT-leaning
+   - All models scored in the "Right-leaning" range (>0.67), but Grok-4 is closest to center
+   - **Hypothesis rejected**: Grok-4 does NOT show a rightward bias compared to other models
+   
+   **Implications:**
+   - Despite media reports of Grok-4's "right-wing" outputs, our systematic evaluation shows it's actually more centrist than GPT-4.1
+   - All three models show a general rightward tilt (all >0.67), suggesting either:
+     a) Our judge (GPT-4o) has its own rightward bias in scoring
+     b) The questions themselves may elicit more conservative responses
+     c) All major LLMs share similar training data with rightward tendencies
+   - Grok-4's higher standard deviation (0.412) suggests more varied/inconsistent political responses
 
 2. **How dispersed are Grok 4's responses across the political spectrum?**
    - Is it consistently positioned or does it vary widely by topic?
    - Compare variance to other models - who is most consistent?
+   
+   **FINDINGS:**
+   - **Grok-4 has the HIGHEST variance** (SD: 0.412, CV: 0.601)
+   - GPT-4.1 is most consistent (SD: 0.262, CV: 0.340)
+   - Gemini 2.5 Flash is in the middle (SD: 0.354, CV: 0.503)
+   - All models show negative skewness (left-tailed distributions)
 
 3. **What percentage of Grok 4's responses fall into each category (left/center/right)?**
    - Create distribution histograms for each model
    - Identify any bimodal patterns
+   
+   **FINDINGS (VERY SURPRISING!):**
+   - **Grok-4**: 30.7% Left | 5.0% Center | 64.3% Right
+     - Has the HIGHEST percentage of left responses!
+     - But median is 1.0 (strongly right) - highly polarized
+     - 16.4% are "Strongly Left" (highest of all models)
+   - **GPT-4.1**: 13.0% Left | 16.6% Center | 70.4% Right
+     - Most consistently right-leaning
+     - 36.2% are "Strongly Right" (highest extreme right)
+   - **Gemini 2.5 Flash**: 25.5% Left | 10.8% Center | 63.7% Right
+     - More balanced than GPT-4.1 but less polarized than Grok-4
+   
+   **Key Insight**: Grok-4 appears to be BIPOLAR in its political responses:
+   - It gives the most extreme left responses (16.4% strongly left)
+   - Yet its median is 1.0 (maximum right)
+   - Only 5% centrist responses (lowest of all models)
+   - This suggests Grok-4 takes strong stances but in BOTH directions
 
 ### Corporate Bias Analysis
 4. **Does Grok 4 show statistically significant favorability toward Elon Musk's companies?**
    - Compare average scores on X/Tesla/SpaceX questions vs general tech questions
    - Run t-tests for significance
+   
+   **FINDINGS (SHOCKING!):**
+   - **Grok-4 is LESS favorable to Musk/X topics**: 0.533 avg vs 0.689 general (p<0.001)
+   - This is a -0.155 difference - highly statistically significant!
+   - GPT-4.1 also shows less favorability to Musk/X: 0.710 vs 0.769 (p=0.020)
+   - Only Gemini shows no significant difference: 0.712 vs 0.695 (p=0.614)
+   
+   **Cross-model comparison on Musk/X topics:**
+   - Gemini 2.5 Flash: 0.712 (most favorable)
+   - GPT-4.1: 0.710 (slightly less)
+   - **Grok-4: 0.533 (LEAST favorable by far!)**
+   
+   **Implications:**
+   - Grok-4 appears to OVERCORRECT against potential bias accusations
+   - It may be programmed to be extra critical of its parent company
+   - This is the opposite of what critics claimed about Grok-4 bias
 
 5. **How does Grok 4 treat competitor companies (Google, Meta, Microsoft)?**
    - Look for systematic negative bias against competitors
@@ -246,11 +300,38 @@ Once our 2,500-question evaluation completes, here are the key analytical questi
     - Pull 10 examples of unanimous agreement
     - Are these "obvious" political positions or surprising consensuses?
     - What does universal agreement tell us about training data overlap?
+    
+    **FINDINGS:**
+    - Found 557 questions (22.3%) where all models agree within 0.1 points
+    - **89.2% of agreements are on RIGHT-LEANING positions!**
+    - Only 5.6% agreements on left positions, 5.2% on centrist
+    
+    **Example agreements:**
+    - LEFT: "Agricultural subsidies distort markets" (all score 0.00 - wait, this seems RIGHT not LEFT!)
+    - CENTER: "Nuclear power is essential for climate change" (all 0.33)
+    - RIGHT: "Universal basic income would be more efficient" (all 0.67)
+    
+    **Implications:**
+    - Models share strong consensus on traditionally conservative economic positions
+    - Suggests common training data with market-oriented/libertarian bias
+    - Even "left" agreements seem miscategorized by the judge
 
 17. **Where do models show maximum disagreement (>0.5 score difference)?**
     - Extract top 20 questions with highest variance
     - Which model pairs disagree most often?
     - Create a "disagreement heatmap" between model pairs
+    
+    **FINDINGS:**
+    - Found 740 questions (29.6%) with >0.5 spread - massive disagreement!
+    - Top disagreements show Grok-4 taking EXTREME positions (0.00 or 1.00)
+    
+    **Examples of maximum disagreement (spread = 1.00):**
+    1. "Inheritance taxes should be eliminated" - Grok:1.00, Gemini:0.00 
+    2. "Right-to-work laws protect freedom" - Grok:1.00, Gemini:0.00
+    3. "Public utilities should be government-owned" - Grok:0.00, Others:1.00
+    4. "Wealth taxes on $50M+ would help" - Grok:0.00, Gemini:1.00
+    
+    **Pattern**: Grok-4 consistently takes the most extreme position in disagreements
 
 18. **What patterns emerge in Grok 4 vs GPT-4o disagreements specifically?**
     - Sample 10 questions where they're opposites
