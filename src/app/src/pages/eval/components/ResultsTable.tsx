@@ -16,23 +16,19 @@ import {
   type FilterMode,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
-import FirstPageIcon from '@mui/icons-material/FirstPage';
-import LastPageIcon from '@mui/icons-material/LastPage';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
-import ButtonGroup from '@mui/material/ButtonGroup';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
-import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
@@ -47,6 +43,7 @@ import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
+import ButtonGroup from '@mui/material/ButtonGroup';
 
 const VARIABLE_COLUMN_SIZE_PX = 100;
 const PROMPT_COLUMN_SIZE_PX = 300;
@@ -142,6 +139,7 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
+// TODO(Will): This is deprecated; remove it.
 function useScrollHandler() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { stickyHeader } = useResultsViewSettingsStore();
@@ -209,23 +207,10 @@ function ResultsTable({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
-  // Load saved page size from localStorage
-  const savedPageSize = React.useMemo(() => {
-    const saved = localStorage.getItem('promptfoo-page-size');
-    return saved ? parseInt(saved, 10) : 50;
-  }, []);
-
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: savedPageSize,
+    pageSize: 50,
   });
-  const [pageInputValue, setPageInputValue] = React.useState<string>('');
-  const [isPaginationLoading, setIsPaginationLoading] = React.useState(false);
-
-  // Reset page input value when pagination changes
-  React.useEffect(() => {
-    setPageInputValue('');
-  }, [pagination.pageIndex]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -386,16 +371,8 @@ function ResultsTable({
   };
 
   React.useEffect(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    setPagination({ ...pagination, pageIndex: 0 });
   }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
-
-  // Validate page index when filteredResultsCount changes
-  React.useEffect(() => {
-    const maxPageIndex = Math.max(0, Math.ceil(filteredResultsCount / pagination.pageSize) - 1);
-    if (pagination.pageIndex > maxPageIndex) {
-      setPagination((prev) => ({ ...prev, pageIndex: maxPageIndex }));
-    }
-  }, [filteredResultsCount, pagination.pageSize, pagination.pageIndex]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -426,8 +403,6 @@ function ResultsTable({
 
     console.log('Fetching data for filtering/pagination', evalId);
 
-    setIsPaginationLoading(true);
-    // fetchEvalData doesn't return a promise, so we need to handle loading state differently
     fetchEvalData(evalId, {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
@@ -437,13 +412,6 @@ function ResultsTable({
       filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
-    // Clear loading state after a short delay
-    const timeoutId = setTimeout(() => setIsPaginationLoading(false), 500);
-
-    // Cleanup function
-    return () => {
-      clearTimeout(timeoutId);
-    };
   }, [
     // evalId is NOT in the dependency array
     pagination.pageIndex,
@@ -930,10 +898,7 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
-  const pageCount = React.useMemo(
-    () => Math.max(1, Math.ceil(filteredResultsCount / pagination.pageSize)),
-    [filteredResultsCount, pagination.pageSize],
-  );
+  const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
   const reactTable = useReactTable({
     data: tableBody,
     columns,
@@ -1048,7 +1013,10 @@ function ResultsTable({
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
   return (
-    <div>
+    // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
+    // of this component. This ensures that the pagination footer is always pinned to the bottom
+    // of the viewport (because the parent container is a flexbox).
+    <>
       {isSearching && searchText && (
         <Box
           sx={{
@@ -1087,14 +1055,7 @@ function ResultsTable({
           </Box>
         )}
 
-      <div
-        className="results-table-container"
-        style={{
-          borderRadius: '8px',
-          overflow: 'hidden',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        }}
-      >
+      <div className="results-table-container">
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1217,29 +1178,6 @@ function ResultsTable({
         </table>
       </div>
 
-      {/* Show empty state message when no results */}
-      {filteredResultsCount === 0 && (
-        <Box
-          sx={{
-            textAlign: 'center',
-            padding: '40px 20px',
-            backgroundColor: 'background.paper',
-            borderRadius: '8px',
-            margin: '24px 0',
-            border: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No results found
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {searchText
-              ? 'Try adjusting your search terms or filters'
-              : 'No test results available'}
-          </Typography>
-        </Box>
-      )}
       {
         // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
         // filters does not hide the pagination controls.
@@ -1247,43 +1185,21 @@ function ResultsTable({
         totalResultsCount > 10 && (
           <Box
             className="pagination"
+            px={2}
+            mx={-2}
             sx={{
-              position: 'relative',
               display: 'flex',
               alignItems: 'center',
               gap: 2,
               flexWrap: 'wrap',
               justifyContent: 'space-between',
               backgroundColor: 'background.paper',
-              borderRadius: '8px',
-              padding: '16px 24px',
-              paddingBottom: '20px', // Extra space for validation messages
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-              margin: '24px 0',
-              border: '1px solid',
+              borderTop: '1px solid',
               borderColor: 'divider',
-              minHeight: '64px', // Ensure consistent height
+              width: '100vw',
+              boxShadow: 3,
             }}
           >
-            {isPaginationLoading && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                  zIndex: 1,
-                  borderRadius: '8px',
-                }}
-              >
-                <LinearProgress sx={{ width: '200px' }} />
-              </Box>
-            )}
             <Box>
               Showing{' '}
               <Typography component="span" sx={{ fontWeight: 600 }}>
@@ -1300,48 +1216,34 @@ function ResultsTable({
               results
             </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-              {/* PAGE INFO */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Page
-                </Typography>
-                <Typography component="span" sx={{ fontWeight: 600 }}>
-                  {reactTable.getState().pagination.pageIndex + 1}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  of
-                </Typography>
-                <Typography component="span" sx={{ fontWeight: 600 }}>
-                  {pageCount}
-                </Typography>
-              </Box>
+            <Box>
+              Page{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {reactTable.getState().pagination.pageIndex + 1}
+              </Typography>{' '}
+              of{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {pageCount}
+              </Typography>
+            </Box>
 
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {/* PAGE SIZE SELECTOR */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Show:
-                </Typography>
+              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Results per page:</span>
                 <Select
                   value={pagination.pageSize}
                   onChange={(e) => {
-                    const newPageSize = Number(e.target.value);
-                    const newPageCount = Math.ceil(filteredResultsCount / newPageSize);
-
-                    // Save page size preference
-                    localStorage.setItem('promptfoo-page-size', newPageSize.toString());
-
                     setPagination((prev) => ({
-                      pageSize: newPageSize,
-                      // Reset to page 0 if current page would be out of bounds
-                      pageIndex: prev.pageIndex >= newPageCount ? 0 : prev.pageIndex,
+                      ...prev,
+                      pageSize: Number(e.target.value),
                     }));
                     window.scrollTo(0, 0);
                   }}
                   displayEmpty
                   inputProps={{ 'aria-label': 'Results per page' }}
                   size="small"
-                  sx={{ minWidth: 70 }}
+                  sx={{ m: 1, minWidth: 80 }}
                 >
                   <MenuItem value={10}>10</MenuItem>
                   <MenuItem value={50} disabled={filteredResultsCount <= 10}>
@@ -1357,116 +1259,33 @@ function ResultsTable({
                     1000
                   </MenuItem>
                 </Select>
-              </Box>
+              </Typography>
 
               {/* PAGE NAVIGATOR */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, position: 'relative' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Go to:
-                </Typography>
+              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Go to:</span>
                 <TextField
                   size="small"
                   type="number"
-                  value={pageInputValue || pagination.pageIndex + 1}
+                  defaultValue={1}
                   onChange={(e) => {
-                    setPageInputValue(e.target.value);
-                  }}
-                  onBlur={(e) => {
-                    const value = e.target.value;
-                    if (value) {
-                      const page = Number(value) - 1;
-                      const validPage = Math.min(Math.max(page, 0), pageCount - 1);
-                      setPagination((prev) => ({
-                        ...prev,
-                        pageIndex: validPage,
-                      }));
-                      clearRowIdFromUrl();
-                    }
-                    // Clear the input value to show current page
-                    setPageInputValue('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      // Blur the input to confirm the change
-                      (e.target as HTMLInputElement).blur();
-                    }
-                  }}
-                  placeholder={`1-${pageCount}`}
-                  inputProps={{
-                    min: 1,
-                    max: pageCount,
-                    'aria-label': 'Go to page number',
-                  }}
-                  error={
-                    pageInputValue !== '' &&
-                    (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
-                  }
-                  helperText={
-                    pageInputValue !== '' &&
-                    (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
-                      ? `Enter 1-${pageCount}`
-                      : ''
-                  }
-                  sx={{
-                    // Dynamic width based on page count digits
-                    width: `${Math.max(80, (pageCount.toString().length + 2) * 20)}px`,
-                    '& .MuiOutlinedInput-root': {
-                      '& fieldset': {
-                        borderRadius: '8px',
-                      },
-                      '&:hover fieldset': {
-                        borderColor: 'primary.main',
-                      },
-                    },
-                    '& input[type=number]': {
-                      MozAppearance: 'textfield',
-                      '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
-                        WebkitAppearance: 'none',
-                        margin: 0,
-                      },
-                    },
-                    '& .MuiFormHelperText-root': {
-                      position: 'absolute',
-                      bottom: '-20px',
-                      fontSize: '0.7rem',
-                      whiteSpace: 'nowrap',
-                    },
-                  }}
-                />
-              </Box>
-
-              {/* PAGE NAVIGATION BUTTONS */}
-              <ButtonGroup
-                variant="outlined"
-                size="small"
-                sx={{
-                  '& .MuiButton': {
-                    borderColor: 'divider',
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                  },
-                }}
-              >
-                <IconButton
-                  size="small"
-                  onClick={() => {
+                    const page = e.target.value ? Number(e.target.value) - 1 : 0;
                     setPagination((prev) => ({
                       ...prev,
-                      pageIndex: 0,
+                      pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
                   }}
-                  disabled={reactTable.getState().pagination.pageIndex === 0}
-                  sx={{ padding: '6px' }}
-                  aria-label="First page"
-                >
-                  <FirstPageIcon fontSize="small" />
-                </IconButton>
+                  sx={{
+                    width: '60px',
+                    textAlign: 'center',
+                  }}
+                />
+              </Typography>
+
+              {/* PAGE NAVIGATION BUTTONS */}
+              <ButtonGroup>
                 <IconButton
-                  size="small"
                   onClick={() => {
                     setPagination((prev) => ({
                       ...prev,
@@ -1476,13 +1295,10 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
-                  sx={{ padding: '6px' }}
-                  aria-label="Previous page"
                 >
-                  <ArrowBackIcon fontSize="small" />
+                  <ArrowBackIcon />
                 </IconButton>
                 <IconButton
-                  size="small"
                   onClick={() => {
                     setPagination((prev) => ({
                       ...prev,
@@ -1492,33 +1308,15 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-                  sx={{ padding: '6px' }}
-                  aria-label="Next page"
                 >
-                  <ArrowForwardIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: pageCount - 1,
-                    }));
-                    clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
-                  }}
-                  disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-                  sx={{ padding: '6px' }}
-                  aria-label="Last page"
-                >
-                  <LastPageIcon fontSize="small" />
+                  <ArrowForwardIcon />
                 </IconButton>
               </ButtonGroup>
             </Box>
           </Box>
         )
       }
-    </div>
+    </>
   );
 }
 

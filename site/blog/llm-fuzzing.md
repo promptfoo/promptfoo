@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2024-10-17
 authors: [vanessa]
+tags: [technical-guide, red-teaming]
 ---
 
 # Does Fuzzing LLMs Actually Work?
