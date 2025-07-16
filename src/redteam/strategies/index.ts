@@ -24,6 +24,7 @@ import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
+import { addPlaybook } from './playbook';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
