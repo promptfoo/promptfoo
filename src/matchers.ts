@@ -543,15 +543,21 @@ export async function matchesLlmRubric(
     );
   }
 
-  if(!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
-    return fail(`llm-rubric produced malformed response - We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`, resp.tokenUsage);
+  if (!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
+    return fail(
+      `llm-rubric produced malformed response - We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
   }
 
   // expects properties pass, score, and reason
   const parsed = jsonObjects[0] as Partial<GradingResult>;
 
-  if(typeof parsed !== 'object' || parsed === null || parsed === undefined) {
-    return fail(`llm-rubric produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`, resp.tokenUsage);
+  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
+    return fail(
+      `llm-rubric produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
   }
 
   let pass = parsed.pass ?? true;

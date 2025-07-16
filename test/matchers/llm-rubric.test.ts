@@ -153,7 +153,8 @@ describe('matchesLlmRubric', () => {
       assertion: undefined,
       pass: false,
       score: 0,
-      reason: 'llm-rubric produced malformed response - output must be string or object. Output: 42',
+      reason:
+        'llm-rubric produced malformed response - output must be string or object. Output: 42',
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -338,7 +339,6 @@ describe('matchesLlmRubric', () => {
       },
     });
   });
-
 
   it('should fail when the grading provider returns a failing result', async () => {
     const expected = 'Expected output';
