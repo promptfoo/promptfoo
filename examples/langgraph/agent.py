@@ -26,7 +26,8 @@ def get_research_agent(model="gpt-4o"):
 
     # Node 1: Simulate a search function that populates raw_info
     def search_info(state: ResearchState) -> ResearchState:
-        mock_info = f"According to recent sources, the latest trends in {state.query} include X, Y, Z."
+        # TODO: Replace with real search API integration
+        mock_info = f"(Mock) According to recent sources, the latest trends in {state.query} include X, Y, Z."
         return ResearchState(query=state.query, raw_info=mock_info)
 
     # Node 2: Use the LLM to summarize the raw_info content

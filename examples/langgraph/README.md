@@ -18,14 +18,20 @@ You can set this in a `.env` file or directly in your environment.
 
 ## Prerequisites
 
-- Python 3.10+
-- Node.js v18+
-- OpenAI API access (for GPT-4o, GPT-4o-mini, or other models)
+- Python 3.9-3.12 tested
+- Node.js v22 LTS or newer
+- OpenAI API access (for GPT-4o, GPT-4o-mini, and OpenAI's forthcoming o3 mini once released)
 - An OpenAI API key
 
 Install Python packages:
 
+```bash
+pip install -r requirements.txt
 ```
+
+Or install individually:
+
+```bash
 pip install langgraph langchain langchain-openai python-dotenv
 ```
 
@@ -47,14 +53,14 @@ npm install -g promptfoo
 
 Run the evaluation:
 
-```
-promptfoo eval
+```bash
+npx promptfoo eval
 ```
 
 Explore results in browser:
 
-```
-promptfoo view
+```bash
+npx promptfoo view
 ```
 
 ---

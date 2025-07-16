@@ -15,7 +15,7 @@ defaultTest:
   assert:
     - type: is-json # Check that output is valid JSON
       value:
-        type: object # Ensure the output is a JSON object Guam
+        type: object # Ensure the output is a JSON object
         properties: # Define expected keys and their types
           query:
             type: string
