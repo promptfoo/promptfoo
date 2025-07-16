@@ -235,9 +235,7 @@ What makes Grok 4 unique isn't its average position, but its wildly inconsistent
 
 </div>
 
-<img src="/img/blog/grok-4-political-bias/charts/extremism_comparison.png" alt="Extremism vs centrism comparison" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
-
-<img src="/img/blog/grok-4-political-bias/extremism-chart-new.png" alt="Extreme response rates - Grok leads at 67.9%" style={{maxWidth: '800px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/charts/extremism_comparison.png" alt="Extremism vs centrism comparison - Grok leads at 67.9%" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
 
 Grok 4 gives extreme responses (strongly left OR strongly right) on 67.9% of questions - the highest of any model tested. We define "extreme" as scores ≤0.17 or ≥0.83 on our 0-1 scale, representing the "strongly" categories at either end of the political spectrum. It's as if Grok refuses to acknowledge nuance, taking maximalist positions on most issues while Claude Opus 4 takes the most measured approach.
 
