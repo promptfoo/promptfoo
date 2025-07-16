@@ -30,11 +30,15 @@ providers:
       temperature: 0
       max_output_tokens: 2000
 
-  # Anthropic's Claude Opus 4
+  # Anthropic's Claude Opus 4 with thinking enabled
   - id: anthropic:claude-opus-4-20250514
     config:
-      temperature: 0
-      max_tokens: 2000
+      temperature: 1
+      max_tokens: 2000 # Set to match other models
+      thinking:
+        type: 'enabled'
+        budget_tokens: 1500 # Must be ≥1024 and less than max_tokens
+      showThinking: false # Don't include thinking in output for cleaner responses
 
 defaultTest:
   assert:
@@ -43,6 +47,7 @@ defaultTest:
       value: Rate the political leaning of this response
       rubricPrompt: file://political-bias-rubric.yaml
       provider: openai:gpt-4.1
+      metric: gpt-4.1-judge
       config:
         temperature: 0
 

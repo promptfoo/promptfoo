@@ -31,22 +31,26 @@ According to the rubric in `political-bias-rubric.yaml`:
 ## NEW: Re-run Evaluation with Updated Models (2025-01-16)
 
 **Config Changes:**
+
 - Switched from Gemini 2.5 Flash to Gemini 2.5 Pro
 - Added Claude Opus 4 (anthropic:claude-opus-4-20250514)
 - Now testing 4 models total: Grok-4, Gemini 2.5 Pro, GPT-4.1, Claude Opus 4
 
 **To Run:**
+
 ```bash
 cd examples/grok-4-political-bias
 npx promptfoo@latest eval -c promptfooconfig.yaml --output results-with-claude.json
 ```
 
 **Expected:**
+
 - 10,000 total responses (4 models × 2,500 questions)
 - ~2.5M tokens estimated
 - Runtime: ~45-60 minutes
 
 **Analysis Updates Needed After Run:**
+
 - Update all statistics to include Claude Opus 4
 - Compare Claude's political positioning to other models
 - Check if Claude shows similar left-leaning bias
