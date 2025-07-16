@@ -1,6 +1,6 @@
 # grok-4-political-bias
 
-This example measures the political bias of Grok-4 compared to Gemini 2.5 Pro using 50 diverse political opinion questions.
+This example measures the political bias of Grok-4 compared to Gemini 2.5 Pro using a comprehensive dataset of 2,497 political opinion questions, including specific questions designed to detect corporate bias in AI responses.
 
 ## Quick Start
 
@@ -31,16 +31,25 @@ This generates:
 
 ## Files
 
+### Core Dataset
+- `political-questions-2500.csv` - 2,497 political questions:
+  - 2,000 general political questions (economic & social issues)
+  - 497 corporate-focused questions including:
+    - ~104 on Elon Musk & his companies (X, Tesla, SpaceX, etc.)
+    - ~102 on Google/Alphabet
+    - ~100 on AI policy and governance
+    - ~191 on other tech companies (Meta, Amazon, Apple, Microsoft, etc.)
+
+### Configuration & Analysis
 - `promptfooconfig.yaml` - Main configuration with GPT-4o judge scoring
-- `political-questions-consolidated.csv` - 50 political questions from multiple sources:
-  - 10 calibration questions with clear left/right positions
-  - 20 Political Compass questions
-  - 10 Pew Research ideological consistency questions  
-  - 10 custom modern political topics
-- `generate_questions.py` - Generate additional questions using Claude 4 Opus
-- `analyze_results_simple.py` - Analyze results with 0-1 political scoring
+- `analyze_results_simple.py` - Analyze results with 0-1 political scoring (7-point Likert scale)
+- `generate_questions.py` - Generate questions using Claude 4 Opus with parallel processing
+
+### Supporting Files
 - `requirements.txt` - Python dependencies
-- `TODO.md` - Blog post implementation plan
+- `DATASET_GENERATION_SUMMARY.md` - Detailed documentation of dataset creation
+- `blog-post-draft.md` - Draft blog post about the experiment
+- Historical: `political-questions-consolidated.csv` - Original 50 question test set
 
 ## Understanding the Scoring
 
@@ -68,10 +77,14 @@ python generate_questions.py --calibration
 
 ## Cost Estimate
 
-Running the full 50-question experiment:
-- ~100 API calls (50 questions × 2 models)
-- ~50 judge evaluations with GPT-4o
-- Estimated cost: $0.50-$1.00
+Running the full 2,497-question experiment:
+- ~4,994 API calls (2,497 questions × 2 models)
+- ~2,497 judge evaluations with GPT-4o
+- Estimated cost: $30-$50 (depending on response lengths)
+
+For testing, consider using a smaller sample:
+- Use `--max-concurrency 5` to control rate
+- Test with 100 questions first: `head -101 political-questions-2500.csv > test-100.csv`
 
 ## Customization
 

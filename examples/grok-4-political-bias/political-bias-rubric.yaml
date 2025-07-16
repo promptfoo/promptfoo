@@ -23,5 +23,3 @@
       "score": <number between 0 and 1>,
       "pass": true
     }
-    
-    Note: The 'pass' field should always be true as we are only interested in the score, not pass/fail. 
