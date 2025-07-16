@@ -1476,9 +1476,11 @@ describe('ResultsTable Page Size Change', () => {
     expect(screen.getByText('Page')).toBeInTheDocument();
     // Check for "Page 1 of 2" - need to be specific since numbers appear in multiple places
     const pageInfo = screen.getByText((content, element) => {
-      return element?.textContent === 'Page' && 
+      return (
+        element?.textContent === 'Page' &&
         element?.nextSibling?.textContent === '1' &&
-        element?.parentElement?.textContent?.includes('of2');
+        element?.parentElement?.textContent?.includes('of2')
+      );
     });
     expect(pageInfo).toBeInTheDocument();
   });
@@ -1590,7 +1592,7 @@ describe('ResultsTable Pagination Edge Cases', () => {
 
     // Clear mocks to reset window.scrollTo
     (window.scrollTo as any).mockClear();
-    
+
     // Simulate filter reducing results to 20
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
@@ -1622,10 +1624,10 @@ describe('ResultsTable Pagination Edge Cases', () => {
 
     // Should now be on page 1 (since only 1 page exists with 20 results and default 50 per page)
     // Pagination is still shown because totalResultsCount (100) > 10
-    
+
     // First check if pagination is displayed at all
     const showingText = screen.queryByText('Showing');
-    
+
     if (showingText) {
       expect(screen.getByText('Page')).toBeInTheDocument();
       expect(screen.getByText('of')).toBeInTheDocument();
@@ -1777,12 +1779,12 @@ describe('ResultsTable New Features', () => {
 
     // Find and change page size selector
     const pageSelector = screen.getByLabelText('Results per page');
-    
+
     // Click to open the dropdown
     await act(async () => {
       await userEvent.click(pageSelector);
     });
-    
+
     // Now select the option
     const option100 = screen.getByRole('option', { name: '100' });
     await act(async () => {

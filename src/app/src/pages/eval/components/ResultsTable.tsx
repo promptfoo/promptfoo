@@ -439,7 +439,7 @@ function ResultsTable({
     });
     // Clear loading state after a short delay
     const timeoutId = setTimeout(() => setIsPaginationLoading(false), 500);
-    
+
     // Cleanup function
     return () => {
       clearTimeout(timeoutId);
