@@ -19,6 +19,7 @@ keywords:
   ]
 date: 2025-07-01
 authors: [tabs]
+tags: [technical-guide, best-practices, prompt-injection]
 ---
 
 # Harder, Better, Prompter, Stronger: AI system prompt hardening
