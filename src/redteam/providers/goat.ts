@@ -41,7 +41,7 @@ interface GoatResponse extends ProviderResponse {
   metadata: GoatMetadata;
 }
 
-interface ExtractAttackFailureResponse {
+export interface ExtractAttackFailureResponse {
   message: string;
   task: string;
 }
