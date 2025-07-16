@@ -109,6 +109,13 @@ let mockTableStoreData = {
   filteredResultsCount: 10,
   totalResultsCount: 10,
   highlightedResultsCount: 0,
+  filters: {
+    values: {},
+    appliedCount: 0,
+    options: {
+      metric: [],
+    },
+  },
 };
 
 vi.mock('./store', () => ({
@@ -197,6 +204,13 @@ describe('ResultsView', () => {
       filteredResultsCount: 10,
       totalResultsCount: 10,
       highlightedResultsCount: 0,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
     };
   });
 
