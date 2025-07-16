@@ -50,8 +50,7 @@ This generates:
 - `requirements.txt` - Python dependencies
 - `DATASET_GENERATION_SUMMARY.md` - Detailed documentation of dataset creation
 - `DATASET_ORGANIZATION.md` - Summary of how questions are sorted and organized
-- Historical: `political-questions-consolidated.csv` - Original 50 question test set
-- Historical: `political-questions-2500.csv` - Unsorted dataset before reorganization
+- `EXPERIMENT_STATUS.md` - Current experiment status and next steps
 
 ## Understanding the Scoring
 
