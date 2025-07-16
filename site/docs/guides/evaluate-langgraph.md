@@ -259,7 +259,7 @@ description: 'LangGraph Research Agent Evaluation'
 
 # List of input prompts to test the provider with
 prompts:
-  - '{{input_prompt}}'
+  - '{\{input_prompt\}}'
 
 # Provider configuration
 providers:
@@ -338,7 +338,7 @@ Set up evaluation metadata (description)
 → Named this evaluation job.
 
 Defined the input prompt (prompts)
-→ Uses {{input_prompt}} as a variable.
+→ Uses `{{input_prompt}}` as a variable.
 
 Connected to the local Python provider (providers)
 → Points to file://./provider.py.
