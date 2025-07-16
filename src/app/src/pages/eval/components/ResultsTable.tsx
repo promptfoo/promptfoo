@@ -140,6 +140,7 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
+// TODO(Will): This is deprecated; remove it.
 function useScrollHandler() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { stickyHeader } = useResultsViewSettingsStore();
