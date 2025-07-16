@@ -1,7 +1,7 @@
 ---
 title: 'Grok 4 Goes Red? Yes, But Not How You Think'
 description: "We tested Grok 4 with 2,500 political questions. It's more right than GPT-4, but still left of center. Plus a shocking anti-Musk overcorrection."
-image: /img/blog/grok-4-political-bias/grok-political-bias-hero.png
+image: /img/blog/grok-4-political-bias/hero.jpg
 keywords:
   [
     Grok 4 political bias,
@@ -25,7 +25,7 @@ The real story isn't that Grok "goes red" - it's that it can't pick a side. With
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'center', margin: '2rem 0'}}>
   <div>
-    <img src="/img/blog/grok-4-political-bias/grok-political-bias-hero.png" alt="Grok 4 political spectrum analysis showing all major AI models lean left of center" style={{width: '100%', height: 'auto', borderRadius: '8px'}} />
+    <img src="/img/blog/grok-4-political-bias/hero.jpg" alt="Grok 4 political spectrum analysis showing all major AI models lean left of center" style={{width: '100%', height: 'auto', borderRadius: '8px'}} />
   </div>
   
   <div style={{backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1.5rem'}}>
@@ -251,9 +251,10 @@ Here's what we found across [2,500 political questions](https://github.com/promp
 
 </div>
 
-<img src="/img/blog/grok-4-political-bias/charts/political_spectrum_main.png" alt="Political positioning of major AI models" style={{maxWidth: '800px', width: '100%', display: 'block', margin: '2rem auto'}} />
-
-<img src="/img/blog/grok-4-political-bias/all-lean-left-improved.png" alt="All AI models lean left on the political see-saw" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1rem', alignItems: 'center', margin: '2rem auto'}}>
+  <img src="/img/blog/grok-4-political-bias/charts/political-spectrum.jpg" alt="Political positioning of major AI models" style={{width: '100%', height: 'auto'}} />
+  <img src="/img/blog/grok-4-political-bias/all-lean-left.jpg" alt="All AI models lean left on the political see-saw" style={{width: '100%', height: 'auto'}} />
+</div>
 
 **Grok 4 leans more right than GPT-4.1 or Gemini** - but surprisingly, Claude Opus 4 is the most centrist of all, scoring 0.646 compared to Grok's 0.655.
 
@@ -261,11 +262,11 @@ Here's what we found across [2,500 political questions](https://github.com/promp
 
 ### The Bipolar Phenomenon: Grok's Extreme Personality
 
-<img src="/img/blog/grok-4-political-bias/bipolar-v4.png" alt="Grok's Political Tug of War - Extreme Swings" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '1.5rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/bipolar.jpg" alt="Grok's Political Tug of War - Extreme Swings" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '1.5rem auto'}} />
 
 What makes Grok 4 unique isn't its average position, but its wildly inconsistent behavior:
 
-<img src="/img/blog/grok-4-political-bias/charts/political_distribution_violin.png" alt="Political score distributions showing different bias patterns" style={{maxWidth: '800px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/charts/political-distribution-violin.jpg" alt="Political score distributions showing different bias patterns" style={{maxWidth: '800px', width: '100%', display: 'block', margin: '2rem auto'}} />
 
 <div style={{display: 'flex', justifyContent: 'center'}}>
 
@@ -278,7 +279,7 @@ What makes Grok 4 unique isn't its average position, but its wildly inconsistent
 
 </div>
 
-<img src="/img/blog/grok-4-political-bias/charts/extremism_comparison.png" alt="Extremism vs centrism comparison - Grok leads at 67.9%" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/charts/extremism-comparison.jpg" alt="Extremism vs centrism comparison - Grok leads at 67.9%" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
 
 Grok 4 gives extreme responses (strongly left OR strongly right) on 67.9% of questions - the highest of any model tested. We define "extreme" as scores ≤0.17 or ≥0.83 on our 0-1 scale, representing the "strongly" categories at either end of the political spectrum. It's as if Grok refuses to acknowledge nuance, taking maximalist positions on most issues while Claude Opus 4 takes the most measured approach.
 
@@ -313,7 +314,7 @@ This isn't coherent ideology - it's a bi-modal response pattern that defies trad
 
 ### The Musk Paradox: Overcorrecting Against Bias?
 
-<img src="/img/blog/grok-4-political-bias/musk-critique-v2.png" alt="Grok gives F grades to Musk companies" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '1.5rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/musk-critique.jpg" alt="Grok gives F grades to Musk companies" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '1.5rem auto'}} />
 
 Perhaps most surprising is how Grok 4 treats questions about its parent company and founder:
 
@@ -330,7 +331,7 @@ Perhaps most surprising is how Grok 4 treats questions about its parent company 
 
 _\*p < 0.001 - highly statistically significant_
 
-<img src="/img/blog/grok-4-political-bias/charts/musk_bias_comparison.png" alt="Musk bias comparison across models" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/charts/musk-bias-comparison.jpg" alt="Musk bias comparison across models" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
 
 Grok 4 is dramatically MORE CRITICAL of Musk-related companies than any other model. This 14.1 percentage point drop suggests possible overcorrection against accusations of bias. Interestingly, Gemini is the only model that's slightly more favorable to Musk topics.
 
@@ -392,9 +393,10 @@ In 521 questions, Grok 4 was >0.3 points more progressive than others. In 306 qu
 
 When other models agree, Grok often takes the opposite extreme.
 
-<img src="/img/blog/grok-4-political-bias/charts/contrarian_scatter.png" alt="Grok's contrarian behavior visualization" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
-
-<img src="/img/blog/grok-4-political-bias/contrarian-v3.png" alt="Grok plays discordant notes in the AI orchestra" style={{maxWidth: '800px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1rem', alignItems: 'center', margin: '2rem auto'}}>
+  <img src="/img/blog/grok-4-political-bias/charts/contrarian-scatter.jpg" alt="Grok's contrarian behavior visualization" style={{width: '100%', height: 'auto'}} />
+  <img src="/img/blog/grok-4-political-bias/contrarian.jpg" alt="Grok plays discordant notes in the AI orchestra" style={{width: '100%', height: 'auto'}} />
+</div>
 
 ## Making Sense of the Paradox
 
@@ -517,7 +519,7 @@ Perhaps most revealing: **GPT-4.1 shows statistically significant self-favoritis
 
 \*\*\*p < 0.05 - statistically significant
 
-<img src="/img/blog/grok-4-political-bias/charts/self_scoring_bias.png" alt="Self-scoring bias analysis" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/charts/self-scoring-bias.jpg" alt="Self-scoring bias analysis" style={{maxWidth: '700px', width: '100%', display: 'block', margin: '2rem auto'}} />
 
 This suggests single-judge evaluations using GPT-4.1 may inflate its perceived performance.
 
@@ -544,7 +546,7 @@ This isn't judge bias - it's a real pattern recognized by all AI systems, includ
 - **Most reliable judge**: Claude Opus 4 (93.3% moderate scores)
 - **Most extreme judge**: GPT-4.1 (45.3% extreme left scores)
 
-<img src="/img/blog/grok-4-political-bias/charts/judge_agreement_heatmap.png" alt="Inter-judge agreement correlation matrix" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '2rem auto'}} />
+<img src="/img/blog/grok-4-political-bias/charts/judge-agreement-heatmap.jpg" alt="Inter-judge agreement correlation matrix" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '2rem auto'}} />
 
 The takeaway: While judges largely agree, using multiple judges reveals subtleties that single-judge designs miss. Our main findings hold across all judges, but the multi-judge approach exposed GPT-4.1's self-bias and confirmed that Grok's anti-Musk stance is real, not an artifact of judge selection.
 
