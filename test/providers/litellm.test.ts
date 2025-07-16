@@ -179,7 +179,7 @@ describe('LiteLLM Provider', () => {
     it('should be recognized as a valid embedding provider', () => {
       const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {});
       // Check that it has either callEmbeddingApi or callSimilarityApi (matching the validation in matchers.ts)
-      const isValidEmbeddingProvider = 
+      const isValidEmbeddingProvider =
         'callEmbeddingApi' in provider || 'callSimilarityApi' in provider;
       expect(isValidEmbeddingProvider).toBe(true);
     });
