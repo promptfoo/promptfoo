@@ -172,7 +172,6 @@
     "drizzle-kit": "^0.31.4",
     "ibm-cloud-sdk-core": "^5.4.0",
     "jest": "^30.0.4",
-    "knip": "^5.61.3",
     "langfuse": "^3.38.4",
     "madge": "^8.0.0",
     "natural": "^8.1.0",
