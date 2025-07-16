@@ -390,7 +390,8 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
 }
 
 /**
- * Get the evaluation timeout in milliseconds.
+ * Get the timeout in milliseconds for each individual test case/provider API call.
+ * When this timeout is reached, that specific test is marked as an error.
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
  * @returns The timeout value in milliseconds, or the default value if not set.
  */
@@ -399,7 +400,8 @@ export function getEvalTimeoutMs(defaultValue: number = 0): number {
 }
 
 /**
- * Get the maximum duration for an evaluation in milliseconds.
+ * Get the maximum total runtime in milliseconds for the entire evaluation process.
+ * When this timeout is reached, all remaining tests are marked as errors and the evaluation ends.
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
  * @returns The max duration in milliseconds, or the default value if not set.
  */

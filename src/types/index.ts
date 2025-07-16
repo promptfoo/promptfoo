@@ -185,11 +185,15 @@ const EvaluateOptionsSchema = z.object({
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
   /**
-   * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
+   * Timeout in milliseconds for each individual test case/provider API call.
+   * When reached, that specific test is marked as an error.
+   * Default is 0 (no timeout).
    */
   timeoutMs: z.number().optional(),
   /**
-   * Maximum runtime in milliseconds for the entire evaluation. Default is 0 (no limit).
+   * Maximum total runtime in milliseconds for the entire evaluation process.
+   * When reached, all remaining tests are marked as errors and the evaluation ends.
+   * Default is 0 (no limit).
    */
   maxEvalTimeMs: z.number().optional(),
   isRedteam: z.boolean().optional(),

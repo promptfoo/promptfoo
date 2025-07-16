@@ -1,25 +1,19 @@
 #!/usr/bin/env node
-
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-
 // Load environment variables from .env file
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-
 // Get OpenAI API key from environment
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
 if (!OPENAI_API_KEY) {
   console.error('Please set the OPENAI_API_KEY environment variable');
   process.exit(1);
 }
-
 // Parse command line arguments
 const args = process.argv.slice(2);
 let filename = 'blog-image.png';
 let prompt = '';
-
 // Parse arguments
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--filename' || args[i] === '-f') {
@@ -31,12 +25,10 @@ for (let i = 0; i < args.length; i++) {
   } else if (args[i] === '--help' || args[i] === '-h') {
     console.log(`
 Usage: node generate-blog-image.js [options]
-
 Options:
   -f, --filename <name>    Output filename (default: blog-image.png)
   -p, --prompt <text>      Image generation prompt
   -h, --help              Show this help message
-
 Examples:
   node generate-blog-image.js -f system-cards-hero.png -p "A red panda reading documentation"
   node generate-blog-image.js --filename security-test.png --prompt "Cybersecurity visualization"
@@ -44,11 +36,9 @@ Examples:
     process.exit(0);
   }
 }
-
 // Example prompt for system cards blog post:
 /*
 const systemCardsPrompt = `Create a professional hero image for a blog post about LLM System Cards and AI Safety Documentation. 
-
 The image should feature:
 - A cute red panda character (the Promptfoo mascot) in a cybersecurity/tech setting
 - The red panda should be examining or holding system documentation, security reports, or technical papers
@@ -58,16 +48,13 @@ The image should feature:
 - Background could include subtle circuit patterns, document icons, or security symbols
 - The red panda should look intelligent and focused, perhaps wearing glasses or holding a magnifying glass
 - Overall mood: trustworthy, technical, but friendly
-
 Style: Modern tech illustration, clean lines, professional but approachable, suitable for a security-focused blog post`;
 */
-
 if (!prompt) {
   console.error('Please provide a prompt using --prompt or -p');
   console.log('Use --help for usage information');
   process.exit(1);
 }
-
 async function generateImage() {
   const data = JSON.stringify({
     model: 'gpt-image-1',
@@ -76,7 +63,6 @@ async function generateImage() {
     quality: 'high',
     n: 1,
   });
-
   const options = {
     hostname: 'api.openai.com',
     port: 443,
@@ -88,15 +74,12 @@ async function generateImage() {
       'Content-Length': data.length,
     },
   };
-
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       let responseBody = '';
-
       res.on('data', (chunk) => {
         responseBody += chunk;
       });
-
       res.on('end', () => {
         try {
           const response = JSON.parse(responseBody);
@@ -110,24 +93,19 @@ async function generateImage() {
         }
       });
     });
-
     req.on('error', (error) => {
       reject(error);
     });
-
     req.write(data);
     req.end();
   });
 }
-
 async function downloadImage(url, filepath) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(filepath);
-
     https
       .get(url, (response) => {
         response.pipe(file);
-
         file.on('finish', () => {
           file.close(resolve);
         });
@@ -138,12 +116,10 @@ async function downloadImage(url, filepath) {
       });
   });
 }
-
 async function main() {
   try {
     console.log('Generating image with gpt-image-1...');
     const imageData = await generateImage();
-
     if (imageData.b64_json) {
       // If we get base64 data, save it directly
       const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', 'blog', filename);
@@ -163,5 +139,4 @@ async function main() {
     process.exit(1);
   }
 }
-
 main();
