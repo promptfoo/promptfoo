@@ -1,8 +1,10 @@
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import * as assetStorage from '../../../src/util/assetStorage';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
+jest.mock('../../../src/util/assetStorage');
 
 describe('OpenAiImageProvider', () => {
   const mockFetchResponse = {
@@ -26,6 +28,17 @@ describe('OpenAiImageProvider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+    
+    // Mock asset storage
+    jest.mocked(assetStorage.saveBase64Asset).mockImplementation((base64, mimeType, originalName) => ({
+      id: 'mock-uuid',
+      path: '/path/to/asset',
+      url: '/assets/mock-uuid.png',
+      mimeType: mimeType || 'image/png',
+      originalName,
+      createdAt: new Date(),
+      type: 'image',
+    }));
   });
 
   describe('Basic functionality', () => {
@@ -287,10 +300,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockBase64Response.data),
+        output: '![test prompt](/assets/mock-uuid.png)',
         cached: false,
-        isBase64: true,
-        format: 'json',
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
 
@@ -578,6 +589,67 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('Invalid size "512x512" for GPT-image-1');
+    });
+
+    it('should handle base64 response format from gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          created: 1234567890,
+          data: [{ b64_json: 'base64ImageData' }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Generate an image');
+
+      expect(result).toEqual({
+        output: '![Generate an image](/assets/mock-uuid.png)',
+        cached: false,
+        cost: 0.04, // Default medium quality for gpt-image-1
+      });
+
+      expect(assetStorage.saveBase64Asset).toHaveBeenCalledWith(
+        'base64ImageData',
+        'image/png',
+        'Generate an image.png',
+      );
+    });
+
+    it('should handle top-level base64 response from gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', output_format: 'webp' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          created: 1234567890,
+          background: 'opaque',
+          b64_json: 'base64WebpData',
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Generate a webp image');
+
+      expect(result).toEqual({
+        output: '![Generate a webp image](/assets/mock-uuid.png)',
+        cached: false,
+        cost: 0.04, // Default medium quality for gpt-image-1
+      });
+
+      expect(assetStorage.saveBase64Asset).toHaveBeenCalledWith(
+        'base64WebpData',
+        'image/webp',
+        'Generate a webp image.webp',
+      );
     });
   });
 });

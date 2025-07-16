@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import { saveBase64Asset } from '../../util/assetStorage';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiSharedOptions } from './types';
@@ -127,14 +128,13 @@ export function formatOutput(
       
       // GPT-image-1 primarily returns base64 data
       if (firstItem.b64_json) {
-        // Convert base64 to data URL for display in web viewer
+        // Save base64 as asset file
         let mimeType = 'image/png'; // Default
         if (outputFormat === 'jpeg' || outputFormat === 'jpg') {
           mimeType = 'image/jpeg';
         } else if (outputFormat === 'webp') {
           mimeType = 'image/webp';
         }
-        const dataUrl = `data:${mimeType};base64,${firstItem.b64_json}`;
         
         const sanitizedPrompt = prompt
           .replace(/\r?\n|\r/g, ' ')
@@ -142,7 +142,13 @@ export function formatOutput(
           .replace(/\]/g, ')');
         const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
         
-        return `![${ellipsizedPrompt}](${dataUrl})`;
+        const asset = saveBase64Asset(
+          firstItem.b64_json,
+          mimeType,
+          `${ellipsizedPrompt}.${outputFormat || 'png'}`
+        );
+        
+        return `![${ellipsizedPrompt}](${asset.url})`;
       }
       
       // But can also return URLs (for compatibility/testing)
@@ -165,7 +171,6 @@ export function formatOutput(
       } else if (outputFormat === 'webp') {
         mimeType = 'image/webp';
       }
-      const dataUrl = `data:${mimeType};base64,${data.b64_json}`;
       
       const sanitizedPrompt = prompt
         .replace(/\r?\n|\r/g, ' ')
@@ -173,7 +178,13 @@ export function formatOutput(
         .replace(/\]/g, ')');
       const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
       
-      return `![${ellipsizedPrompt}](${dataUrl})`;
+      const asset = saveBase64Asset(
+        data.b64_json,
+        mimeType,
+        `${ellipsizedPrompt}.${outputFormat || 'png'}`
+      );
+      
+      return `![${ellipsizedPrompt}](${asset.url})`;
     }
     
     // Check for error conditions
@@ -192,9 +203,8 @@ export function formatOutput(
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    // Convert base64 to data URL for display in web viewer
+    // Save base64 as asset file
     const mimeType = 'image/png';
-    const dataUrl = `data:${mimeType};base64,${b64Json}`;
     
     const sanitizedPrompt = prompt
       .replace(/\r?\n|\r/g, ' ')
@@ -202,7 +212,13 @@ export function formatOutput(
       .replace(/\]/g, ')');
     const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     
-    return `![${ellipsizedPrompt}](${dataUrl})`;
+    const asset = saveBase64Asset(
+      b64Json,
+      mimeType,
+      `${ellipsizedPrompt}.png`
+    );
+    
+    return `![${ellipsizedPrompt}](${asset.url})`;
   } else {
     const url = data.data[0].url;
     if (!url) {

@@ -1,0 +1,26 @@
+# Test configuration for DALL-E with base64 response format
+description: Test DALL-E base64 image generation and asset storage
+
+providers:
+  - id: openai:image:dall-e-3
+    config:
+      response_format: b64_json
+      size: 1024x1024
+      quality: standard
+  
+  - id: openai:image:dall-e-2
+    config:
+      response_format: b64_json
+      size: 512x512
+
+prompts:
+  - 'Create a photorealistic image of: {{subject}}'
+  - 'Draw {{subject}} in a minimalist style'
+
+tests:
+  - vars:
+      subject: a red panda eating bamboo
+  - vars:
+      subject: a futuristic cityscape at sunset
+  - vars:
+      subject: abstract geometric patterns in blue and gold 

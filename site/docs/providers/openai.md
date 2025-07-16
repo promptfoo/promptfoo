@@ -326,6 +326,34 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 
 Then, enable 'Render markdown' under Table Settings.
 
+#### Base64 Image Handling and Asset Storage
+
+When OpenAI image models return base64-encoded images (common with gpt-image-1 or when using `response_format: b64_json`), promptfoo automatically:
+
+1. **Saves base64 images as files** in the local cache directory (`~/.promptfoo/cache/assets/`)
+2. **Serves them through the web viewer** at `/assets/[filename]`
+3. **Returns markdown image references** that display properly in the web interface
+
+This means you don't need to handle base64 data manually. For example:
+
+```yaml title="base64-example.yaml"
+providers:
+  - id: openai:image:dall-e-3
+    config:
+      response_format: b64_json  # Returns base64 instead of URLs
+```
+
+The output will automatically be converted from base64 to a viewable image:
+```markdown
+![A red panda](/assets/12345678-1234-1234-1234-123456789012.png)
+```
+
+The assets are stored with:
+- **Unique UUID filenames** to prevent conflicts
+- **Proper MIME types** based on the image format
+- **Immutable cache headers** for optimal performance
+- **Automatic cleanup** based on cache TTL settings
+
 ## Using tools and functions
 
 OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).

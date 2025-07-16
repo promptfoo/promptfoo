@@ -30,6 +30,7 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
+import { assetsRouter } from './routes/assets';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
@@ -215,12 +216,15 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
-  app.use('/api/providers', providersRouter);
-  app.use('/api/redteam', redteamRouter);
-  app.use('/api/user', userRouter);
-  app.use('/api/configs', configsRouter);
-  app.use('/api/model-audit', modelAuditRouter);
-  app.use('/api/traces', tracesRouter);
+app.use('/api/providers', providersRouter);
+app.use('/api/redteam', redteamRouter);
+app.use('/api/user', userRouter);
+app.use('/api/configs', configsRouter);
+app.use('/api/model-audit', modelAuditRouter);
+app.use('/api/traces', tracesRouter);
+
+// Serve assets (images, etc.) stored in cache
+app.use('/assets', assetsRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
