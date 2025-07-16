@@ -469,7 +469,7 @@ export default function ResultsView({
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
 
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
-  const [renderResultsCharts, setRenderResultsCharts] = React.useState(true);
+  const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   return (
     <>
@@ -646,13 +646,13 @@ export default function ResultsView({
                 <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
                   Eval actions
                 </Button>
-                {canRenderResultsCharts && !renderResultsCharts && (
+                {canRenderResultsCharts && (
                   <Button
-                    onClick={() => setRenderResultsCharts(true)}
+                    onClick={() => setRenderResultsCharts((prev) => !prev)}
                     variant="text"
                     startIcon={<BarChartIcon />}
                   >
-                    Show Charts
+                    {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
                   </Button>
                 )}
                 {config && (
