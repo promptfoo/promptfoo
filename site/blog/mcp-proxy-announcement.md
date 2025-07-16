@@ -10,6 +10,8 @@ image: /img/blog/mcp/mcp-proxy-hero.png
 Model Context Protocol (MCP) adoption is skyrocketing, [NPM installations are up to 4.7m](https://www.npmjs.com/package/@modelcontextprotocol/sdk) for the week of July 7th, 2025. Today we're announcing the Promptfoo MCP Proxy to manage the security risks for enterprises using MCP servers.
 MCP servers aren't inherently insecure, but the way they're being used creates huge vulnerabilities. Through our work with some of the world's largest companies, we've discovered alarmingly insecure patterns.
 
+<!-- truncate -->
+
 ## What Are MCP Servers?
 
 MCP servers are wrappers around existing APIs, just like an SDK. No magic, no AI. A "Slack MCP server" takes Slack's existing API endpoints (like [these](https://api.slack.com/docs)) and packages them as tools an LLM can use.

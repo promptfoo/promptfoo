@@ -273,7 +273,7 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
 - `google:gemini-2.5-pro-preview-06-05` - Previous Gemini 2.5 Pro preview with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
-- `google:gemini-2.5-flash-preview-05-20` - Previous Flash preview with enhanced reasoning and thinking capabilities
+- `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
@@ -311,7 +311,7 @@ For models that support thinking capabilities (like Gemini 2.5 Flash), you can c
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-05-20
+  - id: google:gemini-2.5-flash
     config:
       generationConfig:
         temperature: 0.7
@@ -341,6 +341,21 @@ For multimodal inputs (images and video), the provider supports:
 
 - Images: PNG, JPEG, WEBP, HEIC, HEIF formats (max 3,600 files)
 - Videos: MP4, MPEG, MOV, AVI, FLV, MPG, WEBM, WMV, 3GPP formats (up to ~1 hour)
+
+When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
+
+```yaml
+prompts: |
+  {{imageFile}}
+  Caption this image.
+
+providers:
+  - id: google:gemini-2.5-flash
+
+tests:
+  - vars:
+      imageFile: file://assets/red-panda.jpg
+```
 
 ### Safety Settings
 
@@ -570,7 +585,7 @@ To enable Search grounding:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-05-20
+  - id: google:gemini-2.5-flash
     config:
       tools:
         - googleSearch: {} # or google_search: {}
@@ -627,11 +642,60 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
-#### Example and Resources
-
-For a complete working example, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
-
 For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+### Code Execution
+
+Code execution allows Gemini models to write and execute Python code to solve computational problems, perform calculations, and generate data visualizations.
+
+#### Basic Usage
+
+To enable code execution:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-05-20
+    config:
+      tools:
+        - codeExecution: {}
+```
+
+#### Example Use Cases
+
+Code execution is particularly valuable for:
+
+- Mathematical computations and calculations
+- Data analysis and visualization
+
+For more details, see the [Google AI Studio documentation on Code Execution](https://ai.google.dev/gemini-api/docs/code-execution).
+
+### URL Context
+
+URL context allows Gemini models to extract and analyze content from web URLs, enabling them to understand and work with information from specific web pages.
+
+#### Basic Usage
+
+To enable URL context:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      tools:
+        - urlContext: {}
+```
+
+#### Example Use Cases
+
+URL context is particularly valuable for:
+
+- Analyzing specific web page content
+- Extracting information from documentation
+- Comparing information across multiple URLs
+
+For more details, see the [Google AI Studio documentation on URL Context](https://ai.google.dev/gemini-api/docs/url-context).
+
+For complete working examples of the search grounding, code execution, and url context features, see the [google-aistudio-tools examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-tools).
 
 ## Google Live API
 
