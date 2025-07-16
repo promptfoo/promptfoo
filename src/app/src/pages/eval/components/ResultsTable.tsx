@@ -227,8 +227,6 @@ function ResultsTable({
     setPageInputValue('');
   }, [pagination.pageIndex]);
 
-
-
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
     setLightboxOpen(!lightboxOpen);
@@ -440,7 +438,12 @@ function ResultsTable({
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
     // Clear loading state after a short delay
-    setTimeout(() => setIsPaginationLoading(false), 500);
+    const timeoutId = setTimeout(() => setIsPaginationLoading(false), 500);
+    
+    // Cleanup function
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [
     // evalId is NOT in the dependency array
     pagination.pageIndex,
@@ -929,7 +932,7 @@ function ResultsTable({
 
   const pageCount = React.useMemo(
     () => Math.max(1, Math.ceil(filteredResultsCount / pagination.pageSize)),
-    [filteredResultsCount, pagination.pageSize]
+    [filteredResultsCount, pagination.pageSize],
   );
   const reactTable = useReactTable({
     data: tableBody,
@@ -947,8 +950,6 @@ function ResultsTable({
 
   const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
-
-
 
   const clearRowIdFromUrl = React.useCallback(() => {
     const url = new URL(window.location.href);
@@ -1233,10 +1234,9 @@ function ResultsTable({
             No results found
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {searchText ? 
-              'Try adjusting your search terms or filters' : 
-              'No test results available'
-            }
+            {searchText
+              ? 'Try adjusting your search terms or filters'
+              : 'No test results available'}
           </Typography>
         </Box>
       )}
@@ -1398,9 +1398,13 @@ function ResultsTable({
                     max: pageCount,
                     'aria-label': 'Go to page number',
                   }}
-                  error={pageInputValue !== '' && (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)}
+                  error={
+                    pageInputValue !== '' &&
+                    (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
+                  }
                   helperText={
-                    pageInputValue !== '' && (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
+                    pageInputValue !== '' &&
+                    (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
                       ? `Enter 1-${pageCount}`
                       : ''
                   }
