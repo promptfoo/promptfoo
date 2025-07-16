@@ -50,7 +50,7 @@ describe('share', () => {
 
     expect(res.body).toHaveProperty('id');
     expect(res.body.id).toBeTruthy();
-    
+
     // Track this eval for cleanup
     testEvalIds.add(res.body.id);
 
@@ -69,7 +69,7 @@ describe('share', () => {
 
     expect(res.body).toHaveProperty('id');
     expect(res.body.id).toBeTruthy();
-    
+
     // Track this eval for cleanup
     testEvalIds.add(res.body.id);
 
@@ -89,7 +89,7 @@ describe('share', () => {
 
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
-      
+
       // No eval was created, so nothing to track
     });
 
@@ -106,7 +106,7 @@ describe('share', () => {
 
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
-      
+
       // No eval was created, so nothing to track
     });
 
@@ -121,7 +121,7 @@ describe('share', () => {
 
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
-      
+
       // No eval was created, so nothing to track
     });
   });
