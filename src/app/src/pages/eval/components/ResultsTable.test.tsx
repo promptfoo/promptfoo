@@ -1476,7 +1476,7 @@ describe('ResultsTable Page Size Change', () => {
     expect(screen.getByText('Page')).toBeInTheDocument();
     // Check for "Page 1 of 2" - need to be specific since numbers appear in multiple places
     const pageInfo = screen.getByText((content, element) => {
-      return (
+      return !!(
         element?.textContent === 'Page' &&
         element?.nextSibling?.textContent === '1' &&
         element?.parentElement?.textContent?.includes('of2')
