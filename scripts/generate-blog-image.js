@@ -30,7 +30,7 @@ for (let i = 0; i < args.length; i++) {
     i++;
   } else if (args[i] === '--help' || args[i] === '-h') {
     console.log(`
-Usage: node generate-system-cards-image.js [options]
+Usage: node generate-blog-image.js [options]
 
 Options:
   -f, --filename <name>    Output filename (default: blog-image.png)
@@ -38,8 +38,8 @@ Options:
   -h, --help              Show this help message
 
 Examples:
-  node generate-system-cards-image.js -f system-cards-hero.png -p "A red panda reading documentation"
-  node generate-system-cards-image.js --filename security-test.png --prompt "Cybersecurity visualization"
+  node generate-blog-image.js -f system-cards-hero.png -p "A red panda reading documentation"
+  node generate-blog-image.js --filename security-test.png --prompt "Cybersecurity visualization"
 `);
     process.exit(0);
   }
