@@ -97,10 +97,13 @@ When running in development mode:
 - ✓ Automatic MIME type detection
 - ✓ Server endpoint for asset serving
 - ✓ Cache headers for performance
-- ✓ Works with all OpenAI image models
+- ✓ Works with all OpenAI image models (gpt-image-1, DALL-E 2/3)
+- ✓ Works with Hyperbolic image models
+- ✓ Works with xAI image models (inherits from OpenAI)
 - ✓ Backward compatible with URL responses
 - ✓ Frontend proxy configuration for development
 - ✓ Markdown image rendering in web viewer
+- ✓ Comprehensive unit and integration tests
 
 ## Future Enhancements
 
