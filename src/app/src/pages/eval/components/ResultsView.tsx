@@ -467,8 +467,6 @@ export default function ResultsView({
 
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
 
-  const [showResultsCharts, setShowResultsCharts] = React.useState(true);
-
   return (
     <>
       <Box
@@ -729,13 +727,10 @@ export default function ResultsView({
               </ResponsiveStack>
             </Box>
           </ResponsiveStack>
-          {showResultsCharts && (
-            <ResultsCharts
-              columnVisibility={currentColumnState.columnVisibility}
-              recentEvals={recentEvals}
-              setShowResultsCharts={setShowResultsCharts}
-            />
-          )}
+          <ResultsCharts
+            columnVisibility={currentColumnState.columnVisibility}
+            recentEvals={recentEvals}
+          />
         </Box>
         <ResultsTable
           maxTextLength={maxTextLength}

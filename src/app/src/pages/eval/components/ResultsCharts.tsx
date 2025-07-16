@@ -32,7 +32,6 @@ import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from '.
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
   recentEvals: ResultLightweightWithLabel[];
-  setShowResultsCharts: (show: boolean) => void;
 }
 
 interface ChartProps {
@@ -620,14 +619,11 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({
-  columnVisibility,
-  recentEvals,
-  setShowResultsCharts,
-}: ResultsChartsProps) {
+function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
+  const [showCharts, setShowCharts] = useState(true);
 
   const { table, evalId, config } = useTableStore();
 
@@ -647,6 +643,7 @@ function ResultsCharts({
   if (
     !table ||
     !config ||
+    !showCharts ||
     (table.head.prompts.length < 2 && !showPerformanceOverTimeChart)
   ) {
     return null;
@@ -693,7 +690,7 @@ function ResultsCharts({
       <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
         <IconButton
           style={{ position: 'absolute', right: 0, top: 0 }}
-          onClick={() => setShowResultsCharts(false)}
+          onClick={() => setShowCharts(false)}
         >
           <CloseIcon />
         </IconButton>
