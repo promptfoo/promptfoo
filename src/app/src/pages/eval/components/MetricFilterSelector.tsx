@@ -11,10 +11,6 @@ export const MetricFilterSelector: React.FC<{}> = () => {
   const { filters, addFilter, resetFilters } = useTableStore();
   const availableMetrics = filters.options.metric;
 
-  if (availableMetrics.length === 0) {
-    return null;
-  }
-
   const handleChange = React.useCallback(
     (event: SelectChangeEvent) => {
       const value = event.target.value;
@@ -36,7 +32,7 @@ export const MetricFilterSelector: React.FC<{}> = () => {
   const selectedMetric =
     Object.keys(filters.values).length > 0 ? Object.values(filters.values)[0].value : null;
 
-  return (
+  return availableMetrics.length > 0 ? (
     <Box>
       <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
         <InputLabel id="metric-filter-label">Filter by Metric</InputLabel>
@@ -56,5 +52,5 @@ export const MetricFilterSelector: React.FC<{}> = () => {
         </Select>
       </FormControl>
     </Box>
-  );
+  ) : null;
 };
