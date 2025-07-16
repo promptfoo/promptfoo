@@ -7,9 +7,42 @@ pre {
 }
 
 .results-table-container {
-  overflow: scroll;
-  margin: 1rem -1rem 0 -1rem;
-  padding: 0 1rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 0;
+  position: relative;
+  scroll-behavior: smooth;
+  margin-top: 1rem;
+}
+
+.results-table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.results-table-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .results-table-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.results-table-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .results-table-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.results-table-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .results-table-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 table.results-table,
@@ -614,4 +647,31 @@ thead.collapsed .header-dismiss {
   color: var(--ifm-color-emphasis-700);
   line-height: 1.4;
   white-space: pre-wrap;
+}
+
+/* Pagination styles */
+.pagination {
+  /* Removed animation to prevent jumping */
+}
+
+/* Mobile responsiveness for pagination */
+@media (max-width: 768px) {
+  .pagination {
+    flex-direction: column;
+    gap: 1rem !important;
+    text-align: center;
+  }
+
+  .pagination > * {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Firefox specific fix for scrollbar */
+.results-table-container.firefox-fix {
+  /* Firefox fix */
+  .results-table td {
+    height: 100%;
+  }
 }

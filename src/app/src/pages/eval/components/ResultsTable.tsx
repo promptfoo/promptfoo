@@ -29,6 +29,8 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import FirstPageIcon from '@mui/icons-material/FirstPage';
+import LastPageIcon from '@mui/icons-material/LastPage';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
@@ -44,7 +46,6 @@ import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 import ButtonGroup from '@mui/material/ButtonGroup';
-import useViewportHeight from '@app/hooks/useViewportHeight';
 
 const VARIABLE_COLUMN_SIZE_PX = 100;
 const PROMPT_COLUMN_SIZE_PX = 300;
@@ -1012,23 +1013,6 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
-  const paginationContainerRef = React.useRef<HTMLDivElement>(null);
-  const tableContainerRef = React.useRef<HTMLDivElement>(null);
-  const viewportHeight = useViewportHeight();
-
-  /**
-   * The table container's height is dynamically constructed such that the pagination footer
-   * is always pinned to the bottom of the viewport. This enables the table to scroll horizontally
-   * within the table container, enabling the sticky header to function as expected.
-   */
-  const tableContainerHeight = React.useMemo(() => {
-    const tableStart = tableContainerRef.current?.getBoundingClientRect().top ?? 0;
-    const paginationContainerHeight =
-      paginationContainerRef.current?.getBoundingClientRect().height ?? 0;
-    const tableHeight = viewportHeight - tableStart - paginationContainerHeight;
-    return tableHeight;
-  }, [tableContainerRef.current, paginationContainerRef.current, viewportHeight]);
-
   return (
     <div>
       {isSearching && searchText && (
@@ -1071,8 +1055,11 @@ function ResultsTable({
 
       <div
         className="results-table-container"
-        ref={tableContainerRef}
-        style={{ height: tableContainerHeight }}
+        style={{
+          borderRadius: '8px',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        }}
       >
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
@@ -1202,10 +1189,7 @@ function ResultsTable({
         // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
         totalResultsCount > 10 && (
           <Box
-            ref={paginationContainerRef}
             className="pagination"
-            px={2}
-            mx={-2}
             sx={{
               display: 'flex',
               alignItems: 'center',
@@ -1213,10 +1197,12 @@ function ResultsTable({
               flexWrap: 'wrap',
               justifyContent: 'space-between',
               backgroundColor: 'background.paper',
-              borderTop: '1px solid',
+              borderRadius: '8px',
+              padding: '16px 24px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+              margin: '24px 0',
+              border: '1px solid',
               borderColor: 'divider',
-              width: '100vw',
-              boxShadow: 3,
             }}
           >
             <Box>
@@ -1235,21 +1221,28 @@ function ResultsTable({
               results
             </Box>
 
-            <Box>
-              Page{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {reactTable.getState().pagination.pageIndex + 1}
-              </Typography>{' '}
-              of{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {pageCount}
-              </Typography>
-            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+              {/* PAGE INFO */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Page
+                </Typography>
+                <Typography component="span" sx={{ fontWeight: 600 }}>
+                  {reactTable.getState().pagination.pageIndex + 1}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  of
+                </Typography>
+                <Typography component="span" sx={{ fontWeight: 600 }}>
+                  {pageCount}
+                </Typography>
+              </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {/* PAGE SIZE SELECTOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Results per page:</span>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Show:
+                </Typography>
                 <Select
                   value={pagination.pageSize}
                   onChange={(e) => {
@@ -1262,7 +1255,7 @@ function ResultsTable({
                   displayEmpty
                   inputProps={{ 'aria-label': 'Results per page' }}
                   size="small"
-                  sx={{ m: 1, minWidth: 80 }}
+                  sx={{ minWidth: 70 }}
                 >
                   <MenuItem value={10}>10</MenuItem>
                   <MenuItem value={50} disabled={filteredResultsCount <= 10}>
@@ -1278,15 +1271,17 @@ function ResultsTable({
                     1000
                   </MenuItem>
                 </Select>
-              </Typography>
+              </Box>
 
               {/* PAGE NAVIGATOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Go to:</span>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Go to:
+                </Typography>
                 <TextField
                   size="small"
                   type="number"
-                  defaultValue={1}
+                  value={pagination.pageIndex + 1}
                   onChange={(e) => {
                     const page = e.target.value ? Number(e.target.value) - 1 : 0;
                     setPagination((prev) => ({
@@ -1297,14 +1292,45 @@ function ResultsTable({
                   }}
                   sx={{
                     width: '60px',
-                    textAlign: 'center',
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': {
+                        borderRadius: '8px',
+                      },
+                    },
                   }}
                 />
-              </Typography>
+              </Box>
 
               {/* PAGE NAVIGATION BUTTONS */}
-              <ButtonGroup>
+              <ButtonGroup
+                variant="outlined"
+                size="small"
+                sx={{
+                  '& .MuiButton': {
+                    borderColor: 'divider',
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  },
+                }}
+              >
                 <IconButton
+                  size="small"
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: 0,
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={reactTable.getState().pagination.pageIndex === 0}
+                  sx={{ padding: '6px' }}
+                >
+                  <FirstPageIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
                   onClick={() => {
                     setPagination((prev) => ({
                       ...prev,
@@ -1314,10 +1340,12 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
+                  sx={{ padding: '6px' }}
                 >
-                  <ArrowBackIcon />
+                  <ArrowBackIcon fontSize="small" />
                 </IconButton>
                 <IconButton
+                  size="small"
                   onClick={() => {
                     setPagination((prev) => ({
                       ...prev,
@@ -1327,8 +1355,24 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+                  sx={{ padding: '6px' }}
                 >
-                  <ArrowForwardIcon />
+                  <ArrowForwardIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: pageCount - 1,
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+                  sx={{ padding: '6px' }}
+                >
+                  <LastPageIcon fontSize="small" />
                 </IconButton>
               </ButtonGroup>
             </Box>
