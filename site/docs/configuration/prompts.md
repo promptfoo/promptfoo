@@ -125,6 +125,8 @@ prompts:
   - file://scenarios/**/*.json
 ```
 
+Wildcards like `path/to/prompts/**/*.py:func_name` are also supported.
+
 ## Chat Format (JSON)
 
 For conversation-style interactions, use JSON format:
