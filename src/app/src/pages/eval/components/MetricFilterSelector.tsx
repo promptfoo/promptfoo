@@ -11,10 +11,6 @@ export const MetricFilterSelector: React.FC<{}> = () => {
   const { filters, addFilter, resetFilters } = useTableStore();
   const availableMetrics = filters.options.metric;
 
-  if (availableMetrics.length === 0) {
-    return null;
-  }
-
   const handleChange = React.useCallback(
     (event: SelectChangeEvent) => {
       const value = event.target.value;

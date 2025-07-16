@@ -36,6 +36,8 @@ As enterprises deploy AI applications at scale, red teaming has become essential
 | **Learning Curve**    | Low                              | High                     |
 | **Best For**          | Continuous security testing      | Custom deep-dives        |
 
+<!-- truncate -->
+
 PyRIT interface:
 
 ![pyrit](/img/blog/pyrit/pyrit.png)
