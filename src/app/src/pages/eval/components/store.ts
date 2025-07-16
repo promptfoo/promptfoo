@@ -163,7 +163,7 @@ interface FilterableTextField extends IFilterableField {
   type: 'text';
 }
 
-type FilterableField = FilterableSelectField | FilterableFieldField | FilterableTextField;
+export type FilterableField = FilterableSelectField | FilterableFieldField | FilterableTextField;
 
 interface TableState {
   evalId: string | null;
@@ -422,6 +422,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             type: filter.type,
             operator: filter.operator,
             value: filter.value,
+            field: filter.field,
           }),
         );
       });

@@ -449,12 +449,16 @@ export default class Eval {
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
       opts.filters.forEach((filter) => {
-        const { logicOperator, type, operator, value } = JSON.parse(filter);
+        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
           condition = `json_extract(named_scores, '$.${sanitizedValue}') IS NOT NULL`;
+        } else if (type === 'metadata' && operator === 'equals' && field) {
+          const sanitizedField = field.replace(/'/g, "''");
+          const sanitizedValue = value.replace(/'/g, "''");
+          condition = `json_extract(metadata, '$.${sanitizedField}') = '${sanitizedValue}'`;
         }
 
         if (condition) {

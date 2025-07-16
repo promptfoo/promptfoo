@@ -15,7 +15,7 @@ import {
   Divider,
   TextField,
 } from '@mui/material';
-import { useTableStore, type ResultsFilter } from '../store';
+import { useTableStore, type ResultsFilter, type FilterableField } from '../store';
 
 function Dropdown({
   id,
@@ -137,7 +137,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
   );
 
   // Find the current field to get its options
-  const currentField = filters.fields.find((field) => field.id === value.type);
+  const currentField = filters.fields.find((field) => field.id === value.type) as FilterableField;
 
   let valueInput = null;
 
@@ -146,8 +146,8 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
     valueInput = (
       <Dropdown
         id={`${index}-value-select`}
-        label={currentField?.label || 'Value'}
-        values={currentField!.options
+        label={currentField.label || 'Value'}
+        values={currentField.options
           .sort((a, b) => a.label.localeCompare(b.label))
           .map((option) => ({
             label: option.label,
@@ -171,7 +171,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
         />
       );
     }
-  }
+  };
 
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
@@ -205,17 +205,17 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
           width={125}
         />
 
-        {currentField!.type === 'field' && (
+        {currentField.type === 'field' && (
           <Dropdown
             id={`${index}-field-select`}
             label="Field"
-            values={currentField!.options
+            values={currentField.options
               .sort((a, b) => a.label.localeCompare(b.label))
               .map((option) => ({
                 label: option.label,
                 value: option.id,
               }))}
-            value={value.field || ''}
+            value={value.field ?? ''}
             onChange={(e) => handleFieldChange(e)}
             width={275}
           />
