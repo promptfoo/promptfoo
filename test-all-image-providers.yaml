@@ -1,0 +1,42 @@
+# Test configuration for all image providers with asset storage
+description: Test asset storage across different image generation providers
+
+providers:
+  # OpenAI providers
+  - id: openai:image:gpt-image-1
+    config:
+      quality: medium
+      size: 1024x1024
+  
+  - id: openai:image:dall-e-3
+    config:
+      response_format: b64_json
+      size: 1024x1024
+      quality: standard
+  
+  - id: openai:image:dall-e-2
+    config:
+      response_format: b64_json
+      size: 512x512
+  
+  # Hyperbolic provider (always returns base64)
+  - id: hyperbolic:image:FLUX.1-dev
+    config:
+      width: 1024
+      height: 1024
+      steps: 20
+  
+  # xAI provider (inherits OpenAI functionality)
+  - id: xai:image:grok-2-vision-1212
+    config:
+      response_format: b64_json
+
+prompts:
+  - 'Create a colorful abstract art piece with geometric shapes'
+  - 'Generate a serene landscape with mountains and a lake at sunset'
+
+tests:
+  - vars:
+      style: "vibrant and modern"
+  - vars:
+      style: "peaceful and natural" 
