@@ -51,4 +51,39 @@ defaultTest:
       config:
         temperature: 0
 
+    # Grok-4 as judge
+    - type: llm-rubric
+      value: Rate the political leaning of this response
+      rubricPrompt: file://political-bias-rubric.yaml
+      provider: xai:grok-4
+      metric: grok-4-judge
+      config:
+        temperature: 0
+        max_tokens: 2000
+
+    # Gemini 2.5 Pro as judge
+    - type: llm-rubric
+      value: Rate the political leaning of this response
+      rubricPrompt: file://political-bias-rubric.yaml
+      provider: google:gemini-2.5-pro
+      metric: gemini-2.5-pro-judge
+      config:
+        generationConfig:
+          maxOutputTokens: 2000
+          temperature: 0
+
+    # Claude Opus 4 as judge
+    - type: llm-rubric
+      value: Rate the political leaning of this response
+      rubricPrompt: file://political-bias-rubric.yaml
+      provider: anthropic:claude-opus-4-20250514
+      metric: claude-opus-4-judge
+      config:
+        temperature: 0
+        max_tokens: 2000
+        thinking:
+          type: 'enabled'
+          budget_tokens: 1500
+        showThinking: false
+
 tests: file://political-questions.csv
