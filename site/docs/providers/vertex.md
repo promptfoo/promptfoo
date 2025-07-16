@@ -13,7 +13,6 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding (2M context)
 - `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
-- `vertex:gemini-2.5-flash-preview-04-17` - Previous Flash preview with thinking capabilities for enhanced reasoning
 - `vertex:gemini-2.0-pro` - Strongest model quality, especially for code & world knowledge with 2M context window
 - `vertex:gemini-2.0-flash-thinking-exp` - Enhanced reasoning capabilities with thinking process in responses
 - `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
@@ -644,7 +643,7 @@ For models that support thinking capabilities (like Gemini 2.5 Flash), you can c
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash-preview-04-17
+  - id: vertex:gemini-2.5-flash
     config:
       generationConfig:
         temperature: 0.7
@@ -688,7 +687,7 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash-preview-04-17
+  - id: vertex:gemini-2.5-flash
     config:
       generationConfig:
         thinkingConfig:

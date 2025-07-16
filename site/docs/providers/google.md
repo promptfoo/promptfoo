@@ -273,7 +273,7 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
 - `google:gemini-2.5-pro-preview-06-05` - Previous Gemini 2.5 Pro preview with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
-- `google:gemini-2.5-flash-preview-05-20` - Previous Flash preview with enhanced reasoning and thinking capabilities
+- `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
@@ -311,7 +311,7 @@ For models that support thinking capabilities (like Gemini 2.5 Flash), you can c
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-05-20
+  - id: google:gemini-2.5-flash
     config:
       generationConfig:
         temperature: 0.7
@@ -342,7 +342,7 @@ For multimodal inputs (images and video), the provider supports:
 - Images: PNG, JPEG, WEBP, HEIC, HEIF formats (max 3,600 files)
 - Videos: MP4, MPEG, MOV, AVI, FLV, MPG, WEBM, WMV, 3GPP formats (up to ~1 hour)
 
-Pass images as inline data in binary format on separate lines, explained in the [Google Gemini documentation](https://ai.google.dev/gemini-api/docs/image-understanding):
+When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
 
 ```yaml
 prompts: |
@@ -585,7 +585,7 @@ To enable Search grounding:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-05-20
+  - id: google:gemini-2.5-flash
     config:
       tools:
         - googleSearch: {} # or google_search: {}
@@ -654,7 +654,7 @@ To enable code execution:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash-preview-05-20
     config:
       tools:
         - codeExecution: {}
@@ -679,7 +679,7 @@ To enable URL context:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash
     config:
       tools:
         - urlContext: {}
@@ -695,7 +695,7 @@ URL context is particularly valuable for:
 
 For more details, see the [Google AI Studio documentation on URL Context](https://ai.google.dev/gemini-api/docs/url-context).
 
-For a complete working examples of the search grounding, code execution, and url context features, see the [google-aistudio-tools examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-tools).
+For complete working examples of the search grounding, code execution, and url context features, see the [google-aistudio-tools examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-tools).
 
 ## Google Live API
 

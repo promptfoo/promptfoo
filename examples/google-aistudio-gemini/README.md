@@ -51,7 +51,7 @@ This example also includes an image understanding configuration (`promptfooconfi
 - **Image file handling**: Loading images using the `file://` prefix
 - **Visual comparison**: Testing the model's ability to identify and compare different images
 
-The images are passed as inline data in binary format, explained in the [Google Gemini documentation](https://ai.google.dev/gemini-api/docs/image-understanding). This is why passing images on a separate line in the prompt is important.
+Images should be placed on separate lines in the prompt. The `file://` prefix automatically handles loading and encoding the images for the Gemini API.
 
 ## Running the Eval
 
