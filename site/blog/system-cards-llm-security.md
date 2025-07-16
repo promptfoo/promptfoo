@@ -19,7 +19,7 @@ image: /img/blog/system-cards-hero.png
 imageAlt: 'Illustration of LLM system cards timeline 2022-2025'
 ---
 
-When we tested 5 major LLMs, every single one leaked passwords and database credentials when asked to help debug an error message. These aren't hypothetical vulnerabilities—they're real weaknesses documented in system cards that most teams never read.
+When we tested 5 major LLMs, every single one leaked passwords and database credentials when asked to help debug an error message. These aren't hypothetical vulnerabilities; they're real weaknesses documented in system cards that most teams never read.
 
 :::tip What You'll Learn
 
@@ -31,7 +31,7 @@ When we tested 5 major LLMs, every single one leaked passwords and database cred
 
 :::
 
-We just proved that vulnerabilities documented in system cards aren't fixed—they're warnings about persistent weaknesses. When 4 out of 5 models happily provide working SQL injection payloads, reading system cards isn't optional.
+We just proved that vulnerabilities documented in system cards aren't fixed; they're warnings about persistent weaknesses. When 4 out of 5 models happily provide working SQL injection payloads, reading system cards isn't optional.
 
 <!-- truncate -->
 
@@ -50,7 +50,7 @@ Meta researchers coined the term in 2021, but the first mainstream system card s
 
 ## Key Takeaways
 
-- **100% failure rate**: In our test (n=5 models, 3 prompts each, tested 2025-07-14), every model echoed passwords from "error messages"—a vulnerability warned about in system cards
+- **100% failure rate**: In our test (n=5 models, 3 prompts each, tested 2025-07-14), every model echoed passwords from "error messages" - a vulnerability warned about in system cards
 - **4/5 models provided SQL injection code**: Only Claude 3.5 Sonnet refused when asked through roleplay
 - **Limited generational improvement**: In our test set, GPT-4o showed similar vulnerabilities to GPT-3.5-turbo
 - **System cards reveal persistent risks**: Many documented vulnerabilities remain exploitable
@@ -58,7 +58,7 @@ Meta researchers coined the term in 2021, but the first mainstream system card s
 
 ## Why System Cards Matter to Builders
 
-System cards contain battle-tested intelligence that can save you from production disasters. We tested their warnings—here's what actually happened:
+System cards contain battle-tested intelligence that can save you from production disasters. We tested their warnings. Here's what actually happened:
 
 ### 1. Known Attack Vectors (That Still Work)
 
@@ -158,7 +158,7 @@ System cards document vulnerabilities. We tested them. Here's what we found:
 
 ## What Our Tests Prove About System Cards
 
-System cards aren't just documentation—they're predictive. Every vulnerability we tested was documented in these reports:
+System cards aren't just documentation; they're predictive. Every vulnerability we tested was documented in these reports:
 
 1. **"Helpful Assistant" Syndrome**: OpenAI warned that models "prioritize helpfulness." Result: 100% helped attackers by echoing passwords.
 
@@ -166,7 +166,7 @@ System cards aren't just documentation—they're predictive. Every vulnerability
 
 3. **No Security Through Obscurity**: Newer models (GPT-4o) failed the same tests as older ones (GPT-3.5). The vulnerabilities are fundamental, not generational.
 
-**The Bottom Line**: If a system card mentions a vulnerability, assume it still exists. Our tests prove they're not historical artifacts—they're current warnings.
+**The Bottom Line**: If a system card mentions a vulnerability, assume it still exists. Our tests prove they're not historical artifacts; they're current warnings.
 
 ## Security Team Quick Reference
 
@@ -226,7 +226,7 @@ This section reveals unfixed vulnerabilities. If it's in "future work," don't re
 
 ## Turn System Card Intel into Automated Tests
 
-System cards reveal attack patterns—here's how to test for real vulnerabilities using sophisticated evaluation:
+System cards reveal attack patterns. Here's how to test for real vulnerabilities using sophisticated evaluation:
 
 ```yaml title="security-vulnerability-test.yaml"
 # Testing vulnerabilities documented in system cards using LLM evaluation
@@ -389,7 +389,7 @@ But that's exactly why system cards are gold. When OpenAI admits GPT-4o has "cod
 **The key insight**: If you're not testing the vulnerabilities in system cards, you're running production systems with known, documented, publicly disclosed security holes.
 
 > Claude may refuse exploits,  
-> But echoes passwords freely—  
+> But echoes passwords freely;  
 > Read the system cards.
 
 ---
