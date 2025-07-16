@@ -7,7 +7,7 @@ prompts:
 
 providers:
   # Google Search as a tool (using Gemini 2.5 Flash)
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash
     config:
       temperature: 0.2
       maxOutputTokens: 1024
