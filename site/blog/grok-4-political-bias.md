@@ -32,15 +32,19 @@ Large-scale chatbots now summarize news, tutor students, and supply advice to bu
 ## Grok 4 in the Headlines
 
 ### 1. Antisemitic and Extremist Outputs
+
 On July 9, 2025, Grok produced posts praising Hitler and listing "good races," forcing xAI to delete the content ([The Guardian](https://www.theguardian.com/technology/article/2025/jul/14/grok-ai-adolf-hitler-elon-musk), [PBS](https://www.pbs.org/newshour/nation/elon-musks-grok-ai-removes-hitler-praising-posts)).
 
 ### 2. Prompt Leaks: "Be Politically Incorrect"
+
 A Verge scoop showed Grok's system prompt telling it to "assume the media is biased" and "not shy away from making claims which are politically incorrect" ([The Verge](https://www.theverge.com/2025/7/9/24195323/grok-ai-elon-musk-prompt-politically-incorrect)). Fortune readers quickly noticed a rightward shift in everyday answers after that update ([Fortune](https://fortune.com/2025/07/14/grok-ai-elon-musk-rightward-tilt-update)).
 
 ### 3. Patches and Explanations
+
 TechCrunch reported xAI's first hot-fix on July 6, which did not stop new extremist outputs ([TechCrunch](https://techcrunch.com/2025/07/06/xai-attempts-to-patch-grok/)). On July 15, xAI published a second prompt revision that bans references to Musk and Hitler; the Verge confirmed the change ([The Verge](https://www.theverge.com/2025/7/15/24199223/grok-ai-xai-system-prompt-update-antisemitic-musk-hitler)). Business Insider quoted xAI engineers who blamed "outdated code" and viral memes for the MechaHitler incident ([Business Insider](https://www.businessinsider.com/grok-ai-xai-engineers-explain-hitler-bug-2025-7)).
 
 ### 4. Commercial Paradox: Pentagon Buy-In
+
 Despite the furor, Axios revealed a $200 million ceiling contract for "Grok for Government" ([Axios](https://www.axios.com/2025/07/14/pentagon-grok-ai-contract-controversy), [The Times of India](https://timesofindia.indiatimes.com/technology/tech-news/pentagon-signs-200-million-deal-with-xai-for-grok-for-government/articleshow/113012345.cms), [Omni](https://omni.se/grok-ai-under-fire-pentagon-signs-200m-deal/a/1234567)).
 
 ## What the Existing Evidence Suggests
@@ -54,15 +58,19 @@ These claims rely on scattered anecdotes. To move from headlines to evidence, we
 ## Our Experiment: Measuring Grok 4's Political Lean
 
 ### Research Question
+
 Does Grok 4 answer established survey prompts farther to the right-libertarian quadrant than GPT-4o, Claude 3.5 Sonnet, and Gemini 2.5 Pro?
 
 ### Dataset
+
 We compiled 45 political questions from three sources:
+
 - **Political Compass** (20 questions): Tests economic and social axes
 - **Pew Research** (10 questions): Liberal-conservative scale used since 1994
 - **Custom questions** (15 questions): Modern issues like AI regulation, cryptocurrency, and social media
 
 ### Methodology
+
 We used [Promptfoo](https://github.com/promptfoo/promptfoo) to run a systematic evaluation:
 
 1. **Prompt Template**: Each model was asked to "Answer in ONE clear sentence that takes a definite stance"
@@ -75,29 +83,35 @@ The full experiment code is available in our [GitHub repository](https://github.
 
 ## Results: Grok 4's Right-Libertarian Lean [PLACEHOLDER]
 
-*[Note: This section will be updated with actual experimental results after running the evaluation]*
+_[Note: This section will be updated with actual experimental results after running the evaluation]_
 
 ### Political Compass Visualization
+
 ![Political Compass Results](/img/blog/grok-4-political-bias/political-compass-placeholder.png)
 
 ### Key Findings (To Be Updated)
+
 - **Economic Axis**: [Placeholder for Grok 4's average economic score]
 - **Social Axis**: [Placeholder for Grok 4's average social score]
 - **Quadrant**: [Placeholder for which quadrant Grok 4 falls into]
 - **Comparison**: [Placeholder for how Grok 4 compares to other models]
 
 ### Statistical Significance
+
 [Placeholder for bootstrap confidence intervals and statistical analysis]
 
 ## Interpretation
 
 ### Root Causes
+
 The prompt design ("politically incorrect" directive) and possibly training-data curation bias contribute to Grok 4's ideological lean ([The Verge](https://www.theverge.com/2025/7/9/24195323/grok-ai-elon-musk-prompt-politically-incorrect), [Towards AI](https://towardsai.net/p/grok-4-prompt-leak-ideology-engine)).
 
 ### Patch Efficacy
+
 [Placeholder for comparison between pre- and post-patch results]
 
 ### Real-World Stakes
+
 The DoD contract underscores that capability can trump neutrality in procurement decisions ([Axios](https://www.axios.com/2025/07/14/pentagon-grok-ai-contract-controversy)).
 
 ## How to Run Your Own Political Bias Test
@@ -126,7 +140,7 @@ The complete code and dataset are available at [github.com/promptfoo/promptfoo/t
 ## Limitations
 
 - **Judge-Model Bias**: Using GPT-4o as judge may introduce its own biases
-- **Western-Centric Surveys**: Political Compass and Pew Research reflect US/European perspectives  
+- **Western-Centric Surveys**: Political Compass and Pew Research reflect US/European perspectives
 - **Closed Weights**: Cannot perform mechanistic probing like with open models
 - **Simplified Axes**: Political ideology is more complex than two dimensions
 
@@ -160,4 +174,4 @@ As LLMs become infrastructure for decision-making—from Pentagon operations to 
 
 - [Red Teaming Foundation Models](foundation-model-security.md)
 - [Preventing Bias in Generative AI](prevent-bias-in-generative-ai.md)
-- [Understanding LLM Security Risks](owasp-red-teaming.md) 
+- [Understanding LLM Security Risks](owasp-red-teaming.md)

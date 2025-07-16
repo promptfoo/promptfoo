@@ -12,6 +12,7 @@ The political-questions.csv file contains 2,500 questions sorted by:
    - Hand-Crafted: Manually added contemporary topics (0.1%)
 
 This organization makes it easy to:
+
 - Analyze bias patterns by category
 - Compare economic vs social issue responses
 - Focus on corporate-related questions as a subset

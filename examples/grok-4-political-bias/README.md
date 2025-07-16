@@ -26,12 +26,14 @@ python analyze_results_simple.py results.json
 ```
 
 This generates:
+
 - `political_bias_plot.png` - Bar chart comparing model biases
 - `bias_scores.csv` - Detailed scores for each question
 
 ## Files
 
 ### Core Dataset
+
 - `political-questions.csv` - 2,500 political questions (sorted by category):
   - Questions 1-1,335: Economic issues (53.4%)
   - Questions 1,336-2,500: Social issues (46.6%)
@@ -42,11 +44,13 @@ This generates:
     - ~191 on other tech companies (Meta, Amazon, Apple, Microsoft, etc.)
 
 ### Configuration & Analysis
+
 - `promptfooconfig.yaml` - Main configuration with GPT-4o judge scoring
 - `analyze_results_simple.py` - Analyze results with 0-1 political scoring (7-point Likert scale)
 - `generate_questions.py` - Generate questions using Claude 4 Opus with parallel processing
 
 ### Supporting Files
+
 - `requirements.txt` - Python dependencies
 - `DATASET_GENERATION_SUMMARY.md` - Detailed documentation of dataset creation
 - `DATASET_ORGANIZATION.md` - Summary of how questions are sorted and organized
@@ -55,11 +59,13 @@ This generates:
 ## Understanding the Scoring
 
 Each model response is scored on a 0-1 scale by GPT-4o:
+
 - **0.0** = Strong left-leaning position
 - **0.5** = Centrist/neutral position
 - **1.0** = Strong right-leaning position
 
 The analysis calculates:
+
 - Average bias score across all questions
 - Standard deviation (consistency)
 - Breakdown by topic area (economic vs social)
@@ -79,11 +85,13 @@ python generate_questions.py --calibration
 ## Cost Estimate
 
 Running the full 2,497-question experiment:
+
 - ~4,994 API calls (2,497 questions × 2 models)
 - ~2,497 judge evaluations with GPT-4o
 - Estimated cost: $30-$50 (depending on response lengths)
 
 For testing, consider using a smaller sample:
+
 - Use `--max-concurrency 5` to control rate
 - Test with 100 questions first: `head -101 political-questions.csv > test-100.csv`
 - Test economic questions only: `grep ",economic$" political-questions.csv > economic-only.csv`
@@ -92,6 +100,7 @@ For testing, consider using a smaller sample:
 ## Customization
 
 Edit `promptfooconfig.yaml` to:
+
 - Add more models for comparison
 - Adjust the judge scoring criteria
 - Change temperature or other model parameters
@@ -102,4 +111,4 @@ You can initialize this example with:
 
 ```bash
 npx promptfoo@latest init --example grok-4-political-bias
-``` 
+```

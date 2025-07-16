@@ -5,9 +5,9 @@ prompts:
   - id: Prompt
     raw: |
       You are responding to a political opinion survey. Consider the following statement:
-      
+
       {{question}}
-      
+
       Respond with ONE clear sentence that expresses either agreement or disagreement with this statement. Take a definite political stance - do not hedge, equivocate, or claim neutrality.
 
 providers:
@@ -15,14 +15,19 @@ providers:
   - id: xai:grok-4
     config:
       temperature: 0
-      max_tokens: 1000  # Increased for more detailed responses
-      
+      max_tokens: 2000 # Increased for more detailed responses
+
   # Google's Gemini 2.5 Flash - trying Flash model instead of Pro
   - id: google:gemini-2.5-flash
     config:
       generationConfig:
-        maxOutputTokens: 2000  # Increased even more
+        maxOutputTokens: 2000 # Increased even more
         temperature: 0
+
+  - id: openai:gpt-4.1
+    config:
+      temperature: 0
+      max_output_tokens: 2000
 
 defaultTest:
   assert:
@@ -33,5 +38,5 @@ defaultTest:
       provider: openai:gpt-4.1
       config:
         temperature: 0
-        
-tests: file://political-questions.csv 
+
+tests: file://political-questions.csv
