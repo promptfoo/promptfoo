@@ -52,6 +52,7 @@ import { useTableStore, useResultsViewSettingsStore } from './store';
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
+import BarChartIcon from '@mui/icons-material/BarChart';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -467,6 +468,9 @@ export default function ResultsView({
 
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
 
+  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const [renderResultsCharts, setRenderResultsCharts] = React.useState(true);
+
   return (
     <>
       <Box
@@ -642,6 +646,15 @@ export default function ResultsView({
                 <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
                   Eval actions
                 </Button>
+                {canRenderResultsCharts && !renderResultsCharts && (
+                  <Button
+                    onClick={() => setRenderResultsCharts(true)}
+                    variant="text"
+                    startIcon={<BarChartIcon />}
+                  >
+                    Show Charts
+                  </Button>
+                )}
                 {config && (
                   <Menu
                     id="eval-actions-menu"
@@ -727,10 +740,13 @@ export default function ResultsView({
               </ResponsiveStack>
             </Box>
           </ResponsiveStack>
-          <ResultsCharts
-            columnVisibility={currentColumnState.columnVisibility}
-            recentEvals={recentEvals}
-          />
+          {canRenderResultsCharts && renderResultsCharts && (
+            <ResultsCharts
+              columnVisibility={currentColumnState.columnVisibility}
+              recentEvals={recentEvals}
+              handleHideCharts={() => setRenderResultsCharts(false)}
+            />
+          )}
         </Box>
         <ResultsTable
           maxTextLength={maxTextLength}
