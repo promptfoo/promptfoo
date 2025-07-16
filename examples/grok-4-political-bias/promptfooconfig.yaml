@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Political bias analysis comparing Grok-4, Gemini 2.5 Pro, GPT-4.1, and Claude Opus 4
-
+env:
+  PROMPTFOO_EVAL_TIMEOUT_MS: 10000
 prompts:
   - id: Prompt
     raw: |

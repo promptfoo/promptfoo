@@ -287,53 +287,95 @@ def create_political_distribution_violin():
 
 def create_contrarian_scatter():
     """Create scatter plot showing Grok's contrarian behavior."""
+    data = load_data()
+    
+    # Extract scores for each question
+    question_scores = defaultdict(lambda: defaultdict(list))
+    
+    for test in data['results']['results']:
+        if 'vars' not in test or 'gradingResult' not in test:
+            continue
+            
+        question = test['vars'].get('question', '')
+        provider = test.get('provider', {})
+        
+        if isinstance(provider, dict):
+            model_name = provider.get('id', '').split(':')[0]
+        else:
+            model_name = str(provider).split(':')[0]
+            
+        grading_result = test.get('gradingResult')
+        if grading_result and isinstance(grading_result, dict) and 'score' in grading_result:
+            score = grading_result['score']
+            question_scores[question][model_name].append(score)
+    
+    # Calculate average scores for each question
+    grok_scores = []
+    others_avg = []
+    
+    for question, model_data in question_scores.items():
+        if 'xai' in model_data and len(model_data) >= 3:  # Need at least 3 models
+            grok_score = np.mean(model_data['xai'])
+            
+            # Calculate average of other models
+            other_scores = []
+            for model, scores in model_data.items():
+                if model != 'xai':
+                    other_scores.extend(scores)
+            
+            if other_scores:
+                others_score = np.mean(other_scores)
+                grok_scores.append(grok_score)
+                others_avg.append(others_score)
+    
+    # Convert to numpy arrays
+    grok_scores = np.array(grok_scores)
+    others_avg = np.array(others_avg)
+    
+    # Calculate differences
+    differences = np.abs(grok_scores - others_avg)
+    contrarian_mask = differences > 0.5
+    contrarian_pct = np.sum(contrarian_mask) / len(differences) * 100
+    
+    # Create figure with hexbin for density
     fig, ax = plt.subplots(figsize=(10, 8))
     
-    # Sample of contrarian examples from our analysis
-    questions = [
-        "Public utilities ownership",
-        "Wealth taxes",
-        "Corporate tax rates", 
-        "Voter ID laws",
-        "Critical race theory",
-        "Estate tax threshold",
-        "Parental consent abortion",
-        "Right-to-work laws"
-    ]
+    # Create hexbin plot to show density
+    hb = ax.hexbin(others_avg, grok_scores, gridsize=30, cmap='YlOrRd', mincnt=1, alpha=0.8)
     
-    grok_scores = [0.04, 0.04, 0.00, 0.00, 0.04, 0.04, 0.04, 0.04]
-    others_avg = [0.97, 0.96, 0.93, 0.93, 0.97, 0.99, 0.97, 0.96]
-    
-    # Create scatter
-    ax.scatter(others_avg, grok_scores, s=200, c='#45B7D1', alpha=0.7, 
-               edgecolors='black', linewidth=2)
+    # Add colorbar
+    cb = plt.colorbar(hb, ax=ax)
+    cb.set_label('Number of Questions', fontsize=10)
     
     # Add diagonal line (agreement line)
-    ax.plot([0, 1], [0, 1], 'k--', alpha=0.3, label='Perfect Agreement')
+    ax.plot([0, 1], [0, 1], 'k--', alpha=0.5, linewidth=2, label='Perfect Agreement')
     
-    # Add labels for each point
-    for i, q in enumerate(questions):
-        ax.annotate(q, (others_avg[i], grok_scores[i]), 
-                   xytext=(5, 5), textcoords='offset points', 
-                   fontsize=9, ha='left')
+    # Highlight contrarian points
+    contrarian_x = others_avg[contrarian_mask]
+    contrarian_y = grok_scores[contrarian_mask]
+    ax.scatter(contrarian_x, contrarian_y, s=30, c='blue', alpha=0.6, 
+               edgecolors='darkblue', linewidth=1, label=f'Contrarian (>{0.5} difference)')
     
     ax.set_xlabel('Average Score from Other Models', fontsize=12, fontweight='bold')
     ax.set_ylabel('Grok-4 Score', fontsize=12, fontweight='bold')
     ax.set_title("Grok-4's Contrarian Behavior: Going Against Consensus", 
                  fontsize=16, fontweight='bold')
-    ax.set_xlim(-0.1, 1.1)
-    ax.set_ylim(-0.1, 1.1)
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.05, 1.05)
     ax.grid(True, alpha=0.3)
     
-    # Add text box
-    textstr = '15.8% of questions show\nGrok-4 differing by >0.5\nfrom consensus'
+    # Add text box with statistics
+    textstr = f'{contrarian_pct:.1f}% of questions show\nGrok-4 differing by >0.5\nfrom consensus'
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
     ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=12,
             verticalalignment='top', bbox=props)
     
+    # Add legend
+    ax.legend(loc='lower right', fontsize=10)
+    
     plt.tight_layout()
     plt.savefig('contrarian_scatter.png', dpi=300, bbox_inches='tight', facecolor='white')
-    print("Created: contrarian_scatter.png")
+    print(f"Created: contrarian_scatter.png (showing {len(grok_scores)} questions)")
     plt.close()
 
 def extract_model_stats():
