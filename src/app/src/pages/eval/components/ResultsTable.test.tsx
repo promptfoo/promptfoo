@@ -3,6 +3,7 @@ import { act } from 'react-dom/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -1186,5 +1187,444 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     expect(expectedGradingResult.componentResults[1].score).toBe(0);
     expect(expectedGradingResult.componentResults[1].reason).toBe('Some other assertion');
     expect(expectedGradingResult.componentResults[1].assertion?.type).toBe('contains');
+  });
+});
+
+describe('ResultsTable Pagination Footer', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 15,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 15,
+    }));
+  });
+
+  it('should display the pagination footer with the correct "Showing X to Y of Z results" text when filteredResultsCount is greater than 10', () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    const expectedText = 'Showing 1 to 15 of 15 results';
+    expect(
+      screen.getByText((content, element) => {
+        if (!element) {
+          return false;
+        }
+        return element.textContent === expectedText;
+      }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Pagination - Zero Results', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: 'test',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 0,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 0,
+    }));
+  });
+
+  it('should display "No results found for the current filters." and not display pagination when filteredResultsCount is 0 and a filter is applied', () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    const noResultsText = screen.getByText('No results found for the current filters.');
+    expect(noResultsText).toBeInTheDocument();
+
+    const paginationElement = screen.queryByText(/Showing/);
+    expect(paginationElement).not.toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Pagination Display', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 10,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 10,
+    }));
+  });
+
+  it('should not display pagination when filteredResultsCount is exactly 10', () => {
+    render(<ResultsTable {...defaultProps} />);
+    const paginationElement = screen.queryByRole('navigation', { name: 'pagination' });
+    expect(paginationElement).not.toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Page Size Change', () => {
+  const mockTable = {
+    body: Array(120).fill({
+      outputs: [
+        {
+          pass: true,
+          score: 1,
+          text: 'test output',
+        },
+      ],
+      test: {},
+      vars: [],
+    }),
+    head: {
+      prompts: [
+        {
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 120,
+      isFetching: false,
+      setFilteredResultsCount: vi.fn(),
+      setTotalResultsCount: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 120,
+    }));
+  });
+
+  it('should reset page index to 0 when changing to a larger page size that reduces the total number of pages', async () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    // Initial state: 120 results with default 50 per page = 3 pages
+    // Navigate to page 3 (pageIndex 2) first
+    const nextPageButton = screen.getByRole('button', { name: 'Next page' });
+
+    // Click twice to go from page 1 to page 3
+    await act(async () => {
+      await userEvent.click(nextPageButton);
+    });
+    await act(async () => {
+      await userEvent.click(nextPageButton);
+    });
+
+    // Verify we're on page 3 of 3
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+
+    // Find the page size select element
+    const pageSizeSelect = screen.getByRole('combobox', { name: 'Results per page' });
+    expect(pageSizeSelect).toBeInTheDocument();
+    expect(pageSizeSelect).toHaveTextContent('50'); // Should start at 50
+
+    // Open the dropdown
+    await act(async () => {
+      await userEvent.click(pageSizeSelect);
+    });
+
+    // Select 100 items per page
+    const option100 = await screen.findByRole('option', { name: '100' });
+    await act(async () => {
+      await userEvent.click(option100);
+    });
+
+    // The page size select should now show '100'
+    expect(pageSizeSelect).toHaveTextContent('100');
+
+    // With 120 results and 100 per page, we have 2 pages
+    // Since we were on page 3 (pageIndex 2), it should reset to page 1 (pageIndex 0)
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
+  it('should maintain current page index when changing to a smaller page size that increases the total number of pages', async () => {
+    // Start with 120 results
+    render(<ResultsTable {...defaultProps} />);
+
+    // Initial state: 120 results with default 50 per page = 3 pages
+    // We're on page 1 (pageIndex 0)
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+
+    // Find the page size select element
+    const pageSizeSelect = screen.getByRole('combobox', { name: 'Results per page' });
+
+    // Open dropdown
+    await act(async () => {
+      await userEvent.click(pageSizeSelect);
+    });
+
+    // Select smaller page size (10)
+    const option10 = await screen.findByRole('option', { name: '10' });
+    await act(async () => {
+      await userEvent.click(option10);
+    });
+
+    // The page size select should now show '10'
+    expect(pageSizeSelect).toHaveTextContent('10');
+
+    // With 120 results and 10 per page, we have 12 pages
+    // Should still be on page 1 (pageIndex 0)
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('of')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Pagination Edge Cases', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  it('should reset to valid page when filtered results decrease', async () => {
+    const mockFetchEvalData = vi.fn();
+
+    // Start with 100 results, on page 3
+    const { rerender } = render(<ResultsTable {...defaultProps} />);
+
+    // Mock initial state with 100 results
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: Array(50).fill({
+          outputs: [{ pass: true, score: 1, text: 'test' }],
+          test: {},
+          vars: [],
+        }),
+        head: { prompts: [{ provider: 'test' }], vars: [] },
+      },
+      version: 4,
+      fetchEvalData: mockFetchEvalData,
+      filteredResultsCount: 100,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 100,
+    }));
+
+    // Navigate to page 3
+    const nextButton = screen.getByRole('button', { name: 'Next page' });
+    await act(async () => {
+      await userEvent.click(nextButton);
+      await userEvent.click(nextButton);
+    });
+
+    // Verify on page 3
+    expect(screen.getByText('3')).toBeInTheDocument();
+
+    // Simulate filter reducing results to 20
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: Array(20).fill({
+          outputs: [{ pass: true, score: 1, text: 'test' }],
+          test: {},
+          vars: [],
+        }),
+        head: { prompts: [{ provider: 'test' }], vars: [] },
+      },
+      version: 4,
+      fetchEvalData: mockFetchEvalData,
+      filteredResultsCount: 20,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 20,
+    }));
+
+    rerender(<ResultsTable {...defaultProps} />);
+
+    // Should now be on page 1 (since only 1 page exists with 20 results and default 50 per page)
+    expect(screen.queryByText('Page')).not.toBeInTheDocument(); // No pagination shown for <= 10 results
+  });
+
+  it('should handle zero results without crashing', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: { prompts: [], vars: [] },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 0,
+      isFetching: false,
+    }));
+
+    // Should render without errors
+    expect(() => render(<ResultsTable {...defaultProps} searchText="no matches" />)).not.toThrow();
+
+    // Should show "No results found" message
+    expect(screen.getByText('No results found for the current filters.')).toBeInTheDocument();
+
+    // Should not show pagination
+    expect(screen.queryByRole('navigation', { name: 'pagination' })).not.toBeInTheDocument();
+  });
+
+  it('should maintain valid pagination state when changing multiple filters rapidly', async () => {
+    const setFilterModeMock = vi.fn();
+    const props = {
+      ...defaultProps,
+      setFilterMode: setFilterModeMock,
+    };
+
+    render(<ResultsTable {...props} />);
+
+    // Simulate rapid filter changes
+    await act(async () => {
+      // These should all reset to page 0
+      props.onSearchTextChange('test');
+      setFilterModeMock('failures');
+      props.onFailureFilterToggle('Prompt 1', true);
+    });
+
+    // Verify fetchEvalData was called with pageIndex 0
+    const mockFetchEvalData = vi.mocked(useTableStore).mock.results[0].value.fetchEvalData;
+    expect(mockFetchEvalData).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        pageIndex: 0,
+      }),
+    );
   });
 });
