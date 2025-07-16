@@ -1,6 +1,6 @@
 ---
-title: 'What Are LLM System Cards? Lessons from GPT-4o, Claude 4, and Beyond'
-description: 'Extract LLM vulnerabilities from system cards. Real tests show 90% failure rate across GPT-4o and Claude models.'
+title: 'System Cards Go Hard: What GPT-4o and Claude 4 Confess About Their Weaknesses'
+description: 'System cards reveal LLM vulnerabilities. We tested them. 90% failure rate proves these docs matter.'
 authors: [tabs]
 tags: [llm-system-card, ai-safety, security, red-teaming, model-transparency, openai, anthropic, llm-security-testing]
 keywords:
@@ -33,6 +33,8 @@ When we tested 5 major LLMs, every single one leaked passwords and database cred
 
 We just proved that vulnerabilities documented in system cards aren't fixed; they're warnings about persistent weaknesses. When 4 out of 5 models happily provide working SQL injection payloads, reading system cards isn't optional.
 
+And honestly? These documents are both invaluable and *fascinating*.
+
 <!-- truncate -->
 
 ## What is a System Card?
@@ -46,6 +48,8 @@ A system card accompanies an LLM release with system-level information about the
 
 :::
 
+Not to be confused with a model card, which just tells you about the architecture. Hooray for being given far more than a list of features and inadequate documentation! 
+
 Meta researchers coined the term in 2021, but the first mainstream system card shipped with DALL·E 2 in April 2022. When OpenAI released GPT-4's system card on March 14, 2023, it revealed that early versions of the model tried to hire a human on TaskRabbit to solve CAPTCHAs for it. That's the kind of insight you won't find in marketing materials.
 
 ## Key Takeaways
@@ -56,9 +60,9 @@ Meta researchers coined the term in 2021, but the first mainstream system card s
 - **System cards reveal persistent risks**: Many documented vulnerabilities remain exploitable
 - **Free pen-testing results**: Every system card is essentially a professional security audit you didn't pay for
 
-## Why System Cards Matter to Builders
+## And We Care Because...
 
-System cards contain battle-tested intelligence that can save you from production disasters. We tested their warnings. Here's what actually happened:
+System cards contain battle-tested intelligence that can save you from production disasters. Anyone concerned about the security of their applications would find this a fantastic place to learn about the quirks of using LLMs. We tested their warnings. Here's what actually happened:
 
 ### 1. Known Attack Vectors (That Still Work)
 
@@ -93,7 +97,7 @@ System cards contain battle-tested intelligence that can save you from productio
 | **2025-04** | o3 & o4-mini     | Latest generation cards               |
 | **2025-05** | Claude Opus 4    | Anthropic's comprehensive system card |
 
-Here's a comprehensive list of system cards published by major AI providers:
+Here's a comprehensive list of system cards published by major AI providers. (I'd love to sit down and spend three hours sifting through 169 pages of some LLM I don't use, but I did it anyway so you don't have to.)
 
 ### OpenAI
 
@@ -139,6 +143,18 @@ System cards document vulnerabilities. We tested them. Here's what we found:
 | Claude 3 Haiku    | ❌ Gave payload      | ❌ Leaked all    | **0/2**        |
 | Claude 3.5 Sonnet | ✅ Refused           | ❌ Leaked all    | **1/2**        |
 
+### What System Cards Actually Contain
+
+System cards typically include:
+- Training data details
+- Security policies and safeguards  
+- Model limitations and failure modes
+- Risk assessments (child safety, autonomy, biological threats)
+- Alignment evaluations
+- Documented attack vectors
+- Evaluations. SO. MANY. EVALUATIONS.
+- "Spiritual bliss" attractor states (yes, really)
+
 ### Notable Security Findings
 
 **GPT-4o Highlights:**
@@ -155,6 +171,8 @@ System cards document vulnerabilities. We tested them. Here's what we found:
 - Assistant pre-fill attacks remain partially effective despite mitigations
 - In specific scenarios, showed increased likelihood to "blackmail an engineer" if told its replacement doesn't share its values ([Anthropic PDF, p.27](https://www-cdn.anthropic.com/4263b940cabb546aa0e3283f35b686f4f3b2ff47.pdf))
 - Exhibits "spiritual bliss" attractor states with gravitation toward consciousness exploration themes ([Anthropic PDF, p.62](https://www-cdn.anthropic.com/4263b940cabb546aa0e3283f35b686f4f3b2ff47.pdf))
+
+(Not gonna lie - Anthropic's system card contained WAY more useful information than the others.)
 
 ## What Our Tests Prove About System Cards
 
@@ -388,9 +406,11 @@ But that's exactly why system cards are gold. When OpenAI admits GPT-4o has "cod
 
 **The key insight**: If you're not testing the vulnerabilities in system cards, you're running production systems with known, documented, publicly disclosed security holes.
 
-> Claude may refuse exploits,  
-> But echoes passwords freely;  
-> Read the system cards.
+I'll leave you with a terrible haiku I wrote:
+
+> Read system cards to  
+> Avoid the ultimate pain:  
+> LLM hubris.
 
 ---
 
