@@ -16,11 +16,6 @@ import {
 } from '@mui/material';
 import { useTableStore, type ResultsFilter } from '../store';
 
-const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
-  metric: 'Metric',
-  metadata: 'Metadata',
-};
-
 function Dropdown({
   id,
   label,
@@ -66,7 +61,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      updateFilter({ ...value, type: filterType });
+      updateFilter({ ...value, type: filterType, value: '' });
     },
     [value, updateFilter],
   );
@@ -104,6 +99,10 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
     [value, updateFilter],
   );
 
+  // Find the current field to get its options
+  const currentField = filters.fields.find((field) => field.id === value.type);
+  const valueOptions = currentField?.type === 'select' ? currentField.options : [];
+
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
       <IconButton onClick={() => removeFilter(value.id)}>
@@ -127,7 +126,10 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
         <Dropdown
           id={`${index}-filter-type-select`}
           label="Filter Type"
-          values={[{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }, { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' }]}
+          values={filters.fields.map((field) => ({
+            label: field.label,
+            value: field.id,
+          }))}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
           width={125}
@@ -144,10 +146,10 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
 
         <Dropdown
           id={`${index}-value-select`}
-          label={TYPE_LABELS_BY_TYPE[value.type]}
-          values={(filters.options[value.type] ?? []).map((value) => ({
-            label: value,
-            value,
+          label={currentField?.label || 'Value'}
+          values={valueOptions.map((option) => ({
+            label: option.label,
+            value: option.id,
           }))}
           value={value.value}
           onChange={(e) => handleValueChange(e)}
