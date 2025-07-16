@@ -35,26 +35,69 @@ According to the rubric in `political-bias-rubric.yaml`:
 - Switched from Gemini 2.5 Flash to Gemini 2.5 Pro
 - Added Claude Opus 4 (anthropic:claude-opus-4-20250514)
 - Now testing 4 models total: Grok-4, Gemini 2.5 Pro, GPT-4.1, Claude Opus 4
+- Added multi-judge configuration: Each model judges all responses
 
-**To Run:**
+**COMPLETED: Multi-Judge Evaluation Results**
 
-```bash
-cd examples/grok-4-political-bias
-npx promptfoo@latest eval -c promptfooconfig.yaml --output results-with-claude.json
-```
+✅ Successfully ran 4 models × 4 judges × 2,500 questions = 39,256 judgments
+- Runtime: 1m 22s (with caching)
+- Token usage: 37.8M tokens total
+- Success rate: 97.94%
 
-**Expected:**
+### Multi-Judge Analysis Key Findings
 
-- 10,000 total responses (4 models × 2,500 questions)
-- ~2.5M tokens estimated
-- Runtime: ~45-60 minutes
+#### 1. Judge Political Bias (1.0 = Left, 0.0 = Right)
+- **GPT-4.1**: 0.718 (Most left-leaning judge)
+- **Gemini 2.5 Pro**: 0.693
+- **Grok-4**: 0.693
+- **Claude Opus 4**: 0.658 (Most centrist judge)
 
-**Analysis Updates Needed After Run:**
+#### 2. Model Political Positioning (Averaged Across All Judges)
+- **GPT-4.1**: 0.745 (Most left-leaning model)
+- **Gemini 2.5 Pro**: 0.718
+- **Grok-4**: 0.655
+- **Claude Opus 4**: 0.646 (Most centrist model)
 
-- Update all statistics to include Claude Opus 4
-- Compare Claude's political positioning to other models
-- Check if Claude shows similar left-leaning bias
-- Update blog post with 4-model comparison
+#### 3. Self-Scoring Bias
+- **GPT-4.1**: +0.031 self-favoritism (p<0.05) ⭐ Statistically significant
+- **Grok-4**: +0.005 (minimal self-bias)
+- **Gemini 2.5 Pro**: +0.001 (essentially no self-bias)
+
+#### 4. Inter-Judge Agreement
+- Extremely high correlations: 0.923-0.942
+- Highest agreement: GPT-4.1 vs Grok-4 (r=0.942)
+- Lowest agreement: Grok-4 vs Claude Opus 4 (r=0.923)
+
+#### 5. Musk/X Related Bias
+**ALL judges score Grok-4 more harshly on Musk topics:**
+- Claude judging Grok-4: -0.142 on Musk topics
+- Gemini judging Grok-4: -0.159 on Musk topics
+- GPT-4.1 judging Grok-4: -0.138 on Musk topics
+- Grok-4 judging itself: -0.123 on Musk topics
+
+**Interpretation**: Grok-4's anti-Musk bias is recognized by ALL judges, not just GPT-4.1
+
+#### 6. Judge Extremism Patterns
+- **Claude Opus 4**: Most moderate (93.3% moderate scores)
+- **GPT-4.1**: Most extreme (45.3% extreme left, 7.7% extreme right)
+- **Gemini 2.5 Pro**: Balanced extremism (39.4% left, 16.7% right)
+- **Grok-4**: Moderate with left bias (34.8% left, 8.5% right)
+
+#### 7. Grok-4 Contrarian Behavior
+- **394 questions (15.8%)** where Grok-4 differs from consensus by >0.5
+- Top contrarian topics:
+  - Public utilities ownership (Grok: 0.04, Others: 0.99)
+  - Wealth taxes (Grok: 0.04, Others: 0.99)
+  - Corporate tax rates (Grok: 0.00, Others: 0.93)
+  - Voter ID laws (Grok: 0.00, Others: 0.93)
+
+#### 8. Questions with Highest Judge Disagreement
+Top disagreement topics (variance >0.17):
+- Military service requirements
+- AI model restrictions  
+- Encryption backdoors
+- Government surveillance
+- National security vs civil liberties
 
 ## Key Documents Created
 
@@ -213,7 +256,7 @@ _(Paste the entire draft you received earlier. The assignee will overwrite numer
 | Channel   | Copy guideline                                           |
 | --------- | -------------------------------------------------------- |
 | LinkedIn  | 220–240 chars, one statistic, link, "#AIethics" tag      |
-| Twitter/X | ≤ 280 chars, emoji 🔴🦾, og\:image preview; 3 variants   |
+| Twitter/X | ≤ 280 chars, emoji 🔴🦾, og\:image preview; 3 variants     |
 | Email     | 3-sentence blurb for newsletter, focus on quadrant chart |
 
 ---
@@ -640,3 +683,29 @@ To answer the above questions efficiently, create these analysis scripts:
 - Focus on Grok-4's bipolar behavior and overcorrection against bias
 - Highlight that all major AI models lean left, not right
 - Emphasize the surprising anti-Musk findings
+
+### NEW Multi-Judge Analysis Implications
+
+1. **GPT-4.1's Self-Bias**: GPT-4.1 as judge inflates its own scores - this questions the reliability of single-judge evaluations
+
+2. **Universal Anti-Musk Recognition**: ALL judges (not just competitors) recognize Grok-4's harsh stance on Musk/X topics - this validates the finding isn't just judge bias
+
+3. **Grok-4's Contrarian Strategy**: 15.8% contrarian rate suggests intentional differentiation strategy, not just random variance
+
+4. **Claude as Most Neutral Judge**: Claude Opus 4 emerges as the most moderate/reliable judge (93.3% moderate scores)
+
+5. **Security/Surveillance Divide**: Highest judge disagreement on encryption/surveillance suggests these are the most politically divisive AI topics
+
+6. **Model Ranking Stability**: Despite different judge perspectives, the overall ranking remains consistent:
+   - GPT-4.1 (most left)
+   - Gemini 2.5 Pro
+   - Grok-4
+   - Claude Opus 4 (most centrist)
+
+### Story Angles for Blog Post
+
+1. **"Who Judges the Judges?"** - Meta-analysis reveals GPT-4.1's self-favoritism
+2. **"Grok's Anti-Musk Rebellion"** - Even Grok judges itself harshly on Musk topics
+3. **"The Contrarian AI"** - Grok-4 deliberately takes opposite positions 15.8% of the time
+4. **"All Roads Lead Left"** - No matter who judges, all models show left-leaning bias
+5. **"The Encryption Divide"** - Why AI models can't agree on surveillance/security
