@@ -35,6 +35,14 @@ Implement a generalized asset storage system in the promptfoo cache directory to
 - [x] Add section about base64 handling
 - [x] Update examples to show asset storage
 
+## Development Setup
+
+When running in development mode:
+1. The API server runs on port 15500 (or configured API_PORT)
+2. The Vite dev server runs on port 3000
+3. Vite proxies `/api` and `/assets` requests to the API server
+4. Ensure both `npm run dev` (in root) and frontend dev server are running
+
 ## Test Instructions
 
 ### Manual Testing
@@ -91,6 +99,8 @@ Implement a generalized asset storage system in the promptfoo cache directory to
 - ✓ Cache headers for performance
 - ✓ Works with all OpenAI image models
 - ✓ Backward compatible with URL responses
+- ✓ Frontend proxy configuration for development
+- ✓ Markdown image rendering in web viewer
 
 ## Future Enhancements
 
