@@ -15,7 +15,7 @@ providers:
 tests:
   - vars:
       query: |
-        "Draw an ASCII Sierpiński triangle of depth 4, then report how many * characters appear in the drawing."
+        "Draw an ASCII Sierpiński triangle of depth 4, then report how many * characters appear in the drawing."
     assert:
       - type: contains
-        value: 81
+        value: 81 # A Sierpiński triangle of depth 4 has 3^4 = 81 asterisks
