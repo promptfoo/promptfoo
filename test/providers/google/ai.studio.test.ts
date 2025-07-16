@@ -1274,4 +1274,91 @@ describe('AIStudioChatProvider', () => {
       );
     });
   });
+
+  describe('thinking token tracking', () => {
+    it('should track thinking tokens when present in response', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: {
+          apiKey: 'test-key',
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 20,
+            totalTokenCount: 30,
+            thoughtsTokenCount: 50, // Thinking tokens
+          },
+        },
+        cached: false,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 50,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+    });
+
+    it('should handle response without thinking tokens', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response without thinking' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 20,
+            totalTokenCount: 30,
+            // No thoughtsTokenCount field
+          },
+        },
+        cached: false,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        // No completionDetails field when thoughtsTokenCount is absent
+      });
+    });
+  });
 });

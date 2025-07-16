@@ -195,20 +195,29 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     try {
       const output = data.candidates[0].content;
+      const tokenUsage = cached
+        ? {
+            cached: data.usageMetadata?.totalTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 0,
+          }
+        : {
+            prompt: data.usageMetadata?.promptTokenCount,
+            completion: data.usageMetadata?.candidatesTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.thoughtsTokenCount && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
+
       return {
         output,
-        tokenUsage: cached
-          ? {
-              cached: data.usageMetadata?.totalTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 0,
-            }
-          : {
-              prompt: data.usageMetadata?.promptTokenCount,
-              completion: data.usageMetadata?.candidatesTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 1,
-            },
+        tokenUsage,
         raw: data,
         cached,
       };
@@ -333,20 +342,29 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         };
       }
 
+      const tokenUsage = cached
+        ? {
+            cached: data.usageMetadata?.totalTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 0,
+          }
+        : {
+            prompt: data.usageMetadata?.promptTokenCount,
+            completion: data.usageMetadata?.candidatesTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.thoughtsTokenCount && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
+
       return {
         output,
-        tokenUsage: cached
-          ? {
-              cached: data.usageMetadata?.totalTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 0,
-            }
-          : {
-              prompt: data.usageMetadata?.promptTokenCount,
-              completion: data.usageMetadata?.candidatesTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 1,
-            },
+        tokenUsage,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),

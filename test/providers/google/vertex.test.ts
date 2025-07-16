@@ -793,6 +793,92 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect(result.output).toBe('External result');
     });
   });
+
+  describe('thinking token tracking', () => {
+    it('should track thinking tokens when present in response', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              thoughtsTokenCount: 50, // Thinking tokens
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        completionDetails: {
+          reasoning: 50,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+    });
+
+    it('should handle response without thinking tokens', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'response without thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              // No thoughtsTokenCount field
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        // No completionDetails field when thoughtsTokenCount is absent
+      });
+    });
+  });
 });
 
 describe('VertexChatProvider.callLlamaApi', () => {
