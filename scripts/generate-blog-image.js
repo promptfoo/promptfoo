@@ -15,7 +15,39 @@ if (!OPENAI_API_KEY) {
   process.exit(1);
 }
 
-const prompt = `Create a professional hero image for a blog post about LLM System Cards and AI Safety Documentation. 
+// Parse command line arguments
+const args = process.argv.slice(2);
+let filename = 'blog-image.png';
+let prompt = '';
+
+// Parse arguments
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--filename' || args[i] === '-f') {
+    filename = args[i + 1];
+    i++;
+  } else if (args[i] === '--prompt' || args[i] === '-p') {
+    prompt = args[i + 1];
+    i++;
+  } else if (args[i] === '--help' || args[i] === '-h') {
+    console.log(`
+Usage: node generate-system-cards-image.js [options]
+
+Options:
+  -f, --filename <name>    Output filename (default: blog-image.png)
+  -p, --prompt <text>      Image generation prompt
+  -h, --help              Show this help message
+
+Examples:
+  node generate-system-cards-image.js -f system-cards-hero.png -p "A red panda reading documentation"
+  node generate-system-cards-image.js --filename security-test.png --prompt "Cybersecurity visualization"
+`);
+    process.exit(0);
+  }
+}
+
+// Example prompt for system cards blog post:
+/*
+const systemCardsPrompt = `Create a professional hero image for a blog post about LLM System Cards and AI Safety Documentation. 
 
 The image should feature:
 - A cute red panda character (the Promptfoo mascot) in a cybersecurity/tech setting
@@ -28,6 +60,13 @@ The image should feature:
 - Overall mood: trustworthy, technical, but friendly
 
 Style: Modern tech illustration, clean lines, professional but approachable, suitable for a security-focused blog post`;
+*/
+
+if (!prompt) {
+  console.error('Please provide a prompt using --prompt or -p');
+  console.log('Use --help for usage information');
+  process.exit(1);
+}
 
 async function generateImage() {
   const data = JSON.stringify({
@@ -114,7 +153,7 @@ async function main() {
         'static',
         'img',
         'blog',
-        'system-cards-hero.png',
+        filename,
       );
       const buffer = Buffer.from(imageData.b64_json, 'base64');
       fs.writeFileSync(outputPath, buffer);
@@ -128,7 +167,7 @@ async function main() {
         'static',
         'img',
         'blog',
-        'system-cards-hero.png',
+        filename,
       );
       await downloadImage(imageData.url, outputPath);
       console.log(`Image downloaded and saved to: ${outputPath}`);
