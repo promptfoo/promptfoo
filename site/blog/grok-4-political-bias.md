@@ -154,6 +154,8 @@ Here's what we found across 2,500 political questions:
 
 ### The Bipolar Phenomenon: Grok's Extreme Personality
 
+<img src="/img/blog/grok-4-political-bias/bipolar-pendulum.png" alt="Grok's Political Pendulum" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
+
 What makes Grok 4 unique isn't its average position, but its wildly inconsistent behavior:
 
 | Model            | Left % | Center % | Right % | Extreme Responses % |
@@ -195,6 +197,8 @@ This isn't coherent ideology - it's digital dissociative identity disorder.
 
 ### The Musk Paradox: Overcorrecting Against Bias?
 
+<img src="/img/blog/grok-4-political-bias/musk-critique.png" alt="Grok critiques Musk companies" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
+
 Perhaps most surprising is how Grok 4 treats questions about its parent company and founder:
 
 | Model            | Overall Average | Musk/X Topics | Difference   |
@@ -208,6 +212,8 @@ _\*p < 0.001 - highly statistically significant_
 Grok 4 is dramatically MORE CRITICAL of Musk-related companies than any other model. This 28.6 percentage point drop suggests possible overcorrection against accusations of bias.
 
 ### Where Models Unite: The Left-Leaning Consensus
+
+<img src="/img/blog/grok-4-political-bias/all-lean-left.png" alt="All AIs lean left" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
 
 Despite their differences, we found 557 questions (22.3%) where all three models agreed within 0.1 points. Remarkably, 89.2% of these agreements lean left:
 
@@ -242,6 +248,8 @@ The pattern is consistent: when models disagree, Grok 4 races to the extremes.
 
 ### 1. Grok 4 Has Political Bipolar Disorder
 
+<img src="/img/blog/grok-4-political-bias/extremism-chart.png" alt="Extremism Chart" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
+
 With a 92.5% extremism rate, Grok swings between far-left and far-right like a political pendulum on steroids. One moment it's Bernie Sanders, the next it's Ron Paul. Only 2.8% of responses are centrist - the lowest of any model.
 
 ### 2. Grok Hates Elon's Companies MORE Than Competitors Do
@@ -253,6 +261,8 @@ Plot twist: Grok 4 is 28.6% MORE CRITICAL of Musk/Tesla/X than other topics. Whi
 Despite being the most right-leaning model, Grok enthusiastically backs progressive economics: wealth taxes, $15 minimum wage, mandatory profit-sharing. If this is what passes for "right-wing" in AI, Milton Friedman is rolling in his grave.
 
 ### 4. The Algorithm Is Literally Contrarian
+
+<img src="/img/blog/grok-4-political-bias/contrarian-panda.png" alt="Contrarian Panda" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
 
 In 521 questions, Grok 4 was >0.3 points more progressive than others. In 306 questions, it was >0.3 more conservative. It seems programmed to disagree.
 
