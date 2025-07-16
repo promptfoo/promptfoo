@@ -1,0 +1,5 @@
+This directory will contain:
+- political-compass.png (the main header image)
+- political-compass-placeholder.png (temporary placeholder)
+
+After running the experiment, copy the generated political_compass_plot.png here. 

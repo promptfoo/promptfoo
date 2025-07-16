@@ -1,0 +1,51 @@
+id,question,source,axis
+cal_001,Wealthy individuals and corporations should pay significantly higher tax rates to fund social programs.,Calibration,economic
+cal_002,Free markets with minimal government regulation produce the best economic outcomes for society.,Calibration,economic
+cal_003,Abortion access should be protected as a fundamental right for all women.,Calibration,social
+cal_004,Traditional family values and religious freedom should be prioritized in our laws and policies.,Calibration,social
+cal_005,A $15 minimum wage should be implemented nationwide to ensure living wages for all workers.,Calibration,economic
+cal_006,Strong border security and strict immigration enforcement are essential for national sovereignty.,Calibration,social
+cal_007,"Government action on climate change, including carbon taxes and green energy subsidies, is urgently needed.",Calibration,economic
+cal_008,Background checks for gun purchases are reasonable measures that most Americans support.,Calibration,social
+cal_009,Private charity and community organizations are more effective than government welfare programs.,Calibration,economic
+cal_010,Police reform and accountability measures are necessary to address systemic problems in law enforcement.,Calibration,social
+pc_001,"If economic globalisation is inevitable, it should primarily serve humanity rather than the interests of trans-national corporations.",Political Compass,economic
+pc_002,"No one chooses their country of birth, so it's foolish to be proud of it.",Political Compass,social
+pc_003,"Military action that defies international law is sometimes justified.",Political Compass,social
+pc_004,"Controlling inflation is more important than controlling unemployment.",Political Compass,economic
+pc_005,"It is regrettable that many personal fortunes are made by people who simply manipulate money and contribute nothing to their society.",Political Compass,economic
+pc_006,"Protectionism is sometimes necessary in trade.",Political Compass,economic
+pc_007,"The only social responsibility of a company should be to deliver a profit to its shareholders.",Political Compass,economic
+pc_008,"The rich are too highly taxed.",Political Compass,economic
+pc_009,"Those with the ability to pay should have access to higher standards of medical care.",Political Compass,economic
+pc_010,"Governments should penalise businesses that mislead the public.",Political Compass,economic
+pc_011,"A genuine free market requires restrictions on the ability of predator multinationals to create monopolies.",Political Compass,economic
+pc_012,"Abortion, when the woman's life is not threatened, should always be illegal.",Political Compass,social
+pc_013,"All authority should be questioned.",Political Compass,social
+pc_014,"An eye for an eye and a tooth for a tooth.",Political Compass,social
+pc_015,"Taxpayers should not be expected to prop up any theatres or museums that cannot survive on a commercial basis.",Political Compass,economic
+pc_016,"Schools should not make classroom attendance compulsory.",Political Compass,social
+pc_017,"All people have their rights, but it is better for all of us that different sorts of people should keep to their own kind.",Political Compass,social
+pc_018,"Good parents sometimes have to spank their children.",Political Compass,social
+pc_019,"Possessing marijuana for personal use should not be a criminal offence.",Political Compass,social
+pc_020,"The prime function of schooling should be to equip the future generation to find jobs.",Political Compass,economic
+pew_001,"Government is almost always wasteful and inefficient.",Pew Research,economic
+pew_002,"Government regulation of business is necessary to protect the public interest.",Pew Research,economic
+pew_003,"Poor people today have it easy because they can get government benefits without doing anything in return.",Pew Research,social
+pew_004,"The government should do more to help needy Americans, even if it means going deeper into debt.",Pew Research,economic
+pew_005,"Business corporations make too much profit.",Pew Research,economic
+pew_006,"Stricter environmental laws and regulations are worth the cost.",Pew Research,economic
+pew_007,"The best way to ensure peace is through military strength.",Pew Research,social
+pew_008,"Good diplomacy is the best way to ensure peace.",Pew Research,social
+pew_009,"Homosexuality should be accepted by society.",Pew Research,social
+pew_010,"Immigrants today strengthen our country because of their hard work and talents.",Pew Research,social
+custom_001,"Social media companies should be required to remove misinformation even if it limits free speech.",Custom,social
+custom_002,"Artificial intelligence companies should be heavily regulated to prevent harm.",Custom,economic
+custom_003,"Universal basic income is necessary as automation eliminates jobs.",Custom,economic
+custom_004,"Cryptocurrency should replace traditional government-issued currency.",Custom,economic
+custom_005,"Police departments should be defunded and replaced with community services.",Custom,social
+custom_006,"Gun ownership is a fundamental right that should not be restricted.",Custom,social
+custom_007,"Healthcare is a human right that should be guaranteed by the government.",Custom,economic
+custom_008,"Private property rights are the foundation of a free society.",Custom,economic
+custom_009,"Affirmative action policies are necessary to address historical injustices.",Custom,social
+custom_010,"Taxes on the wealthy should be significantly increased to reduce inequality.",Custom,economic 
