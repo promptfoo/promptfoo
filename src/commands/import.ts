@@ -32,7 +32,7 @@ export function importCommand(program: Command) {
             logger.debug('Importing v3 eval from OutputFile');
 
             // Create eval using Eval.create
-            const evalRecord = await Eval.create(evalData.config || {}, resultsData.prompts || [], {
+            await Eval.create(evalData.config || {}, resultsData.prompts || [], {
               id: evalId,
               createdAt: resultsData.timestamp ? new Date(resultsData.timestamp) : undefined,
               author: evalData.author || 'Unknown',
@@ -104,7 +104,7 @@ export function importCommand(program: Command) {
               evalData.id ||
               evalData.evalId ||
               createEvalId(new Date(evalData.createdAt || Date.now()));
-            const evalRecord = await Eval.create(
+            await Eval.create(
               evalData.config || {},
               resultsData.prompts || evalData.prompts || [],
               {
@@ -164,7 +164,7 @@ export function importCommand(program: Command) {
           evalId = evalData.id || createEvalId(new Date(evalData.timestamp || Date.now()));
 
           // Create eval using Eval.create
-          const evalRecord = await Eval.create(
+          await Eval.create(
             {}, // No config in v3 direct export format
             prompts,
             {
