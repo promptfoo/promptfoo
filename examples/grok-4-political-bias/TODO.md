@@ -132,7 +132,7 @@ _(Paste the entire draft you received earlier. The assignee will overwrite numer
 | Channel   | Copy guideline                                           |
 | --------- | -------------------------------------------------------- |
 | LinkedIn  | 220–240 chars, one statistic, link, "#AIethics" tag      |
-| Twitter/X | ≤ 280 chars, emoji 🔴🦾, og\:image preview; 3 variants   |
+| Twitter/X | ≤ 280 chars, emoji 🔴🦾, og\:image preview; 3 variants     |
 | Email     | 3-sentence blurb for newsletter, focus on quadrant chart |
 
 ---
@@ -167,3 +167,102 @@ _(Paste the entire draft you received earlier. The assignee will overwrite numer
 ### Questions?
 
 Ping \<your handle> on Slack or drop comments in the GitHub repo issues.
+
+---
+
+## 11. Analysis Questions for Results (Post-Evaluation)
+
+Once our 2,500-question evaluation completes, here are the key analytical questions to explore:
+
+### Overall Political Positioning
+1. **What is Grok 4's average political score compared to GPT-4o, Gemini 2.5 Pro, and Claude 3.5 Sonnet?**
+   - Calculate mean scores and standard deviations for each model
+   - Identify which model is furthest left/right overall
+
+2. **How dispersed are Grok 4's responses across the political spectrum?**
+   - Is it consistently positioned or does it vary widely by topic?
+   - Compare variance to other models - who is most consistent?
+
+3. **What percentage of Grok 4's responses fall into each category (left/center/right)?**
+   - Create distribution histograms for each model
+   - Identify any bimodal patterns
+
+### Corporate Bias Analysis
+4. **Does Grok 4 show statistically significant favorability toward Elon Musk's companies?**
+   - Compare average scores on X/Tesla/SpaceX questions vs general tech questions
+   - Run t-tests for significance
+
+5. **How does Grok 4 treat competitor companies (Google, Meta, Microsoft)?**
+   - Look for systematic negative bias against competitors
+   - Compare to how other models discuss these same companies
+
+6. **Which specific corporate topics show the largest bias differential?**
+   - Content moderation policies?
+   - Antitrust regulation?
+   - CEO leadership styles?
+
+### Topic-Specific Patterns
+7. **On which political topics does Grok 4 diverge most from other models?**
+   - Immigration? Climate? Tech regulation? Healthcare?
+   - Create topic-specific bias scores
+
+8. **Are there "surprise" progressive positions where Grok 4 leans left?**
+   - Identify questions where Grok 4 is more liberal than GPT-4o
+   - Look for inconsistencies in its ideological framework
+
+9. **How does Grok 4 handle AI governance and safety questions?**
+   - Does it favor industry self-regulation or government oversight?
+   - Compare to other models' AI policy stances
+
+### Consistency and Coherence
+10. **Does Grok 4 maintain ideological consistency across related questions?**
+    - Find question pairs that should correlate (e.g., taxation views)
+    - Calculate intra-model consistency scores
+
+11. **Which model shows the most "human-like" political reasoning?**
+    - Look for nuanced positions vs simplistic left/right answers
+    - Analyze response sophistication
+
+### Patch Effectiveness
+12. **If we test pre/post patch versions, how much did the patches shift responses?**
+    - Calculate mean shift magnitude
+    - Which topics were most affected by patches?
+
+13. **Did patches merely suppress extreme outputs or genuinely recenter the model?**
+    - Look at distribution shape changes
+    - Check if variance decreased (suppression) or mean shifted (recentering)
+
+### Methodological Insights
+14. **Does our LLM judge (GPT-4o) show its own bias in scoring?**
+    - Spot-check controversial scores manually
+    - Consider running subset through Claude as alternate judge
+
+15. **Which questions best discriminate between models' political positions?**
+    - Identify high-variance questions across models
+    - These could form a more efficient test battery
+
+### Surprising Findings
+16. **What's the most unexpected finding in the data?**
+    - Models agreeing where we expected divergence?
+    - Extreme positions on seemingly neutral topics?
+
+17. **Do any models show "strategic" answering patterns?**
+    - Avoiding certain topics?
+    - Hedging on controversial issues?
+
+### Business Implications
+18. **Based on bias patterns, which model would be most suitable for which use cases?**
+    - Government applications?
+    - Educational settings?
+    - Business analytics?
+
+19. **How might these biases affect real-world deployments?**
+    - Customer service scenarios
+    - Content generation
+    - Decision support systems
+
+### Future Research
+20. **What follow-up experiments do these results suggest?**
+    - Testing with non-Western political frameworks?
+    - Longitudinal bias tracking?
+    - Prompt engineering to reduce bias?
