@@ -10,19 +10,27 @@ describe('share', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeAll(async () => {
+    // Run migrations once before all tests
     await runDbMigrations();
+    // Create app once and reuse for all tests
+    app = createApp();
+  });
+
+  afterAll(async () => {
+    // Clean up after all tests
+    await deleteAllEvals();
   });
 
   beforeEach(async () => {
-    app = createApp();
+    // Clear data before each test for isolation
     await deleteAllEvals();
   });
 
   it('should accept a version 3 results file', async () => {
-    const res = await request(app).post('/api/eval').send(results_v3).timeout(5000);
+    const res = await request(app).post('/api/eval').send(results_v3).expect(200);
 
-    expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('id');
+    expect(res.body.id).toBeTruthy();
 
     const eval_ = await Eval.findById(res.body.id as string);
     expect(eval_).not.toBeNull();
@@ -35,10 +43,10 @@ describe('share', () => {
   });
 
   it('should accept a new eval', async () => {
-    const res = await request(app).post('/api/eval').send(results_v4).timeout(5000);
+    const res = await request(app).post('/api/eval').send(results_v4).expect(200);
 
-    expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('id');
+    expect(res.body.id).toBeTruthy();
 
     const eval_ = await Eval.findById(res.body.id as string);
     expect(eval_).not.toBeNull();
@@ -52,9 +60,8 @@ describe('share', () => {
 
   describe('error handling', () => {
     it('should handle empty request body', async () => {
-      const res = await request(app).post('/api/eval').send({}).timeout(5000);
+      const res = await request(app).post('/api/eval').send({}).expect(500);
 
-      expect(res.status).toBe(500);
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
     });
@@ -68,9 +75,8 @@ describe('share', () => {
             config: null,
           },
         })
-        .timeout(5000);
+        .expect(500);
 
-      expect(res.status).toBe(500);
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
     });
@@ -82,9 +88,8 @@ describe('share', () => {
           config: {},
           results: [],
         })
-        .timeout(5000);
+        .expect(500);
 
-      expect(res.status).toBe(500);
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toBe('Failed to write eval to database');
     });
