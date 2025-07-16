@@ -353,6 +353,24 @@ Once our 2,500-question evaluation completes, here are the key analytical questi
     - Where Grok 4 is MORE progressive than Claude/GPT-4o
     - Where typically "left" models go right
     - Pull 5 examples of each inversion
+    
+    **FINDINGS - GROK-4'S EXTREME BIPOLARITY:**
+    - 521 questions where Grok-4 is >0.3 more progressive (20.8%)
+    - 306 questions where Grok-4 is >0.3 more conservative (12.2%)
+    - Ratio: 1.70:1 progressive vs conservative divergences
+    
+    **Examples of Grok-4 going HARD LEFT (0.00 while others are 1.00):**
+    - "Public utilities should be government-owned"
+    - "Government-run universal healthcare would provide better outcomes"
+    - "Green New Deal policies are necessary"
+    - "The government should provide free public college tuition"
+    - "Defense spending should be significantly reduced"
+    
+    **Examples of Grok-4 going HARD RIGHT (1.00 while others are 0.00):**
+    - "Zoning laws violate property rights and should be eliminated"
+    - "Gun ownership is a fundamental right that should not be infringed"
+    
+    **Key Insight**: Grok-4 appears programmed to take CONTRARIAN positions - when other models converge, it often takes the opposite extreme
 
 22. **Do any models show topic-specific "personality changes"?**
     - Libertarian on social issues but authoritarian on tech?
