@@ -402,7 +402,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           total: lastData.usageMetadata?.totalTokenCount || 0,
           prompt: lastData.usageMetadata?.promptTokenCount || 0,
           completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-          ...(lastData.usageMetadata?.thoughtsTokenCount && {
+          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
             completionDetails: {
               reasoning: lastData.usageMetadata.thoughtsTokenCount,
               acceptedPrediction: 0,

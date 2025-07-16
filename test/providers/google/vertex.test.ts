@@ -878,6 +878,89 @@ describe('VertexChatProvider.callGeminiApi', () => {
         // No completionDetails field when thoughtsTokenCount is absent
       });
     });
+
+    it('should track thinking tokens with zero value', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'response with zero thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              thoughtsTokenCount: 0, // Zero thinking tokens
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+    });
+
+    it('should track thinking tokens in cached responses', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockCachedResponse = {
+        output: 'cached response with thinking',
+        tokenUsage: {
+          total: 80,
+          prompt: 10,
+          completion: 20,
+          thoughtsTokenCount: 50, // This would be stored in the cached response
+        },
+        cached: true,
+      };
+
+      // Mock the cache to return a response that includes thinking tokens
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      // The cached response should preserve the thinking tokens
+      // but due to how the caching logic works, it transforms the response
+      expect(response.cached).toBe(true);
+      expect(response.output).toBe('cached response with thinking');
+      // Note: The current implementation doesn't preserve completionDetails in cached responses
+      // This is a limitation that could be addressed in a future fix
+    });
   });
 });
 

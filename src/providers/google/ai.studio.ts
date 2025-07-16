@@ -200,13 +200,20 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
             cached: data.usageMetadata?.totalTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 0,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
           }
         : {
             prompt: data.usageMetadata?.promptTokenCount,
             completion: data.usageMetadata?.candidatesTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 1,
-            ...(data.usageMetadata?.thoughtsTokenCount && {
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
                 acceptedPrediction: 0,
@@ -347,13 +354,20 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
             cached: data.usageMetadata?.totalTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 0,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
           }
         : {
             prompt: data.usageMetadata?.promptTokenCount,
             completion: data.usageMetadata?.candidatesTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 1,
-            ...(data.usageMetadata?.thoughtsTokenCount && {
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
                 acceptedPrediction: 0,
