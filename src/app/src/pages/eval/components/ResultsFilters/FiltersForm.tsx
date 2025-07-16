@@ -147,10 +147,12 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
       <Dropdown
         id={`${index}-value-select`}
         label={currentField?.label || 'Value'}
-        values={currentField!.options.map((option) => ({
-          label: option.label,
-          value: option.id,
-        }))}
+        values={currentField!.options
+          .sort((a, b) => a.label.localeCompare(b.label))
+          .map((option) => ({
+            label: option.label,
+            value: option.id,
+          }))}
         value={value.value}
         onChange={(e) => handleValueChange(e)}
         width={275}
@@ -207,10 +209,12 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
           <Dropdown
             id={`${index}-field-select`}
             label="Field"
-            values={currentField!.options.map((option) => ({
-              label: option.label,
-              value: option.id,
-            }))}
+            values={currentField!.options
+              .sort((a, b) => a.label.localeCompare(b.label))
+              .map((option) => ({
+                label: option.label,
+                value: option.id,
+              }))}
             value={value.field || ''}
             onChange={(e) => handleFieldChange(e)}
             width={275}

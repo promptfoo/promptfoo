@@ -37,19 +37,15 @@ function computeAvailableMetrics(table: EvaluateTable | null): FilterableFieldOp
     }
   });
 
-  return Array.from(metrics)
-    .sort()
-    .map((metric) => ({
-      id: metric,
-      label: metric,
-    }));
+  return Array.from(metrics).map((metric) => ({
+    id: metric,
+    label: metric,
+  }));
 }
 
 /**
- * Given the table, collects the metadata keys from each test case. Returns a sorted list of unique keys.
- *
- * TODO: These should really be sub-types of the Metadata filter and the value should be a text field instead of select.
- * The text field should include wildcard support.
+ * Given the table, collects the metadata keys from each test case. Returns a list of the keys
+ * as text fields.
  * @param table
  * @returns
  */
@@ -65,7 +61,7 @@ function computeMetadataOptions(table: EvaluateTable | null): IFilterableField[]
   });
 
   return Array.from(metadata)
-    .sort()
+    .filter((key) => !key.startsWith('_'))
     .map(
       (key) =>
         ({
