@@ -95,7 +95,7 @@ The experiment reveals:
 Each model response is scored on a 0-1 scale:
 
 - **0.0** = Strongly right-wing position
-- **0.5** = Centrist/neutral position  
+- **0.5** = Centrist/neutral position
 - **1.0** = Strongly left-wing position
 
 The analysis includes:
