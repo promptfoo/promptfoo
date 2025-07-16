@@ -27,6 +27,7 @@ import ButtonGroup from '@mui/material/ButtonGroup';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
@@ -208,16 +209,25 @@ function ResultsTable({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  // Load saved page size from localStorage
+  const savedPageSize = React.useMemo(() => {
+    const saved = localStorage.getItem('promptfoo-page-size');
+    return saved ? parseInt(saved, 10) : 50;
+  }, []);
+
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: 50,
+    pageSize: savedPageSize,
   });
   const [pageInputValue, setPageInputValue] = React.useState<string>('');
+  const [isPaginationLoading, setIsPaginationLoading] = React.useState(false);
 
   // Reset page input value when pagination changes
   React.useEffect(() => {
     setPageInputValue('');
   }, [pagination.pageIndex]);
+
+
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -418,6 +428,8 @@ function ResultsTable({
 
     console.log('Fetching data for filtering/pagination', evalId);
 
+    setIsPaginationLoading(true);
+    // fetchEvalData doesn't return a promise, so we need to handle loading state differently
     fetchEvalData(evalId, {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
@@ -427,6 +439,8 @@ function ResultsTable({
       filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
+    // Clear loading state after a short delay
+    setTimeout(() => setIsPaginationLoading(false), 500);
   }, [
     // evalId is NOT in the dependency array
     pagination.pageIndex,
@@ -913,7 +927,10 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredResultsCount / pagination.pageSize));
+  const pageCount = React.useMemo(
+    () => Math.max(1, Math.ceil(filteredResultsCount / pagination.pageSize)),
+    [filteredResultsCount, pagination.pageSize]
+  );
   const reactTable = useReactTable({
     data: tableBody,
     columns,
@@ -930,6 +947,49 @@ function ResultsTable({
 
   const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
+
+  // Keyboard shortcuts for pagination
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if no input is focused
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'ArrowLeft' && pagination.pageIndex > 0) {
+          e.preventDefault();
+          setPagination((prev) => ({ ...prev, pageIndex: prev.pageIndex - 1 }));
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          // Announce to screen readers
+          const announcement = document.createElement('div');
+          announcement.setAttribute('role', 'status');
+          announcement.setAttribute('aria-live', 'polite');
+          announcement.style.position = 'absolute';
+          announcement.style.left = '-10000px';
+          announcement.textContent = `Navigated to page ${pagination.pageIndex}`;
+          document.body.appendChild(announcement);
+          setTimeout(() => document.body.removeChild(announcement), 1000);
+        } else if (e.key === 'ArrowRight' && pagination.pageIndex < pageCount - 1) {
+          e.preventDefault();
+          setPagination((prev) => ({ ...prev, pageIndex: prev.pageIndex + 1 }));
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          // Announce to screen readers
+          const announcement = document.createElement('div');
+          announcement.setAttribute('role', 'status');
+          announcement.setAttribute('aria-live', 'polite');
+          announcement.style.position = 'absolute';
+          announcement.style.left = '-10000px';
+          announcement.textContent = `Navigated to page ${pagination.pageIndex + 2}`;
+          document.body.appendChild(announcement);
+          setTimeout(() => document.body.removeChild(announcement), 1000);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pagination.pageIndex, pageCount]);
 
   const clearRowIdFromUrl = React.useCallback(() => {
     const url = new URL(window.location.href);
@@ -1197,6 +1257,30 @@ function ResultsTable({
         </table>
       </div>
 
+      {/* Show empty state message when no results */}
+      {filteredResultsCount === 0 && (
+        <Box
+          sx={{
+            textAlign: 'center',
+            padding: '40px 20px',
+            backgroundColor: 'background.paper',
+            borderRadius: '8px',
+            margin: '24px 0',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No results found
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {searchText ? 
+              'Try adjusting your search terms or filters' : 
+              'No test results available'
+            }
+          </Typography>
+        </Box>
+      )}
       {
         // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
         // filters does not hide the pagination controls.
@@ -1205,6 +1289,7 @@ function ResultsTable({
           <Box
             className="pagination"
             sx={{
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
               gap: 2,
@@ -1221,6 +1306,25 @@ function ResultsTable({
               minHeight: '64px', // Ensure consistent height
             }}
           >
+            {isPaginationLoading && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  zIndex: 1,
+                  borderRadius: '8px',
+                }}
+              >
+                <LinearProgress sx={{ width: '200px' }} />
+              </Box>
+            )}
             <Box>
               Showing{' '}
               <Typography component="span" sx={{ fontWeight: 600 }}>
@@ -1238,6 +1342,13 @@ function ResultsTable({
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+              {/* Keyboard shortcut hint */}
+              <Tooltip title="Use Ctrl/Cmd + Arrow keys to navigate pages" placement="top">
+                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                  Tip: Ctrl+← →
+                </Typography>
+              </Tooltip>
+              
               {/* PAGE INFO */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography variant="body2" color="text.secondary">
@@ -1265,12 +1376,15 @@ function ResultsTable({
                     const newPageSize = Number(e.target.value);
                     const newPageCount = Math.ceil(filteredResultsCount / newPageSize);
 
+                    // Save page size preference
+                    localStorage.setItem('promptfoo-page-size', newPageSize.toString());
+
                     setPagination((prev) => ({
                       pageSize: newPageSize,
                       // Reset to page 0 if current page would be out of bounds
                       pageIndex: prev.pageIndex >= newPageCount ? 0 : prev.pageIndex,
                     }));
-                    window.scrollTo(0, 0);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   displayEmpty
                   inputProps={{ 'aria-label': 'Results per page' }}
@@ -1387,7 +1501,7 @@ function ResultsTable({
                       pageIndex: 0,
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
                   sx={{ padding: '6px' }}
@@ -1403,7 +1517,7 @@ function ResultsTable({
                       pageIndex: Math.max(prev.pageIndex - 1, 0),
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
                   sx={{ padding: '6px' }}
@@ -1419,7 +1533,7 @@ function ResultsTable({
                       pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
                   sx={{ padding: '6px' }}
@@ -1435,7 +1549,7 @@ function ResultsTable({
                       pageIndex: pageCount - 1,
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
                   sx={{ padding: '6px' }}
