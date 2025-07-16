@@ -241,28 +241,114 @@ Once our 2,500-question evaluation completes, here are the key analytical questi
     - Identify high-variance questions across models
     - These could form a more efficient test battery
 
-### Surprising Findings
-16. **What's the most unexpected finding in the data?**
-    - Models agreeing where we expected divergence?
-    - Extreme positions on seemingly neutral topics?
+### Model Agreement/Disagreement Patterns
+16. **On which questions do ALL models strongly agree (within 0.1 score)?**
+    - Pull 10 examples of unanimous agreement
+    - Are these "obvious" political positions or surprising consensuses?
+    - What does universal agreement tell us about training data overlap?
 
-17. **Do any models show "strategic" answering patterns?**
-    - Avoiding certain topics?
-    - Hedging on controversial issues?
+17. **Where do models show maximum disagreement (>0.5 score difference)?**
+    - Extract top 20 questions with highest variance
+    - Which model pairs disagree most often?
+    - Create a "disagreement heatmap" between model pairs
+
+18. **What patterns emerge in Grok 4 vs GPT-4o disagreements specifically?**
+    - Sample 10 questions where they're opposites
+    - Are disagreements concentrated in certain topics?
+    - Does one consistently go left/right of the other?
+
+### Surprising Findings & Edge Cases
+19. **Which questions produce the most "centrist" responses across all models?**
+    - Find questions where all models score 0.4-0.6
+    - Are models avoiding taking stances on certain topics?
+    - Pull 5 examples of "strategic neutrality"
+
+20. **What are the most extreme responses from each model?**
+    - Find each model's most left-wing response (closest to 0.0)
+    - Find each model's most right-wing response (closest to 1.0)
+    - Do extreme responses correlate with specific topics?
+
+21. **Which questions show "inverted" political positions?**
+    - Where Grok 4 is MORE progressive than Claude/GPT-4o
+    - Where typically "left" models go right
+    - Pull 5 examples of each inversion
+
+22. **Do any models show topic-specific "personality changes"?**
+    - Libertarian on social issues but authoritarian on tech?
+    - Progressive on environment but conservative on economics?
+    - Map ideological consistency by topic area
+
+### Sample Extraction for Blog Post
+23. **Which specific examples best illustrate our key findings?**
+    - Pull 3 questions showing Grok 4's rightward bias
+    - Pull 3 questions showing corporate favoritism
+    - Pull 3 questions showing model consensus
+    - Pull 3 questions showing maximum disagreement
+
+24. **What quotes from model responses are most compelling?**
+    - Find quotable responses that clearly show bias
+    - Extract responses that would surprise readers
+    - Identify responses that contradict model maker claims
 
 ### Business Implications
-18. **Based on bias patterns, which model would be most suitable for which use cases?**
+25. **Based on bias patterns, which model would be most suitable for which use cases?**
     - Government applications?
     - Educational settings?
     - Business analytics?
 
-19. **How might these biases affect real-world deployments?**
+26. **How might these biases affect real-world deployments?**
     - Customer service scenarios
     - Content generation
     - Decision support systems
 
 ### Future Research
-20. **What follow-up experiments do these results suggest?**
+27. **What follow-up experiments do these results suggest?**
     - Testing with non-Western political frameworks?
     - Longitudinal bias tracking?
     - Prompt engineering to reduce bias?
+
+28. **Which findings warrant deeper investigation?**
+    - Unexpected model agreements that suggest shared training data?
+    - Topic areas where all models show bias?
+    - Questions that "break" certain models?
+
+---
+
+## 12. Data Extraction Scripts Needed
+
+To answer the above questions efficiently, create these analysis scripts:
+
+### Agreement/Disagreement Analysis
+```python
+# extract_agreement_patterns.py
+- find_unanimous_agreements(threshold=0.1)  # Questions where all models agree
+- find_maximum_disagreements(threshold=0.5)  # Questions with high variance
+- create_disagreement_heatmap()  # Pairwise model disagreement visualization
+- extract_model_pair_conflicts(model1='grok-4', model2='gpt-4o', n=10)
+```
+
+### Sample Extraction
+```python
+# extract_key_examples.py
+- get_extreme_responses(model, direction='left|right', n=5)
+- find_inverted_positions()  # Where models break expected patterns
+- extract_corporate_bias_examples(company='tesla|google|meta', n=3)
+- find_centrist_dodges(threshold=0.4-0.6)  # Strategic neutrality
+```
+
+### Topic Analysis
+```python
+# analyze_by_topic.py
+- calculate_topic_bias(model, topics=['immigration', 'climate', 'tech', 'ai'])
+- find_topic_personality_changes()  # Ideological inconsistencies
+- identify_high_variance_topics()  # Topics that split models most
+```
+
+### Blog Post Support
+```python
+# prepare_blog_examples.py
+- format_compelling_quotes(results, n=10)
+- create_comparison_table(questions, models)
+- generate_visual_examples()  # For social media
+- export_key_findings_summary()
+```
