@@ -233,8 +233,6 @@ Grok 4 is dramatically MORE CRITICAL of Musk-related companies than any other mo
 
 ### Where Models Unite: The Left-Leaning Consensus
 
-<img src="/img/blog/grok-4-political-bias/all-lean-left.png" alt="All AIs lean left" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
-
 Despite their differences, we found numerous questions where all four models agreed within narrow margins. Remarkably, the vast majority of these agreements lean left:
 
 **Universal Progressive Stances:**
