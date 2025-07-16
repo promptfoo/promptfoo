@@ -25,6 +25,7 @@ export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
 export * from './tracing';
+export * from './prompt-management';
 
 export type { EnvOverrides };
 

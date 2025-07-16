@@ -19,7 +19,12 @@ import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
 import ModelAuditPage from './pages/model-audit/page';
+import PromptEditor from './pages/prompts/PromptEditor';
+import PromptCreatePage from './pages/prompts/create';
+import PromptDiffPage from './pages/prompts/diff';
+import PromptHistoryPage from './pages/prompts/history';
 import PromptsPage from './pages/prompts/page';
+import PromptTestPage from './pages/prompts/test';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
 
@@ -63,6 +68,11 @@ const router = createBrowserRouter(
           <Route path="/history" element={<HistoryPage />} />
 
           <Route path="/prompts" element={<PromptsPage />} />
+          <Route path="/prompts/new" element={<PromptCreatePage />} />
+          <Route path="/prompts/:promptId/edit" element={<PromptEditor />} />
+          <Route path="/prompts/:promptId/history" element={<PromptHistoryPage />} />
+          <Route path="/prompts/:promptId/diff" element={<PromptDiffPage />} />
+          <Route path="/prompts/:promptId/test" element={<PromptTestPage />} />
           <Route path="/model-audit" element={<ModelAuditPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />

@@ -81,6 +81,7 @@ describe('index.ts exports', () => {
     'isGradingResult',
     'isProviderOptions',
     'loadApiProvider',
+    'prompts',
     'redteam',
   ];
 
@@ -157,6 +158,7 @@ describe('index.ts exports', () => {
       evaluate: index.evaluate,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
+      prompts: index.prompts,
       redteam: index.redteam,
     });
   });

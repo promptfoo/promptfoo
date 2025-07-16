@@ -7,6 +7,7 @@ import {
   index,
   uniqueIndex,
   real,
+  unique,
 } from 'drizzle-orm/sqlite-core';
 import {
   type Prompt,
@@ -247,6 +248,109 @@ export const evalsToDatasetsRelations = relations(evalsToDatasetsTable, ({ one }
   dataset: one(datasetsTable, {
     fields: [evalsToDatasetsTable.datasetId],
     references: [datasetsTable.id],
+  }),
+}));
+
+// ------------ Managed Prompts ------------
+
+export const managedPromptsTable = sqliteTable(
+  'managed_prompts',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull().unique(),
+    description: text('description'),
+    tags: text('tags', { mode: 'json' }).$type<string[]>(),
+    currentVersion: integer('current_version').notNull().default(1),
+    createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+    updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
+    author: text('author'),
+    // Metadata fields
+    metadata: text('metadata', { mode: 'json' }).$type<{
+      promptfooVersion?: string;
+      os?: string;
+      platform?: string;
+      arch?: string;
+      usageCount?: number;
+      lastUsedAt?: number;
+      isCloudSynced?: boolean;
+    }>(),
+  },
+  (table) => ({
+    createdAtIdx: index('managed_prompts_created_at_idx').on(table.createdAt),
+    nameIdx: uniqueIndex('managed_prompts_name_idx').on(table.name),
+  }),
+);
+
+export const promptVersionsTable = sqliteTable(
+  'prompt_versions',
+  {
+    id: text('id').primaryKey(),
+    promptId: text('prompt_id')
+      .notNull()
+      .references(() => managedPromptsTable.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    content: text('content').notNull(),
+    author: text('author'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    notes: text('notes'),
+    // New columns for prompt features
+    config: text('config'), // JSON stored as text
+    contentType: text('content_type'), // 'string' | 'json' | 'function' | 'file'
+    functionSource: text('function_source'),
+    functionName: text('function_name'),
+    fileFormat: text('file_format'),
+    transform: text('transform'),
+    label: text('label'),
+  },
+  (table) => {
+    return {
+      promptVersionIdx: index('prompt_version_idx').on(table.promptId, table.version),
+      uniquePromptVersion: unique().on(table.promptId, table.version),
+    };
+  },
+);
+
+export const promptDeploymentsTable = sqliteTable(
+  'prompt_deployments',
+  {
+    promptId: text('prompt_id')
+      .notNull()
+      .references(() => managedPromptsTable.id, { onDelete: 'cascade' }),
+    environment: text('environment').notNull(),
+    versionId: text('version_id')
+      .notNull()
+      .references(() => promptVersionsTable.id),
+    updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
+    updatedBy: text('updated_by'),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.promptId, table.environment] }),
+    environmentIdx: index('prompt_deployments_env_idx').on(table.environment),
+  }),
+);
+
+// ------------ Relations ------------
+
+export const managedPromptsRelations = relations(managedPromptsTable, ({ many }) => ({
+  versions: many(promptVersionsTable),
+  deployments: many(promptDeploymentsTable),
+}));
+
+export const promptVersionsRelations = relations(promptVersionsTable, ({ one }) => ({
+  prompt: one(managedPromptsTable, {
+    fields: [promptVersionsTable.promptId],
+    references: [managedPromptsTable.id],
+  }),
+}));
+
+export const promptDeploymentsRelations = relations(promptDeploymentsTable, ({ one }) => ({
+  prompt: one(managedPromptsTable, {
+    fields: [promptDeploymentsTable.promptId],
+    references: [managedPromptsTable.id],
+  }),
+  version: one(promptVersionsTable, {
+    fields: [promptDeploymentsTable.versionId],
+    references: [promptVersionsTable.id],
   }),
 }));
 

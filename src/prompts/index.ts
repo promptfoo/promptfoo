@@ -18,12 +18,14 @@ import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
+import { processManagedPrompt } from './processors/managed';
 import { processMarkdownFile } from './processors/markdown';
 import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
+import { autoTrackPrompts } from './management/autoTracker';
 
 export * from './grading';
 
@@ -102,6 +104,11 @@ async function processPrompt(
   // Handling when the prompt is a raw function (e.g. javascript function)
   if (prompt.function) {
     return [prompt as Prompt];
+  }
+
+  // Handle managed prompts with pf:// prefix
+  if (prompt.raw.startsWith('pf://')) {
+    return processManagedPrompt(prompt);
   }
 
   if (!maybeFilePath(prompt.raw)) {
@@ -202,7 +209,7 @@ export async function readPrompts(
 export async function processPrompts(
   prompts: EvaluateTestSuite['prompts'],
 ): Promise<TestSuite['prompts']> {
-  return (
+  const processedPrompts = (
     await Promise.all(
       prompts.map(async (promptInput: EvaluateTestSuite['prompts'][number]) => {
         if (typeof promptInput === 'function') {
@@ -228,6 +235,15 @@ export async function processPrompts(
       }),
     )
   ).flat();
+
+  // Auto-track prompts if enabled
+  try {
+    await autoTrackPrompts(processedPrompts);
+  } catch (error) {
+    logger.debug(`Failed to auto-track prompts: ${error}`);
+  }
+
+  return processedPrompts;
 }
 
 export const GEVAL_PROMPT_STEPS = `

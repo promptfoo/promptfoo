@@ -33,6 +33,7 @@ import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
+import { promptsRouter } from './routes/prompts';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
@@ -221,6 +222,7 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
+  app.use('/api/managed-prompts', promptsRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -240,6 +242,63 @@ export function createApp() {
         `Error processing telemetry request: ${error instanceof Error ? error.message : error}`,
       );
       res.status(500).json({ error: 'Failed to process telemetry request' });
+    }
+  });
+
+  app.post('/api/generate', async (req: Request, res: Response): Promise<void> => {
+    const { prompt, systemPrompt, provider = 'openai:gpt-3.5-turbo', temperature = 0.7 } = req.body;
+
+    if (!prompt) {
+      res.status(400).json({ error: 'Prompt is required' });
+      return;
+    }
+
+    try {
+      // Import providers dynamically to avoid circular dependencies
+      const { loadApiProviders } = await import('../providers');
+      const providers = await loadApiProviders([
+        {
+          id: provider,
+          config: { temperature },
+        },
+      ]);
+
+      if (providers.length === 0) {
+        res.status(400).json({ error: 'Failed to load provider' });
+        return;
+      }
+
+      const apiProvider = providers[0];
+
+      // Prepare the prompt based on whether it's a chat or completion model
+      let finalPrompt: string | any[];
+      if (provider.includes('gpt') || provider.includes('claude') || provider.includes('gemini')) {
+        // Chat model format
+        finalPrompt = [];
+        if (systemPrompt) {
+          finalPrompt.push({ role: 'system', content: systemPrompt });
+        }
+        finalPrompt.push({ role: 'user', content: prompt });
+      } else {
+        // Completion model format
+        finalPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+      }
+
+      const result = await apiProvider.callApi(finalPrompt as string);
+
+      if (result.error) {
+        res.status(500).json({ error: result.error });
+        return;
+      }
+
+      res.json({
+        output: result.output,
+        tokenUsage: result.tokenUsage,
+        cost: result.cost,
+      });
+    } catch (error) {
+      logger.error(`Failed to generate: ${error instanceof Error ? error.message : String(error)}`);
+      res.status(500).json({ error: 'Failed to generate response' });
     }
   });
 

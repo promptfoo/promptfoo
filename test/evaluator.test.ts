@@ -246,10 +246,6 @@ function toPrompt(text: string): Prompt {
 }
 
 describe('evaluator', () => {
-  beforeAll(async () => {
-    await runDbMigrations();
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
   });

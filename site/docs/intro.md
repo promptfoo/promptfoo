@@ -9,6 +9,7 @@ sidebar_position: 1
 With promptfoo, you can:
 
 - **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
+- **Manage prompts with version control** using [prompt management](/docs/prompts/management) for team collaboration
 - **Secure your apps** with automated [red teaming](/docs/red-team) and pentesting
 - **Speed up evaluations** with caching, concurrency, and live reloading
 - **Score outputs automatically** by defining [metrics](/docs/configuration/expected-outputs)
@@ -23,6 +24,7 @@ The goal: **test-driven LLM development**, not trial-and-error.
 
 - [**Red teaming**](/docs/red-team/quickstart) - LLM security scans
 - [**Evaluations**](/docs/getting-started) - LLM quality benchmarks
+- [**Prompt Management**](/docs/prompts/management) - Version control for prompts
 
 </div>
 
