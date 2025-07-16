@@ -106,6 +106,46 @@ prompts:
 - Building new templates designed for object navigation
 - Working with complex nested data structures
 
+## Import/Export Issues
+
+When importing or exporting evaluation results, you might encounter errors related to data format compatibility.
+
+### Import fails with "Transaction function cannot return a promise"
+
+This error occurred in versions prior to 0.116.8 when importing v3 format evaluations. The issue has been fixed by updating the transaction handling to be synchronous as required by better-sqlite3.
+
+**Solution:** Update to promptfoo version 0.116.8 or later where this issue is resolved.
+
+```bash
+npm install promptfoo@latest
+# or
+npx promptfoo@latest import your-file.json
+```
+
+### Import fails with "NOT NULL constraint failed: evals.config"
+
+This error happens when importing evaluations exported from older versions that don't include all required fields.
+
+**Solution:** The import command now automatically handles missing fields by providing appropriate defaults. Make sure you're using version 0.116.8 or later.
+
+### Supported Import Formats
+
+The import command supports multiple formats:
+
+1. **Direct export format** (from `promptfoo export`)
+   - v2 format: Legacy format stored as-is in the results field
+   - v3 format: Includes prompts, results, and stats
+
+2. **OutputFile format** (from `promptfoo export -o`)
+   - Includes additional metadata like config and author
+   - Preferred format for complete data preservation
+
+### Best Practices
+
+- When transferring evaluations between systems, use `promptfoo export -o output.json` for the most complete data export
+- Always use the same or newer version of promptfoo when importing data
+- If you encounter import errors, try using `npx promptfoo@latest import` to ensure you have the latest fixes
+
 ## Node.js version mismatch error
 
 When running `npx promptfoo@latest`, you might encounter this error:
