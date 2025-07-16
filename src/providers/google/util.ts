@@ -53,6 +53,7 @@ interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 export interface GeminiErrorResponse {
@@ -79,6 +80,7 @@ interface GeminiPromptFeedback {
 interface GeminiUsageMetadata {
   promptTokenCount: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 interface GeminiBlockedResponse {
