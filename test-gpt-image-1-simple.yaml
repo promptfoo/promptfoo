@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Simple GPT-image-1 test
+
+prompts:
+  - 'red circle'
+
+providers:
+  - id: openai:image:gpt-image-1
+
+tests:
+  - vars: {} 

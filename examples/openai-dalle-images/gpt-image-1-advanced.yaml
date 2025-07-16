@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced GPT-image-1 features demonstration
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # High quality with transparent background
+  - id: openai:image:gpt-image-1
+    label: gpt-image-1-transparent
+    config:
+      size: 1024x1024
+      quality: high
+      output_format: png
+      background: transparent
+
+  # Low quality JPEG with compression
+  - id: openai:image:gpt-image-1
+    label: gpt-image-1-compressed
+    config:
+      size: 1536x1024
+      quality: low
+      output_format: jpeg
+      output_compression: 70
+
+  # Auto quality with WebP format
+  - id: openai:image:gpt-image-1
+    label: gpt-image-1-webp
+    config:
+      size: auto
+      quality: auto
+      output_format: webp
+
+tests:
+  - vars:
+      prompt: A cute red panda mascot on a transparent background, clean vector style
+  - vars:
+      prompt: A futuristic cityscape at night with neon lights and flying cars
+  - vars:
+      prompt: Product photo of a luxury watch with text "PROMPTFOO" clearly visible on the dial 

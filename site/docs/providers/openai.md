@@ -270,7 +270,12 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Generating images
 
-OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+OpenAI supports image generation through DALL-E and GPT-image-1 models. See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+
+#### Available models:
+- `openai:image:gpt-image-1` - Latest multimodal model with enhanced text rendering and image editing
+- `openai:image:dall-e-3` - Advanced image generation with high quality
+- `openai:image:dall-e-2` - Classic image generation model
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -279,6 +284,7 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
+  - openai:image:gpt-image-1
   - openai:image:dall-e-3
 
 tests:
@@ -286,6 +292,30 @@ tests:
       subject: bananas
   - vars:
       subject: new york city
+```
+
+#### GPT-image-1 specific features:
+
+```yaml title="gpt-image-1-config.yaml"
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024  # or 1536x1024, 1024x1536, auto
+      quality: high    # low, medium, high, auto
+      output_format: png  # jpeg, png, webp
+      output_compression: 80  # 0-100 for JPEG/WebP
+      background: transparent  # only for PNG/WebP
+```
+
+#### Image editing with GPT-image-1:
+
+```yaml title="image-editing.yaml"
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      operation: edit
+      image: [file://base-image.png]  # Up to 10 images
+      mask: file://mask.png  # Optional mask with alpha channel
 ```
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:

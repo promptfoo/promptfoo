@@ -56,6 +56,37 @@ describe('OpenAiImageProvider', () => {
       });
     });
 
+    it('should generate an image with gpt-image-1 successfully', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { 
+          apiKey: 'test-key',
+          quality: 'high',
+          output_format: 'png',
+        },
+      });
+
+      const result = await provider.callApi('Generate a red panda');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/images/generations'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+          body: expect.stringContaining('"model":"gpt-image-1"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        output: '![Generate a red panda](https://example.com/image.png)',
+        cached: false,
+        cost: 0.17, // Default cost for GPT-image-1 high quality 1024x1024
+      });
+    });
+
     it('should use cached response', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
@@ -345,9 +376,7 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain(
-        "Only 'generation' operations are currently supported. 'variation' operations are not implemented.",
-      );
+      expect(result.error).toContain("Only 'generation' operations are currently supported");
     });
   });
 
@@ -467,6 +496,88 @@ describe('OpenAiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
       );
+    });
+  });
+
+  describe('GPT-image-1 specific features', () => {
+    it('should handle edit operation for gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          operation: 'edit',
+          image: ['base64ImageData'],
+          mask: 'base64MaskData',
+        },
+      });
+
+      const result = await provider.callApi('Edit this image');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/images/edits'),
+        expect.objectContaining({
+          body: expect.stringContaining('"image":["base64ImageData"]'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        output: '![Edit this image](https://example.com/image.png)',
+        cached: false,
+        cost: 0.04, // Default medium quality cost
+      });
+    });
+
+    it('should handle transparent background for gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          background: 'transparent',
+          output_format: 'png',
+        },
+      });
+
+      await provider.callApi('Generate with transparent background');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"background":"transparent"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should handle output compression for gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          output_format: 'jpeg',
+          output_compression: 75,
+        },
+      });
+
+      await provider.callApi('Generate compressed image');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_compression":75'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should validate invalid size for gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          size: '512x512',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('Invalid size "512x512" for GPT-image-1');
     });
   });
 });

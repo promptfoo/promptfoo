@@ -8,6 +8,7 @@ import {
   processApiResponse,
   DALLE2_COSTS,
   DALLE3_COSTS,
+  GPT_IMAGE_1_COSTS,
 } from '../../../src/providers/openai/image';
 
 jest.mock('../../../src/cache', () => ({
@@ -42,6 +43,19 @@ describe('OpenAI Image Provider Functions', () => {
       const result = validateSizeForModel('1792x1024', 'dall-e-2');
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Invalid size "1792x1024" for DALL-E 2');
+    });
+
+    it('should validate valid GPT-image-1 sizes', () => {
+      expect(validateSizeForModel('1024x1024', 'gpt-image-1')).toEqual({ valid: true });
+      expect(validateSizeForModel('1536x1024', 'gpt-image-1')).toEqual({ valid: true });
+      expect(validateSizeForModel('1024x1536', 'gpt-image-1')).toEqual({ valid: true });
+      expect(validateSizeForModel('auto', 'gpt-image-1')).toEqual({ valid: true });
+    });
+
+    it('should invalidate incorrect GPT-image-1 sizes', () => {
+      const result = validateSizeForModel('512x512', 'gpt-image-1');
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('Invalid size "512x512" for GPT-image-1');
     });
 
     it('should validate any size for unknown models', () => {
@@ -92,6 +106,25 @@ describe('OpenAI Image Provider Functions', () => {
       const result = formatOutput(data, 'prompt', 'b64_json');
       expect(typeof result).toBe('object');
       expect(result).toHaveProperty('error');
+    });
+
+    it('should handle GPT-image-1 response format with base64', () => {
+      const data = {
+        data: [{ b64_json: 'base64encodeddata' }],
+      };
+      const result = formatOutput(data, 'prompt', undefined, 'gpt-image-1');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('data:image/png;base64,base64encodeddata');
+    });
+
+    it('should handle GPT-image-1 response format with URL', () => {
+      const data = {
+        data: [{ url: 'https://example.com/image.png' }],
+      };
+      const result = formatOutput(data, 'prompt', undefined, 'gpt-image-1');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('![');
+      expect(result).toContain('](https://example.com/image.png)');
     });
   });
 
@@ -148,6 +181,34 @@ describe('OpenAI Image Provider Functions', () => {
       expect(body).not.toHaveProperty('quality');
       expect(body).not.toHaveProperty('style');
     });
+
+    it('should include GPT-image-1 specific parameters', () => {
+      const config = {
+        quality: 'high',
+        output_format: 'png',
+        output_compression: 80,
+        background: 'transparent',
+      };
+      const body = prepareRequestBody('gpt-image-1', 'prompt', '1024x1024', 'url', config);
+
+      expect(body).toEqual({
+        model: 'gpt-image-1',
+        prompt: 'prompt',
+        size: '1024x1024',
+        n: 1,
+        quality: 'high',
+        output_format: 'png',
+        output_compression: 80,
+        background: 'transparent',
+      });
+      // response_format should not be included for gpt-image-1
+      expect(body).not.toHaveProperty('response_format');
+    });
+
+    it('should handle auto size for GPT-image-1', () => {
+      const body = prepareRequestBody('gpt-image-1', 'prompt', 'auto', 'url', {});
+      expect(body.size).toBeUndefined();
+    });
   });
 
   describe('calculateImageCost', () => {
@@ -192,7 +253,31 @@ describe('OpenAI Image Provider Functions', () => {
       );
     });
 
-    it('should use default cost for models other than DALL-E 2 or 3', () => {
+    it('should calculate correct cost for GPT-image-1', () => {
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'low')).toBe(
+        GPT_IMAGE_1_COSTS['low_1024x1024'],
+      );
+      expect(calculateImageCost('gpt-image-1', '1536x1024', 'medium')).toBe(
+        GPT_IMAGE_1_COSTS['medium_1536x1024'],
+      );
+      expect(calculateImageCost('gpt-image-1', '1024x1536', 'high')).toBe(
+        GPT_IMAGE_1_COSTS['high_1024x1536'],
+      );
+    });
+
+    it('should use medium quality if quality is not specified for GPT-image-1', () => {
+      expect(calculateImageCost('gpt-image-1', '1024x1024')).toBe(
+        GPT_IMAGE_1_COSTS['medium_1024x1024'],
+      );
+    });
+
+    it('should handle auto size for GPT-image-1', () => {
+      expect(calculateImageCost('gpt-image-1', 'auto', 'medium')).toBe(
+        GPT_IMAGE_1_COSTS['medium_1024x1024'],
+      );
+    });
+
+    it('should use default cost for models other than DALL-E 2, 3, or GPT-image-1', () => {
       expect(calculateImageCost('gpt-4', '1024x1024')).toBe(0.04);
       expect(calculateImageCost('', '1024x1024')).toBe(0.04);
     });

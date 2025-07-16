@@ -1,10 +1,22 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing DALL-E 2 and 3 image generation capabilities
+description: Comparing DALL-E 2, 3, and GPT-image-1 image generation
 
 prompts:
   - 'In the style of {{artist}}: {{subject}}'
 
 providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024 # Valid sizes: 1024x1024, 1536x1024, 1024x1536, auto
+      quality: high # Valid qualities: low, medium, high, auto
+
+  - id: openai:image:gpt-image-1
+    label: gpt-image-1-low
+    config:
+      size: auto
+      quality: low
+      output_format: jpeg
+
   - id: openai:image:dall-e-3
     config:
       size: 1024x1024 # Valid sizes for DALL-E 3: 1024x1024, 1792x1024, 1024x1792
