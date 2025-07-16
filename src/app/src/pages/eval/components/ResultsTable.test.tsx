@@ -50,6 +50,25 @@ vi.mock('react-router-dom', () => ({
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
+// Mock window.scrollTo
+Object.defineProperty(window, 'scrollTo', {
+  writable: true,
+  value: vi.fn(),
+});
+
+// Mock localStorage
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  clear: vi.fn(),
+  removeItem: vi.fn(),
+  length: 0,
+  key: vi.fn(),
+};
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+});
+
 vi.mock('./EvalOutputCell', () => {
   const MockEvalOutputCell = vi.fn(({ onRating }: { onRating: any }) => {
     return (
@@ -1500,6 +1519,11 @@ describe('ResultsTable Pagination Edge Cases', () => {
     setFilterMode: vi.fn(),
   };
 
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (window.localStorage.getItem as any).mockReturnValue(null);
+  });
+
   it('should reset to valid page when filtered results decrease', async () => {
     const mockFetchEvalData = vi.fn();
 
@@ -1542,6 +1566,9 @@ describe('ResultsTable Pagination Edge Cases', () => {
 
     // Verify on page 3
     expect(screen.getByText('3')).toBeInTheDocument();
+    
+    // Verify window.scrollTo was called
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
 
     // Simulate filter reducing results to 20
     vi.mocked(useTableStore).mockImplementation(() => ({
@@ -1627,4 +1654,176 @@ describe('ResultsTable Pagination Edge Cases', () => {
       }),
     );
   });
+});
+
+describe('ResultsTable New Features', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (window.localStorage.getItem as any).mockReturnValue(null);
+    (window.scrollTo as any).mockClear();
+  });
+
+  it('should persist page size to localStorage when changed', async () => {
+    const mockSetItem = vi.fn();
+    (window.localStorage.setItem as any) = mockSetItem;
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: Array(150).fill({
+          outputs: [{ pass: true, score: 1, text: 'test' }],
+          test: {},
+          vars: [],
+        }),
+        head: { prompts: [{ provider: 'test' }], vars: [] },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 150,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 150,
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+    
+    // Find and change page size selector
+    const pageSelector = screen.getByLabelText('Results per page');
+    await act(async () => {
+      await userEvent.selectOptions(pageSelector, '100');
+    });
+
+    // Verify localStorage was called
+    expect(mockSetItem).toHaveBeenCalledWith('promptfoo-page-size', '100');
+  });
+
+  it('should load saved page size from localStorage on mount', () => {
+    // Mock localStorage to return saved page size
+    (window.localStorage.getItem as any).mockReturnValue('100');
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: Array(150).fill({
+          outputs: [{ pass: true, score: 1, text: 'test' }],
+          test: {},
+          vars: [],
+        }),
+        head: { prompts: [{ provider: 'test' }], vars: [] },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 150,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 150,
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+    
+    // Verify localStorage was called
+    expect(window.localStorage.getItem).toHaveBeenCalledWith('promptfoo-page-size');
+    
+    // Verify page size selector shows 100
+    const pageSelector = screen.getByLabelText('Results per page') as HTMLSelectElement;
+    expect(pageSelector.value).toBe('100');
+  });
+
+  it('should call window.scrollTo(0, 0) when navigating pages', async () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: Array(50).fill({
+          outputs: [{ pass: true, score: 1, text: 'test' }],
+          test: {},
+          vars: [],
+        }),
+        head: { prompts: [{ provider: 'test' }], vars: [] },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 150,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 150,
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    // Click next page
+    const nextButton = screen.getByRole('button', { name: 'Next page' });
+    await act(async () => {
+      await userEvent.click(nextButton);
+    });
+
+    // Verify scrollTo was called with fast scroll
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('should display empty state when no results', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: { prompts: [{ provider: 'test' }], vars: [] },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 0,
+      isFetching: false,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      totalResultsCount: 0,
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('No results found')).toBeInTheDocument();
+    expect(screen.getByText('No test results available')).toBeInTheDocument();
+  });
+
 });

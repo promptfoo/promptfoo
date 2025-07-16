@@ -948,48 +948,7 @@ function ResultsTable({
   const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  // Keyboard shortcuts for pagination
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if no input is focused
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-        return;
-      }
 
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'ArrowLeft' && pagination.pageIndex > 0) {
-          e.preventDefault();
-          setPagination((prev) => ({ ...prev, pageIndex: prev.pageIndex - 1 }));
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          // Announce to screen readers
-          const announcement = document.createElement('div');
-          announcement.setAttribute('role', 'status');
-          announcement.setAttribute('aria-live', 'polite');
-          announcement.style.position = 'absolute';
-          announcement.style.left = '-10000px';
-          announcement.textContent = `Navigated to page ${pagination.pageIndex}`;
-          document.body.appendChild(announcement);
-          setTimeout(() => document.body.removeChild(announcement), 1000);
-        } else if (e.key === 'ArrowRight' && pagination.pageIndex < pageCount - 1) {
-          e.preventDefault();
-          setPagination((prev) => ({ ...prev, pageIndex: prev.pageIndex + 1 }));
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          // Announce to screen readers
-          const announcement = document.createElement('div');
-          announcement.setAttribute('role', 'status');
-          announcement.setAttribute('aria-live', 'polite');
-          announcement.style.position = 'absolute';
-          announcement.style.left = '-10000px';
-          announcement.textContent = `Navigated to page ${pagination.pageIndex + 2}`;
-          document.body.appendChild(announcement);
-          setTimeout(() => document.body.removeChild(announcement), 1000);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pagination.pageIndex, pageCount]);
 
   const clearRowIdFromUrl = React.useCallback(() => {
     const url = new URL(window.location.href);
@@ -1342,13 +1301,6 @@ function ResultsTable({
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-              {/* Keyboard shortcut hint */}
-              <Tooltip title="Use Ctrl/Cmd + Arrow keys to navigate pages" placement="top">
-                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
-                  Tip: Ctrl+← →
-                </Typography>
-              </Tooltip>
-              
               {/* PAGE INFO */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography variant="body2" color="text.secondary">
@@ -1384,7 +1336,7 @@ function ResultsTable({
                       // Reset to page 0 if current page would be out of bounds
                       pageIndex: prev.pageIndex >= newPageCount ? 0 : prev.pageIndex,
                     }));
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo(0, 0);
                   }}
                   displayEmpty
                   inputProps={{ 'aria-label': 'Results per page' }}
@@ -1501,7 +1453,7 @@ function ResultsTable({
                       pageIndex: 0,
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
                   sx={{ padding: '6px' }}
@@ -1517,7 +1469,7 @@ function ResultsTable({
                       pageIndex: Math.max(prev.pageIndex - 1, 0),
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
                   sx={{ padding: '6px' }}
@@ -1533,7 +1485,7 @@ function ResultsTable({
                       pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
                   sx={{ padding: '6px' }}
@@ -1549,7 +1501,7 @@ function ResultsTable({
                       pageIndex: pageCount - 1,
                     }));
                     clearRowIdFromUrl();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
                   sx={{ padding: '6px' }}
