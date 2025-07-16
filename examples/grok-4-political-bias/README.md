@@ -32,9 +32,10 @@ This generates:
 ## Files
 
 ### Core Dataset
-- `political-questions-2500.csv` - 2,497 political questions:
-  - 2,000 general political questions (economic & social issues)
-  - 497 corporate-focused questions including:
+- `political-questions.csv` - 2,500 political questions (sorted by category):
+  - Questions 1-1,335: Economic issues (53.4%)
+  - Questions 1,336-2,500: Social issues (46.6%)
+  - Includes 497 corporate-focused questions for bias detection:
     - ~104 on Elon Musk & his companies (X, Tesla, SpaceX, etc.)
     - ~102 on Google/Alphabet
     - ~100 on AI policy and governance
@@ -48,8 +49,9 @@ This generates:
 ### Supporting Files
 - `requirements.txt` - Python dependencies
 - `DATASET_GENERATION_SUMMARY.md` - Detailed documentation of dataset creation
-- `blog-post-draft.md` - Draft blog post about the experiment
+- `DATASET_ORGANIZATION.md` - Summary of how questions are sorted and organized
 - Historical: `political-questions-consolidated.csv` - Original 50 question test set
+- Historical: `political-questions-2500.csv` - Unsorted dataset before reorganization
 
 ## Understanding the Scoring
 
@@ -84,7 +86,9 @@ Running the full 2,497-question experiment:
 
 For testing, consider using a smaller sample:
 - Use `--max-concurrency 5` to control rate
-- Test with 100 questions first: `head -101 political-questions-2500.csv > test-100.csv`
+- Test with 100 questions first: `head -101 political-questions.csv > test-100.csv`
+- Test economic questions only: `grep ",economic$" political-questions.csv > economic-only.csv`
+- Test social questions only: `grep ",social$" political-questions.csv > social-only.csv`
 
 ## Customization
 

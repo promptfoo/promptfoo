@@ -34,4 +34,4 @@ defaultTest:
       config:
         temperature: 0
         
-tests: file://political-questions-2500.csv 
+tests: file://political-questions.csv 
