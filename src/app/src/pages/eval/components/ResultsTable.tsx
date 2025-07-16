@@ -1012,25 +1012,11 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
-  const paginationContainerRef = React.useRef<HTMLDivElement>(null);
-  const tableContainerRef = React.useRef<HTMLDivElement>(null);
-  const viewportHeight = useViewportHeight();
-
-  /**
-   * The table container's height is dynamically constructed such that the pagination footer
-   * is always pinned to the bottom of the viewport. This enables the table to scroll horizontally
-   * within the table container, enabling the sticky header to function as expected.
-   */
-  const tableContainerHeight = React.useMemo(() => {
-    const tableStart = tableContainerRef.current?.getBoundingClientRect().top ?? 0;
-    const paginationContainerHeight =
-      paginationContainerRef.current?.getBoundingClientRect().height ?? 0;
-    const tableHeight = viewportHeight - tableStart - paginationContainerHeight;
-    return tableHeight;
-  }, [tableContainerRef.current, paginationContainerRef.current, viewportHeight]);
-
   return (
-    <div>
+    // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
+    // of this component. This ensures that the pagination footer is always pinned to the bottom
+    // of the viewport (because the parent container is a flexbox).
+    <>
       {isSearching && searchText && (
         <Box
           sx={{
@@ -1071,8 +1057,6 @@ function ResultsTable({
 
       <div
         className="results-table-container"
-        ref={tableContainerRef}
-        style={{ height: tableContainerHeight }}
       >
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
@@ -1202,7 +1186,6 @@ function ResultsTable({
         // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
         totalResultsCount > 10 && (
           <Box
-            ref={paginationContainerRef}
             className="pagination"
             px={2}
             mx={-2}
@@ -1335,7 +1318,7 @@ function ResultsTable({
           </Box>
         )
       }
-    </div>
+    </>
   );
 }
 

@@ -467,269 +467,290 @@ export default function ResultsView({
 
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
 
+  const [showResultsCharts, setShowResultsCharts] = React.useState(true);
+
   return (
-    <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
-      <ResponsiveStack
-        direction="row"
-        mb={3}
-        spacing={1}
-        alignItems="center"
-        className="eval-header"
+    <>
+      <Box
+        px={2}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          // TODO: This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
+          // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
+          height: `calc(100vh - 81px)`,
+        }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
-          <TextField
-            variant="outlined"
-            size="small"
-            fullWidth
-            value={config?.description || evalId || ''}
-            slotProps={{
-              input: {
-                readOnly: true,
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <ArrowDropDownIcon />
-                  </InputAdornment>
-                ),
-              },
-            }}
-            onClick={() => setEvalSelectorDialogOpen(true)}
-            placeholder="Search or select an eval..."
-            sx={{ cursor: 'pointer' }}
-          />
-          <EvalSelectorDialog
-            open={evalSelectorDialogOpen}
-            onClose={() => setEvalSelectorDialogOpen(false)}
-            onEvalSelected={(evalId) => {
-              setEvalSelectorDialogOpen(false);
-              onRecentEvalSelected(evalId);
-            }}
-            title="Select an Eval"
-            focusedEvalId={evalId ?? undefined}
-          />
-        </Box>
-        {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
-        <AuthorChip
-          author={author}
-          onEditAuthor={handleEditAuthor}
-          currentUserEmail={currentUserEmail}
-          editable
-        />
-        {Object.keys(config?.tags || {}).map((tag) => (
-          <Chip
-            key={tag}
-            size="small"
-            label={`${tag}: ${config?.tags?.[tag]}`}
-            sx={{ opacity: 0.7 }}
-          />
-        ))}
-      </ResponsiveStack>
-      <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
-          <FilterModeSelector
-            filterMode={filterMode}
-            onChange={handleFilterModeChange}
-            showDifferentOption={visiblePromptCount > 1}
-          />
-        </Box>
-        <Box>
-          <SearchInputField
-            value={searchText}
-            onChange={handleSearchTextChange}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Text or regex"
-          />
-        </Box>
+          <ResponsiveStack
+            direction="row"
+            mb={3}
+            spacing={1}
+            alignItems="center"
+            className="eval-header"
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
+              <TextField
+                variant="outlined"
+                size="small"
+                fullWidth
+                value={config?.description || evalId || ''}
+                slotProps={{
+                  input: {
+                    readOnly: true,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <ArrowDropDownIcon />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                onClick={() => setEvalSelectorDialogOpen(true)}
+                placeholder="Search or select an eval..."
+                sx={{ cursor: 'pointer' }}
+              />
+              <EvalSelectorDialog
+                open={evalSelectorDialogOpen}
+                onClose={() => setEvalSelectorDialogOpen(false)}
+                onEvalSelected={(evalId) => {
+                  setEvalSelectorDialogOpen(false);
+                  onRecentEvalSelected(evalId);
+                }}
+                title="Select an Eval"
+                focusedEvalId={evalId ?? undefined}
+              />
+            </Box>
+            {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
+            <AuthorChip
+              author={author}
+              onEditAuthor={handleEditAuthor}
+              currentUserEmail={currentUserEmail}
+              editable
+            />
+            {Object.keys(config?.tags || {}).map((tag) => (
+              <Chip
+                key={tag}
+                size="small"
+                label={`${tag}: ${config?.tags?.[tag]}`}
+                sx={{ opacity: 0.7 }}
+              />
+            ))}
+          </ResponsiveStack>
+          <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
+            <Box>
+              <FilterModeSelector
+                filterMode={filterMode}
+                onChange={handleFilterModeChange}
+                showDifferentOption={visiblePromptCount > 1}
+              />
+            </Box>
+            <Box>
+              <SearchInputField
+                value={searchText}
+                onChange={handleSearchTextChange}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Text or regex"
+              />
+            </Box>
 
-        {isMultiFilteringEnabled ? (
-          <>
-            <FiltersButton
-              appliedFiltersCount={filters.appliedCount}
-              onClick={() => setFiltersFormOpen(true)}
-              ref={filtersButtonRef}
-            />
-            <FiltersForm
-              open={filtersFormOpen}
-              onClose={() => setFiltersFormOpen(false)}
-              anchorEl={filtersButtonRef.current}
-            />
-          </>
-        ) : filters.options.metric.length > 0 ? (
-          <MetricFilterSelector />
-        ) : null}
+            {isMultiFilteringEnabled ? (
+              <>
+                <FiltersButton
+                  appliedFiltersCount={filters.appliedCount}
+                  onClick={() => setFiltersFormOpen(true)}
+                  ref={filtersButtonRef}
+                />
+                <FiltersForm
+                  open={filtersFormOpen}
+                  onClose={() => setFiltersFormOpen(false)}
+                  anchorEl={filtersButtonRef.current}
+                />
+              </>
+            ) : filters.options.metric.length > 0 ? (
+              <MetricFilterSelector />
+            ) : null}
 
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            borderRadius: '16px',
-            padding: '4px 12px',
-            fontSize: '0.875rem',
-          }}
-        >
-          {searchText || filterMode !== 'all' || filters.appliedCount > 0 ? (
-            <>
-              <strong>{filteredResultsCount}</strong>
-              <span style={{ margin: '0 4px' }}>of</span>
-              <strong>{totalResultsCount}</strong>
-              <span style={{ margin: '0 4px' }}>results</span>
-              {searchText && (
-                <Chip
-                  size="small"
-                  label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
-                  onDelete={() => handleSearchTextChange('')}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                />
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                borderRadius: '16px',
+                padding: '4px 12px',
+                fontSize: '0.875rem',
+              }}
+            >
+              {searchText || filterMode !== 'all' || filters.appliedCount > 0 ? (
+                <>
+                  <strong>{filteredResultsCount}</strong>
+                  <span style={{ margin: '0 4px' }}>of</span>
+                  <strong>{totalResultsCount}</strong>
+                  <span style={{ margin: '0 4px' }}>results</span>
+                  {searchText && (
+                    <Chip
+                      size="small"
+                      label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
+                      onDelete={() => handleSearchTextChange('')}
+                      sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                    />
+                  )}
+                  {filterMode !== 'all' && (
+                    <Chip
+                      size="small"
+                      label={`Filter: ${filterMode}`}
+                      onDelete={() => setFilterMode('all')}
+                      sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                    />
+                  )}
+                </>
+              ) : (
+                <>{filteredResultsCount} results</>
               )}
-              {filterMode !== 'all' && (
-                <Chip
-                  size="small"
-                  label={`Filter: ${filterMode}`}
-                  onDelete={() => setFilterMode('all')}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+            </Box>
+            {highlightedResultsCount > 0 && (
+              <Chip
+                size="small"
+                label={`${highlightedResultsCount} highlighted`}
+                sx={{
+                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                  color: 'rgba(25, 118, 210, 1)',
+                  border: '1px solid rgba(25, 118, 210, 0.2)',
+                  fontWeight: 500,
+                }}
+              />
+            )}
+            <Box flexGrow={1} />
+            <Box display="flex" justifyContent="flex-end">
+              <ResponsiveStack direction="row" spacing={2}>
+                <ColumnSelector
+                  columnData={columnData}
+                  selectedColumns={currentColumnState.selectedColumns}
+                  onChange={handleChange}
                 />
-              )}
-            </>
-          ) : (
-            <>{filteredResultsCount} results</>
-          )}
-        </Box>
-        {highlightedResultsCount > 0 && (
-          <Chip
-            size="small"
-            label={`${highlightedResultsCount} highlighted`}
-            sx={{
-              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-              color: 'rgba(25, 118, 210, 1)',
-              border: '1px solid rgba(25, 118, 210, 0.2)',
-              fontWeight: 500,
-            }}
-          />
-        )}
-        <Box flexGrow={1} />
-        <Box display="flex" justifyContent="flex-end">
-          <ResponsiveStack direction="row" spacing={2}>
-            <ColumnSelector
-              columnData={columnData}
-              selectedColumns={currentColumnState.selectedColumns}
-              onChange={handleChange}
-            />
-            <Tooltip title="Edit table view settings" placement="bottom">
-              <Button
-                color="primary"
-                onClick={() => setViewSettingsModalOpen(true)}
-                startIcon={<SettingsIcon />}
-              >
-                Table Settings
-              </Button>
-            </Tooltip>
-            <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
-              Eval actions
-            </Button>
-            {config && (
-              <Menu
-                id="eval-actions-menu"
-                anchorEl={anchorEl}
-                keepMounted
-                open={Boolean(anchorEl)}
-                onClose={handleMenuClose}
-              >
-                <Tooltip title="Edit the name of this eval" placement="left">
-                  <MenuItem onClick={handleDescriptionClick}>
-                    <ListItemIcon>
-                      <EditIcon fontSize="small" />
-                    </ListItemIcon>
-                    Edit name
-                  </MenuItem>
-                </Tooltip>
-                <Tooltip title="Edit this eval in the web UI" placement="left">
-                  <MenuItem
-                    onClick={() => {
-                      updateConfig(config);
-                      navigate('/setup/');
-                    }}
+                <Tooltip title="Edit table view settings" placement="bottom">
+                  <Button
+                    color="primary"
+                    onClick={() => setViewSettingsModalOpen(true)}
+                    startIcon={<SettingsIcon />}
                   >
-                    <ListItemIcon>
-                      <PlayArrowIcon fontSize="small" />
-                    </ListItemIcon>
-                    Edit and re-run
-                  </MenuItem>
+                    Table Settings
+                  </Button>
                 </Tooltip>
-                <CompareEvalMenuItem
-                  initialEvals={recentEvals}
-                  onComparisonEvalSelected={handleComparisonEvalSelected}
-                />
-                <Tooltip title="View the configuration that defines this eval" placement="left">
-                  <MenuItem onClick={() => setConfigModalOpen(true)}>
-                    <ListItemIcon>
-                      <VisibilityIcon fontSize="small" />
-                    </ListItemIcon>
-                    View YAML
-                  </MenuItem>
-                </Tooltip>
-                <DownloadMenu />
-                {config?.sharing && (
-                  <Tooltip title="Generate a unique URL that others can access" placement="left">
-                    <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                      <ListItemIcon>
-                        {shareLoading ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <ShareIcon fontSize="small" />
-                        )}
-                      </ListItemIcon>
-                      Share
-                    </MenuItem>
+                <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
+                  Eval actions
+                </Button>
+                {config && (
+                  <Menu
+                    id="eval-actions-menu"
+                    anchorEl={anchorEl}
+                    keepMounted
+                    open={Boolean(anchorEl)}
+                    onClose={handleMenuClose}
+                  >
+                    <Tooltip title="Edit the name of this eval" placement="left">
+                      <MenuItem onClick={handleDescriptionClick}>
+                        <ListItemIcon>
+                          <EditIcon fontSize="small" />
+                        </ListItemIcon>
+                        Edit name
+                      </MenuItem>
+                    </Tooltip>
+                    <Tooltip title="Edit this eval in the web UI" placement="left">
+                      <MenuItem
+                        onClick={() => {
+                          updateConfig(config);
+                          navigate('/setup/');
+                        }}
+                      >
+                        <ListItemIcon>
+                          <PlayArrowIcon fontSize="small" />
+                        </ListItemIcon>
+                        Edit and re-run
+                      </MenuItem>
+                    </Tooltip>
+                    <CompareEvalMenuItem
+                      initialEvals={recentEvals}
+                      onComparisonEvalSelected={handleComparisonEvalSelected}
+                    />
+                    <Tooltip title="View the configuration that defines this eval" placement="left">
+                      <MenuItem onClick={() => setConfigModalOpen(true)}>
+                        <ListItemIcon>
+                          <VisibilityIcon fontSize="small" />
+                        </ListItemIcon>
+                        View YAML
+                      </MenuItem>
+                    </Tooltip>
+                    <DownloadMenu />
+                    {config?.sharing && (
+                      <Tooltip
+                        title="Generate a unique URL that others can access"
+                        placement="left"
+                      >
+                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                          <ListItemIcon>
+                            {shareLoading ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <ShareIcon fontSize="small" />
+                            )}
+                          </ListItemIcon>
+                          Share
+                        </MenuItem>
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Delete this eval" placement="left">
+                      <MenuItem onClick={handleDeleteEvalClick}>
+                        <ListItemIcon>
+                          <DeleteIcon fontSize="small" />
+                        </ListItemIcon>
+                        Delete
+                      </MenuItem>
+                    </Tooltip>
+                  </Menu>
+                )}
+                {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
+                {(config?.redteam || config?.metadata?.redteam) && (
+                  <Tooltip title="View vulnerability scan report" placement="bottom">
+                    <Button
+                      color="primary"
+                      variant="contained"
+                      startIcon={<EyeIcon />}
+                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                    >
+                      Vulnerability Report
+                    </Button>
                   </Tooltip>
                 )}
-                <Tooltip title="Delete this eval" placement="left">
-                  <MenuItem onClick={handleDeleteEvalClick}>
-                    <ListItemIcon>
-                      <DeleteIcon fontSize="small" />
-                    </ListItemIcon>
-                    Delete
-                  </MenuItem>
-                </Tooltip>
-              </Menu>
-            )}
-            {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
-            {(config?.redteam || config?.metadata?.redteam) && (
-              <Tooltip title="View vulnerability scan report" placement="bottom">
-                <Button
-                  color="primary"
-                  variant="contained"
-                  startIcon={<EyeIcon />}
-                  onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
-                >
-                  Vulnerability Report
-                </Button>
-              </Tooltip>
-            )}
+              </ResponsiveStack>
+            </Box>
           </ResponsiveStack>
+          {showResultsCharts && (
+            <ResultsCharts
+              columnVisibility={currentColumnState.columnVisibility}
+              recentEvals={recentEvals}
+              setShowResultsCharts={setShowResultsCharts}
+            />
+          )}
         </Box>
-      </ResponsiveStack>
-      <ResultsCharts
-        columnVisibility={currentColumnState.columnVisibility}
-        recentEvals={recentEvals}
-      />
-      <ResultsTable
-        maxTextLength={maxTextLength}
-        columnVisibility={currentColumnState.columnVisibility}
-        wordBreak={wordBreak}
-        showStats={showInferenceDetails}
-        filterMode={filterMode}
-        failureFilter={failureFilter}
-        searchText={searchText}
-        debouncedSearchText={debouncedSearchValue}
-        onFailureFilterToggle={handleFailureFilterToggle}
-        onSearchTextChange={handleSearchTextChange}
-        setFilterMode={setFilterMode}
-      />
+        <ResultsTable
+          maxTextLength={maxTextLength}
+          columnVisibility={currentColumnState.columnVisibility}
+          wordBreak={wordBreak}
+          showStats={showInferenceDetails}
+          filterMode={filterMode}
+          failureFilter={failureFilter}
+          searchText={searchText}
+          debouncedSearchText={debouncedSearchValue}
+          onFailureFilterToggle={handleFailureFilterToggle}
+          onSearchTextChange={handleSearchTextChange}
+          setFilterMode={setFilterMode}
+        />
+      </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
         open={shareModalOpen}
@@ -739,6 +760,6 @@ export default function ResultsView({
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
-    </div>
+    </>
   );
 }

@@ -32,6 +32,7 @@ import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from '.
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
   recentEvals: ResultLightweightWithLabel[];
+  setShowResultsCharts: (show: boolean) => void;
 }
 
 interface ChartProps {
@@ -619,10 +620,13 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
+function ResultsCharts({
+  columnVisibility,
+  recentEvals,
+  setShowResultsCharts,
+}: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
-  const [showCharts, setShowCharts] = useState(true);
   const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
 
   const { table, evalId, config } = useTableStore();
@@ -643,7 +647,6 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   if (
     !table ||
     !config ||
-    !showCharts ||
     (table.head.prompts.length < 2 && !showPerformanceOverTimeChart)
   ) {
     return null;
@@ -690,7 +693,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
       <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
         <IconButton
           style={{ position: 'absolute', right: 0, top: 0 }}
-          onClick={() => setShowCharts(false)}
+          onClick={() => setShowResultsCharts(false)}
         >
           <CloseIcon />
         </IconButton>
