@@ -43,6 +43,16 @@ The `system-instruction.txt` file contains reusable instructions that can be:
 - Version controlled separately
 - Used to manage complex or lengthy system prompts
 
+## Image Understanding Example
+
+This example also includes an image understanding configuration (`promptfooconfig.image.yaml`) that demonstrates:
+
+- **Multimodal capabilities**: Using Gemini models to analyze and compare images
+- **Image file handling**: Loading images using the `file://` prefix
+- **Visual comparison**: Testing the model's ability to identify and compare different images
+
+Images should be placed on separate lines in the prompt. The `file://` prefix automatically handles loading and encoding the images for the Gemini API.
+
 ## Running the Eval
 
 1. Get a local copy of the configuration:
@@ -51,14 +61,18 @@ The `system-instruction.txt` file contains reusable instructions that can be:
 promptfoo init --example google-aistudio-gemini
 ```
 
-2. Run the example:
+2. Run the examples:
 
 ```sh
-# Basic example
+# Basic math puzzle evaluation across multiple Gemini models
 promptfoo eval
 
-# Example with image understanding
+# Image understanding and comparison evaluation
 promptfoo eval -c promptfooconfig.image.yaml
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+3. View the results:
+
+```sh
+promptfoo view
+```

@@ -796,7 +796,7 @@ export async function matchesClosedQa(
     const pass = resp.output.trimEnd().endsWith('Y');
     let reason;
     if (pass) {
-      reason = 'The submission meets the criterion';
+      reason = `The submission meets the criterion:\n${resp.output}`;
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
