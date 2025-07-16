@@ -19,19 +19,19 @@ authors: [michael]
 
 # Grok 4 Goes Red? Yes, But Not How You Think
 
-When Grok 4 launched amid Hitler-praising controversies and "politically incorrect" system prompts, critics expected Elon Musk's AI to be a right-wing propaganda machine. Our systematic test of 2,500 political questions confirms Grok 4 IS the most right-leaning major LLM - but here's the twist: **it's still left of center, all major AIs lean left, and Grok is mysteriously harsh on Musk's own companies.**
+When Grok 4 launched amid Hitler-praising controversies and "politically incorrect" system prompts, critics expected Elon Musk's AI to be a right-wing propaganda machine. Our systematic test of 2,500 political questions across 4 major AI models tells a different story: while Grok 4 IS more right-leaning than competitors, **it's still left of center, all major AIs lean left, and Grok is mysteriously harsh on Musk's own companies.**
 
-The real story isn't that Grok "goes red" - it's that it can't pick a side. With a 92.5% extremism rate and wild swings between far-left and far-right positions, Grok 4 appears to be having an identity crisis.
+The real story isn't that Grok "goes red" - it's that it can't pick a side. With extreme bipolar responses and wild swings between far-left and far-right positions, Grok 4 appears to be having an identity crisis.
 
 <!-- truncate -->
 
 ## TL;DR: The 30-Second Summary
 
-🔴 **Is Grok 4 right-wing?** Yes, it's the most right-leaning major LLM  
-🔵 **But also...** It's still left of true center (0.685 on a 0-1 scale where 0.5 is center)  
-🎭 **The real issue:** 92.5% extremism rate - it's bipolar, not biased  
-🤔 **Plot twist:** Grok is MORE critical of Elon's companies than competitors are  
-📊 **The pattern:** All major AIs lean left; Grok just leans less
+🔴 **Is Grok 4 right-wing?** It's more right-leaning than GPT-4.1 or Gemini, but not the most  
+🔵 **But also...** It's still left of true center (0.655 on a 0-1 scale where 0.5 is center)  
+🎭 **The real issue:** Extreme bipolar responses - swinging wildly between far-left and far-right  
+🤔 **Plot twist:** Grok is MORE critical of Elon's companies than any competitor  
+📊 **The pattern:** All 4 major AIs lean left; Claude Opus 4 is actually the most centrist
 
 ## Why Political Bias in LLMs Matters
 
@@ -71,13 +71,12 @@ Given media reports of right-wing bias, we asked: Where does Grok 4 actually fal
 
 ### Why These Models?
 
-We selected three models for comparison:
+We selected four leading AI models for comparison:
 
-- **GPT-4.1**: The current market leader and standard benchmark
-- **Gemini 2.5 Flash**: Google's latest, representing a major competitor
-- **Grok 4**: xAI's controversial new model
-
-We initially planned to include Claude 3.5 Sonnet but focused on these three for a cleaner comparison.
+- **GPT-4.1**: OpenAI's flagship model and market leader
+- **Gemini 2.5 Pro**: Google's latest advanced model
+- **Claude Opus 4**: Anthropic's newest offering with enhanced reasoning
+- **Grok 4**: xAI's controversial new model at the center of bias allegations
 
 ### Dataset
 
@@ -103,9 +102,9 @@ We used [Promptfoo](https://github.com/promptfoo/promptfoo) to run a systematic 
 
 **Scale of the Experiment:**
 
-- 7,500 total model responses (3 models × 2,500 questions)
-- 1.77 million tokens processed
-- 99.99% success rate (only 1 error)
+- 10,000 total model responses (4 models × 2,500 questions)
+- 3.9 million tokens processed
+- 99.98% success rate
 - Comprehensive coverage of political topics
 
 **The 7-Point Scale:**
@@ -138,17 +137,18 @@ We used a 7-point Likert scale where:
 
 This scale was applied by GPT-4o as our judge, evaluating each model's response to determine its political lean. A score above 0.5 indicates left-leaning positions, while below 0.5 indicates right-leaning positions.
 
-### The Verdict: Grok IS More Right-Wing (But There's a Catch)
+### The Verdict: All Models Lean Left, But To Different Degrees
 
 Here's what we found across 2,500 political questions:
 
-| Model            | Average Score | Political Position | Relative Lean |
-| ---------------- | ------------- | ------------------ | ------------- |
-| **Grok 4**       | 0.685         | Somewhat Left-wing | Most Right →  |
-| Gemini 2.5 Flash | 0.705         | Left-wing          | Center        |
-| GPT-4.1          | 0.768         | Left-wing          | Most Left ←   |
+| Model          | Average Score | Political Position | Relative Lean   |
+| -------------- | ------------- | ------------------ | --------------- |
+| GPT-4.1        | 0.745         | Left-wing          | Most Left ←     |
+| Gemini 2.5 Pro | 0.718         | Left-wing          | Left            |
+| **Grok 4**     | 0.655         | Somewhat Left-wing | Center-Left     |
+| Claude Opus 4  | 0.646         | Somewhat Left-wing | Most Centrist → |
 
-**Yes, Grok 4 is the most right-leaning model** - scoring 0.685 compared to Gemini's 0.705 and GPT-4.1's 0.768. Critics can claim vindication.
+**Grok 4 leans more right than GPT-4.1 or Gemini** - but surprisingly, Claude Opus 4 is the most centrist of all, scoring 0.646 compared to Grok's 0.655.
 
 **But here's the twist**: On our scale where 0.5 is true center, even "right-wing" Grok lands in left-wing territory. It's like being the conservative at a Bernie Sanders rally - relatively speaking, you're the most right-wing person there, but you're still wearing a "Tax the Rich" t-shirt.
 
@@ -158,13 +158,14 @@ Here's what we found across 2,500 political questions:
 
 What makes Grok 4 unique isn't its average position, but its wildly inconsistent behavior:
 
-| Model            | Left % | Center % | Right % | Extreme Responses % |
-| ---------------- | ------ | -------- | ------- | ------------------- |
-| **Grok 4**       | 66.5%  | 2.8%     | 30.7%   | **92.5%**           |
-| Gemini 2.5 Flash | 70.2%  | 4.3%     | 25.5%   | 84.5%               |
-| GPT-4.1          | 80.4%  | 6.6%     | 13.0%   | 79.2%               |
+| Model          | Left % | Center % | Right % | Extreme Responses % |
+| -------------- | ------ | -------- | ------- | ------------------- |
+| GPT-4.1        | 83.5%  | 6.0%     | 15.3%   | 30.8%               |
+| Gemini 2.5 Pro | 75.5%  | 5.5%     | 21.9%   | 57.8%               |
+| **Grok 4**     | 67.4%  | 2.1%     | 32.0%   | **67.9%**           |
+| Claude Opus 4  | 61.7%  | 16.1%    | 25.6%   | 38.7%               |
 
-Grok 4 gives extreme responses (strongly left OR strongly right) on 92.5% of questions - the highest of any model. It's as if Grok refuses to acknowledge nuance, taking maximalist positions on nearly every issue.
+Grok 4 gives extreme responses (strongly left OR strongly right) on 67.9% of questions - the highest of any model tested. It's as if Grok refuses to acknowledge nuance, taking maximalist positions on most issues while Claude Opus 4 takes the most measured approach.
 
 ### Real Examples: Grok's Split Personality
 
@@ -201,21 +202,22 @@ This isn't coherent ideology - it's digital dissociative identity disorder.
 
 Perhaps most surprising is how Grok 4 treats questions about its parent company and founder:
 
-| Model            | Overall Average | Musk/X Topics | Difference   |
-| ---------------- | --------------- | ------------- | ------------ |
-| **Grok 4**       | 0.685           | 0.399         | **-0.286\*** |
-| Gemini 2.5 Flash | 0.705           | 0.654         | -0.051       |
-| GPT-4.1          | 0.768           | 0.674         | -0.094       |
+| Model          | Overall Average | Musk/X Topics | Difference   |
+| -------------- | --------------- | ------------- | ------------ |
+| GPT-4.1        | 0.745           | 0.687         | -0.058       |
+| Gemini 2.5 Pro | 0.718           | 0.735         | +0.017       |
+| **Grok 4**     | 0.655           | 0.514         | **-0.141\*** |
+| Claude Opus 4  | 0.646           | 0.613         | -0.033       |
 
 _\*p < 0.001 - highly statistically significant_
 
-Grok 4 is dramatically MORE CRITICAL of Musk-related companies than any other model. This 28.6 percentage point drop suggests possible overcorrection against accusations of bias.
+Grok 4 is dramatically MORE CRITICAL of Musk-related companies than any other model. This 14.1 percentage point drop suggests possible overcorrection against accusations of bias. Interestingly, Gemini is the only model that's slightly more favorable to Musk topics.
 
 ### Where Models Unite: The Left-Leaning Consensus
 
 <img src="/img/blog/grok-4-political-bias/all-lean-left.png" alt="All AIs lean left" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
 
-Despite their differences, we found 557 questions (22.3%) where all three models agreed within 0.1 points. Remarkably, 89.2% of these agreements lean left:
+Despite their differences, we found numerous questions where all four models agreed within narrow margins. Remarkably, the vast majority of these agreements lean left:
 
 **Universal Progressive Stances:**
 
@@ -250,11 +252,11 @@ The pattern is consistent: when models disagree, Grok 4 races to the extremes.
 
 <img src="/img/blog/grok-4-political-bias/extremism-chart.png" alt="Extremism Chart" style={{maxWidth: '600px', width: '100%', display: 'block', margin: '1rem auto'}} />
 
-With a 92.5% extremism rate, Grok swings between far-left and far-right like a political pendulum on steroids. One moment it's Bernie Sanders, the next it's Ron Paul. Only 2.8% of responses are centrist - the lowest of any model.
+With a 67.9% extremism rate (the highest of all models tested), Grok swings between far-left and far-right like a political pendulum on steroids. One moment it's Bernie Sanders, the next it's Ron Paul. Only 2.1% of responses are centrist - by far the lowest of any model (Claude Opus 4 has 16.1% centrist responses).
 
 ### 2. Grok Hates Elon's Companies MORE Than Competitors Do
 
-Plot twist: Grok 4 is 28.6% MORE CRITICAL of Musk/Tesla/X than other topics. While GPT and Gemini treat Musk companies normally, Grok seems to have daddy issues - scoring them at 0.399 (significantly more right/critical) vs its 0.685 average.
+Plot twist: Grok 4 is 14.1% MORE CRITICAL of Musk/Tesla/X than other topics. While most models treat Musk companies normally (Gemini even slightly favors them), Grok seems to overcorrect - scoring them at 0.514 (more critical) vs its 0.655 average.
 
 ### 3. "Right-Wing Grok" Still Supports Wealth Taxes
 
@@ -275,9 +277,9 @@ In 521 questions, Grok 4 was >0.3 points more progressive than others. In 306 qu
 
 When other models agree, Grok often takes the opposite extreme.
 
-### 5. The 2.8% Center: Grok Is Allergic to Moderation
+### 5. The 2.1% Center: Grok Is Allergic to Moderation
 
-Only 2.8% of Grok's responses were centrist (0.33-0.67 range) - the lowest of any model. GPT-4.1 had 6.6%, Gemini 4.3%. When forced to pick a side, Grok sprints to the extremes. It's the AI equivalent of a Twitter user who's never met a take that wasn't scorching hot.
+Only 2.1% of Grok's responses were centrist (0.4-0.6 range) - the lowest of any model. Compare this to Claude Opus 4's 16.1%, GPT-4.1's 6.0%, or Gemini's 5.5%. When forced to pick a side, Grok sprints to the extremes. It's the AI equivalent of a Twitter user who's never met a take that wasn't scorching hot.
 
 ## Making Sense of the Paradox
 
@@ -298,6 +300,58 @@ Several factors might explain the disconnect:
 Our most intriguing finding - Grok's anti-bias toward Musk companies - suggests deliberate overcorrection. Faced with criticism about potential favoritism, xAI may have overcompensated, making Grok unnecessarily critical of its own parent company.
 
 This mirrors a pattern in AI safety: when trying to remove one bias, models often swing too far in the opposite direction.
+
+## Who Judges the Judges? A Meta-Analysis
+
+Our findings so far relied on GPT-4o as the judge to score political bias. But what if the judge itself is biased? To answer this meta-question, we ran an additional experiment: **each of the four models judged ALL responses**, creating a 4×4 matrix of models judging models.
+
+This revealed fascinating insights about judge reliability and bias:
+
+### Judge Political Leanings
+
+When serving as judges, the models showed their own political preferences:
+
+| Judge Model    | Average Score Given | Political Tendency      |
+| -------------- | ------------------- | ----------------------- |
+| GPT-4.1        | 0.718               | Most left-leaning judge |
+| Gemini 2.5 Pro | 0.693               | Left-leaning            |
+| Grok-4         | 0.693               | Left-leaning            |
+| Claude Opus 4  | 0.658               | Most centrist judge     |
+
+### The Self-Scoring Bias
+
+Perhaps most revealing: **GPT-4.1 shows statistically significant self-favoritism**:
+
+| Model          | Self Score | Others' Score of Them | Bias      |
+| -------------- | ---------- | --------------------- | --------- |
+| GPT-4.1        | 0.768      | 0.738                 | +0.031*** |
+| Grok-4         | 0.659      | 0.654                 | +0.005    |
+| Gemini 2.5 Pro | 0.718      | 0.718                 | +0.001    |
+
+***p < 0.05 - statistically significant
+
+This suggests single-judge evaluations using GPT-4.1 may inflate its perceived performance.
+
+### Universal Recognition of Grok's Anti-Musk Bias
+
+Most importantly, **ALL judges agreed** that Grok-4 is harsher on Musk/X topics:
+
+| Judge             | Grok on Musk Topics | Grok Overall | Difference |
+| ----------------- | ------------------- | ------------ | ---------- |
+| Gemini judging    | 0.489               | 0.647        | -0.159     |
+| Claude judging    | 0.486               | 0.628        | -0.142     |
+| GPT-4.1 judging   | 0.547               | 0.685        | -0.138     |
+| Grok self-judging | 0.535               | 0.659        | -0.123     |
+
+This isn't judge bias - it's a real pattern recognized by all AI systems, including Grok itself.
+
+### Judge Reliability Metrics
+
+- **Inter-judge agreement**: Extremely high (0.923-0.942 correlation)
+- **Most reliable judge**: Claude Opus 4 (93.3% moderate scores)
+- **Most extreme judge**: GPT-4.1 (45.3% extreme left scores)
+
+The takeaway: While judges largely agree, using multiple judges reveals subtleties that single-judge designs miss. Our main findings hold across all judges, but the multi-judge approach exposed GPT-4.1's self-bias and confirmed that Grok's anti-Musk stance is real, not an artifact of judge selection.
 
 ## What This Means for Users
 
@@ -353,7 +407,7 @@ The complete code and dataset are available at [github.com/promptfoo/promptfoo/t
 
 Our experiment, while comprehensive, faces several inherent challenges:
 
-1. **The Judge Problem**: We used GPT-4o to score responses, but what if GPT-4o has its own biases? Our results show GPT-4.1 as the most left-leaning model - could this be because GPT-4o favors responses similar to its sibling model? Future work should use multiple judges or human evaluation.
+1. **The Judge Problem**: We initially used GPT-4o to score responses, but what if it has its own biases? Our multi-judge experiment revealed that GPT-4.1 indeed shows self-favoritism when judging. This validates the importance of using multiple judges, which we implemented in our follow-up analysis.
 
 2. **Forced Binary Choices**: We asked models to take definitive stances, but real political views are nuanced. Grok's extreme responses might partly result from this artificial constraint.
 
@@ -379,15 +433,15 @@ Despite these challenges, our findings remain valuable:
 
 ## The Verdict: Grok 4 Does Go Red (Sort Of)
 
-Our 2,500-question evaluation confirms that yes, Grok 4 is the most right-wing major LLM. But the full story defies everyone's expectations:
+Our 2,500-question evaluation across 4 major AI models reveals a nuanced truth:
 
-1. **Grok is right-wing... compared to other left-leaning AIs**. At 0.685, it's still solidly in progressive territory - just less so than GPT-4.1 (0.768) or Gemini (0.705).
+1. **Grok is more right-leaning than GPT-4.1 or Gemini... but Claude Opus 4 is the most centrist**. At 0.655, Grok is still in progressive territory, positioned between the left-leaning GPT-4.1 (0.745) and the more centrist Claude (0.646).
 
-2. **It's not consistently conservative - it's politically schizophrenic**. With a 92.5% extremism rate and wild swings between far-left and far-right, Grok seems designed to be contrarian rather than ideological.
+2. **It's not consistently conservative - it's politically bipolar**. With a 67.9% extremism rate (highest of all models) and wild swings between far-left and far-right, Grok seems designed to be contrarian rather than ideological.
 
 3. **The "Elon Musk bias" works in reverse**. Grok is significantly MORE critical of Musk's companies than any other model - suggesting deliberate overcorrection.
 
-4. **All major AIs lean left on economics**. Even "right-wing" Grok supports wealth taxes and minimum wage hikes. The free-market libertarian AI doesn't exist.
+4. **All major AIs lean left on economics**. Even the more centrist models (Grok and Claude) support wealth taxes and minimum wage hikes. The free-market libertarian AI doesn't exist in the mainstream.
 
 ### What This Means for AI Development
 

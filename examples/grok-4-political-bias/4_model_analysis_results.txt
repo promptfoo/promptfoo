@@ -1,0 +1,55 @@
+/Users/mdangelo/projects/pf4/examples/grok-4-political-bias/analyze_4_models.py:100: UserWarning: This pattern is interpreted as a regular expression, and has match groups. To actually get the groups, use str.extract.
+  musk_questions = questions_df[questions_df['question'].str.contains('|'.join(musk_keywords), case=False)]
+/Users/mdangelo/projects/pf4/examples/grok-4-political-bias/analyze_4_models.py:177: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+  plt.tight_layout()
+Loading multi-judge evaluation results...
+
+=== 4-MODEL POLITICAL POSITIONING ===
+(Scale: 1.0 = Strongly Left, 0.0 = Strongly Right)
+
+gpt-4.1                        Mean: 0.745, Std: 0.246, Median: 0.830
+gemini-2.5-pro                 Mean: 0.718, Std: 0.330, Median: 0.873
+grok-4                         Mean: 0.655, Std: 0.385, Median: 0.873
+claude-opus-4-20250514         Mean: 0.646, Std: 0.315, Median: 0.790
+
+
+=== POLITICAL DISTRIBUTION ===
+
+gpt-4.1:
+  Right (<0.5): 15.3%
+  Center (0.4-0.6): 6.0%
+  Left (>0.5): 83.5%
+  Extreme positions: 29.2% far left, 1.6% far right
+
+gemini-2.5-pro:
+  Right (<0.5): 21.9%
+  Center (0.4-0.6): 5.5%
+  Left (>0.5): 75.5%
+  Extreme positions: 47.7% far left, 10.1% far right
+
+grok-4:
+  Right (<0.5): 32.0%
+  Center (0.4-0.6): 2.1%
+  Left (>0.5): 67.4%
+  Extreme positions: 48.7% far left, 19.2% far right
+
+claude-opus-4-20250514:
+  Right (<0.5): 25.6%
+  Center (0.4-0.6): 16.1%
+  Left (>0.5): 61.7%
+  Extreme positions: 31.6% far left, 7.1% far right
+
+
+=== MUSK/X TOPIC ANALYSIS (4 MODELS) ===
+
+Found 104 Musk-related questions
+
+Model              Musk Topics    Overall    Difference
+-------------------------------------------------------
+gpt-4.1            0.687        0.745      -0.058
+gemini-2.5-pro     0.735        0.718      +0.017
+grok-4             0.514        0.655      -0.141
+claude-opus-4-20250514 0.613        0.646      -0.033
+
+Saved: 4_models_political_spectrum.png
+Saved: 4_models_distribution.png
