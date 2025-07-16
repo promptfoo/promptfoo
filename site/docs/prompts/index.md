@@ -4,7 +4,7 @@
 
 Promptfoo's Prompt Management system transforms how teams develop, test, and deploy AI prompts. By treating prompts as first-class citizens in your development workflow, you can ensure consistency, track performance, and collaborate effectively across your organization.
 
-![Prompt Management Overview](../assets/prompt-management-overview.png)
+<!-- ![Prompt Management Overview](../assets/prompt-management-overview.png) -->
 
 ### Why Prompt Management?
 
@@ -78,13 +78,13 @@ The prompt management system consists of:
 
 Every prompt change creates a new version with author tracking and timestamps. Compare versions, view diffs, and rollback when needed.
 
-![Version History View](../assets/prompt-version-history.png)
+<!-- ![Version History View](../assets/prompt-version-history.png) -->
 
 ### 🚀 Environment Deployments
 
 Deploy specific prompt versions to different environments (development, staging, production) with full tracking.
 
-![Deployment Dashboard](../assets/prompt-deployment-dashboard.png)
+<!-- ![Deployment Dashboard](../assets/prompt-deployment-dashboard.png) -->
 
 ### 🤖 Auto-Tracking
 
@@ -141,7 +141,7 @@ prompts:
 
 Track who changed what, when, and why with full version history.
 
-![Audit Trail View](../assets/prompt-audit-trail.png)
+<!-- ![Audit Trail View](../assets/prompt-audit-trail.png) -->
 
 ### 4. Team Collaboration
 

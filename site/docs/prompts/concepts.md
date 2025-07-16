@@ -12,7 +12,7 @@ A **managed prompt** is a prompt that's tracked by the prompt management system.
 - **Metadata**: Tags, labels, and custom metadata
 - **Deployment Status**: Which versions are deployed where
 
-![Managed Prompt Structure](../assets/prompt-structure-diagram.png)
+<!-- ![Managed Prompt Structure](../assets/prompt-structure-diagram.png) -->
 
 ### Managed vs Unmanaged Prompts
 
@@ -33,7 +33,7 @@ Every change to a managed prompt creates a new **version**. Versions are:
 - **Timestamped**: Creation time is recorded
 - **Attributed**: Author information is stored
 
-![Version Timeline](../assets/prompt-version-timeline.png)
+<!-- ![Version Timeline](../assets/prompt-version-timeline.png) -->
 
 ### Version Properties
 
@@ -59,7 +59,7 @@ A **deployment** maps a specific prompt version to an environment. This enables:
 - Quick rollbacks
 - Environment-specific configurations
 
-![Deployment Flow](../assets/prompt-deployment-flow.png)
+<!-- ![Deployment Flow](../assets/prompt-deployment-flow.png) -->
 
 ### Common Deployment Patterns
 
@@ -107,7 +107,7 @@ Managed prompts are referenced using the `pf://` protocol:
    pf://customer-support:production
    ```
 
-![Reference Resolution](../assets/prompt-reference-resolution.png)
+<!-- ![Reference Resolution](../assets/prompt-reference-resolution.png) -->
 
 ## Content Types
 
@@ -184,7 +184,7 @@ config:
     return `[INST] ${prompt} [/INST]`
 ```
 
-![Configuration Hierarchy](../assets/prompt-config-hierarchy.png)
+<!-- ![Configuration Hierarchy](../assets/prompt-config-hierarchy.png) -->
 
 ## Storage Modes
 
@@ -200,7 +200,7 @@ Prompt management supports two storage modes:
   - Full control
 - **Best for**: Individual developers, small teams
 
-![Local Storage Structure](../assets/prompt-local-storage.png)
+<!-- ![Local Storage Structure](../assets/prompt-local-storage.png) -->
 
 ### Cloud Mode
 
@@ -212,7 +212,7 @@ Prompt management supports two storage modes:
   - Web UI access
 - **Best for**: Teams, enterprise deployments
 
-![Cloud Architecture](../assets/prompt-cloud-architecture.png)
+<!-- ![Cloud Architecture](../assets/prompt-cloud-architecture.png) -->
 
 ## Auto-Tracking
 
@@ -225,7 +225,7 @@ Auto-tracking automatically creates managed versions of unmanaged prompts:
 3. **Storage**: Prompts are saved to the management system
 4. **Reference**: Future runs can use the managed reference
 
-![Auto-Tracking Flow](../assets/prompt-auto-tracking-flow.png)
+<!-- ![Auto-Tracking Flow](../assets/prompt-auto-tracking-flow.png) -->
 
 ### ID Generation Rules
 
@@ -275,7 +275,7 @@ metadata:
   performance: 'optimized'
 ```
 
-![Metadata Usage](../assets/prompt-metadata-example.png)
+<!-- ![Metadata Usage](../assets/prompt-metadata-example.png) -->
 
 ## Access Control
 

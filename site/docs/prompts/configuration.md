@@ -67,7 +67,7 @@ promptManagement:
     offlineMode: true # Continue working offline
 ```
 
-![Configuration Hierarchy](../assets/prompt-config-file-hierarchy.png)
+<!-- ![Configuration Hierarchy](../assets/prompt-config-file-hierarchy.png) -->
 
 ## Prompt Configuration
 
@@ -116,7 +116,7 @@ config:
         additionalProperties: false
 ```
 
-![Response Format Configuration](../assets/prompt-response-format-config.png)
+<!-- ![Response Format Configuration](../assets/prompt-response-format-config.png) -->
 
 ### Provider-Specific Configuration
 
@@ -249,7 +249,7 @@ def prompt_with_config(context):
     }
 ```
 
-![Function Prompt Flow](../assets/prompt-function-flow.png)
+<!-- ![Function Prompt Flow](../assets/prompt-function-flow.png) -->
 
 ## Transform Configuration
 
@@ -336,7 +336,7 @@ promptAutoTracking:
     notifyOnTrack: true # Show notifications
 ```
 
-![Auto-Tracking Configuration](../assets/prompt-auto-tracking-config.png)
+<!-- ![Auto-Tracking Configuration](../assets/prompt-auto-tracking-config.png) -->
 
 ## CLI Configuration
 
@@ -401,7 +401,7 @@ webui:
       requireApproval: true
 ```
 
-![Web UI Configuration](../assets/prompt-webui-config.png)
+<!-- ![Web UI Configuration](../assets/prompt-webui-config.png) -->
 
 ## API Configuration
 

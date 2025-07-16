@@ -20,7 +20,7 @@ curl -H "X-API-Key: YOUR_API_KEY" \
   https://api.promptfoo.dev/api/managed-prompts
 ```
 
-![API Authentication Flow](../assets/prompt-api-auth-flow.png)
+<!-- ![API Authentication Flow](../assets/prompt-api-auth-flow.png) -->
 
 ## Base URL
 

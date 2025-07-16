@@ -17,7 +17,7 @@ This page provides a technical overview. For in-depth guides, see:
 
 :::
 
-![Prompt Management Dashboard](../assets/prompt-management-dashboard.png)
+<!-- ![Prompt Management Dashboard](../assets/prompt-management-dashboard.png) -->
 
 Promptfoo provides a comprehensive prompt management system that enables version control, deployment tracking, and team collaboration for your AI prompts. This system allows you to treat prompts as first-class citizens in your development workflow.
 

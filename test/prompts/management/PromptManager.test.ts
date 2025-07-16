@@ -145,7 +145,7 @@ describe('PromptManager', () => {
 
       // Mock the first read (before update)
       mockFs.readFile.mockResolvedValueOnce(yaml.dump(existingYaml));
-      
+
       // Mock the second read (after update) to return the updated version
       const updatedYaml: PromptYaml = {
         ...existingYaml,
@@ -162,7 +162,7 @@ describe('PromptManager', () => {
         ],
       };
       mockFs.readFile.mockResolvedValueOnce(yaml.dump(updatedYaml));
-      
+
       mockFs.writeFile.mockResolvedValue();
 
       const manager = new PromptManager();

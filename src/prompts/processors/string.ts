@@ -11,15 +11,15 @@ export function processString(prompt: Partial<Prompt>): Prompt[] {
     typeof prompt.raw === 'string',
     `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
   );
-  
+
   const result: Prompt = {
     raw: prompt.raw,
     label: prompt.label ?? prompt.raw,
   };
-  
+
   if (prompt.config !== undefined) {
     result.config = prompt.config;
   }
-  
+
   return [result];
 }

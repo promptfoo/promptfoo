@@ -2,7 +2,7 @@
 
 Auto-tracking automatically discovers and manages prompts used in your Promptfoo evaluations. This feature helps you transition from scattered prompt files to a centralized management system without disrupting your workflow.
 
-![Auto-Tracking Overview](../assets/prompt-auto-tracking-overview.png)
+<!-- ![Auto-Tracking Overview](../assets/prompt-auto-tracking-overview.png) -->
 
 ## What is Auto-Tracking?
 
@@ -36,7 +36,7 @@ prompts:
   - pf://api-handler
 ```
 
-![Before and After Auto-Tracking](../assets/prompt-auto-tracking-before-after.png)
+<!-- ![Before and After Auto-Tracking](../assets/prompt-auto-tracking-before-after.png) -->
 
 ## Enable Auto-Tracking
 
@@ -63,7 +63,7 @@ promptfoo eval --auto-track-prompts
 
 ## How It Works
 
-![Auto-Tracking Flow Diagram](../assets/prompt-auto-tracking-flow-detailed.png)
+<!-- ![Auto-Tracking Flow Diagram](../assets/prompt-auto-tracking-flow-detailed.png) -->
 
 ### 1. Detection Phase
 
@@ -352,7 +352,7 @@ git add ./prompts/*.yaml
 
 ### Development Workflow
 
-![Development Workflow](../assets/prompt-auto-tracking-dev-workflow.png)
+<!-- ![Development Workflow](../assets/prompt-auto-tracking-dev-workflow.png) -->
 
 1. **Development**: Write prompts inline or in files
 2. **Testing**: Run evaluations with auto-tracking

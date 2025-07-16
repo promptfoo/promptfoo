@@ -9,7 +9,7 @@ Get up and running with Promptfoo's prompt management system in just 5 minutes! 
 - 5 minutes of your time
   :::
 
-![Quickstart Overview](../assets/prompt-quickstart-overview.png)
+<!-- ![Quickstart Overview](../assets/prompt-quickstart-overview.png) -->
 
 ## 📋 What You'll Learn
 
@@ -46,7 +46,7 @@ promptfoo auth login
 # Follow the authentication flow
 ```
 
-![Authentication Flow](../assets/prompt-auth-flow.png)
+<!-- ![Authentication Flow](../assets/prompt-auth-flow.png) -->
 
 ### Step 2: Create Your First Prompt
 
@@ -60,7 +60,7 @@ Always be polite, empathetic, and solution-focused.
 Current date: {{date}}"
 ```
 
-![Create Prompt Command](../assets/prompt-create-command.png)
+<!-- ![Create Prompt Command](../assets/prompt-create-command.png) -->
 
 You should see:
 
@@ -78,7 +78,7 @@ List all managed prompts:
 promptfoo prompt list
 ```
 
-![Prompt List View](../assets/prompt-list-cli.png)
+<!-- ![Prompt List View](../assets/prompt-list-cli.png) -->
 
 View details of a specific prompt:
 
@@ -139,7 +139,7 @@ tests:
 promptfoo eval -c customer-support-test.yaml
 ```
 
-![Evaluation Results](../assets/prompt-eval-results.png)
+<!-- ![Evaluation Results](../assets/prompt-eval-results.png) -->
 
 ### Step 6: Update the Prompt
 
@@ -179,7 +179,7 @@ Deploy a specific version to production:
 promptfoo prompt deploy customer-support production --version 2
 ```
 
-![Deployment Confirmation](../assets/prompt-deploy-confirm.png)
+<!-- ![Deployment Confirmation](../assets/prompt-deploy-confirm.png) -->
 
 ### Step 8: Use Production Version
 
@@ -198,7 +198,7 @@ View the differences between versions:
 promptfoo prompt diff customer-support 1 2
 ```
 
-![Prompt Diff View](../assets/prompt-diff-cli.png)
+<!-- ![Prompt Diff View](../assets/prompt-diff-cli.png) -->
 
 ### Step 10: Enable Auto-Tracking
 
@@ -215,7 +215,7 @@ promptfoo eval -c my-existing-config.yaml
 promptfoo prompt list
 ```
 
-![Auto-Tracked Prompts](../assets/prompt-auto-tracked.png)
+<!-- ![Auto-Tracked Prompts](../assets/prompt-auto-tracked.png) -->
 
 ## 🎯 What's Next?
 

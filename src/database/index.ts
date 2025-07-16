@@ -68,7 +68,7 @@ export function getDb() {
 
     const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
     dbInstance = drizzle(sqliteInstance, { logger: drizzleLogger });
-    
+
     // Run migrations automatically for in-memory databases (testing)
     if (isMemoryDb) {
       const { migrate } = require('drizzle-orm/better-sqlite3/migrator');

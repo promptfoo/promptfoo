@@ -2,7 +2,7 @@
 
 Learn proven patterns and practices for managing prompts at scale. This guide covers team workflows, naming conventions, version control strategies, and production deployment patterns.
 
-![Best Practices Overview](../assets/prompt-best-practices-overview.png)
+<!-- ![Best Practices Overview](../assets/prompt-best-practices-overview.png) -->
 
 ## 📋 Quick Reference
 
@@ -71,7 +71,7 @@ deployments:
 
 Apply semantic versioning principles to prompt changes:
 
-![Prompt Versioning Strategy](../assets/prompt-versioning-strategy.png)
+<!-- ![Prompt Versioning Strategy](../assets/prompt-versioning-strategy.png) -->
 
 1. **Major Changes** (Breaking):
    - Complete rewrite
@@ -120,7 +120,7 @@ versions:
 
 ### 1. Feature Branch Workflow
 
-![Feature Branch Workflow](../assets/prompt-feature-branch-workflow.png)
+<!-- ![Feature Branch Workflow](../assets/prompt-feature-branch-workflow.png) -->
 
 ```bash
 # 1. Create feature branch
@@ -265,7 +265,7 @@ defaultTest:
 
 ### 1. Progressive Rollout
 
-![Progressive Rollout](../assets/prompt-progressive-rollout.png)
+<!-- ![Progressive Rollout](../assets/prompt-progressive-rollout.png) -->
 
 ```bash
 # Stage 1: Development (immediate)
@@ -525,7 +525,7 @@ prompts:
 
 Track prompt usage patterns:
 
-![Usage Analytics Dashboard](../assets/prompt-usage-analytics.png)
+<!-- ![Usage Analytics Dashboard](../assets/prompt-usage-analytics.png) -->
 
 ```javascript
 // Track usage
@@ -719,13 +719,13 @@ metadata:
 
 Track these KPIs for your prompt management:
 
-| Metric                  | Target | Description                              |
-| ----------------------- | ------ | ---------------------------------------- |
-| Deployment Success Rate | >99%   | Successful deployments without rollbacks |
-| Test Coverage           | >90%   | Percentage of prompts with test cases    |
-| Version Documentation   | 100%   | All versions have change descriptions    |
-| Time to Deploy          | <5 min | From commit to production                |
-| Rollback Frequency      | <5%    | Deployments requiring rollback           |
+| Metric                  | Target    | Description                              |
+| ----------------------- | --------- | ---------------------------------------- |
+| Deployment Success Rate | &gt;99%   | Successful deployments without rollbacks |
+| Test Coverage           | &gt;90%   | Percentage of prompts with test cases    |
+| Version Documentation   | 100%      | All versions have change descriptions    |
+| Time to Deploy          | &lt;5 min | From commit to production                |
+| Rollback Frequency      | &lt;5%    | Deployments requiring rollback           |
 
 ## 💡 Pro Tips
 
