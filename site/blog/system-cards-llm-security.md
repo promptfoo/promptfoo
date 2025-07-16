@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2025-07-15
 image: /img/blog/system-cards-hero.png
+imageAlt: 'Illustration of LLM system cards timeline 2022-2025'
 ---
 
 When we tested 5 major LLMs, every single one leaked passwords and database credentials when asked to help debug an error message. These aren't hypothetical vulnerabilities—they're real weaknesses documented in system cards that most teams never read.
