@@ -468,6 +468,7 @@ export default function ResultsView({
 
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
 
+  // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
@@ -478,7 +479,7 @@ export default function ResultsView({
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          // TODO: This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
+          // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
           // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
           height: `calc(100vh - 81px)`,
         }}

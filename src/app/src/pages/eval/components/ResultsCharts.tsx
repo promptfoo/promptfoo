@@ -628,6 +628,8 @@ function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: Resu
     //setShowPerformanceOverTimeChart
   ] = useState(false);
 
+  // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
+  // non-null.
   const { table, evalId } = useTableStore();
 
   // TODO(Will): Release performance over time chart; it's been hidden for 10 months.
@@ -691,22 +693,22 @@ function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: Resu
         </IconButton>
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ width: chartWidth }}>
-            <PassRateChart table={table} />
+            <PassRateChart table={table!} />
           </div>
           <div style={{ width: chartWidth }}>
             {scoreSet.size <= 3 &&
-            Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
-              <MetricChart table={table} />
+            Object.keys(table!.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
+              <MetricChart table={table!} />
             ) : (
-              <HistogramChart table={table} />
+              <HistogramChart table={table!} />
             )}
           </div>
           <div style={{ width: chartWidth }}>
-            <ScatterChart table={table} />
+            <ScatterChart table={table!} />
           </div>
           {showPerformanceOverTimeChart && (
             <div style={{ width: chartWidth }}>
-              <PerformanceOverTimeChart table={table} evalId={evalId} />
+              <PerformanceOverTimeChart table={table!} evalId={evalId} />
             </div>
           )}
         </div>

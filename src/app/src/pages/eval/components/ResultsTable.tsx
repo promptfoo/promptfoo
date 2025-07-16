@@ -44,7 +44,6 @@ import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 import ButtonGroup from '@mui/material/ButtonGroup';
-import useViewportHeight from '@app/hooks/useViewportHeight';
 
 const VARIABLE_COLUMN_SIZE_PX = 100;
 const PROMPT_COLUMN_SIZE_PX = 300;
@@ -1056,9 +1055,7 @@ function ResultsTable({
           </Box>
         )}
 
-      <div
-        className="results-table-container"
-      >
+      <div className="results-table-container">
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
