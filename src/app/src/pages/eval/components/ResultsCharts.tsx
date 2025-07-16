@@ -622,8 +622,8 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
 function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
-  const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
+  const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
 
   const { table, evalId, config } = useTableStore();
 
