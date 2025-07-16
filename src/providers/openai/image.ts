@@ -121,11 +121,11 @@ export function formatOutput(
   // Handle gpt-image-1 response format
   if (model === 'gpt-image-1') {
     logger.debug(`GPT-image-1 response: ${JSON.stringify(data)}`);
-    
+
     // Check if we have the expected structure
     if (data.data && Array.isArray(data.data) && data.data.length > 0) {
       const firstItem = data.data[0];
-      
+
       // GPT-image-1 primarily returns base64 data
       if (firstItem.b64_json) {
         // Save base64 as asset file
@@ -135,22 +135,22 @@ export function formatOutput(
         } else if (outputFormat === 'webp') {
           mimeType = 'image/webp';
         }
-        
+
         const sanitizedPrompt = prompt
           .replace(/\r?\n|\r/g, ' ')
           .replace(/\[/g, '(')
           .replace(/\]/g, ')');
         const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-        
+
         const asset = saveBase64Asset(
           firstItem.b64_json,
           mimeType,
-          `${ellipsizedPrompt}.${outputFormat || 'png'}`
+          `${ellipsizedPrompt}.${outputFormat || 'png'}`,
         );
-        
+
         return `![${ellipsizedPrompt}](${asset.url})`;
       }
-      
+
       // But can also return URLs (for compatibility/testing)
       if (firstItem.url) {
         const url = firstItem.url;
@@ -162,7 +162,7 @@ export function formatOutput(
         return `![${ellipsizedPrompt}](${url})`;
       }
     }
-    
+
     // Handle single base64 response at top level
     if (data.b64_json) {
       let mimeType = 'image/png'; // Default
@@ -171,27 +171,29 @@ export function formatOutput(
       } else if (outputFormat === 'webp') {
         mimeType = 'image/webp';
       }
-      
+
       const sanitizedPrompt = prompt
         .replace(/\r?\n|\r/g, ' ')
         .replace(/\[/g, '(')
         .replace(/\]/g, ')');
       const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-      
+
       const asset = saveBase64Asset(
         data.b64_json,
         mimeType,
-        `${ellipsizedPrompt}.${outputFormat || 'png'}`
+        `${ellipsizedPrompt}.${outputFormat || 'png'}`,
       );
-      
+
       return `![${ellipsizedPrompt}](${asset.url})`;
     }
-    
+
     // Check for error conditions
     if (data.created && !data.data) {
-      return { error: `GPT-image-1 may not be available yet or requires special access. Response has 'created' field but no 'data' array.` };
+      return {
+        error: `GPT-image-1 may not be available yet or requires special access. Response has 'created' field but no 'data' array.`,
+      };
     }
-    
+
     // If we get a different structure, return error
     return { error: `Unexpected GPT-image-1 response format: ${JSON.stringify(data)}` };
   }
@@ -205,19 +207,15 @@ export function formatOutput(
 
     // Save base64 as asset file
     const mimeType = 'image/png';
-    
+
     const sanitizedPrompt = prompt
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
     const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    
-    const asset = saveBase64Asset(
-      b64Json,
-      mimeType,
-      `${ellipsizedPrompt}.png`
-    );
-    
+
+    const asset = saveBase64Asset(b64Json, mimeType, `${ellipsizedPrompt}.png`);
+
     return `![${ellipsizedPrompt}](${asset.url})`;
   } else {
     const url = data.data[0].url;

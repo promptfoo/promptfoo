@@ -37,4 +37,4 @@ tests:
   - vars:
       prompt: A futuristic cityscape at night with neon lights and flying cars
   - vars:
-      prompt: Product photo of a luxury watch with text "PROMPTFOO" clearly visible on the dial 
+      prompt: Product photo of a luxury watch with text "PROMPTFOO" clearly visible on the dial

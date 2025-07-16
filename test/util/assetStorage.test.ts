@@ -53,14 +53,14 @@ describe('assetStorage', () => {
     it('should use custom cache path from environment', () => {
       const customPath = '/custom/cache';
       jest.mocked(fs.existsSync).mockReturnValue(false);
-      
+
       // Mock getEnvString by mocking the environment variable
       process.env.PROMPTFOO_CACHE_PATH = customPath;
 
       const result = getAssetsDirectory();
 
       expect(result).toBe(path.join(customPath, 'assets'));
-      
+
       delete process.env.PROMPTFOO_CACHE_PATH;
     });
   });
@@ -96,7 +96,8 @@ describe('assetStorage', () => {
   });
 
   describe('saveBase64Asset', () => {
-    const base64Data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const base64Data =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     const base64WithPrefix = `data:image/png;base64,${base64Data}`;
 
     it('should save base64 data as a file', () => {
@@ -114,7 +115,7 @@ describe('assetStorage', () => {
 
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         `${mockAssetsDir}/${mockUuid}.png`,
-        expect.any(Buffer)
+        expect.any(Buffer),
       );
 
       const savedBuffer = (fs.writeFileSync as jest.Mock).mock.calls[0][1];
@@ -192,7 +193,7 @@ describe('assetStorage', () => {
 
       expect(result).toBe(false);
       expect(logger.error).toHaveBeenCalledWith(
-        `Failed to delete asset: ${mockAssetsDir}/${filename}: ${error}`
+        `Failed to delete asset: ${mockAssetsDir}/${filename}: ${error}`,
       );
     });
   });
@@ -217,7 +218,7 @@ describe('assetStorage', () => {
         }
         return { mtimeMs: now - 0.5 * hourInMs } as any; // 30 minutes old
       });
-      
+
       jest.mocked(fs.unlinkSync).mockImplementation(() => undefined);
 
       const result = cleanupOldAssets(hourInMs); // Delete files older than 1 hour
@@ -249,4 +250,4 @@ describe('assetStorage', () => {
       expect(logger.info).not.toHaveBeenCalled();
     });
   });
-}); 
+});

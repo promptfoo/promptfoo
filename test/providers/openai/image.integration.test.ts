@@ -10,7 +10,12 @@ describe('OpenAI Image Provider - Asset Storage Integration', () => {
   const mockBase64Response = {
     data: {
       created: 1234567890,
-      data: [{ b64_json: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }],
+      data: [
+        {
+          b64_json:
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        },
+      ],
     },
     cached: false,
     status: 200,
@@ -23,7 +28,7 @@ describe('OpenAI Image Provider - Asset Storage Integration', () => {
     const assetsDir = getAssetsDirectory();
     if (fs.existsSync(assetsDir)) {
       const files = fs.readdirSync(assetsDir);
-      files.forEach(file => {
+      files.forEach((file) => {
         if (file.endsWith('.png')) {
           try {
             fs.unlinkSync(path.join(assetsDir, file));
@@ -46,35 +51,35 @@ describe('OpenAI Image Provider - Asset Storage Integration', () => {
 
     // Check the result contains an asset URL
     expect(result.output).toMatch(/^!\[Generate a test image\]\(\/assets\/[a-f0-9-]+\.png\)$/);
-    
+
     // Extract the filename from the markdown
     const match = (result.output as string).match(/\/assets\/([a-f0-9-]+\.png)/);
     expect(match).toBeTruthy();
-    
+
     if (match) {
       const filename = match[1];
       const assetPath = path.join(getAssetsDirectory(), filename);
-      
+
       // Verify the file was created
       expect(fs.existsSync(assetPath)).toBe(true);
-      
+
       // Verify the file contains valid image data
       const fileContent = fs.readFileSync(assetPath);
       expect(fileContent.length).toBeGreaterThan(0);
-      
+
       // PNG files start with specific bytes
       expect(fileContent[0]).toBe(0x89);
       expect(fileContent[1]).toBe(0x50); // 'P'
-      expect(fileContent[2]).toBe(0x4E); // 'N'
+      expect(fileContent[2]).toBe(0x4e); // 'N'
       expect(fileContent[3]).toBe(0x47); // 'G'
     }
   });
 
   it('should handle multiple image formats correctly', async () => {
     const provider = new OpenAiImageProvider('gpt-image-1', {
-      config: { 
+      config: {
         apiKey: 'test-key',
-        output_format: 'webp'
+        output_format: 'webp',
       },
     });
 
@@ -92,19 +97,19 @@ describe('OpenAI Image Provider - Asset Storage Integration', () => {
 
     // Check the result contains a webp asset URL
     expect(result.output).toMatch(/^!\[Generate a webp image\]\(\/assets\/[a-f0-9-]+\.webp\)$/);
-    
+
     // Extract and verify the webp file
     const match = (result.output as string).match(/\/assets\/([a-f0-9-]+\.webp)/);
     if (match) {
       const filename = match[1];
       const assetPath = path.join(getAssetsDirectory(), filename);
-      
+
       expect(fs.existsSync(assetPath)).toBe(true);
-      
+
       // WEBP files start with 'RIFF' header
       const fileContent = fs.readFileSync(assetPath);
       const header = fileContent.slice(0, 4).toString('ascii');
       expect(header).toBe('RIFF');
     }
   });
-}); 
+});

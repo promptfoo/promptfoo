@@ -7,25 +7,25 @@ providers:
     config:
       quality: medium
       size: 1024x1024
-  
+
   - id: openai:image:dall-e-3
     config:
       response_format: b64_json
       size: 1024x1024
       quality: standard
-  
+
   - id: openai:image:dall-e-2
     config:
       response_format: b64_json
       size: 512x512
-  
+
   # Hyperbolic provider (always returns base64)
   - id: hyperbolic:image:FLUX.1-dev
     config:
       width: 1024
       height: 1024
       steps: 20
-  
+
   # xAI provider (inherits OpenAI functionality)
   - id: xai:image:grok-2-vision-1212
     config:
@@ -37,6 +37,6 @@ prompts:
 
 tests:
   - vars:
-      style: "vibrant and modern"
+      style: 'vibrant and modern'
   - vars:
-      style: "peaceful and natural" 
+      style: 'peaceful and natural'

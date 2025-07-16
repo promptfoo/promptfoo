@@ -12,7 +12,7 @@ describe('assetsRouter', () => {
 
   beforeEach(() => {
     app = express();
-    
+
     // Mock sendFile at the application level
     app.use('/assets', (req, res, next) => {
       const originalSendFile = res.sendFile;
@@ -25,7 +25,7 @@ describe('assetsRouter', () => {
       }) as any;
       next();
     });
-    
+
     app.use('/assets', assetsRouter);
     jest.clearAllMocks();
   });
@@ -35,9 +35,7 @@ describe('assetsRouter', () => {
       const mockAssetPath = '/path/to/assets/test-image.png';
       jest.mocked(assetStorage.getAssetPath).mockReturnValue(mockAssetPath);
 
-      const response = await request(app)
-        .get('/assets/test-image.png')
-        .expect(200);
+      const response = await request(app).get('/assets/test-image.png').expect(200);
 
       expect(assetStorage.getAssetPath).toHaveBeenCalledWith('test-image.png');
       expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
@@ -47,9 +45,7 @@ describe('assetsRouter', () => {
     it('should return 404 for non-existent asset', async () => {
       jest.mocked(assetStorage.getAssetPath).mockReturnValue(null);
 
-      const response = await request(app)
-        .get('/assets/non-existent.png')
-        .expect(404);
+      const response = await request(app).get('/assets/non-existent.png').expect(404);
 
       expect(response.text).toBe('Asset not found');
       expect(logger.debug).toHaveBeenCalledWith('Asset not found: non-existent.png');
@@ -71,7 +67,7 @@ describe('assetsRouter', () => {
         expect(response.text).toBe('Invalid filename');
         expect(logger.warn).toHaveBeenCalledWith(`Invalid asset filename requested: ${filename}`);
       }
-      
+
       // Clear mocks between iterations
       jest.clearAllMocks();
     });
@@ -88,9 +84,7 @@ describe('assetsRouter', () => {
       jest.mocked(assetStorage.getAssetPath).mockReturnValue('/path/to/asset');
 
       for (const filename of validFilenames) {
-        await request(app)
-          .get(`/assets/${filename}`)
-          .expect(200);
+        await request(app).get(`/assets/${filename}`).expect(200);
 
         expect(assetStorage.getAssetPath).toHaveBeenCalledWith(filename);
       }
@@ -112,13 +106,11 @@ describe('assetsRouter', () => {
       });
       app.use('/assets', assetsRouter);
 
-      await request(app)
-        .get('/assets/test-image.png')
-        .expect(500);
+      await request(app).get('/assets/test-image.png').expect(500);
 
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error sending asset test-image.png')
+        expect.stringContaining('Error sending asset test-image.png'),
       );
     });
   });
-}); 
+});

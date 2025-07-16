@@ -273,6 +273,7 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 OpenAI supports image generation through DALL-E and GPT-image-1 models. See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
 
 #### Available models:
+
 - `openai:image:gpt-image-1` - Latest multimodal model with enhanced text rendering and image editing
 - `openai:image:dall-e-3` - Advanced image generation with high quality
 - `openai:image:dall-e-2` - Classic image generation model
@@ -300,11 +301,11 @@ tests:
 providers:
   - id: openai:image:gpt-image-1
     config:
-      size: 1024x1024  # or 1536x1024, 1024x1536, auto
-      quality: high    # low, medium, high, auto
-      output_format: png  # jpeg, png, webp
-      output_compression: 80  # 0-100 for JPEG/WebP
-      background: transparent  # only for PNG/WebP
+      size: 1024x1024 # or 1536x1024, 1024x1536, auto
+      quality: high # low, medium, high, auto
+      output_format: png # jpeg, png, webp
+      output_compression: 80 # 0-100 for JPEG/WebP
+      background: transparent # only for PNG/WebP
 ```
 
 #### Image editing with GPT-image-1:
@@ -314,8 +315,8 @@ providers:
   - id: openai:image:gpt-image-1
     config:
       operation: edit
-      image: [file://base-image.png]  # Up to 10 images
-      mask: file://mask.png  # Optional mask with alpha channel
+      image: [file://base-image.png] # Up to 10 images
+      mask: file://mask.png # Optional mask with alpha channel
 ```
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
@@ -342,15 +343,17 @@ This means you don't need to handle base64 data manually. For example:
 providers:
   - id: openai:image:dall-e-3
     config:
-      response_format: b64_json  # Returns base64 instead of URLs
+      response_format: b64_json # Returns base64 instead of URLs
 ```
 
 The output will automatically be converted from base64 to a viewable image:
+
 ```markdown
 ![A red panda](/assets/12345678-1234-1234-1234-123456789012.png)
 ```
 
 The assets are stored with:
+
 - **Unique UUID filenames** to prevent conflicts
 - **Proper MIME types** based on the image format
 - **Immutable cache headers** for optimal performance

@@ -28,17 +28,19 @@ describe('OpenAiImageProvider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
-    
+
     // Mock asset storage
-    jest.mocked(assetStorage.saveBase64Asset).mockImplementation((base64, mimeType, originalName) => ({
-      id: 'mock-uuid',
-      path: '/path/to/asset',
-      url: '/assets/mock-uuid.png',
-      mimeType: mimeType || 'image/png',
-      originalName,
-      createdAt: new Date(),
-      type: 'image',
-    }));
+    jest
+      .mocked(assetStorage.saveBase64Asset)
+      .mockImplementation((base64, mimeType, originalName) => ({
+        id: 'mock-uuid',
+        path: '/path/to/asset',
+        url: '/assets/mock-uuid.png',
+        mimeType: mimeType || 'image/png',
+        originalName,
+        createdAt: new Date(),
+        type: 'image',
+      }));
   });
 
   describe('Basic functionality', () => {
@@ -71,7 +73,7 @@ describe('OpenAiImageProvider', () => {
 
     it('should generate an image with gpt-image-1 successfully', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1', {
-        config: { 
+        config: {
           apiKey: 'test-key',
           quality: 'high',
           output_format: 'png',

@@ -35,21 +35,24 @@ promptfoo view
 ## Key Notes
 
 ### Supported Sizes
+
 - **GPT-image-1**: 1024x1024, 1536x1024, 1024x1536, auto
-- **DALL-E 3**: 1024x1024, 1792x1024, 1024x1792  
+- **DALL-E 3**: 1024x1024, 1792x1024, 1024x1792
 - **DALL-E 2**: 256x256, 512x512, 1024x1024
 
 ### GPT-image-1 Features
+
 - **Quality levels**: low, medium, high, auto
 - **Output formats**: jpeg, png, webp
-- **Special capabilities**: 
+- **Special capabilities**:
   - Better text rendering
   - Support for transparent backgrounds (PNG/WEBP)
   - Image editing with multiple input images (up to 10)
   - Output compression control (0-100 for JPEG/WEBP)
 
 ### Pricing (approximate per image)
-- **GPT-image-1**: 
+
+- **GPT-image-1**:
   - Low quality: $0.01
   - Medium quality: $0.04
   - High quality: $0.17

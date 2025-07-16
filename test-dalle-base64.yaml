@@ -7,7 +7,7 @@ providers:
       response_format: b64_json
       size: 1024x1024
       quality: standard
-  
+
   - id: openai:image:dall-e-2
     config:
       response_format: b64_json
@@ -23,4 +23,4 @@ tests:
   - vars:
       subject: a futuristic cityscape at sunset
   - vars:
-      subject: abstract geometric patterns in blue and gold 
+      subject: abstract geometric patterns in blue and gold

@@ -102,13 +102,9 @@ export function formatHyperbolicImageOutput(
     .replace(/\[/g, '(')
     .replace(/\]/g, ')');
   const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-  
-  const asset = saveBase64Asset(
-    imageData,
-    mimeType,
-    `${ellipsizedPrompt}.${extension}`
-  );
-  
+
+  const asset = saveBase64Asset(imageData, mimeType, `${ellipsizedPrompt}.${extension}`);
+
   return `![${ellipsizedPrompt}](${asset.url})`;
 }
 

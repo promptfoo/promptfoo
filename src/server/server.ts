@@ -216,15 +216,15 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
-app.use('/api/providers', providersRouter);
-app.use('/api/redteam', redteamRouter);
-app.use('/api/user', userRouter);
-app.use('/api/configs', configsRouter);
-app.use('/api/model-audit', modelAuditRouter);
-app.use('/api/traces', tracesRouter);
+  app.use('/api/providers', providersRouter);
+  app.use('/api/redteam', redteamRouter);
+  app.use('/api/user', userRouter);
+  app.use('/api/configs', configsRouter);
+  app.use('/api/model-audit', modelAuditRouter);
+  app.use('/api/traces', tracesRouter);
 
-// Serve assets (images, etc.) stored in cache
-app.use('/assets', assetsRouter);
+  // Serve assets (images, etc.) stored in cache
+  app.use('/assets', assetsRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {

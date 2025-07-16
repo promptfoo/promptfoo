@@ -12,7 +12,8 @@ describe('HyperbolicImageProvider', () => {
       status: 'success',
       images: [
         {
-          image: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+          image:
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
           seed: 12345,
         },
       ],
@@ -25,17 +26,19 @@ describe('HyperbolicImageProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
-    
+
     // Mock asset storage
-    jest.mocked(assetStorage.saveBase64Asset).mockImplementation((base64, mimeType, originalName) => ({
-      id: 'mock-uuid',
-      path: '/path/to/asset',
-      url: '/assets/mock-uuid.png',
-      mimeType: mimeType || 'image/png',
-      originalName,
-      createdAt: new Date(),
-      type: 'image',
-    }));
+    jest
+      .mocked(assetStorage.saveBase64Asset)
+      .mockImplementation((base64, mimeType, originalName) => ({
+        id: 'mock-uuid',
+        path: '/path/to/asset',
+        url: '/assets/mock-uuid.png',
+        mimeType: mimeType || 'image/png',
+        originalName,
+        createdAt: new Date(),
+        type: 'image',
+      }));
   });
 
   describe('Basic functionality', () => {
@@ -146,13 +149,15 @@ describe('HyperbolicImageProvider', () => {
       // Clear any environment variables that might be set
       const originalEnv = process.env.HYPERBOLIC_API_KEY;
       delete process.env.HYPERBOLIC_API_KEY;
-      
+
       const provider = new HyperbolicImageProvider('FLUX.1-dev', {
         config: {},
       });
 
-      await expect(provider.callApi('test prompt')).rejects.toThrow('Hyperbolic API key is not set');
-      
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        'Hyperbolic API key is not set',
+      );
+
       // Restore original env
       if (originalEnv) {
         process.env.HYPERBOLIC_API_KEY = originalEnv;
