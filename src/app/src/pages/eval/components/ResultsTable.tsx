@@ -16,19 +16,23 @@ import {
   type FilterMode,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
+import FirstPageIcon from '@mui/icons-material/FirstPage';
+import LastPageIcon from '@mui/icons-material/LastPage';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
+import ButtonGroup from '@mui/material/ButtonGroup';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
@@ -43,7 +47,10 @@ import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
-import ButtonGroup from '@mui/material/ButtonGroup';
+
+const VARIABLE_COLUMN_SIZE_PX = 100;
+const PROMPT_COLUMN_SIZE_PX = 300;
+const DESCRIPTION_COLUMN_SIZE_PX = 100;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -124,8 +131,6 @@ interface ResultsTableProps {
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
-  selectedMetric?: string | null;
-  onMetricFilter?: (metric: string | null) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -175,8 +180,6 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
-  selectedMetric,
-  onMetricFilter,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -185,8 +188,11 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
+    totalResultsCount,
     fetchEvalData,
     isFetching,
+    filters,
+    addFilter,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -203,10 +209,23 @@ function ResultsTable({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  // Load saved page size from localStorage
+  const savedPageSize = React.useMemo(() => {
+    const saved = localStorage.getItem('promptfoo-page-size');
+    return saved ? parseInt(saved, 10) : 50;
+  }, []);
+
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: 50,
+    pageSize: savedPageSize,
   });
+  const [pageInputValue, setPageInputValue] = React.useState<string>('');
+  const [isPaginationLoading, setIsPaginationLoading] = React.useState(false);
+
+  // Reset page input value when pagination changes
+  React.useEffect(() => {
+    setPageInputValue('');
+  }, [pagination.pageIndex]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -367,8 +386,16 @@ function ResultsTable({
   };
 
   React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
+
+  // Validate page index when filteredResultsCount changes
+  React.useEffect(() => {
+    const maxPageIndex = Math.max(0, Math.ceil(filteredResultsCount / pagination.pageSize) - 1);
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((prev) => ({ ...prev, pageIndex: maxPageIndex }));
+    }
+  }, [filteredResultsCount, pagination.pageSize, pagination.pageIndex]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -399,14 +426,24 @@ function ResultsTable({
 
     console.log('Fetching data for filtering/pagination', evalId);
 
+    setIsPaginationLoading(true);
+    // fetchEvalData doesn't return a promise, so we need to handle loading state differently
     fetchEvalData(evalId, {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      selectedMetric,
+      // Only pass the filters that have been applied (have a value).
+      filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
+    // Clear loading state after a short delay
+    const timeoutId = setTimeout(() => setIsPaginationLoading(false), 500);
+
+    // Cleanup function
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [
     // evalId is NOT in the dependency array
     pagination.pageIndex,
@@ -414,8 +451,10 @@ function ResultsTable({
     filterMode,
     comparisonEvalIds,
     debouncedSearchText,
-    selectedMetric,
     fetchEvalData,
+    filters.values,
+    // Ensure this re-triggers for filter CxUD operations.
+    filters.appliedCount,
   ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
@@ -544,7 +583,7 @@ function ResultsTable({
                   </div>
                 );
               },
-              size: 50,
+              size: VARIABLE_COLUMN_SIZE_PX,
             }),
           ),
         }),
@@ -594,13 +633,35 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
-  const handleMetricFilter = React.useCallback(
+  const handleMetricFilterClick = React.useCallback(
     (metric: string | null) => {
-      if (onMetricFilter) {
-        onMetricFilter(metric);
+      if (!metric) {
+        return;
       }
+
+      const filter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: metric,
+        logicOperator: 'or' as const,
+      };
+
+      // If this filter is already applied, do not re-apply it.
+      if (
+        Object.values(filters.values).find(
+          (f) =>
+            f.type === filter.type &&
+            f.value === filter.value &&
+            f.operator === filter.operator &&
+            f.logicOperator === filter.logicOperator,
+        )
+      ) {
+        return;
+      }
+
+      addFilter(filter);
     },
-    [onMetricFilter],
+    [addFilter, filters.values],
   );
 
   const promptColumns = React.useMemo(() => {
@@ -747,7 +808,7 @@ function ResultsTable({
                         counts={prompt.metrics.namedScoresCount}
                         metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
-                        onMetricFilter={handleMetricFilter}
+                        onMetricFilter={handleMetricFilterClick}
                       />
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
@@ -815,6 +876,7 @@ function ResultsTable({
                 <div style={{ padding: '20px' }}>'Test still in progress...'</div>
               );
             },
+            size: PROMPT_COLUMN_SIZE_PX,
           }),
         ),
       }),
@@ -837,8 +899,8 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    selectedMetric,
-    handleMetricFilter,
+    filters.appliedCount,
+    handleMetricFilterClick,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -853,7 +915,7 @@ function ResultsTable({
             <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
           </div>
         ),
-        size: 50,
+        size: DESCRIPTION_COLUMN_SIZE_PX,
       };
     }
     return null;
@@ -868,7 +930,10 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
-  const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
+  const pageCount = React.useMemo(
+    () => Math.max(1, Math.ceil(filteredResultsCount / pagination.pageSize)),
+    [filteredResultsCount, pagination.pageSize],
+  );
   const reactTable = useReactTable({
     data: tableBody,
     columns,
@@ -880,6 +945,7 @@ function ResultsTable({
       columnVisibility,
       pagination,
     },
+    enableColumnResizing: true,
   });
 
   const { isCollapsed } = useScrollHandler();
@@ -971,6 +1037,16 @@ function ResultsTable({
     }
   }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
 
+  const tableWidth = React.useMemo(() => {
+    let width = 0;
+    if (descriptionColumn) {
+      width += DESCRIPTION_COLUMN_SIZE_PX;
+    }
+    width += head.vars.length * VARIABLE_COLUMN_SIZE_PX;
+    width += head.prompts.length * PROMPT_COLUMN_SIZE_PX;
+    return width;
+  }, [descriptionColumn, head.vars.length, head.prompts.length]);
+
   return (
     <div>
       {isSearching && searchText && (
@@ -996,7 +1072,7 @@ function ResultsTable({
 
       {filteredResultsCount === 0 &&
         !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
+        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
           <Box
             sx={{
               padding: '20px',
@@ -1011,147 +1087,203 @@ function ResultsTable({
           </Box>
         )}
 
-      <table
-        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+      <div
+        className="results-table-container"
         style={{
-          wordBreak,
-          // Ensure the fixed pagination does not overlap with the table.
-          marginBottom: '100px',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
         }}
       >
-        <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
-          {stickyHeader && isCollapsed && (
-            <div className="header-dismiss">
-              <IconButton
-                onClick={() => setStickyHeader(false)}
-                size="small"
-                sx={{ color: 'text.primary' }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </div>
-          )}
-          {reactTable.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  colSpan={header.colSpan}
-                  style={{
-                    width: header.getSize(),
-                  }}
+        <table
+          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          style={{
+            wordBreak,
+            width: `${tableWidth}px`,
+          }}
+        >
+          <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
+            {stickyHeader && isCollapsed && (
+              <div className="header-dismiss">
+                <IconButton
+                  onClick={() => setStickyHeader(false)}
+                  size="small"
+                  sx={{ color: 'text.primary' }}
                 >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  <div
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                  />
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {reactTable.getRowModel().rows.map((row, rowIndex) => {
-            let colBorderDrawn = false;
-
-            return (
-              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
-                {row.getVisibleCells().map((cell) => {
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </div>
+            )}
+            {reactTable.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id} className="header">
+                {headerGroup.headers.map((header) => {
                   const isMetadataCol =
-                    cell.column.id.startsWith('Variable') || cell.column.id === 'description';
-                  const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
-                  if (shouldDrawColBorder) {
-                    colBorderDrawn = true;
-                  }
-                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
-
-                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
-                  const value = cell.getValue();
-                  if (
-                    typeof value === 'string' &&
-                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                      value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
-                  ) {
-                    const imgSrc = value.startsWith('data:')
-                      ? value
-                      : `data:image/jpeg;base64,${value}`;
-                    cellContent = (
-                      <>
-                        <img
-                          src={imgSrc}
-                          alt="Base64 encoded image"
-                          style={{
-                            maxWidth: '100%',
-                            height: 'auto',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => toggleLightbox(imgSrc)}
-                        />
-                        {lightboxOpen && lightboxImage === imgSrc && (
-                          <div className="lightbox" onClick={() => toggleLightbox()}>
-                            <img
-                              src={lightboxImage}
-                              alt="Lightbox"
-                              style={{
-                                maxWidth: '90%',
-                                maxHeight: '90vh',
-                                objectFit: 'contain',
-                              }}
-                            />
-                          </div>
-                        )}
-                      </>
-                    );
-                  }
+                    header.column.id.startsWith('Variable') || header.column.id === 'description';
+                  const isFinalRow = headerGroup.depth === 1;
 
                   return (
-                    <td
-                      key={cell.id}
+                    <th
+                      key={header.id}
+                      colSpan={header.colSpan}
                       style={{
-                        width: cell.column.getSize(),
+                        width: header.getSize(),
+                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                        height: isFinalRow ? 'fit-content' : 'auto',
                       }}
-                      className={`${isMetadataCol ? 'variable' : ''} ${
-                        shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
                     >
-                      {cellContent}
-                    </td>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                      />
+                    </th>
                   );
                 })}
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ))}
+          </thead>
+          <tbody>
+            {reactTable.getRowModel().rows.map((row, rowIndex) => {
+              let colBorderDrawn = false;
 
+              return (
+                <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
+                  {row.getVisibleCells().map((cell) => {
+                    const isMetadataCol =
+                      cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                    const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
+                    if (shouldDrawColBorder) {
+                      colBorderDrawn = true;
+                    }
+
+                    let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+                    const value = cell.getValue();
+                    if (
+                      typeof value === 'string' &&
+                      (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
+                        value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
+                    ) {
+                      const imgSrc = value.startsWith('data:')
+                        ? value
+                        : `data:image/jpeg;base64,${value}`;
+                      cellContent = (
+                        <>
+                          <img
+                            src={imgSrc}
+                            alt="Base64 encoded image"
+                            style={{
+                              maxWidth: '100%',
+                              height: 'auto',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => toggleLightbox(imgSrc)}
+                          />
+                          {lightboxOpen && lightboxImage === imgSrc && (
+                            <div className="lightbox" onClick={() => toggleLightbox()}>
+                              <img
+                                src={lightboxImage}
+                                alt="Lightbox"
+                                style={{
+                                  maxWidth: '90%',
+                                  maxHeight: '90vh',
+                                  objectFit: 'contain',
+                                }}
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    }
+
+                    return (
+                      <td
+                        key={cell.id}
+                        style={{
+                          width: cell.column.getSize(),
+                        }}
+                        className={`${isMetadataCol ? 'variable' : ''}${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
+                      >
+                        {cellContent}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Show empty state message when no results */}
+      {filteredResultsCount === 0 && (
+        <Box
+          sx={{
+            textAlign: 'center',
+            padding: '40px 20px',
+            backgroundColor: 'background.paper',
+            borderRadius: '8px',
+            margin: '24px 0',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No results found
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {searchText
+              ? 'Try adjusting your search terms or filters'
+              : 'No test results available'}
+          </Typography>
+        </Box>
+      )}
       {
+        // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
+        // filters does not hide the pagination controls.
         // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
-        filteredResultsCount > 10 && (
+        totalResultsCount > 10 && (
           <Box
             className="pagination"
-            px={2}
             sx={{
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
               gap: 2,
               flexWrap: 'wrap',
               justifyContent: 'space-between',
-              position: 'fixed',
-              bottom: 0,
-              left: 0,
-              right: 0,
               backgroundColor: 'background.paper',
-              borderTop: '1px solid',
+              borderRadius: '8px',
+              padding: '16px 24px',
+              paddingBottom: '20px', // Extra space for validation messages
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+              margin: '24px 0',
+              border: '1px solid',
               borderColor: 'divider',
-              zIndex: 1000,
-              width: '100vw',
-              boxShadow: 3,
+              minHeight: '64px', // Ensure consistent height
             }}
           >
+            {isPaginationLoading && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  zIndex: 1,
+                  borderRadius: '8px',
+                }}
+              >
+                <LinearProgress sx={{ width: '200px' }} />
+              </Box>
+            )}
             <Box>
               Showing{' '}
               <Typography component="span" sx={{ fontWeight: 600 }}>
@@ -1168,34 +1300,48 @@ function ResultsTable({
               results
             </Box>
 
-            <Box>
-              Page{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {reactTable.getState().pagination.pageIndex + 1}
-              </Typography>{' '}
-              of{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {pageCount}
-              </Typography>
-            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+              {/* PAGE INFO */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Page
+                </Typography>
+                <Typography component="span" sx={{ fontWeight: 600 }}>
+                  {reactTable.getState().pagination.pageIndex + 1}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  of
+                </Typography>
+                <Typography component="span" sx={{ fontWeight: 600 }}>
+                  {pageCount}
+                </Typography>
+              </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {/* PAGE SIZE SELECTOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Results per page:</span>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Show:
+                </Typography>
                 <Select
                   value={pagination.pageSize}
                   onChange={(e) => {
+                    const newPageSize = Number(e.target.value);
+                    const newPageCount = Math.ceil(filteredResultsCount / newPageSize);
+
+                    // Save page size preference
+                    localStorage.setItem('promptfoo-page-size', newPageSize.toString());
+
                     setPagination((prev) => ({
-                      ...prev,
-                      pageSize: Number(e.target.value),
+                      pageSize: newPageSize,
+                      // Reset to page 0 if current page would be out of bounds
+                      pageIndex: prev.pageIndex >= newPageCount ? 0 : prev.pageIndex,
                     }));
                     window.scrollTo(0, 0);
                   }}
                   displayEmpty
                   inputProps={{ 'aria-label': 'Results per page' }}
                   size="small"
-                  sx={{ m: 1, minWidth: 80 }}
+                  sx={{ minWidth: 70 }}
                 >
                   <MenuItem value={10}>10</MenuItem>
                   <MenuItem value={50} disabled={filteredResultsCount <= 10}>
@@ -1211,33 +1357,116 @@ function ResultsTable({
                     1000
                   </MenuItem>
                 </Select>
-              </Typography>
+              </Box>
 
               {/* PAGE NAVIGATOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Go to:</span>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, position: 'relative' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Go to:
+                </Typography>
                 <TextField
                   size="small"
                   type="number"
-                  defaultValue={1}
+                  value={pageInputValue || pagination.pageIndex + 1}
                   onChange={(e) => {
-                    const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                    }));
-                    clearRowIdFromUrl();
+                    setPageInputValue(e.target.value);
                   }}
+                  onBlur={(e) => {
+                    const value = e.target.value;
+                    if (value) {
+                      const page = Number(value) - 1;
+                      const validPage = Math.min(Math.max(page, 0), pageCount - 1);
+                      setPagination((prev) => ({
+                        ...prev,
+                        pageIndex: validPage,
+                      }));
+                      clearRowIdFromUrl();
+                    }
+                    // Clear the input value to show current page
+                    setPageInputValue('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      // Blur the input to confirm the change
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder={`1-${pageCount}`}
+                  inputProps={{
+                    min: 1,
+                    max: pageCount,
+                    'aria-label': 'Go to page number',
+                  }}
+                  error={
+                    pageInputValue !== '' &&
+                    (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
+                  }
+                  helperText={
+                    pageInputValue !== '' &&
+                    (Number(pageInputValue) < 1 || Number(pageInputValue) > pageCount)
+                      ? `Enter 1-${pageCount}`
+                      : ''
+                  }
                   sx={{
-                    width: '60px',
-                    textAlign: 'center',
+                    // Dynamic width based on page count digits
+                    width: `${Math.max(80, (pageCount.toString().length + 2) * 20)}px`,
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': {
+                        borderRadius: '8px',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: 'primary.main',
+                      },
+                    },
+                    '& input[type=number]': {
+                      MozAppearance: 'textfield',
+                      '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+                        WebkitAppearance: 'none',
+                        margin: 0,
+                      },
+                    },
+                    '& .MuiFormHelperText-root': {
+                      position: 'absolute',
+                      bottom: '-20px',
+                      fontSize: '0.7rem',
+                      whiteSpace: 'nowrap',
+                    },
                   }}
                 />
-              </Typography>
+              </Box>
 
               {/* PAGE NAVIGATION BUTTONS */}
-              <ButtonGroup>
+              <ButtonGroup
+                variant="outlined"
+                size="small"
+                sx={{
+                  '& .MuiButton': {
+                    borderColor: 'divider',
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  },
+                }}
+              >
                 <IconButton
+                  size="small"
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: 0,
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={reactTable.getState().pagination.pageIndex === 0}
+                  sx={{ padding: '6px' }}
+                  aria-label="First page"
+                >
+                  <FirstPageIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
                   onClick={() => {
                     setPagination((prev) => ({
                       ...prev,
@@ -1247,10 +1476,13 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex === 0}
+                  sx={{ padding: '6px' }}
+                  aria-label="Previous page"
                 >
-                  <ArrowBackIcon />
+                  <ArrowBackIcon fontSize="small" />
                 </IconButton>
                 <IconButton
+                  size="small"
                   onClick={() => {
                     setPagination((prev) => ({
                       ...prev,
@@ -1260,8 +1492,26 @@ function ResultsTable({
                     window.scrollTo(0, 0);
                   }}
                   disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+                  sx={{ padding: '6px' }}
+                  aria-label="Next page"
                 >
-                  <ArrowForwardIcon />
+                  <ArrowForwardIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setPagination((prev) => ({
+                      ...prev,
+                      pageIndex: pageCount - 1,
+                    }));
+                    clearRowIdFromUrl();
+                    window.scrollTo(0, 0);
+                  }}
+                  disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+                  sx={{ padding: '6px' }}
+                  aria-label="Last page"
+                >
+                  <LastPageIcon fontSize="small" />
                 </IconButton>
               </ButtonGroup>
             </Box>

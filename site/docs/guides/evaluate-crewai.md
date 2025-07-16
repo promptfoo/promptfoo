@@ -381,7 +381,7 @@ In this example, you can see:
 - It returned a mock structured JSON with Alex, William, and Stanislav, plus a summary.
 - Pass rate: **100%**
 
-<img width="800" height="499" alt="Promptfoo Eval 2" src="/img/docs/crewai/promptfoo-eval-2.png" />
+<img width="800" height="499" alt="Promptfoo eval results" src="/img/docs/crewai/promptfoo-eval.png" />
 
 Once done, you can even open the local web viewer to explore the full results:
 
