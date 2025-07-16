@@ -4,6 +4,8 @@ import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
+import { saveBase64Asset } from '../../util/assetStorage';
+import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
 export type HyperbolicImageOptions = {
@@ -80,26 +82,34 @@ export function formatHyperbolicImageOutput(
   prompt: string,
   responseFormat?: string,
 ): string {
-  if (responseFormat === 'b64_json') {
-    // Return structured JSON for b64_json format
-    return JSON.stringify({
-      data: [{ b64_json: imageData }],
-    });
-  } else {
-    // For URL format or default, format as data URL for proper rendering
-    // Determine image format from base64 header
-    let mimeType = 'image/jpeg'; // Default to JPEG
-    if (imageData.startsWith('/9j/')) {
-      mimeType = 'image/jpeg';
-    } else if (imageData.startsWith('iVBORw0KGgo')) {
-      mimeType = 'image/png';
-    } else if (imageData.startsWith('UklGR')) {
-      mimeType = 'image/webp';
-    }
-
-    // Return as data URL for proper image rendering in the viewer
-    return `data:${mimeType};base64,${imageData}`;
+  // Determine image format from base64 header
+  let mimeType = 'image/jpeg'; // Default to JPEG
+  let extension = 'jpg';
+  if (imageData.startsWith('/9j/')) {
+    mimeType = 'image/jpeg';
+    extension = 'jpg';
+  } else if (imageData.startsWith('iVBORw0KGgo')) {
+    mimeType = 'image/png';
+    extension = 'png';
+  } else if (imageData.startsWith('UklGR')) {
+    mimeType = 'image/webp';
+    extension = 'webp';
   }
+
+  // Save base64 as asset file
+  const sanitizedPrompt = prompt
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')');
+  const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+  
+  const asset = saveBase64Asset(
+    imageData,
+    mimeType,
+    `${ellipsizedPrompt}.${extension}`
+  );
+  
+  return `![${ellipsizedPrompt}](${asset.url})`;
 }
 
 export class HyperbolicImageProvider implements ApiProvider {
@@ -279,7 +289,6 @@ export class HyperbolicImageProvider implements ApiProvider {
         output: formattedOutput,
         cached,
         cost,
-        ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
       return {

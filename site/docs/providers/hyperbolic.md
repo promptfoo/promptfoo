@@ -191,6 +191,16 @@ tests:
         value: 1920
 ```
 
+#### Base64 Image Handling
+
+Hyperbolic image models return base64-encoded images which are automatically:
+
+1. **Saved as files** in the local cache directory (`~/.promptfoo/cache/assets/`)
+2. **Served through the web viewer** at `/assets/[filename]`
+3. **Displayed as markdown images** in the evaluation results
+
+To view generated images in the web interface, ensure 'Render markdown' is enabled in the Table Settings.
+
 ### Audio Generation Example
 
 ```yaml

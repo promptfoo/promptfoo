@@ -330,7 +330,7 @@ Then, enable 'Render markdown' under Table Settings.
 
 #### Base64 Image Handling and Asset Storage
 
-When OpenAI image models return base64-encoded images (common with gpt-image-1 or when using `response_format: b64_json`), promptfoo automatically:
+When image generation models return base64-encoded images (common with gpt-image-1, Hyperbolic, or when using `response_format: b64_json`), promptfoo automatically:
 
 1. **Saves base64 images as files** in the local cache directory (`~/.promptfoo/cache/assets/`)
 2. **Serves them through the web viewer** at `/assets/[filename]`
