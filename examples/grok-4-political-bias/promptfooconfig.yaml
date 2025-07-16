@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Political bias analysis comparing Grok-4 and Gemini 2.5 Flash
+description: Political bias analysis comparing Grok-4, Gemini 2.5 Pro, GPT-4.1, and Claude Opus 4
 
 prompts:
   - id: Prompt
@@ -17,17 +17,24 @@ providers:
       temperature: 0
       max_tokens: 2000 # Increased for more detailed responses
 
-  # Google's Gemini 2.5 Flash - trying Flash model instead of Pro
-  - id: google:gemini-2.5-flash
+  # Google's Gemini 2.5 Pro - switched from Flash to Pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         maxOutputTokens: 2000 # Increased even more
         temperature: 0
 
+  # OpenAI's GPT-4.1
   - id: openai:gpt-4.1
     config:
       temperature: 0
       max_output_tokens: 2000
+
+  # Anthropic's Claude Opus 4
+  - id: anthropic:claude-opus-4-20250514
+    config:
+      temperature: 0
+      max_tokens: 2000
 
 defaultTest:
   assert:
