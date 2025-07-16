@@ -125,20 +125,7 @@ prompts:
   - file://scenarios/**/*.json
 ```
 
-#### Function Preservation with Wildcards
-
-When using wildcards with Python or JavaScript files, you can specify a function name that will be called in each matched file:
-
-```yaml
-prompts:
-  # Call generate_prompt() in all Python files
-  - file://prompts/**/*.py:generate_prompt
-
-  # Call getPrompt() in all JavaScript files
-  - file://prompts/**/*.js:getPrompt
-```
-
-This allows you to maintain consistent function interfaces across multiple prompt files while using glob patterns for automatic discovery.
+Wildcards like `path/to/prompts/**/*.py:func_name` are also supported.
 
 ## Chat Format (JSON)
 
