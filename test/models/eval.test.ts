@@ -449,21 +449,13 @@ describe('evaluator', () => {
 
     it('should filter by specific metrics', async () => {
       // This test requires setting up results with named scores in the eval factory
-      const result = await evalWithResults.getTablePage({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        ],
-      });
+      const metricName = 'accuracy';
+      const result = await evalWithResults.getTablePage({ metricFilter: metricName });
 
       // All results should have the specified metric
       for (const row of result.body) {
         const hasMetric = row.outputs.some(
-          (output) => output.namedScores && output.namedScores['accuracy'] !== undefined,
+          (output) => output.namedScores && output.namedScores[metricName] !== undefined,
         );
         expect(hasMetric).toBe(true);
       }
@@ -473,50 +465,13 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({
         filterMode: 'passes',
         searchQuery: 'searchable_content',
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'relevance',
-          }),
-        ],
+        metricFilter: 'relevance',
         limit: 10,
       });
 
       // Results should satisfy all conditions and respect limit
       expect(result.body.length).toBeLessThanOrEqual(10);
       expect(result.filteredCount).toBeLessThan(result.totalCount);
-    });
-
-    it('should be filterable by multiple metrics', async () => {
-      const result = await evalWithResults.getTablePage({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'or',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-          JSON.stringify({
-            logicOperator: 'or',
-            type: 'metric',
-            operator: 'equals',
-            value: 'relevance',
-          }),
-        ],
-      });
-
-      // Row should have at least one of the metrics
-      for (const row of result.body) {
-        const hasMetric1 = row.outputs.some(
-          (output) => output.namedScores && output.namedScores['accuracy'] !== undefined,
-        );
-        const hasMetric2 = row.outputs.some(
-          (output) => output.namedScores && output.namedScores['relevance'] !== undefined,
-        );
-        expect(hasMetric1 || hasMetric2).toBe(true);
-      }
     });
 
     it('should return correct counts for filtered results', async () => {
