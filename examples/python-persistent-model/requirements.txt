@@ -1,0 +1,10 @@
+# Server dependencies
+flask==3.0.0
+flask-cors==4.0.0
+transformers==4.36.0
+torch>=2.0.0
+accelerate==0.25.0  # For device_map="auto" support
+
+# Client dependencies (for provider.py)
+requests==2.31.0
+backoff==2.2.1 

@@ -599,6 +599,14 @@ def call_api(prompt, options, context):
 
 :::
 
+:::warning
+**Important for Local Models**: The Python provider creates a new process for each evaluation, which means models are loaded into memory for every request. For local models like Hugging Face transformers, this can be extremely inefficient.
+
+**Recommended**: Use production inference servers like **vLLM**, **Ollama**, or **TGI** instead. They're optimized for LLM serving with features like continuous batching, PagedAttention, and efficient memory management.
+
+For details and alternatives, see our [**Persistent Model Loading Guide**](/docs/guides/persistent-model-loading).
+:::
+
 ## Migration Guide
 
 ### From HTTP Provider

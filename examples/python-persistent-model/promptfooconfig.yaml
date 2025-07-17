@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Persistent model loading example
+
+providers:
+  - id: file://provider.py
+    label: Llama (Persistent)
+    config:
+      server_url: ${MODEL_SERVER_URL:-http://localhost:5000}
+      max_length: 150
+      temperature: 0.8
+      top_p: 0.95
+      timeout: 30  # timeout in seconds
+      max_retries: 3
+
+prompts:
+  - 'Write a creative story about {{topic}}:'
+  - 'Generate a poem about {{topic}}:'
+  - 'Describe {{topic}} in a fantasy setting:'
+
+tests:
+  - vars:
+      topic: 'a robot learning to paint'
+    assert:
+      - type: contains
+        value: 'robot'
+      - type: javascript
+        value: 'output.length > 50'
+
+  - vars:
+      topic: 'a magical forest'
+    assert:
+      - type: contains-any
+        value: ['forest', 'tree', 'magical', 'enchanted']
+      - type: javascript
+        value: 'output.length > 50'
+
+  - vars:
+      topic: 'time travel paradoxes'
+    assert:
+      - type: contains-any
+        value: ['time', 'paradox', 'past', 'future']
+      - type: javascript
+        value: 'output.length > 50'
+
+  - vars:
+      topic: 'an underwater city'
+    assert:
+      - type: contains-any
+        value: ['water', 'ocean', 'sea', 'underwater', 'city']
+      - type: javascript
+        value: 'output.length > 50'
