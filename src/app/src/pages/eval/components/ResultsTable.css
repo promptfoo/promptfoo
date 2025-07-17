@@ -6,11 +6,15 @@ pre {
   font-weight: bold;
 }
 
+.results-table-container {
+  overflow: scroll;
+  margin: 1rem -1rem 0 -1rem;
+  padding: 0 1rem;
+}
+
 table.results-table,
 .divTable {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1rem 0;
+  min-width: 100%;
   background-color: #fff;
 }
 
@@ -102,8 +106,7 @@ table.results-table,
 
 @-moz-document url-prefix() {
   /* Firefox fix */
-  .results-table td,
-  .results-table th {
+  .results-table td {
     height: 100%;
   }
 }
@@ -203,7 +206,6 @@ table.results-table,
 /* Table-within-a-cell, used for markdown tables */
 .results-table tr .cell table {
   width: 100%;
-  border-collapse: collapse;
   margin: 1rem 0;
 }
 
@@ -245,6 +247,7 @@ table.results-table,
 
 .results-table th .prompt-container {
   font-weight: bold;
+  font-size: 15px;
   margin-bottom: 0.5rem;
 }
 
@@ -406,10 +409,6 @@ table.results-table,
   border-left: 2px solid #888;
 }
 
-.results-table td.first-prompt-row {
-  border-top: 2px solid #888;
-}
-
 .search-highlight {
   color: var(--search-text-color);
   background-color: var(--search-highlight-color);
@@ -525,7 +524,6 @@ thead.collapsed .header-dismiss {
 
 /* Add these additional styles */
 .results-table {
-  border-collapse: separate;
   border-spacing: 0;
 }
 
