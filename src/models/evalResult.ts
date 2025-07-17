@@ -1,17 +1,17 @@
 import { randomUUID } from 'crypto';
-import { and, eq, gte, lt, inArray } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
 import type {
+  ApiProvider,
   AtomicTestCase,
   GradingResult,
   Prompt,
   ProviderOptions,
   ProviderResponse,
   ResultFailureReason,
-  ApiProvider,
 } from '../types';
 import { type EvaluateResult } from '../types';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -114,13 +114,18 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
+    db.transaction((tx) => {
       for (const result of results) {
-        const dbResult = await tx
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
+        const insertedId = randomUUID();
+        const insertData = {
+          ...result,
+          evalId,
+          id: insertedId,
+          response: result.response ?? null, // Convert undefined to null
+          gradingResult: result.gradingResult ?? null, // Convert undefined to null
+        };
+        tx.insert(evalResultsTable).values(insertData).run();
+        returnResults.push(new EvalResult({ ...insertData, persisted: true }));
       }
     });
     return returnResults;

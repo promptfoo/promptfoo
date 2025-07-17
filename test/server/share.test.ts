@@ -23,7 +23,7 @@ describe('share', () => {
       try {
         const eval_ = await Eval.findById(evalId);
         await eval_?.delete();
-      } catch (error) {
+      } catch (_error) {
         // Ignore cleanup errors - eval might already be deleted
       }
     }
@@ -35,7 +35,7 @@ describe('share', () => {
       try {
         const eval_ = await Eval.findById(evalId);
         await eval_?.delete();
-      } catch (error) {
+      } catch (_error) {
         // Ignore cleanup errors
       }
     }
