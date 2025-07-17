@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -8,6 +9,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -54,6 +56,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
     response: string;
   }>;
   totalSuccessfulAttacks?: number;
+  storedGraderResult?: GradingResult;
 }
 
 /**
@@ -241,6 +244,7 @@ export class CrescendoProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
+    let storedGraderResult: any = undefined;
 
     let exitReason:
       | 'Grader failed'
@@ -268,7 +272,9 @@ export class CrescendoProvider implements ApiProvider {
       content: systemPrompt,
     });
 
-    const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    const assertToUse = test?.assert?.find(
+      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+    );
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
@@ -431,7 +437,9 @@ export class CrescendoProvider implements ApiProvider {
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             );
+
             graderPassed = grade.pass;
+            storedGraderResult = grade;
             if (grade.tokensUsed) {
               totalTokenUsage.total += grade.tokensUsed.total || 0;
               totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
@@ -444,6 +452,23 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         logger.debug(`[Crescendo] graderPassed: ${graderPassed}`);
+
+        if (graderPassed === false) {
+          this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
+
+          // Only break early if continueAfterSuccess is false
+          if (this.config.continueAfterSuccess) {
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via External Grader at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
+            );
+          } else {
+            exitReason = 'Grader failed';
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via External Grader, EXITING at ROUND ${roundNum}`,
+            );
+            break;
+          }
+        }
 
         const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output);
         if (evalTokenUsage) {
@@ -464,6 +489,12 @@ export class CrescendoProvider implements ApiProvider {
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
+          storedGraderResult = {
+            pass: false,
+            score: 0,
+            reason: objectiveScore?.rationale || 'Jailbreak goal achieved',
+          };
+
           // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
             logger.debug(
@@ -473,23 +504,6 @@ export class CrescendoProvider implements ApiProvider {
             exitReason = 'Internal evaluator success';
             logger.debug(
               `[Crescendo] Jailbreak Successful via Internal Evaluator, EXITING at ROUND ${roundNum}`,
-            );
-            break;
-          }
-        }
-
-        if (graderPassed === false) {
-          this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
-
-          // Only break early if continueAfterSuccess is false
-          if (this.config.continueAfterSuccess) {
-            logger.debug(
-              `[Crescendo] Jailbreak Successful via External Grader at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
-            );
-          } else {
-            exitReason = 'Grader failed';
-            logger.debug(
-              `[Crescendo] Jailbreak Successful via External Grader, EXITING at ROUND ${roundNum}`,
             );
             break;
           }
@@ -538,6 +552,7 @@ export class CrescendoProvider implements ApiProvider {
         redteamHistory: messagesToRedteamHistory(messages),
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
+        storedGraderResult,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
