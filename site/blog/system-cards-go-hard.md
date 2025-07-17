@@ -2,7 +2,7 @@
 title: 'System Cards Go Hard'
 description: 'Understanding LLM system cards and their importance for responsible AI deployment'
 authors: [tabs]
-tags: [llm-system-card, ai-safety, model-transparency, openai, anthropic]
+tags: [research-analysis, best-practices, openai, anthropic]
 keywords: [llm system card, AI safety documentation, model transparency, responsible AI]
 date: 2025-07-15
 image: /img/blog/system-cards-hero.jpg
