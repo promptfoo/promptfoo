@@ -5,9 +5,6 @@ import { createApp } from '../../src/server/server';
 import results_v3 from './v3evalToShare.json';
 import results_v4 from './v4evalToShare.json';
 
-// Increase Jest timeout for all tests in this file
-jest.setTimeout(30000);
-
 describe('share', () => {
   let app: ReturnType<typeof createApp>;
   const testEvalIds = new Set<string>();
@@ -22,26 +19,36 @@ describe('share', () => {
 
   afterAll(async () => {
     // Clean up only the specific evals we created during tests
-    for (const evalId of testEvalIds) {
+    const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
       try {
         const eval_ = await Eval.findById(evalId);
-        await eval_?.delete();
+        if (eval_) {
+          await eval_.delete();
+        }
       } catch (error) {
-        // Ignore cleanup errors - eval might already be deleted
+        // Log errors instead of silently ignoring them
+        console.error(`Failed to cleanup eval ${evalId} in afterAll:`, error);
       }
-    }
+    });
+
+    await Promise.allSettled(cleanupPromises);
   });
 
   afterEach(async () => {
     // Clean up evals created in the current test
-    for (const evalId of testEvalIds) {
+    const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
       try {
         const eval_ = await Eval.findById(evalId);
-        await eval_?.delete();
+        if (eval_) {
+          await eval_.delete();
+        }
       } catch (error) {
-        // Ignore cleanup errors
+        // Log errors instead of silently ignoring them
+        console.error(`Failed to cleanup eval ${evalId} in afterEach:`, error);
       }
-    }
+    });
+
+    await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
   });
 

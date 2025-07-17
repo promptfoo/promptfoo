@@ -12,13 +12,6 @@ vi.mock('./store', () => ({
     table: null,
     version: 4,
     fetchEvalData: vi.fn(),
-    filters: {
-      values: {},
-      appliedCount: 0,
-      options: {
-        metric: [],
-      },
-    },
   })),
   useResultsViewSettingsStore: vi.fn(() => ({
     inComparisonMode: false,
@@ -123,13 +116,6 @@ describe('ResultsTable Metrics Display', () => {
       version: 4,
       renderMarkdown: true,
       fetchEvalData: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
   });
 
@@ -191,13 +177,6 @@ describe('ResultsTable Metrics Display', () => {
       version: 4,
       renderMarkdown: true,
       fetchEvalData: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -245,13 +224,6 @@ describe('ResultsTable Metrics Display', () => {
         version: 4,
         renderMarkdown: true,
         fetchEvalData: vi.fn(),
-        filters: {
-          values: {},
-          appliedCount: 0,
-          options: {
-            metric: [],
-          },
-        },
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -272,13 +244,6 @@ describe('ResultsTable Metrics Display', () => {
         table: mockTableWithObjectVar,
         version: 4,
         fetchEvalData: vi.fn(),
-        filters: {
-          values: {},
-          appliedCount: 0,
-          options: {
-            metric: [],
-          },
-        },
       }));
 
       vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
@@ -303,13 +268,6 @@ describe('ResultsTable Metrics Display', () => {
         table: mockTableWithLongVar,
         version: 4,
         fetchEvalData: vi.fn(),
-        filters: {
-          values: {},
-          appliedCount: 0,
-          options: {
-            metric: [],
-          },
-        },
       }));
 
       vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
@@ -336,13 +294,6 @@ describe('ResultsTable Metrics Display', () => {
         version: 4,
         renderMarkdown: true,
         fetchEvalData: vi.fn(),
-        filters: {
-          values: {},
-          appliedCount: 0,
-          options: {
-            metric: [],
-          },
-        },
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -559,13 +510,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       fetchEvalData: vi.fn(),
       isFetching: false,
       filteredResultsCount: 1,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     };
 
     vi.mocked(useTableStore).mockImplementation(() => mockStore);
@@ -640,13 +584,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       fetchEvalData: vi.fn(),
       isFetching: false,
       filteredResultsCount: 1,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
 
     render(<ResultsTable {...defaultProps} />);
@@ -683,13 +620,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       fetchEvalData: vi.fn(),
       isFetching: false,
       filteredResultsCount: 1,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
 
     render(<ResultsTable {...defaultProps} />);
@@ -771,13 +701,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       fetchEvalData: vi.fn(),
       isFetching: false,
       filteredResultsCount: 1,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
 
     render(<ResultsTable {...defaultProps} />);
@@ -856,13 +779,6 @@ describe('ResultsTable handleRating', () => {
       version: 4,
       renderMarkdown: true,
       fetchEvalData: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
   });
 
@@ -964,13 +880,6 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
       fetchEvalData: vi.fn(),
       isFetching: false,
       filteredResultsCount: 1,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
 
     render(<ResultsTable {...defaultProps} />);
@@ -1084,13 +993,6 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
       fetchEvalData: vi.fn(),
       isFetching: false,
       filteredResultsCount: 1,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
     }));
 
     render(<ResultsTable {...defaultProps} />);
