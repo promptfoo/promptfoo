@@ -179,7 +179,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
-  zoom
+  zoom,
 }: ResultsTableProps) {
   const {
     evalId,

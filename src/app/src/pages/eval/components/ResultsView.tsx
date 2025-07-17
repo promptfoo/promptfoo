@@ -628,7 +628,9 @@ export default function ResultsView({
                   value={resultsTableZoom}
                   onMouseEnter={() => setRenderZoomTooltip(true)}
                   onMouseLeave={() => setRenderZoomTooltip(false)}
-                  onChange={(e: SelectChangeEvent<number>) => setResultsTableZoom(e.target.value as number)}
+                  onChange={(e: SelectChangeEvent<number>) =>
+                    setResultsTableZoom(e.target.value as number)
+                  }
                   onOpen={() => setRenderZoomTooltip(false)}
                   sx={{ minWidth: 100 }}
                 >
