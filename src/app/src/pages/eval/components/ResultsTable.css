@@ -7,9 +7,9 @@ pre {
 }
 
 .results-table-container {
-  overflow: scroll;
-  margin: 1rem -1rem 0 -1rem;
-  padding: 0 1rem;
+  overflow: visible; /* Let parent Box handle scrolling */
+  margin: 1rem 0 0 0;
+  padding: 0;
 }
 
 table.results-table,

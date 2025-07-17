@@ -629,7 +629,7 @@ function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: Resu
   ] = useState(false);
 
   // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
-  // non-null.
+  // non-null and having valid scores.
   const { table, evalId } = useTableStore();
 
   // TODO(Will): Release performance over time chart; it's been hidden for 10 months.
@@ -665,20 +665,12 @@ function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: Resu
   //   );
   // }
 
+  // Parent component already checks for valid scores, so we can trust that charts are renderable
   const scores = table!.body
     .flatMap((row) => row.outputs.map((output) => output?.score))
     .filter((score) => typeof score === 'number' && !Number.isNaN(score));
 
-  if (scores.length === 0) {
-    // No valid scores available
-    return null;
-  }
-
   const scoreSet = new Set(scores);
-  if (scoreSet.size === 1) {
-    // All scores are the same, charts not useful.
-    return null;
-  }
 
   const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 

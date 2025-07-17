@@ -468,9 +468,32 @@ export default function ResultsView({
 
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
 
-  // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
-  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
-  const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
+  // Check if charts can be rendered based on data availability
+  const canRenderResultsCharts = React.useMemo(() => {
+    if (!table || !config || table.head.prompts.length <= 1) {
+      return false;
+    }
+
+    // Check if there are valid scores in the data
+    const scores = table.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+
+    if (scores.length === 0) {
+      return false;
+    }
+
+    // Check if all scores are the same (charts not useful)
+    const scoreSet = new Set(scores);
+    if (scoreSet.size === 1) {
+      return false;
+    }
+
+    return true;
+  }, [table, config]);
+
+  // Initialize charts visibility based on whether they can be rendered (not viewport height)
+  const [renderResultsCharts, setRenderResultsCharts] = React.useState(false);
 
   return (
     <>
@@ -479,12 +502,11 @@ export default function ResultsView({
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-          // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-          height: `calc(100vh - 81px)`,
+          height: 'calc(100vh - 81px)', // Account for navigation bar
+          overflow: 'hidden', // Prevent outer container from scrolling
         }}
       >
-        <Box>
+        <Box sx={{ flexShrink: 0 }}>
           <ResponsiveStack
             direction="row"
             mb={3}
@@ -647,14 +669,26 @@ export default function ResultsView({
                 <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
                   Eval actions
                 </Button>
-                {canRenderResultsCharts && (
-                  <Button
-                    onClick={() => setRenderResultsCharts((prev) => !prev)}
-                    variant="text"
-                    startIcon={<BarChartIcon />}
+                {table && config && table.head.prompts.length > 1 && (
+                  <Tooltip 
+                    title={
+                      !canRenderResultsCharts 
+                        ? "Charts cannot be displayed: No valid score data available or all scores are identical" 
+                        : ""
+                    }
+                    placement="bottom"
                   >
-                    {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
-                  </Button>
+                    <span>
+                      <Button
+                        onClick={() => setRenderResultsCharts((prev) => !prev)}
+                        variant="text"
+                        startIcon={<BarChartIcon />}
+                        disabled={!canRenderResultsCharts}
+                      >
+                        {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                      </Button>
+                    </span>
+                  </Tooltip>
                 )}
                 {config && (
                   <Menu
@@ -749,19 +783,22 @@ export default function ResultsView({
             />
           )}
         </Box>
-        <ResultsTable
-          maxTextLength={maxTextLength}
-          columnVisibility={currentColumnState.columnVisibility}
-          wordBreak={wordBreak}
-          showStats={showInferenceDetails}
-          filterMode={filterMode}
-          failureFilter={failureFilter}
-          searchText={searchText}
-          debouncedSearchText={debouncedSearchValue}
-          onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
-        />
+        {/* Table section - grows to fill available space and scrolls */}
+        <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+          <ResultsTable
+            maxTextLength={maxTextLength}
+            columnVisibility={currentColumnState.columnVisibility}
+            wordBreak={wordBreak}
+            showStats={showInferenceDetails}
+            filterMode={filterMode}
+            failureFilter={failureFilter}
+            searchText={searchText}
+            debouncedSearchText={debouncedSearchValue}
+            onFailureFilterToggle={handleFailureFilterToggle}
+            onSearchTextChange={handleSearchTextChange}
+            setFilterMode={setFilterMode}
+          />
+        </Box>
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
