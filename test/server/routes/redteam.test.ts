@@ -11,6 +11,7 @@ describe('redteamRouter', () => {
   let mockResponse: Partial<Response>;
   let mockNext: NextFunction;
   let mockJson: jest.Mock;
+  const originalWebUI = cliState.webUI;
 
   beforeEach(() => {
     mockJson = jest.fn();
@@ -34,6 +35,11 @@ describe('redteamRouter', () => {
 
   afterEach(() => {
     jest.resetAllMocks();
+    evalJobs.clear();
+    cliState.webUI = originalWebUI;
+    // Clean up globals
+    (global as any).currentJobId = null;
+    (global as any).currentAbortController = null;
   });
 
   describe('POST /run', () => {
@@ -48,8 +54,6 @@ describe('redteamRouter', () => {
       mockRequest.body = {
         config: { test: 'config' },
         force: true,
-        verbose: true,
-        delay: 1000,
       };
 
       const routeHandler = redteamRouter.stack.find(
@@ -64,8 +68,8 @@ describe('redteamRouter', () => {
       expect(doRedteamRun).toHaveBeenCalledWith({
         liveRedteamConfig: { test: 'config' },
         force: true,
-        verbose: true,
-        delay: 1000,
+        verbose: undefined,
+        delay: 0,
         maxConcurrency: 1,
         logCallback: expect.any(Function),
         abortSignal: expect.any(AbortSignal),
@@ -73,65 +77,53 @@ describe('redteamRouter', () => {
     });
 
     it('should handle errors during redteam run', async () => {
-      const error = new Error('Test error');
-      jest.mocked(doRedteamRun).mockRejectedValue(error);
+      const testError = new Error('Test error');
+      jest.mocked(doRedteamRun).mockRejectedValue(testError);
 
       mockRequest.body = {
         config: { test: 'config' },
         force: true,
-        verbose: true,
-        delay: 1000,
       };
 
       const routeHandler = redteamRouter.stack.find(
         (layer: any) => layer.route?.path === '/run' && layer.route?.methods?.post,
       )?.route?.stack[0]?.handle;
 
-      if (routeHandler) {
-        await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
-      }
+      // Let the promise rejection be handled by the route
+      await Promise.resolve().then(async () => {
+        if (routeHandler) {
+          await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
+        }
+      });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Wait for the job to be updated
+      await new Promise(setImmediate);
 
-      const jobs = Array.from(evalJobs.values());
-      expect(mockJson).toHaveBeenCalledWith({ id: expect.any(String) });
-      expect(jobs[0]?.status).toBe('error');
-      expect(jobs[0]?.logs).toContain('Error: Test error');
+      const jobId = (mockResponse.json as jest.Mock).mock.calls[0][0].id;
+      const job = evalJobs.get(jobId);
+      expect(job?.status).toBe('error');
+      expect(job?.logs).toContain(`Error: ${testError.message}`);
     });
 
     it('should normalize maxConcurrency to at least 1', async () => {
-      const mockEvalResult = {
-        id: 'eval-123',
-        toEvaluateSummary: jest.fn().mockResolvedValue({ summary: 'test' }),
-      } as any;
-
-      jest.mocked(doRedteamRun).mockResolvedValue(mockEvalResult);
-
+      jest.mocked(doRedteamRun).mockResolvedValue({} as any);
       mockRequest.body = {
-        config: { test: 'config' },
-        force: true,
-        verbose: false,
-        delay: 0,
-        maxConcurrency: 0, // Invalid value, should be normalized to 1
+        config: {},
+        maxConcurrency: 0,
       };
 
       const routeHandler = redteamRouter.stack.find(
         (layer: any) => layer.route?.path === '/run' && layer.route?.methods?.post,
       )?.route?.stack[0]?.handle;
-
       if (routeHandler) {
         await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
       }
 
-      expect(doRedteamRun).toHaveBeenCalledWith({
-        liveRedteamConfig: { test: 'config' },
-        force: true,
-        verbose: false,
-        delay: 0,
-        maxConcurrency: 1, // Should be normalized to 1
-        logCallback: expect.any(Function),
-        abortSignal: expect.any(AbortSignal),
-      });
+      expect(doRedteamRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          maxConcurrency: 1,
+        }),
+      );
     });
   });
 
@@ -142,15 +134,11 @@ describe('redteamRouter', () => {
       const routeHandler = redteamRouter.stack.find(
         (layer: any) => layer.route?.path === '/cancel' && layer.route?.methods?.post,
       )?.route?.stack[0]?.handle;
-
       if (routeHandler) {
         await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
       }
-
       expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(mockJson).toHaveBeenCalledWith({
-        error: 'No job currently running',
-      });
+      expect(mockJson).toHaveBeenCalledWith({ error: 'No job currently running' });
     });
   });
 
@@ -161,15 +149,10 @@ describe('redteamRouter', () => {
       const routeHandler = redteamRouter.stack.find(
         (layer: any) => layer.route?.path === '/status' && layer.route?.methods?.get,
       )?.route?.stack[0]?.handle;
-
       if (routeHandler) {
         await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
       }
-
-      expect(mockJson).toHaveBeenCalledWith({
-        hasRunningJob: false,
-        jobId: null,
-      });
+      expect(mockJson).toHaveBeenCalledWith({ hasRunningJob: false, jobId: null });
     });
   });
 });

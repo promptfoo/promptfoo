@@ -7,10 +7,25 @@ import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
 describe('eval routes', () => {
-  const app = createApp();
+  let app: ReturnType<typeof createApp>;
+  const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
     await runDbMigrations();
+  });
+
+  beforeEach(() => {
+    app = createApp();
+  });
+
+  afterEach(async () => {
+    for (const evalId of testEvalIds) {
+      try {
+        const eval_ = await Eval.findById(evalId);
+        await eval_?.delete();
+      } catch (error) {}
+    }
+    testEvalIds.clear();
   });
 
   function createManualRatingPayload(originalResult: any, pass: boolean) {
@@ -31,6 +46,8 @@ describe('eval routes', () => {
   describe('post("/:evalId/results/:id/rating")', () => {
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
       const results = await eval_.getResults();
       const result = results[0];
       expect(eval_.prompts[result.promptIdx].metrics?.assertPassCount).toBe(1);
@@ -68,6 +85,8 @@ describe('eval routes', () => {
 
     it('Passing test and the user changed it to failing', async () => {
       const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
       const results = await eval_.getResults();
       const result = results[0];
       expect(eval_.prompts[result.promptIdx].metrics?.assertPassCount).toBe(1);
@@ -103,6 +122,8 @@ describe('eval routes', () => {
 
     it('Failing test and the user changed it to passing', async () => {
       const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
       const results = await eval_.getResults();
       const result = results[1];
       expect(eval_.prompts[result.promptIdx].metrics?.assertPassCount).toBe(1);
@@ -143,6 +164,8 @@ describe('eval routes', () => {
 
     it('Failing test and the user marked it as failing (no change)', async () => {
       const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
       const results = await eval_.getResults();
       const result = results[1];
       expect(eval_.prompts[result.promptIdx].metrics?.assertPassCount).toBe(1);
