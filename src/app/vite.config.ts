@@ -4,7 +4,6 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
-import 'dotenv/config';
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -83,11 +82,6 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_KEY': JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
-    ),
-    'import.meta.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING': JSON.stringify(
-      process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING
-        ? process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING === 'true'
-        : false,
     ),
   },
 });
