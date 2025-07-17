@@ -9,7 +9,7 @@ interface FeaturedBlogPostProps {
 
 export default function FeaturedBlogPost({ post }: FeaturedBlogPostProps): JSX.Element {
   const { metadata } = post;
-  const { title, date, permalink, tags, description } = metadata;
+  const { title, date, permalink, description } = metadata;
   const author = metadata.authors[0];
 
   return (
@@ -18,7 +18,6 @@ export default function FeaturedBlogPost({ post }: FeaturedBlogPostProps): JSX.E
         <div className={styles.featuredBadge}>Featured</div>
         <div className={styles.featuredPostContent}>
           <div className={styles.featuredPostHeader}>
-            {tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>}
             <h2 className={styles.title}>{title}</h2>
           </div>
           <div className={styles.featuredPostMeta}>

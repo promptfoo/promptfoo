@@ -9,7 +9,7 @@ interface BlogPostCardProps {
 
 export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
   const { metadata } = post;
-  const { title, date, permalink, tags, description } = metadata;
+  const { title, date, permalink, description } = metadata;
   const author = metadata.authors[0];
 
   return (
@@ -20,7 +20,6 @@ export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
         </div>
       )}
       <div className={styles.blogPostContent}>
-        {/*tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>*/}
         <h3 className={styles.title}>{title}</h3>
         <div className={styles.blogPostMeta}>
           {author && (

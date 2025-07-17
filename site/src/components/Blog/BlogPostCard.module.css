@@ -48,23 +48,7 @@
   flex-direction: column;
 }
 
-.tag {
-  display: inline-block;
-  background-color: var(--ifm-color-primary);
-  color: var(--ifm-color-white);
-  padding: 0.25rem 0.5rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: bold;
-  margin-bottom: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  transition: background-color 0.3s ease;
-}
 
-.blogPostCard:hover .tag {
-  background-color: var(--ifm-color-primary-dark);
-}
 
 .title {
   font-size: 1.3rem;

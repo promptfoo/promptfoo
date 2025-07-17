@@ -41,18 +41,7 @@
   margin-bottom: 1.5rem;
 }
 
-.tag {
-  display: inline-block;
-  background-color: var(--ifm-color-primary);
-  color: var(--ifm-color-white);
-  padding: 0.35rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  margin-bottom: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+
 
 .title {
   font-size: 2.5rem;
