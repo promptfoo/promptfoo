@@ -9,6 +9,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -55,7 +56,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
     response: string;
   }>;
   totalSuccessfulAttacks?: number;
-  storedGraderResult?: any;
+  storedGraderResult?: GradingResult;
 }
 
 /**
@@ -491,7 +492,7 @@ export class CrescendoProvider implements ApiProvider {
           storedGraderResult = {
             pass: false,
             score: 0,
-            reason: objectiveScore?.rationale || 'Internal evaluator detected successful attack',
+            reason: objectiveScore?.rationale || 'Jailbreak goal achieved',
           };
 
           // Only break early if continueAfterSuccess is false
