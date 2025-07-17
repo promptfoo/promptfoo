@@ -50,7 +50,6 @@ describe('providers router', () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue(mockResult),
-        getSessionId: jest.fn().mockReturnValue('test-session'),
       } as any;
 
       jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
@@ -62,21 +61,13 @@ describe('providers router', () => {
 
       jest.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(mockResponse));
 
-      const response = await request(app)
-        .post('/test')
-        .send({
-          id: 'test-provider',
-          config: {
-            sessionSource: 'client',
-          },
-        });
+      const response = await request(app).post('/test').send({
+        id: 'test-provider',
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.testResult).toEqual({ success: true });
-      expect(response.body.providerResponse).toMatchObject({
-        ...mockResult,
-        sessionId: 'test-session',
-      });
+      expect(response.body.providerResponse).toEqual(mockResult);
     });
 
     it('should handle provider API errors', async () => {
@@ -148,79 +139,6 @@ describe('providers router', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.testResult.error).toContain('Error evaluating');
-    });
-
-    it('should use client-generated sessionId if sessionSource is client and getSessionId is not defined', async () => {
-      const mockResult = {
-        raw: 'test raw',
-        output: 'test output',
-        metadata: {
-          headers: {},
-        },
-      };
-
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockImplementation((_prompt, opts) => {
-          // The sessionId should be present in opts.vars
-          expect(opts.vars.sessionId).toBeDefined();
-          return Promise.resolve(mockResult);
-        }),
-        // getSessionId is undefined
-      } as any;
-
-      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-
-      const mockResponse = new Response(JSON.stringify({ result: 'ok' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      jest.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(mockResponse));
-
-      const response = await request(app)
-        .post('/test')
-        .send({
-          id: 'test-provider',
-          config: {
-            sessionSource: 'client',
-          },
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.providerResponse.sessionId).toBeDefined();
-    });
-
-    it('should not include sessionId if not present in provider or client config', async () => {
-      const mockResult = {
-        raw: 'test raw',
-        output: 'test output',
-        metadata: {
-          headers: {},
-        },
-      };
-
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue(mockResult),
-        // getSessionId is undefined
-      } as any;
-
-      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-
-      const mockResponse = new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      jest.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(mockResponse));
-
-      const response = await request(app).post('/test').send({
-        id: 'test-provider',
-      });
-
-      expect(response.status).toBe(200);
-      expect(response.body.providerResponse.sessionId).toBeUndefined();
     });
   });
 

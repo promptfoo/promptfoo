@@ -5,9 +5,6 @@ import { createApp } from '../../src/server/server';
 import results_v3 from './v3evalToShare.json';
 import results_v4 from './v4evalToShare.json';
 
-// Increase Jest timeout for all tests in this file
-jest.setTimeout(30000);
-
 describe('share', () => {
   let app: ReturnType<typeof createApp>;
   const testEvalIds = new Set<string>();
