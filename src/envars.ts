@@ -85,6 +85,11 @@ type EnvVars = {
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
+  PROMPTFOO_PFX_CERT_PATH?: string;
+  PROMPTFOO_PFX_PASSWORD?: string;
+  PROMPTFOO_JKS_CERT_PATH?: string;
+  PROMPTFOO_JKS_PASSWORD?: string;
+  PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
   // HTTP proxy settings
