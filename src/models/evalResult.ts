@@ -122,6 +122,7 @@ export default class EvalResult {
           evalId,
           id: insertedId,
           response: result.response ?? null, // Convert undefined to null
+          gradingResult: result.gradingResult ?? null, // Convert undefined to null
         };
         tx.insert(evalResultsTable).values(insertData).run();
         returnResults.push(new EvalResult({ ...insertData, persisted: true }));
