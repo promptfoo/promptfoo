@@ -140,15 +140,24 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
-// TODO(Will): This is deprecated; remove it.
 function useScrollHandler() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { stickyHeader } = useResultsViewSettingsStore();
   const lastScrollY = useRef(0);
 
   useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
+    const handleScroll = (event: Event) => {
+      let currentScrollY: number;
+      
+      if (stickyHeader) {
+        // When sticky header is enabled, scrolling happens within the table container
+        const target = event.target as HTMLElement;
+        currentScrollY = target.scrollTop;
+      } else {
+        // When sticky header is disabled, scrolling happens on the window
+        currentScrollY = window.scrollY;
+      }
+      
       const shouldCollapse = currentScrollY > 500;
 
       if (shouldCollapse !== isCollapsed || currentScrollY < 100) {
@@ -159,6 +168,14 @@ function useScrollHandler() {
     };
 
     if (stickyHeader) {
+      // Listen to scroll events on the table container when sticky header is enabled
+      const tableContainer = document.querySelector('.results-table-container');
+      if (tableContainer) {
+        tableContainer.addEventListener('scroll', handleScroll, { passive: true });
+        return () => tableContainer.removeEventListener('scroll', handleScroll);
+      }
+    } else {
+      // Listen to window scroll events when sticky header is disabled
       window.addEventListener('scroll', handleScroll, { passive: true });
       return () => window.removeEventListener('scroll', handleScroll);
     }
