@@ -19,26 +19,36 @@ describe('share', () => {
 
   afterAll(async () => {
     // Clean up only the specific evals we created during tests
-    for (const evalId of testEvalIds) {
+    const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
       try {
         const eval_ = await Eval.findById(evalId);
-        await eval_?.delete();
+        if (eval_) {
+          await eval_.delete();
+        }
       } catch (error) {
-        // Ignore cleanup errors - eval might already be deleted
+        // Log errors instead of silently ignoring them
+        console.error(`Failed to cleanup eval ${evalId} in afterAll:`, error);
       }
-    }
+    });
+
+    await Promise.allSettled(cleanupPromises);
   });
 
   afterEach(async () => {
     // Clean up evals created in the current test
-    for (const evalId of testEvalIds) {
+    const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
       try {
         const eval_ = await Eval.findById(evalId);
-        await eval_?.delete();
+        if (eval_) {
+          await eval_.delete();
+        }
       } catch (error) {
-        // Ignore cleanup errors
+        // Log errors instead of silently ignoring them
+        console.error(`Failed to cleanup eval ${evalId} in afterEach:`, error);
       }
-    }
+    });
+
+    await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
   });
 
