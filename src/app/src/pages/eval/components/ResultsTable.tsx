@@ -140,48 +140,27 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
-function useScrollHandler() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const { stickyHeader } = useResultsViewSettingsStore();
-  const lastScrollY = useRef(0);
+
+/**
+ * Returns the scroll vertical position of a component.
+ * @param ref - The ref to the component.
+ * @returns The scroll vertical position of the component.
+ */
+function useScrollY(ref: React.RefObject<HTMLElement>): number {
+  const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
-    const handleScroll = (event: Event) => {
-      let currentScrollY: number;
-      
-      if (stickyHeader) {
-        // When sticky header is enabled, scrolling happens within the table container
-        const target = event.target as HTMLElement;
-        currentScrollY = target.scrollTop;
-      } else {
-        // When sticky header is disabled, scrolling happens on the window
-        currentScrollY = window.scrollY;
-      }
-      
-      const shouldCollapse = currentScrollY > 200;
-
-      if (shouldCollapse !== isCollapsed || currentScrollY < 100) {
-        setIsCollapsed(shouldCollapse);
-      }
-
-      lastScrollY.current = currentScrollY;
-    };
-
-    if (stickyHeader) {
-      // Listen to scroll events on the table container when sticky header is enabled
-      const tableContainer = document.querySelector('.results-table-container');
-      if (tableContainer) {
-        tableContainer.addEventListener('scroll', handleScroll, { passive: true });
-        return () => tableContainer.removeEventListener('scroll', handleScroll);
-      }
-    } else {
-      // Listen to window scroll events when sticky header is disabled
-      window.addEventListener('scroll', handleScroll, { passive: true });
-      return () => window.removeEventListener('scroll', handleScroll);
+    const handleScroll = () => {
+      setScrollY(ref.current?.scrollTop || 0);
     }
-  }, [stickyHeader]);
 
-  return { isCollapsed };
+    if (ref.current) {
+      ref.current.addEventListener('scroll', handleScroll, { passive: true });
+      return () => ref.current?.removeEventListener('scroll', handleScroll);
+    }
+  }, [ref]);
+
+  return scrollY;
 }
 
 function ResultsTable({
@@ -932,7 +911,6 @@ function ResultsTable({
     enableColumnResizing: true,
   });
 
-  const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
   const clearRowIdFromUrl = React.useCallback(() => {
@@ -1031,6 +1009,14 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const containerScrollY = useScrollY(containerRef);
+  const isHeaderCollapsed = containerScrollY > 200;
+
+  // TODO: Resume here – my hypothesis is that the container height is changing when the header is collapsed, causing the scroll position to change.
+  // Thus the recursive loop I'm observing when scroll is within a certain range.
+  console.log('isHeaderCollapsed (scrollY)', containerScrollY, isHeaderCollapsed);
+
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
     // of this component. This ensures that the pagination footer is always pinned to the bottom
@@ -1074,7 +1060,7 @@ function ResultsTable({
           </Box>
         )}
 
-      <div className="results-table-container" style={{ zoom }}>
+      <div className="results-table-container" style={{ zoom }} ref={containerRef}>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1082,8 +1068,8 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
-          <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
-            {stickyHeader && isCollapsed && (
+          <thead className={`${isHeaderCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
+            {stickyHeader && isHeaderCollapsed && (
               <div className="header-dismiss">
                 <IconButton
                   onClick={() => setStickyHeader(false)}
