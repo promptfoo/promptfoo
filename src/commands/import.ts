@@ -34,7 +34,8 @@ export function importCommand(program: Command) {
   program
     .command('import <file>')
     .description('Import an eval record from a JSON file')
-    .action(async (file) => {
+    .option('-f, --force', 'Overwrite existing evaluation if it already exists')
+    .action(async (file, options) => {
       const db = getDb();
       let evalId: string;
       try {
@@ -50,6 +51,17 @@ export function importCommand(program: Command) {
 
           // Use the evalId from the file or generate a new one
           evalId = evalData.evalId || createEvalId(new Date());
+
+          // Check if eval already exists
+          const existingEval = await Eval.findById(evalId);
+          if (existingEval && !options.force) {
+            logger.error(`An evaluation with ID ${evalId} already exists.`);
+            logger.info(`Use --force to overwrite the existing evaluation.`);
+            process.exit(1);
+          } else if (existingEval && options.force) {
+            logger.info(`Overwriting existing evaluation with ID ${evalId}`);
+            await existingEval.delete();
+          }
 
           if (resultsData.version === 3) {
             logger.debug('Importing v3 eval from OutputFile');
@@ -111,6 +123,18 @@ export function importCommand(program: Command) {
               evalData.id ||
               evalData.evalId ||
               createEvalId(new Date(evalData.createdAt || Date.now()));
+
+            // Check if eval already exists
+            const existingEval = await Eval.findById(evalId);
+            if (existingEval && !options.force) {
+              logger.error(`An evaluation with ID ${evalId} already exists.`);
+              logger.info(`Use --force to overwrite the existing evaluation.`);
+              process.exit(1);
+            } else if (existingEval && options.force) {
+              logger.info(`Overwriting existing evaluation with ID ${evalId}`);
+              await existingEval.delete();
+            }
+
             await Eval.create(
               evalData.config || {},
               resultsData.prompts || evalData.prompts || [],
@@ -132,6 +156,18 @@ export function importCommand(program: Command) {
               evalData.id ||
               evalData.evalId ||
               createEvalId(new Date(evalData.createdAt || Date.now()));
+
+            // Check if eval already exists
+            const existingEval = await Eval.findById(evalId);
+            if (existingEval && !options.force) {
+              logger.error(`An evaluation with ID ${evalId} already exists.`);
+              logger.info(`Use --force to overwrite the existing evaluation.`);
+              process.exit(1);
+            } else if (existingEval && options.force) {
+              logger.info(`Overwriting existing evaluation with ID ${evalId}`);
+              await existingEval.delete();
+            }
+
             await db
               .insert(evalsTable)
               .values({
@@ -153,6 +189,17 @@ export function importCommand(program: Command) {
 
           // Generate or use existing ID
           evalId = evalData.id || createEvalId(new Date(evalData.timestamp || Date.now()));
+
+          // Check if eval already exists
+          const existingEval = await Eval.findById(evalId);
+          if (existingEval && !options.force) {
+            logger.error(`An evaluation with ID ${evalId} already exists.`);
+            logger.info(`Use --force to overwrite the existing evaluation.`);
+            process.exit(1);
+          } else if (existingEval && options.force) {
+            logger.info(`Overwriting existing evaluation with ID ${evalId}`);
+            await existingEval.delete();
+          }
 
           // Create eval using Eval.create
           await Eval.create(
@@ -178,6 +225,17 @@ export function importCommand(program: Command) {
           // For v2, the entire structure goes into results
           evalId = evalData.id || createEvalId(new Date(evalData.timestamp || Date.now()));
 
+          // Check if eval already exists
+          const existingEval = await Eval.findById(evalId);
+          if (existingEval && !options.force) {
+            logger.error(`An evaluation with ID ${evalId} already exists.`);
+            logger.info(`Use --force to overwrite the existing evaluation.`);
+            process.exit(1);
+          } else if (existingEval && options.force) {
+            logger.info(`Overwriting existing evaluation with ID ${evalId}`);
+            await existingEval.delete();
+          }
+
           await db
             .insert(evalsTable)
             .values({
@@ -196,6 +254,17 @@ export function importCommand(program: Command) {
           // Try to extract ID from various possible locations
           const timestamp = evalData.createdAt || evalData.timestamp || new Date().toISOString();
           evalId = evalData.id || evalData.evalId || createEvalId(new Date(timestamp));
+
+          // Check if eval already exists
+          const existingEval = await Eval.findById(evalId);
+          if (existingEval && !options.force) {
+            logger.error(`An evaluation with ID ${evalId} already exists.`);
+            logger.info(`Use --force to overwrite the existing evaluation.`);
+            process.exit(1);
+          } else if (existingEval && options.force) {
+            logger.info(`Overwriting existing evaluation with ID ${evalId}`);
+            await existingEval.delete();
+          }
 
           // Determine if this looks like a results object or a full eval object
           const hasResults =
@@ -240,6 +309,7 @@ export function importCommand(program: Command) {
               `Import failed: An evaluation with this ID already exists. The eval may have already been imported.`,
             );
             logger.error(`Error details: ${error.message}`);
+            logger.info(`Use --force to overwrite the existing evaluation.`);
           } else {
             logger.error(`Failed to import eval: ${error.message}`);
           }

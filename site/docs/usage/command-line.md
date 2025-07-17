@@ -180,6 +180,12 @@ Deletes a specific resource.
 
 Import an eval record from JSON format.
 
+**Options:**
+
+| Option        | Description                                        |
+| ------------- | -------------------------------------------------- |
+| `-f, --force` | Overwrite existing evaluation if it already exists |
+
 **Example:**
 
 ```bash
@@ -188,6 +194,9 @@ promptfoo import eval-results.json
 
 # Import with verbose logging
 promptfoo import -v eval-results.json
+
+# Force overwrite if evaluation already exists
+promptfoo import --force eval-results.json
 ```
 
 The imported evaluation will be stored in your local database and can be viewed using `promptfoo view`.
