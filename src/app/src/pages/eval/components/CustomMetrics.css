@@ -18,17 +18,14 @@
   background-color: var(--surface-color, #f8f9fa);
   border: 1px solid var(--border-color, #e9ecef);
   transition: all 0.15s ease-in-out;
-  cursor: pointer;
   position: relative;
   overflow: hidden;
+  user-select: none;
 }
 
-.metric-chip:hover {
-  background-color: var(--primary-color, #007bff);
-  color: white;
-  border-color: var(--primary-color, #007bff);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px -2px rgba(0, 123, 255, 0.25);
+.metric-chip.filterable:hover {
+  color: #2563eb;
+  cursor: pointer;
 }
 
 .metric-content {
@@ -52,7 +49,7 @@
 .filter-icon {
   font-size: 14px !important;
   opacity: 0.6;
-  transition: all 0.2s ease-in-out;
+  transition: all 0.15s ease-in-out;
 }
 
 .metric-chip:hover .filter-icon {

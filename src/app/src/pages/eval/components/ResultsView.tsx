@@ -574,7 +574,7 @@ export default function ResultsView({
                   anchorEl={filtersButtonRef.current}
                 />
               </>
-            ) : filters.options.metric.length > 0 ? (
+            ) : filters.fields.find(field => field.id === 'metric') ? (
               <MetricFilterSelector />
             ) : null}
 

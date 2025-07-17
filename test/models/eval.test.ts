@@ -541,6 +541,29 @@ describe('evaluator', () => {
       expect(result).toHaveProperty('body');
     });
 
+    it('should filter by metadata fields', async () => {
+      // Test metadata filtering
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: 'model',
+            value: 'gpt-4',
+          }),
+        ],
+      });
+
+      // All results should have the specified metadata field with the expected value
+      for (const row of result.body) {
+        const hasMetadata = row.outputs.some(
+          (output) => output.metadata && output.metadata['model'] === 'gpt-4',
+        );
+        expect(hasMetadata).toBe(true);
+      }
+    });
+
     it('should handle empty result sets', async () => {
       // Create an eval with no results
       const emptyEval = await EvalFactory.create({ numResults: 0 });

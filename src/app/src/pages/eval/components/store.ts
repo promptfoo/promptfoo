@@ -25,7 +25,7 @@ function computeHighlightCount(table: EvaluateTable | null): number {
   }, 0);
 }
 
-function computeAvailableMetrics(table: EvaluateTable | null): string[] {
+function computeAvailableMetrics(table: EvaluateTable | null): FilterableFieldOption[] {
   if (!table || !table.head?.prompts) {
     return [];
   }
@@ -37,7 +37,70 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
     }
   });
 
-  return Array.from(metrics).sort();
+  return Array.from(metrics).map((metric) => ({
+    id: metric,
+    label: metric,
+  }));
+}
+
+/**
+ * Given the table, collects the metadata keys from each test case. Returns a list of the keys
+ * as text fields.
+ * @param table
+ * @returns
+ */
+function computeMetadataOptions(table: EvaluateTable | null): IFilterableField[] {
+  if (!table) {
+    return [];
+  }
+
+  const metadata = new Set<string>();
+
+  table.body.forEach((row) => {
+    Object.keys(row.outputs[0]?.metadata ?? {}).forEach((key) => metadata.add(key));
+  });
+
+  return Array.from(metadata)
+    .filter((key) => !key.startsWith('_'))
+    .map(
+      (key) =>
+        ({
+          id: key,
+          label: key,
+          type: 'text',
+        }) as FilterableTextField,
+    );
+}
+
+/**
+ * Given the table, computes the fields that can be filtered on.
+ * @param table
+ * @returns
+ */
+function makeFilterFields(table: EvaluateTable | null): FilterableField[] {
+  const fields: FilterableField[] = [];
+
+  const metrics = computeAvailableMetrics(table);
+  if (metrics.length > 0) {
+    fields.push({
+      id: 'metric',
+      label: 'Metric',
+      type: 'select',
+      options: metrics,
+    } as FilterableSelectField);
+  }
+
+  const metadata = computeMetadataOptions(table);
+  if (metadata.length > 0) {
+    fields.push({
+      id: 'metadata',
+      label: 'Metadata',
+      type: 'field',
+      options: metadata,
+    } as FilterableFieldField);
+  }
+
+  return fields;
 }
 
 interface FetchEvalOptions {
@@ -59,7 +122,7 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric';
+export type ResultsFilterType = 'metric' | 'metadata';
 
 export type ResultsFilter = {
   /**
@@ -70,7 +133,37 @@ export type ResultsFilter = {
   value: string;
   operator: 'equals';
   logicOperator: 'and' | 'or';
+  /**
+   * For metadata filters, specifies which metadata key to filter on.
+   */
+  field?: string;
 };
+
+type FilterableFieldOption = {
+  id: string;
+  label: string;
+};
+
+export interface IFilterableField {
+  id: string;
+  label: string;
+}
+
+interface FilterableSelectField extends IFilterableField {
+  type: 'select';
+  options: FilterableFieldOption[];
+}
+
+interface FilterableFieldField extends IFilterableField {
+  type: 'field';
+  options: FilterableField[];
+}
+
+interface FilterableTextField extends IFilterableField {
+  type: 'text';
+}
+
+export type FilterableField = FilterableSelectField | FilterableFieldField | FilterableTextField;
 
 interface TableState {
   evalId: string | null;
@@ -109,6 +202,7 @@ interface TableState {
     operator: ResultsFilter['operator'];
     value: string;
     logicOperator?: ResultsFilter['logicOperator'];
+    field?: string;
   }) => void;
 
   /**
@@ -143,12 +237,11 @@ interface TableState {
      * The number of filters that have a value i.e. they're applied.
      */
     appliedCount: number;
+
     /**
-     * The options for each filter type.
+     * The fields that can be filtered on.
      */
-    options: {
-      [key in ResultsFilterType]: string[];
-    };
+    fields: FilterableField[];
   };
 }
 
@@ -246,9 +339,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       highlightedResultsCount: computeHighlightCount(table),
       filters: {
         ...prevState.filters,
-        options: {
-          metric: computeAvailableMetrics(table),
-        },
+        fields: makeFilterFields(table),
       },
     })),
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
@@ -260,9 +351,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         highlightedResultsCount: computeHighlightCount(table),
         filters: {
           ...prevState.filters,
-          options: {
-            metric: computeAvailableMetrics(table),
-          },
+          fields: makeFilterFields(table),
         },
       }));
     } else {
@@ -273,9 +362,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         highlightedResultsCount: computeHighlightCount(results.table),
         filters: {
           ...prevState.filters,
-          options: {
-            metric: computeAvailableMetrics(results.table),
-          },
+          fields: makeFilterFields(results.table),
         },
       }));
     }
@@ -335,6 +422,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             type: filter.type,
             operator: filter.operator,
             value: filter.value,
+            field: filter.field,
           }),
         );
       });
@@ -361,9 +449,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           isFetching: false,
           filters: {
             ...prevState.filters,
-            options: {
-              metric: computeAvailableMetrics(data.table),
-            },
+            fields: makeFilterFields(data.table),
           },
         }));
 
@@ -382,9 +468,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   filters: {
     values: {},
     appliedCount: 0,
-    options: {
-      metric: [],
-    },
+    fields: [],
   },
 
   addFilter: (filter) => {
@@ -403,6 +487,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               id: filterId,
               // Default to 'and' logic operator if not provided.
               logicOperator: filter.logicOperator ?? 'and',
+              field: filter.field,
             },
           },
           appliedCount,
