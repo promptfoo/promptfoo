@@ -1207,6 +1207,7 @@ describe('ResultsTable Empty State', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   it('should display the "No results found for the current filters." message when filteredResultsCount is 0, isFetching is false, and filters.appliedCount is greater than 0', () => {
@@ -1254,6 +1255,7 @@ describe('ResultsTable', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   beforeEach(() => {
@@ -1394,6 +1396,7 @@ describe('ResultsTable Pagination', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   it('should render pagination controls when totalResultsCount is greater than 10', () => {
