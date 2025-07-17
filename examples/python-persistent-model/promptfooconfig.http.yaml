@@ -18,7 +18,7 @@ providers:
           temperature: 0.8
           top_p: 0.95
       transformResponse: 'json.output'
-      timeout: 30000  # timeout in milliseconds
+      timeout: 30000 # timeout in milliseconds
 
 prompts:
   - 'Write a creative story about {{topic}}:'

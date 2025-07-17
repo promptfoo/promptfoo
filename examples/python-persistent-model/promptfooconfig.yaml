@@ -9,7 +9,7 @@ providers:
       max_length: 150
       temperature: 0.8
       top_p: 0.95
-      timeout: 30  # timeout in seconds
+      timeout: 30 # timeout in seconds
       max_retries: 3
 
 prompts:

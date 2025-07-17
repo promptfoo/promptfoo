@@ -13,6 +13,7 @@ When using the Python provider with local models (like Hugging Face transformers
 ## Solution
 
 This example uses a client-server architecture:
+
 1. **Model Server** (`model_server.py`): Loads the Llama model once and serves predictions via HTTP
 2. **Provider Client** (`provider.py`): Sends requests to the server instead of loading the model
 
@@ -33,6 +34,7 @@ python model_server.py
 ```
 
 The server will:
+
 - Load a Llama model (defaults to `meta-llama/Llama-3.2-1B` for demo purposes)
 - Listen on port 5000
 - Keep the model in memory between requests
@@ -67,11 +69,11 @@ providers:
     config:
       max_length: 200
       temperature: 0.8
-      timeout: 60  # Longer timeout for larger models
+      timeout: 60 # Longer timeout for larger models
 
 prompts:
-  - "Explain quantum computing in simple terms"
-  - "Write a haiku about machine learning"
+  - 'Explain quantum computing in simple terms'
+  - 'Write a haiku about machine learning'
 ```
 
 ### Using the HTTP Provider (Alternative)
@@ -88,7 +90,7 @@ providers:
       headers:
         Content-Type: application/json
       body:
-        prompt: "{{prompt}}"
+        prompt: '{{prompt}}'
         max_length: 200
         temperature: 0.8
       responseParser: output
@@ -115,16 +117,19 @@ providers:
 ## Troubleshooting
 
 ### Server won't start
+
 - Check if port 5000 is already in use: `lsof -i :5000`
 - Ensure you have enough RAM/VRAM for the model
 - Check CUDA installation if using GPU: `python -c "import torch; print(torch.cuda.is_available())"`
 
 ### Timeouts during generation
+
 - Increase the timeout in provider config
 - Use a smaller model for testing
 - Ensure the server has enough compute resources
 
 ### Connection refused
+
 - Verify the server is running: `curl http://localhost:5000/health`
 - Check firewall settings
 - Ensure MODEL_SERVER_URL matches your server address

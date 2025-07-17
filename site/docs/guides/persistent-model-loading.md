@@ -10,10 +10,10 @@ When using promptfoo's Python provider with local models (like Hugging Face tran
 
 | Solution          | Best For                                          | Setup Time | Performance |
 | ----------------- | ------------------------------------------------- | ---------- | ----------- |
-| **vLLM**          | Production deployments needing maximum throughput | 5 min      | ⭐⭐⭐⭐⭐       |
-| **Ollama**        | Local development, quick prototyping              | 2 min      | ⭐⭐⭐⭐        |
-| **TGI**           | HuggingFace ecosystem users                       | 5 min      | ⭐⭐⭐⭐        |
-| **Custom Server** | Special requirements, custom models               | 30 min     | ⭐⭐⭐         |
+| **vLLM**          | Production deployments needing maximum throughput | 5 min      | ⭐⭐⭐⭐⭐  |
+| **Ollama**        | Local development, quick prototyping              | 2 min      | ⭐⭐⭐⭐    |
+| **TGI**           | HuggingFace ecosystem users                       | 5 min      | ⭐⭐⭐⭐    |
+| **Custom Server** | Special requirements, custom models               | 30 min     | ⭐⭐⭐      |
 
 ## The Problem
 
@@ -43,6 +43,7 @@ For a model like Llama 3.2 1B, this means:
 For production deployments, use specialized inference servers that are optimized for LLM serving. These provide the best performance, reliability, and features out of the box.
 
 #### vLLM (Fastest Open Source)
+
 The current performance leader with PagedAttention and continuous batching:
 
 ```bash
@@ -56,6 +57,7 @@ python -m vllm.entrypoints.openai.api_server \
 ```
 
 Use in promptfoo:
+
 ```yaml
 providers:
   - openai:chat:llama-3.2-1b
@@ -67,6 +69,7 @@ providers:
 **Best for**: High-throughput production deployments
 
 #### Ollama (Simplest)
+
 User-friendly local model server with one-line installation:
 
 ```bash
@@ -78,6 +81,7 @@ ollama pull llama3:latest
 ```
 
 Use in promptfoo:
+
 ```yaml
 providers:
   - ollama:llama3:latest
@@ -89,6 +93,7 @@ providers:
 **Best for**: Development, testing, and small-scale deployments
 
 #### Text Generation Inference (TGI)
+
 Hugging Face's production server with native ecosystem integration:
 
 ```bash
@@ -100,13 +105,14 @@ docker run --gpus all -p 8080:80 \
 ```
 
 Use in promptfoo:
+
 ```yaml
 providers:
   - id: http://localhost:8080/generate
     config:
       method: POST
       body:
-        inputs: "{{prompt}}"
+        inputs: '{{prompt}}'
         parameters:
           max_new_tokens: 100
       transformResponse: 'json.generated_text'
@@ -118,18 +124,21 @@ providers:
 #### Other Production Options
 
 **DeepSpeed-MII** (Microsoft): Best for multi-GPU deployments
+
 ```bash
 pip install deepspeed-mii
 # Supports dynamic batching and tensor parallelism
 ```
 
 **Triton Inference Server** (NVIDIA): Enterprise-grade multi-model serving
+
 ```bash
 # Supports TensorRT optimization, multiple frameworks
 docker run --gpus all -p 8000:8000 nvcr.io/nvidia/tritonserver
 ```
 
 **Ray Serve**: Scalable Python-native serving
+
 ```bash
 pip install "ray[serve]"
 # Great for complex pipelines and auto-scaling
@@ -189,7 +198,7 @@ def generate():
 
         # Tokenize input
         inputs = tokenizer(prompt, return_tensors="pt", padding=True).to(device)
-        
+
         # Generate text with configurable parameters
         with torch.no_grad():
             outputs = model.generate(
@@ -202,10 +211,10 @@ def generate():
                 top_p=config.get('top_p', 0.95),
                 pad_token_id=tokenizer.pad_token_id
             )
-        
+
         # Decode all outputs
         all_outputs = [tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
-        
+
         return jsonify({
             'output': all_outputs[0],
             'all_outputs': all_outputs,
@@ -403,8 +412,6 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5000)
 ```
 
-
-
 ## Best Practices
 
 ### 1. Health Checks
@@ -512,7 +519,7 @@ class BatchProcessor:
         self.queue = deque()
         self.lock = threading.Lock()
         self.last_batch_time = time.time()
-        
+
         # Start background thread for timeout-based flushing
         self.running = True
         self.flush_thread = threading.Thread(target=self._flush_worker)
@@ -640,6 +647,7 @@ for model in os.environ.get('PRELOAD_MODELS', 'meta-llama/Llama-3.2-1B').split('
 ## Model Licensing Considerations
 
 When serving models publicly, ensure compliance with model licenses:
+
 - Some models (e.g., LLaMA original) prohibit commercial use
 - Others require attribution or have specific serving restrictions
 - Check the model card on Hugging Face for license details
@@ -650,12 +658,14 @@ When serving models publicly, ensure compliance with model licenses:
 While the Python provider's default behavior of reloading models for each request is inefficient for local models, modern inference servers have solved this problem comprehensively.
 
 **For 90% of use cases**: Use vLLM, Ollama, or TGI. They provide:
+
 - State-of-the-art performance (4x+ faster than naive implementations)
 - Production-ready features (monitoring, scaling, fault tolerance)
 - Minimal setup time
 - Active maintenance and community support
 
 **Only build a custom server when** you have specific requirements that production servers can't meet, such as:
+
 - Custom model architectures
 - Specialized preprocessing/postprocessing
 - Extreme resource constraints
