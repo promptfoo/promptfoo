@@ -107,6 +107,7 @@ describe('ResultsTable Metrics Display', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
@@ -536,6 +537,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1
   };
 
   beforeEach(async () => {
@@ -843,6 +845,7 @@ describe('ResultsTable handleRating', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     selectedMetric: null,
+    zoom: 1,
   };
 
   beforeEach(() => {
@@ -943,6 +946,7 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   beforeEach(() => {
@@ -1048,6 +1052,7 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   beforeEach(() => {
