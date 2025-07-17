@@ -116,6 +116,14 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
 }
 
 /**
+ * Helper function to resolve file paths relative to basePath if they are relative,
+ * otherwise use them as-is if they are absolute
+ */
+function resolveFilePath(filePath: string): string {
+  return path.isAbsolute(filePath) ? filePath : path.resolve(cliState.basePath || '', filePath);
+}
+
+/**
  * Generate signature using different certificate types
  */
 export async function generateSignature(
@@ -128,7 +136,8 @@ export async function generateSignature(
     switch (signatureAuth.type) {
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
-          privateKey = fs.readFileSync(signatureAuth.privateKeyPath, 'utf8');
+          const resolvedPath = resolveFilePath(signatureAuth.privateKeyPath);
+          privateKey = fs.readFileSync(resolvedPath, 'utf8');
         } else {
           privateKey = signatureAuth.privateKey;
         }
@@ -153,7 +162,8 @@ export async function generateSignature(
         });
 
         const jks = jksModule as any;
-        const keystoreData = fs.readFileSync(signatureAuth.keystorePath);
+        const resolvedPath = resolveFilePath(signatureAuth.keystorePath);
+        const keystoreData = fs.readFileSync(resolvedPath);
 
         const keystore = jks.toPem(keystoreData, keystorePassword);
 
@@ -180,7 +190,8 @@ export async function generateSignature(
       }
       case 'pfx': {
         if (signatureAuth.pfxPath) {
-          logger.debug(`[Signature Auth] Loading PFX file: ${signatureAuth.pfxPath}`);
+          const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
+          logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
 
           // Check for PFX password in config first, then fallback to environment variable
           const pfxPassword = signatureAuth.pfxPassword || getEnvString('PROMPTFOO_PFX_PASSWORD');
@@ -204,7 +215,7 @@ export async function generateSignature(
             // Use promise wrapper for pem.readPkcs12
             const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
               pem.readPkcs12(
-                signatureAuth.pfxPath,
+                resolvedPath,
                 { p12Password: pfxPassword },
                 (err: any, data: any) => {
                   if (err) {
@@ -227,7 +238,7 @@ export async function generateSignature(
           } catch (err) {
             if (err instanceof Error) {
               if (err.message.includes('ENOENT')) {
-                throw new Error(`PFX file not found: ${signatureAuth.pfxPath}`);
+                throw new Error(`PFX file not found: ${resolvedPath}`);
               }
               if (err.message.includes('invalid') || err.message.includes('decrypt')) {
                 throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
@@ -239,20 +250,22 @@ export async function generateSignature(
             );
           }
         } else if (signatureAuth.certPath && signatureAuth.keyPath) {
+          const resolvedCertPath = resolveFilePath(signatureAuth.certPath);
+          const resolvedKeyPath = resolveFilePath(signatureAuth.keyPath);
           logger.debug(
-            `[Signature Auth] Loading separate CRT and KEY files: ${signatureAuth.certPath}, ${signatureAuth.keyPath}`,
+            `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
           );
 
           try {
             // Read the private key directly from the key file
-            if (!fs.existsSync(signatureAuth.keyPath)) {
-              throw new Error(`Key file not found: ${signatureAuth.keyPath}`);
+            if (!fs.existsSync(resolvedKeyPath)) {
+              throw new Error(`Key file not found: ${resolvedKeyPath}`);
             }
-            if (!fs.existsSync(signatureAuth.certPath)) {
-              throw new Error(`Certificate file not found: ${signatureAuth.certPath}`);
+            if (!fs.existsSync(resolvedCertPath)) {
+              throw new Error(`Certificate file not found: ${resolvedCertPath}`);
             }
 
-            privateKey = fs.readFileSync(signatureAuth.keyPath, 'utf8');
+            privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
             logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
           } catch (err) {
             logger.error(`Error loading certificate/key files: ${String(err)}`);
