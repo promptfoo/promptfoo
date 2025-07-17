@@ -24,6 +24,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import type { StackProps } from '@mui/material/Stack';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -164,6 +165,7 @@ export default function ResultsView({
   const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
+
   const {
     author,
     table,
@@ -472,6 +474,8 @@ export default function ResultsView({
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
+  const [zoom, setZoom] = React.useState(1);
+
   return (
     <>
       <Box
@@ -614,6 +618,24 @@ export default function ResultsView({
               ) : (
                 <>{filteredResultsCount} results</>
               )}
+            </Box>
+            <Box>
+              <Tooltip title="Zoom">
+                <Select
+                  size="small"
+                  value={zoom}
+                  onChange={(e: SelectChangeEvent<number>) => setZoom(e.target.value as number)}
+                  sx={{ minWidth: 100 }}
+                >
+                  <MenuItem value={0.5}>50%</MenuItem>
+                  <MenuItem value={0.75}>75%</MenuItem>
+                  <MenuItem value={0.9}>90%</MenuItem>
+                  <MenuItem value={1}>100%</MenuItem>
+                  <MenuItem value={1.25}>125%</MenuItem>
+                  <MenuItem value={1.5}>150%</MenuItem>
+                  <MenuItem value={2}>200%</MenuItem>
+                </Select>
+              </Tooltip>
             </Box>
             {highlightedResultsCount > 0 && (
               <Chip
@@ -761,6 +783,7 @@ export default function ResultsView({
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}
           setFilterMode={setFilterMode}
+          zoom={zoom}
         />
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />

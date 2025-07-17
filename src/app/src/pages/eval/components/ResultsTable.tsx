@@ -128,6 +128,7 @@ interface ResultsTableProps {
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
+  zoom: number;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -178,6 +179,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
+  zoom
 }: ResultsTableProps) {
   const {
     evalId,
@@ -1055,7 +1057,7 @@ function ResultsTable({
           </Box>
         )}
 
-      <div className="results-table-container">
+      <div className="results-table-container" style={{ zoom }}>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
