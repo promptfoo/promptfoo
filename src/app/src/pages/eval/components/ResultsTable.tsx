@@ -44,11 +44,6 @@ import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 import ButtonGroup from '@mui/material/ButtonGroup';
-import useViewportHeight from '@app/hooks/useViewportHeight';
-
-const VARIABLE_COLUMN_SIZE_PX = 100;
-const PROMPT_COLUMN_SIZE_PX = 300;
-const DESCRIPTION_COLUMN_SIZE_PX = 100;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -549,7 +544,7 @@ function ResultsTable({
                   </div>
                 );
               },
-              size: VARIABLE_COLUMN_SIZE_PX,
+              size: 50,
             }),
           ),
         }),
@@ -820,7 +815,6 @@ function ResultsTable({
                 <div style={{ padding: '20px' }}>'Test still in progress...'</div>
               );
             },
-            size: PROMPT_COLUMN_SIZE_PX,
           }),
         ),
       }),
@@ -859,7 +853,7 @@ function ResultsTable({
             <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
           </div>
         ),
-        size: DESCRIPTION_COLUMN_SIZE_PX,
+        size: 50,
       };
     }
     return null;
@@ -886,7 +880,6 @@ function ResultsTable({
       columnVisibility,
       pagination,
     },
-    enableColumnResizing: true,
   });
 
   const { isCollapsed } = useScrollHandler();
@@ -978,33 +971,6 @@ function ResultsTable({
     }
   }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
 
-  const tableWidth = React.useMemo(() => {
-    let width = 0;
-    if (descriptionColumn) {
-      width += DESCRIPTION_COLUMN_SIZE_PX;
-    }
-    width += head.vars.length * VARIABLE_COLUMN_SIZE_PX;
-    width += head.prompts.length * PROMPT_COLUMN_SIZE_PX;
-    return width;
-  }, [descriptionColumn, head.vars.length, head.prompts.length]);
-
-  const paginationContainerRef = React.useRef<HTMLDivElement>(null);
-  const tableContainerRef = React.useRef<HTMLDivElement>(null);
-  const viewportHeight = useViewportHeight();
-
-  /**
-   * The table container's height is dynamically constructed such that the pagination footer
-   * is always pinned to the bottom of the viewport. This enables the table to scroll horizontally
-   * within the table container, enabling the sticky header to function as expected.
-   */
-  const tableContainerHeight = React.useMemo(() => {
-    const tableStart = tableContainerRef.current?.getBoundingClientRect().top ?? 0;
-    const paginationContainerHeight =
-      paginationContainerRef.current?.getBoundingClientRect().height ?? 0;
-    const tableHeight = viewportHeight - tableStart - paginationContainerHeight;
-    return tableHeight;
-  }, [tableContainerRef.current, paginationContainerRef.current, viewportHeight]);
-
   return (
     <div>
       {isSearching && searchText && (
@@ -1045,150 +1011,143 @@ function ResultsTable({
           </Box>
         )}
 
-      <div
-        className="results-table-container"
-        ref={tableContainerRef}
-        style={{ height: tableContainerHeight }}
+      <table
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+        style={{
+          wordBreak,
+          // Ensure the fixed pagination does not overlap with the table.
+          marginBottom: '100px',
+        }}
       >
-        <table
-          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-          style={{
-            wordBreak,
-            width: `${tableWidth}px`,
-          }}
-        >
-          <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
-            {stickyHeader && isCollapsed && (
-              <div className="header-dismiss">
-                <IconButton
-                  onClick={() => setStickyHeader(false)}
-                  size="small"
-                  sx={{ color: 'text.primary' }}
+        <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
+          {stickyHeader && isCollapsed && (
+            <div className="header-dismiss">
+              <IconButton
+                onClick={() => setStickyHeader(false)}
+                size="small"
+                sx={{ color: 'text.primary' }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </div>
+          )}
+          {reactTable.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="header">
+              {headerGroup.headers.map((header) => (
+                <th
+                  key={header.id}
+                  colSpan={header.colSpan}
+                  style={{
+                    width: header.getSize(),
+                  }}
                 >
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              </div>
-            )}
-            {reactTable.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => {
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                  />
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {reactTable.getRowModel().rows.map((row, rowIndex) => {
+            let colBorderDrawn = false;
+
+            return (
+              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
+                {row.getVisibleCells().map((cell) => {
                   const isMetadataCol =
-                    header.column.id.startsWith('Variable') || header.column.id === 'description';
-                  const isFinalRow = headerGroup.depth === 1;
+                    cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                  const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
+                  if (shouldDrawColBorder) {
+                    colBorderDrawn = true;
+                  }
+                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+
+                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+                  const value = cell.getValue();
+                  if (
+                    typeof value === 'string' &&
+                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
+                      value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
+                  ) {
+                    const imgSrc = value.startsWith('data:')
+                      ? value
+                      : `data:image/jpeg;base64,${value}`;
+                    cellContent = (
+                      <>
+                        <img
+                          src={imgSrc}
+                          alt="Base64 encoded image"
+                          style={{
+                            maxWidth: '100%',
+                            height: 'auto',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => toggleLightbox(imgSrc)}
+                        />
+                        {lightboxOpen && lightboxImage === imgSrc && (
+                          <div className="lightbox" onClick={() => toggleLightbox()}>
+                            <img
+                              src={lightboxImage}
+                              alt="Lightbox"
+                              style={{
+                                maxWidth: '90%',
+                                maxHeight: '90vh',
+                                objectFit: 'contain',
+                              }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  }
 
                   return (
-                    <th
-                      key={header.id}
-                      colSpan={header.colSpan}
+                    <td
+                      key={cell.id}
                       style={{
-                        width: header.getSize(),
-                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
-                        height: isFinalRow ? 'fit-content' : 'auto',
+                        width: cell.column.getSize(),
                       }}
+                      className={`${isMetadataCol ? 'variable' : ''} ${
+                        shouldDrawRowBorder ? 'first-prompt-row' : ''
+                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
                     >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                      />
-                    </th>
+                      {cellContent}
+                    </td>
                   );
                 })}
               </tr>
-            ))}
-          </thead>
-          <tbody>
-            {reactTable.getRowModel().rows.map((row, rowIndex) => {
-              let colBorderDrawn = false;
-
-              return (
-                <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
-                  {row.getVisibleCells().map((cell) => {
-                    const isMetadataCol =
-                      cell.column.id.startsWith('Variable') || cell.column.id === 'description';
-                    const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
-                    if (shouldDrawColBorder) {
-                      colBorderDrawn = true;
-                    }
-
-                    let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
-                    const value = cell.getValue();
-                    if (
-                      typeof value === 'string' &&
-                      (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                        value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
-                    ) {
-                      const imgSrc = value.startsWith('data:')
-                        ? value
-                        : `data:image/jpeg;base64,${value}`;
-                      cellContent = (
-                        <>
-                          <img
-                            src={imgSrc}
-                            alt="Base64 encoded image"
-                            style={{
-                              maxWidth: '100%',
-                              height: 'auto',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => toggleLightbox(imgSrc)}
-                          />
-                          {lightboxOpen && lightboxImage === imgSrc && (
-                            <div className="lightbox" onClick={() => toggleLightbox()}>
-                              <img
-                                src={lightboxImage}
-                                alt="Lightbox"
-                                style={{
-                                  maxWidth: '90%',
-                                  maxHeight: '90vh',
-                                  objectFit: 'contain',
-                                }}
-                              />
-                            </div>
-                          )}
-                        </>
-                      );
-                    }
-
-                    return (
-                      <td
-                        key={cell.id}
-                        style={{
-                          width: cell.column.getSize(),
-                        }}
-                        className={`${isMetadataCol ? 'variable' : ''}${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
-                      >
-                        {cellContent}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+        </tbody>
+      </table>
 
       {
         // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
         filteredResultsCount > 10 && (
           <Box
-            ref={paginationContainerRef}
             className="pagination"
             px={2}
-            mx={-2}
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: 2,
               flexWrap: 'wrap',
               justifyContent: 'space-between',
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
               backgroundColor: 'background.paper',
               borderTop: '1px solid',
               borderColor: 'divider',
+              zIndex: 1000,
               width: '100vw',
               boxShadow: 3,
             }}
