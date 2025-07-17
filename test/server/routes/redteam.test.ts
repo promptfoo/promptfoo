@@ -12,6 +12,10 @@ describe('redteamRouter', () => {
   let mockNext: NextFunction;
   let mockJson: jest.Mock;
   const originalWebUI = cliState.webUI;
+  const originalGlobals = {
+    currentJobId: (global as any).currentJobId,
+    currentAbortController: (global as any).currentAbortController,
+  };
 
   beforeEach(() => {
     mockJson = jest.fn();
@@ -37,9 +41,9 @@ describe('redteamRouter', () => {
     jest.resetAllMocks();
     evalJobs.clear();
     cliState.webUI = originalWebUI;
-    // Clean up globals
-    (global as any).currentJobId = null;
-    (global as any).currentAbortController = null;
+    // Restore original globals
+    (global as any).currentJobId = originalGlobals.currentJobId;
+    (global as any).currentAbortController = originalGlobals.currentAbortController;
   });
 
   describe('POST /run', () => {
@@ -90,14 +94,13 @@ describe('redteamRouter', () => {
       )?.route?.stack[0]?.handle;
 
       // Let the promise rejection be handled by the route
-      await Promise.resolve().then(async () => {
-        if (routeHandler) {
-          await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
-        }
-      });
+      if (routeHandler) {
+        await routeHandler(mockRequest as Request, mockResponse as Response, mockNext);
+      }
 
-      // Wait for the job to be updated
-      await new Promise(setImmediate);
+      // Wait for the async job update to complete
+      // Use a small timeout instead of setImmediate for more reliable cross-platform behavior
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const jobId = (mockResponse.json as jest.Mock).mock.calls[0][0].id;
       const job = evalJobs.get(jobId);

@@ -62,21 +62,23 @@ describe('server startup behavior', () => {
       const originalExitCode = process.exitCode;
       process.exitCode = undefined;
 
-      // When attempting to start the server
-      const port = getDefaultPort();
-      const isRunning = await checkServerRunning(port);
+      try {
+        // When attempting to start the server
+        const port = getDefaultPort();
+        const isRunning = await checkServerRunning(port);
 
-      if (isRunning) {
-        logger.info(`Promptfoo server already running at http://localhost:${port}`);
-        process.exitCode = 1;
-        return;
+        if (isRunning) {
+          logger.info(`Promptfoo server already running at http://localhost:${port}`);
+          process.exitCode = 1;
+          return;
+        }
+
+        // Then process.exitCode should be set to 1
+        expect(process.exitCode).toBe(1);
+      } finally {
+        // Always restore original process.exitCode
+        process.exitCode = originalExitCode;
       }
-
-      // Then process.exitCode should be set to 1
-      expect(process.exitCode).toBe(1);
-
-      // Restore original process.exitCode
-      process.exitCode = originalExitCode;
     });
 
     it('should start server when none is running', async () => {
@@ -137,26 +139,28 @@ describe('server startup behavior', () => {
       const originalExitCode = process.exitCode;
       process.exitCode = undefined;
 
-      // When the main function encounters an error
       try {
-        const port = getDefaultPort();
-        const isRunning = await checkServerRunning(port);
-        if (isRunning) {
-          logger.info(`Promptfoo server already running at http://localhost:${port}`);
+        // When the main function encounters an error
+        try {
+          const port = getDefaultPort();
+          const isRunning = await checkServerRunning(port);
+          if (isRunning) {
+            logger.info(`Promptfoo server already running at http://localhost:${port}`);
+            process.exitCode = 1;
+          } else {
+            await startServer(port, BrowserBehavior.SKIP);
+          }
+        } catch (err) {
+          logger.error(`Failed to start server: ${String(err)}`);
           process.exitCode = 1;
-        } else {
-          await startServer(port, BrowserBehavior.SKIP);
         }
-      } catch (err) {
-        logger.error(`Failed to start server: ${String(err)}`);
-        process.exitCode = 1;
+
+        // Then process.exitCode should be set to 1
+        expect(process.exitCode).toBe(1);
+      } finally {
+        // Always restore original process.exitCode
+        process.exitCode = originalExitCode;
       }
-
-      // Then process.exitCode should be set to 1
-      expect(process.exitCode).toBe(1);
-
-      // Restore original process.exitCode
-      process.exitCode = originalExitCode;
     });
   });
 });

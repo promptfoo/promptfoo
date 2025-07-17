@@ -38,6 +38,8 @@ describe('providersRouter', () => {
     }
     // Clear all mocks
     jest.restoreAllMocks();
+    // Clear any remaining jest mocks
+    jest.clearAllMocks();
   });
 
   it('should parse and load the provider with JSON body', async () => {

@@ -15,11 +15,18 @@ app.use(express.json());
 app.use('/', providersRouter);
 
 describe('providers router', () => {
+  const originalFetch = global.fetch;
+
   beforeEach(() => {
     jest.resetAllMocks();
-    if ((global.fetch as any)?.mockRestore) {
-      (global.fetch as any).mockRestore();
-    }
+    // Ensure fetch is properly restored before each test
+    global.fetch = originalFetch;
+  });
+
+  afterEach(() => {
+    // Restore original fetch after each test
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
   });
 
   describe('POST /test', () => {

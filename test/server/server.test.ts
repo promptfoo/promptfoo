@@ -24,6 +24,10 @@ describe('/api/history endpoint', () => {
     app = createApp();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('should return results filtered by tag', async () => {
     const response = await request(app)
       .get('/api/history')
