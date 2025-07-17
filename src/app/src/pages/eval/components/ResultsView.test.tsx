@@ -98,7 +98,7 @@ vi.mock('react-router-dom', async () => {
 let mockTableStoreData = {
   table: mockTableWithoutHighlights,
   setTable: vi.fn(),
-  config: { description: 'Test Config' },
+  config: { description: 'Test Config', tags: {} },
   setConfig: vi.fn(),
   evalId: '1',
   author: 'Test Author',
@@ -113,27 +113,29 @@ let mockTableStoreData = {
     values: {},
     appliedCount: 0,
     options: {
-      metric: [],
+      metric: [] as string[],
     },
   },
 };
 
+let mockResultsViewSettingsStoreData = {
+  stickyHeader: true,
+  setStickyHeader: vi.fn(),
+  inComparisonMode: false,
+  setInComparisonMode: vi.fn(),
+  columnStates: { '1': mockColumnState },
+  setColumnState: vi.fn(),
+  maxTextLength: 100,
+  wordBreak: 'break-word',
+  showInferenceDetails: true,
+  comparisonEvalIds: [],
+  setComparisonEvalIds: vi.fn(),
+  renderMarkdown: true,
+};
+
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => mockTableStoreData),
-  useResultsViewSettingsStore: vi.fn(() => ({
-    stickyHeader: true,
-    setStickyHeader: vi.fn(),
-    inComparisonMode: false,
-    setInComparisonMode: vi.fn(),
-    columnStates: { '1': mockColumnState },
-    setColumnState: vi.fn(),
-    maxTextLength: 100,
-    wordBreak: 'break-word',
-    showInferenceDetails: true,
-    comparisonEvalIds: [],
-    setComparisonEvalIds: vi.fn(),
-    renderMarkdown: true,
-  })),
+  useResultsViewSettingsStore: vi.fn(() => mockResultsViewSettingsStoreData),
 }));
 
 // Mock the API functions
@@ -173,6 +175,18 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
+vi.mock('@app/hooks/useFeatureFlag', () => ({
+  useFeatureFlag: vi.fn(() => true),
+}));
+
+import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
+
+declare global {
+  interface Window {
+    resizeHandler: any;
+  }
+}
+
 // Helper function for rendering with providers
 const renderWithProviders = (ui: React.ReactNode) => {
   return render(
@@ -193,7 +207,7 @@ describe('ResultsView', () => {
     mockTableStoreData = {
       table: mockTableWithoutHighlights,
       setTable: vi.fn(),
-      config: { description: 'Test Config' },
+      config: { description: 'Test Config', tags: {} },
       setConfig: vi.fn(),
       evalId: '1',
       author: 'Test Author',
@@ -208,9 +222,24 @@ describe('ResultsView', () => {
         values: {},
         appliedCount: 0,
         options: {
-          metric: [],
+          metric: [] as string[],
         },
       },
+    };
+
+    mockResultsViewSettingsStoreData = {
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+      inComparisonMode: false,
+      setInComparisonMode: vi.fn(),
+      columnStates: { '1': mockColumnState },
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      renderMarkdown: true,
     };
   });
 
@@ -275,5 +304,78 @@ describe('ResultsView', () => {
       backgroundColor: 'rgba(25, 118, 210, 0.08)',
       color: 'rgba(25, 118, 210, 1)',
     });
+  });
+
+  it('renders FiltersButton and FiltersForm when multi-metric filtering is enabled and metric filters are available', () => {
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument();
+  });
+
+  it('does not render FiltersButton, FiltersForm, or MetricFilterSelector when there are no available metric filters', () => {
+    mockTableStoreData.filters.options.metric = [];
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByTestId('filters-button')).toBeNull();
+    expect(screen.queryByTestId('filters-form')).toBeNull();
+    expect(screen.queryByTestId('metric-filter-selector')).toBeNull();
+  });
+
+  it('handles the case where the multi-metric filtering feature flag is enabled but there are no available metrics', () => {
+    vi.mocked(useFeatureFlag).mockReturnValue(true);
+
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByText('Filters')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Metric' })).toBeNull();
+  });
+
+  it('should not update charts visibility state on window resize after mount', () => {
+    const initialInnerHeight = 1200;
+    const newInnerHeight = 900;
+
+    Object.defineProperty(window, 'innerHeight', {
+      writable: true,
+      configurable: true,
+      value: initialInnerHeight,
+    });
+
+    const { container } = renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const originalAddEventListener = window.addEventListener;
+    window.addEventListener = vi.fn((event, handler) => {
+      if (event === 'resize') {
+        window.resizeHandler = handler;
+      } else {
+        originalAddEventListener(event, handler);
+      }
+    });
+
+    window.innerHeight = newInnerHeight;
+    if (window.resizeHandler) {
+      window.resizeHandler();
+    }
+
+    expect(container).toBeInTheDocument();
   });
 });

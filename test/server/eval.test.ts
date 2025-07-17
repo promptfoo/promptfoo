@@ -19,12 +19,21 @@ describe('eval routes', () => {
   });
 
   afterEach(async () => {
-    for (const evalId of testEvalIds) {
+    // More robust cleanup with proper error handling
+    const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
       try {
         const eval_ = await Eval.findById(evalId);
-        await eval_?.delete();
-      } catch (error) {}
-    }
+        if (eval_) {
+          await eval_.delete();
+        }
+      } catch (error) {
+        // Log the error instead of silently ignoring it
+        console.error(`Failed to cleanup eval ${evalId}:`, error);
+      }
+    });
+
+    // Wait for all cleanups to complete
+    await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
   });
 

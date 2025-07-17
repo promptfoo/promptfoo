@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+
 import {
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
