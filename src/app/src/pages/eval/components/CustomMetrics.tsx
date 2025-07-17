@@ -1,7 +1,6 @@
 import React from 'react';
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import Tooltip from '@mui/material/Tooltip';
 import './CustomMetrics.css';
-import Box from '@mui/material/Box';
 
 const NUM_METRICS_TO_DISPLAY_ABOVE_FOLD = 10;
 
@@ -69,43 +68,38 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
   };
 
   return (
-    <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
+    <div className="custom-metric-container" data-testid="custom-metrics">
       {displayMetrics
         .sort(([metricA], [metricB]) => metricA.localeCompare(metricB))
         .map(([metric, score]) =>
           metric && typeof score !== 'undefined' ? (
-            <div
-              data-testid={`metric-${metric}`}
-              onClick={() => handleMetricClick(metric)}
-              className="metric-chip clickable"
-            >
-              <div className="metric-content">
-                <span data-testid={`metric-name-${metric}`} className="metric-name">
-                  {metric}
-                </span>
-                <span className="metric-value">
-                  <MetricValue
-                    metric={metric}
-                    score={score}
-                    counts={counts}
-                    metricTotals={metricTotals}
-                  />
-                </span>
-              </div>
-              <FilterAltIcon className="filter-icon" sx={{ opacity: 0.35 }} />
-            </div>
+            <Tooltip title={`Filter results to ${metric}`} key={metric}>
+              <span
+                data-testid={`metric-${metric}`}
+                onClick={() => handleMetricClick(metric)}
+                className="clickable"
+              >
+                <span data-testid={`metric-name-${metric}`}>{metric}</span>:{' '}
+                <MetricValue
+                  metric={metric}
+                  score={score}
+                  counts={counts}
+                  metricTotals={metricTotals}
+                />
+              </span>
+            </Tooltip>
           ) : null,
         )}
       {metrics.length > 10 && (
-        <div
-          className="show-more-toggle clickable"
+        <span
+          className="clickable"
           data-testid="toggle-show-more"
           onClick={() => setShowAll(!showAll)}
         >
           {showAll ? 'Show less' : 'Show more...'}
-        </div>
+        </span>
       )}
-    </Box>
+    </div>
   );
 };
 

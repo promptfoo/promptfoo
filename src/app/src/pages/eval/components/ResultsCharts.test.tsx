@@ -53,7 +53,6 @@ describe('ResultsCharts', () => {
   const defaultProps = {
     columnVisibility: {},
     recentEvals: [],
-    handleHideCharts: vi.fn(),
   };
 
   beforeEach(() => {
@@ -217,6 +216,154 @@ describe('ResultsCharts', () => {
       expect(
         screen.queryByText('No score data available for scatter plot'),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Chart Rendering Conditions', () => {
+    it('does not render charts when table is null', () => {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: null,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      const { container } = render(<ResultsCharts {...defaultProps} />);
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('does not render charts when config is null', () => {
+      const mockTable = {
+        head: {
+          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.9, pass: true, text: 'test' },
+              { score: 0.8, pass: true, text: 'test' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTable,
+        evalId: 'test-eval',
+        config: null,
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      const { container } = render(<ResultsCharts {...defaultProps} />);
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('does not render charts when there is only one prompt and no performance chart', () => {
+      const mockTableSinglePrompt = {
+        head: {
+          prompts: [{ provider: 'test-provider-1' }],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [{ score: 0.9, pass: true, text: 'test' }],
+            vars: [],
+          },
+        ],
+      };
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableSinglePrompt,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      const { container } = render(<ResultsCharts {...defaultProps} />);
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('does not render charts when all scores are identical', () => {
+      const mockTableIdenticalScores = {
+        head: {
+          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.8, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+          {
+            outputs: [
+              { score: 0.8, pass: true, text: 'test 3' },
+              { score: 0.8, pass: true, text: 'test 4' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableIdenticalScores,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      const { container } = render(<ResultsCharts {...defaultProps} />);
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('renders charts when valid diverse scores are present', () => {
+      const mockTableValidScores = {
+        head: {
+          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.9, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+          {
+            outputs: [
+              { score: 0.7, pass: true, text: 'test 3' },
+              { score: 0.6, pass: false, text: 'test 4' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableValidScores,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      const { container } = render(<ResultsCharts {...defaultProps} />);
+
+      // Should render the charts container
+      expect(screen.getByRole('button')).toBeInTheDocument(); // Close button
+
+      // Should render multiple canvas elements for different charts
+      const canvasElements = container.querySelectorAll('canvas');
+      expect(canvasElements.length).toBeGreaterThanOrEqual(3); // PassRate, Histogram/Metric, Scatter
     });
   });
 
