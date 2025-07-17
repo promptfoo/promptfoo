@@ -108,7 +108,7 @@ describe('ResultsTable Metrics Display', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
-    zoom: 1
+    zoom: 1,
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
@@ -538,7 +538,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
-    zoom: 1
+    zoom: 1,
   };
 
   beforeEach(async () => {
