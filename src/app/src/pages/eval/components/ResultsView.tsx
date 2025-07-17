@@ -475,6 +475,8 @@ export default function ResultsView({
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [zoom, setZoom] = React.useState(1);
+  // Zoom tooltip is controlled to ensure that it disappears when the select dropdown is open.
+  const [renderZoomTooltip, setRenderZoomTooltip] = React.useState(false);
 
   return (
     <>
@@ -620,11 +622,14 @@ export default function ResultsView({
               )}
             </Box>
             <Box>
-              <Tooltip title="Zoom">
+              <Tooltip title="Zoom" open={renderZoomTooltip}>
                 <Select
                   size="small"
                   value={zoom}
+                  onMouseEnter={() => setRenderZoomTooltip(true)}
+                  onMouseLeave={() => setRenderZoomTooltip(false)}
                   onChange={(e: SelectChangeEvent<number>) => setZoom(e.target.value as number)}
+                  onOpen={() => setRenderZoomTooltip(false)}
                   sx={{ minWidth: 100 }}
                 >
                   <MenuItem value={0.5}>50%</MenuItem>
