@@ -1,11 +1,34 @@
-import type { Command } from 'commander';
-import fs from 'fs';
+import { Command } from 'commander';
+import * as fs from 'fs';
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
+import type { EvaluateResult } from '../types';
+
+function transformV3ResultsToEvaluateResults(results: any[]): EvaluateResult[] {
+  return results.map((result: any, idx: number) => ({
+    promptIdx: result.promptIdx ?? 0,
+    testIdx: result.testIdx ?? idx,
+    testCase: result.testCase || { vars: result.vars || {} },
+    prompt: result.prompt,
+    provider: result.provider,
+    response: result.response || null,
+    error: result.error,
+    success: result.success ?? true,
+    score: result.score ?? 0,
+    gradingResult: result.gradingResult || null,
+    namedScores: result.namedScores || {},
+    metadata: result.metadata || {},
+    latencyMs: result.latencyMs,
+    cost: result.cost,
+    failureReason: result.failureReason,
+    promptId: result.promptId || result.prompt?.id || '',
+    vars: result.vars || result.testCase?.vars || {},
+  }));
+}
 
 export function importCommand(program: Command) {
   program
@@ -41,23 +64,7 @@ export function importCommand(program: Command) {
             // Import results if available
             if (resultsData.results && Array.isArray(resultsData.results)) {
               // Transform v3 format results to full EvaluateResult format
-              const evaluateResults = resultsData.results.map((result: any, idx: number) => ({
-                promptIdx: result.promptIdx ?? 0,
-                testIdx: result.testIdx ?? idx,
-                testCase: result.testCase || { vars: result.vars || {} },
-                prompt: result.prompt,
-                provider: result.provider,
-                response: result.response || null,
-                error: result.error,
-                success: result.success ?? true,
-                score: result.score ?? 0,
-                gradingResult: result.gradingResult || null,
-                namedScores: result.namedScores || {},
-                metadata: result.metadata || {},
-                latencyMs: result.latencyMs,
-                cost: result.cost,
-                failureReason: result.failureReason,
-              }));
+              const evaluateResults = transformV3ResultsToEvaluateResults(resultsData.results);
               await EvalResult.createManyFromEvaluateResult(evaluateResults, evalId);
             }
           } else {
@@ -116,23 +123,7 @@ export function importCommand(program: Command) {
 
             if (resultsData.results && Array.isArray(resultsData.results)) {
               // Transform v3 format results to full EvaluateResult format
-              const evaluateResults = resultsData.results.map((result: any, idx: number) => ({
-                promptIdx: result.promptIdx ?? 0,
-                testIdx: result.testIdx ?? idx,
-                testCase: result.testCase || { vars: result.vars || {} },
-                prompt: result.prompt,
-                provider: result.provider,
-                response: result.response || null,
-                error: result.error,
-                success: result.success ?? true,
-                score: result.score ?? 0,
-                gradingResult: result.gradingResult || null,
-                namedScores: result.namedScores || {},
-                metadata: result.metadata || {},
-                latencyMs: result.latencyMs,
-                cost: result.cost,
-                failureReason: result.failureReason,
-              }));
+              const evaluateResults = transformV3ResultsToEvaluateResults(resultsData.results);
               await EvalResult.createManyFromEvaluateResult(evaluateResults, evalId);
             }
           } else {
@@ -177,25 +168,7 @@ export function importCommand(program: Command) {
           // Import results if available
           if (evalData.results && Array.isArray(evalData.results)) {
             // Transform v3 format results to full EvaluateResult format
-            const evaluateResults = evalData.results.map((result: any, idx: number) => ({
-              promptIdx: 0, // v3 format doesn't have multiple prompts tracked
-              testIdx: idx,
-              testCase: {
-                vars: result.vars || {},
-              },
-              prompt: result.prompt,
-              provider: result.provider,
-              response: result.response || null,
-              error: result.error,
-              success: result.success ?? true,
-              score: result.score ?? 0,
-              gradingResult: result.gradingResult || null,
-              namedScores: result.namedScores || {},
-              metadata: result.metadata || {},
-              latencyMs: result.latencyMs,
-              cost: result.cost,
-              failureReason: result.failureReason,
-            }));
+            const evaluateResults = transformV3ResultsToEvaluateResults(evalData.results);
             await EvalResult.createManyFromEvaluateResult(evaluateResults, evalId);
           }
         } else if (isV2Format) {
