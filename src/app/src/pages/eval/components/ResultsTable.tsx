@@ -45,8 +45,8 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 import ButtonGroup from '@mui/material/ButtonGroup';
 
-const VARIABLE_COLUMN_SIZE_PX = 200;
-const PROMPT_COLUMN_SIZE_PX = 400;
+const VARIABLE_COLUMN_SIZE_PX = 100;
+const PROMPT_COLUMN_SIZE_PX = 300;
 const DESCRIPTION_COLUMN_SIZE_PX = 100;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
