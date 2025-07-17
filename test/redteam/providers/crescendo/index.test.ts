@@ -408,7 +408,10 @@ describe('CrescendoProvider', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: prompt, label: 'test' },
-      test: { assert: [{ type: 'mock-grader' }] } as any,
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
     };
 
     // Mock unblocking to return false so it doesn't interfere
