@@ -474,7 +474,7 @@ export default function ResultsView({
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
-  const [zoom, setZoom] = React.useState(1);
+  const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
   // Zoom tooltip is controlled to ensure that it disappears when the select dropdown is open.
   const [renderZoomTooltip, setRenderZoomTooltip] = React.useState(false);
 
@@ -625,10 +625,10 @@ export default function ResultsView({
               <Tooltip title="Zoom" open={renderZoomTooltip}>
                 <Select
                   size="small"
-                  value={zoom}
+                  value={resultsTableZoom}
                   onMouseEnter={() => setRenderZoomTooltip(true)}
                   onMouseLeave={() => setRenderZoomTooltip(false)}
-                  onChange={(e: SelectChangeEvent<number>) => setZoom(e.target.value as number)}
+                  onChange={(e: SelectChangeEvent<number>) => setResultsTableZoom(e.target.value as number)}
                   onOpen={() => setRenderZoomTooltip(false)}
                   sx={{ minWidth: 100 }}
                 >
@@ -788,7 +788,7 @@ export default function ResultsView({
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}
           setFilterMode={setFilterMode}
-          zoom={zoom}
+          zoom={resultsTableZoom}
         />
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
