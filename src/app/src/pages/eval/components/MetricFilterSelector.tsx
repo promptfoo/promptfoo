@@ -9,7 +9,8 @@ import { useTableStore } from './store';
 
 export const MetricFilterSelector: React.FC<{}> = () => {
   const { filters, addFilter, resetFilters } = useTableStore();
-  const availableMetrics = filters.options.metric;
+  const metricField = filters.fields.find(field => field.id === 'metric');
+  const availableMetrics = metricField?.type === 'select' ? metricField.options.map(option => option.id) : [];
 
   const handleChange = React.useCallback(
     (event: SelectChangeEvent) => {
