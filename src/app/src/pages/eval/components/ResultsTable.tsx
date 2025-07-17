@@ -158,7 +158,7 @@ function useScrollHandler() {
         currentScrollY = window.scrollY;
       }
       
-      const shouldCollapse = currentScrollY > 500;
+      const shouldCollapse = currentScrollY > 200;
 
       if (shouldCollapse !== isCollapsed || currentScrollY < 100) {
         setIsCollapsed(shouldCollapse);
