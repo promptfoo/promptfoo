@@ -214,17 +214,13 @@ export async function generateSignature(
 
             // Use promise wrapper for pem.readPkcs12
             const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-              pem.readPkcs12(
-                resolvedPath,
-                { p12Password: pfxPassword },
-                (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                },
-              );
+              pem.readPkcs12(resolvedPath, { p12Password: pfxPassword }, (err: any, data: any) => {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve(data);
+                }
+              });
             });
 
             if (!result.key) {
