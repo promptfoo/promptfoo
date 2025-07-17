@@ -1267,18 +1267,25 @@ function ResultsTable({
                 <TextField
                   size="small"
                   type="number"
-                  defaultValue={1}
                   onChange={(e) => {
-                    const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                    }));
-                    clearRowIdFromUrl();
+                    const page = e.target.value ? Number(e.target.value) - 1 : null;
+                    if (page) {
+                      setPagination((prev) => ({
+                        ...prev,
+                        pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
+                      }));
+                      clearRowIdFromUrl();
+                    }
                   }}
                   sx={{
                     width: '60px',
                     textAlign: 'center',
+                  }}
+                  slotProps={{
+                    htmlInput: {
+                      min: 1,
+                      max: pageCount,
+                    },
                   }}
                 />
               </Typography>
