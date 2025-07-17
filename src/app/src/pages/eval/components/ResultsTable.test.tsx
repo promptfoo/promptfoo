@@ -108,6 +108,7 @@ describe('ResultsTable Metrics Display', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
@@ -537,6 +538,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   beforeEach(async () => {
@@ -844,6 +846,7 @@ describe('ResultsTable handleRating', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     selectedMetric: null,
+    zoom: 1,
   };
 
   beforeEach(() => {
@@ -944,6 +947,7 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   beforeEach(() => {
@@ -1049,6 +1053,7 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   beforeEach(() => {
@@ -1202,6 +1207,7 @@ describe('ResultsTable Empty State', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   it('should display the "No results found for the current filters." message when filteredResultsCount is 0, isFetching is false, and filters.appliedCount is greater than 0', () => {
@@ -1249,6 +1255,7 @@ describe('ResultsTable', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   beforeEach(() => {
@@ -1389,6 +1396,7 @@ describe('ResultsTable Pagination', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
   };
 
   it('should render pagination controls when totalResultsCount is greater than 10', () => {
