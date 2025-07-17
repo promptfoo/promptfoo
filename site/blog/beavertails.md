@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2024-12-22
 authors: [ian]
+tags: [research-analysis]
 ---
 
 # Red Team Your LLM with BeaverTails

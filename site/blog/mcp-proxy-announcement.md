@@ -2,7 +2,7 @@
 title: 'The Promptfoo MCP Proxy: Enterprise MCP Security'
 description: 'Learn about the security risks introduced by MCP servers and how to mitigate them using the Promptfoo MCP Proxy, an enterprise solution for MCP security.'
 authors: [steve]
-tags: [mcp, security, enterprise, proxy]
+tags: [company-update, integration, mcp]
 date: 2025-07-14
 image: /img/blog/mcp/mcp-proxy-hero.png
 ---

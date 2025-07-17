@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2024-08-14
 authors: [ian]
+tags: [technical-guide, red-teaming, agents]
 ---
 
 # New Red Teaming Plugins for LLM Agents: Enhancing API Security

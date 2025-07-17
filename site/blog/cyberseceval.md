@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2024-12-21
 authors: [ian]
+tags: [research-analysis, meta]
 ---
 
 # How to run CyberSecEval

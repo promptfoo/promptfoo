@@ -5,6 +5,7 @@ description: 'Explore how invisible Unicode characters can be used to manipulate
 image: /img/blog/unicode-threats/unicode.png
 date: 2025-04-10
 authors: [asmi]
+tags: [security-vulnerability, best-practices]
 ---
 
 import RevealButton from './unicode-threats/components/RevealButton';
