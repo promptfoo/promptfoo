@@ -558,9 +558,9 @@ export default function ResultsView({
               anchorEl={filtersButtonRef.current}
             />
           </>
-        ) : filters.options.metric.length > 0 ? (
+        ) : (
           <MetricFilterSelector />
-        ) : null}
+        )}
 
         <Box
           sx={{
