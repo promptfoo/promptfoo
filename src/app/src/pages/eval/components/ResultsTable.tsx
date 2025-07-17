@@ -1269,7 +1269,7 @@ function ResultsTable({
                   type="number"
                   onChange={(e) => {
                     const page = e.target.value ? Number(e.target.value) - 1 : null;
-                    if (page) {
+                    if (page !== null && page >= 0 && page < pageCount) {
                       setPagination((prev) => ({
                         ...prev,
                         pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
