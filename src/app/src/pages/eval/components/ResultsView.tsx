@@ -54,6 +54,8 @@ import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -475,8 +477,6 @@ export default function ResultsView({
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
-  // Zoom tooltip is controlled to ensure that it disappears when the select dropdown is open.
-  const [renderZoomTooltip, setRenderZoomTooltip] = React.useState(false);
 
   return (
     <>
@@ -622,16 +622,16 @@ export default function ResultsView({
               )}
             </Box>
             <Box>
-              <Tooltip title="Zoom" open={renderZoomTooltip}>
+              <FormControl>
+                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
                 <Select
+                  labelId="results-table-zoom-label"
                   size="small"
+                  label="Zoom"
                   value={resultsTableZoom}
-                  onMouseEnter={() => setRenderZoomTooltip(true)}
-                  onMouseLeave={() => setRenderZoomTooltip(false)}
                   onChange={(e: SelectChangeEvent<number>) =>
                     setResultsTableZoom(e.target.value as number)
                   }
-                  onOpen={() => setRenderZoomTooltip(false)}
                   sx={{ minWidth: 100 }}
                 >
                   <MenuItem value={0.5}>50%</MenuItem>
@@ -642,7 +642,7 @@ export default function ResultsView({
                   <MenuItem value={1.5}>150%</MenuItem>
                   <MenuItem value={2}>200%</MenuItem>
                 </Select>
-              </Tooltip>
+              </FormControl>
             </Box>
             {highlightedResultsCount > 0 && (
               <Chip
