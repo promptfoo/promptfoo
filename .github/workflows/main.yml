@@ -55,6 +55,25 @@ jobs:
       - name: Test
         run: npm run test -- --ci
 
+  verify-package:
+    name: Verify package integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify package integrity
+        run: npm run verify:package
+
   build:
     name: Build on Node ${{ matrix.node }}
     env:
