@@ -38,5 +38,8 @@ export const handleContextRecall = async ({
       test.options,
       test.vars,
     )),
+    metadata: {
+      context,
+    },
   };
 };

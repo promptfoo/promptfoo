@@ -7,7 +7,7 @@ import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
-export interface LoadFunctionOptions {
+interface LoadFunctionOptions {
   filePath: string;
   functionName?: string;
   defaultFunctionName?: string;

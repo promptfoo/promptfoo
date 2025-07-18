@@ -5,6 +5,7 @@ description: 'A hands-on exploration of Model Context Protocol - the standard th
 image: /img/blog/mcp/mcp.png
 date: 2025-05-06
 authors: [asmi]
+tags: [technical-guide, integration, mcp]
 ---
 
 import MCPConnectionSimulator from './mcp/components/MCPConnectionSimulator';

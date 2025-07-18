@@ -414,20 +414,24 @@ export async function doGenerateRedteam(
     printBorder();
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
-    if (!options.inRedteamRun) {
-      // Provider cleanup step
-      try {
-        const provider = testSuite.providers[0] as ApiProvider;
-        if (provider && typeof provider.cleanup === 'function') {
-          const cleanupResult = provider.cleanup();
-          if (cleanupResult instanceof Promise) {
-            await cleanupResult;
-          }
-        }
-      } catch (cleanupErr) {
-        logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-      }
 
+    // Provider cleanup step. Note that this should always be run,
+    // since the providers are re-initialized when running the red team,
+    // hence it's safe and necessary to clean-up, particularly for MCP servers
+    try {
+      logger.debug('Cleaning up provider');
+      const provider = testSuite.providers[0] as ApiProvider;
+      if (provider && typeof provider.cleanup === 'function') {
+        const cleanupResult = provider.cleanup();
+        if (cleanupResult instanceof Promise) {
+          await cleanupResult;
+        }
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+    }
+
+    if (!options.inRedteamRun) {
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +

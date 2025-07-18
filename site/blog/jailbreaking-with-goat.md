@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2024-11-05
 authors: [vanessa]
+tags: [research-analysis, red-teaming]
 ---
 
 import { Promise } from 'canvas-confetti';

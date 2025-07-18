@@ -317,7 +317,10 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       const data = (await response.json()) as ProviderTestResponse;
 
       // Handle Target Server Errors:
-      if (data.providerResponse?.metadata?.http?.status !== 200) {
+      if (
+        !data.providerResponse?.metadata?.http?.status ||
+        data.providerResponse?.metadata?.http?.status >= 400
+      ) {
         let errorMessage = 'Target Server Error: ';
 
         if (data.providerResponse.raw) {

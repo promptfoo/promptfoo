@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+
 import {
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
@@ -391,8 +392,7 @@ export const RedteamConfigSchema = z
   });
 
 // Ensure that schemas match their corresponding types
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
+function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();

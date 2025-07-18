@@ -11,7 +11,7 @@ import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
 import { AwsBedrockGenericProvider } from './index';
 
-export interface BedrockKnowledgeBaseOptions {
+interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
   profile?: string;
   region?: string;
@@ -27,7 +27,7 @@ export interface BedrockKnowledgeBaseOptions {
 }
 
 // Define citation types for metadata
-export interface CitationReference {
+interface CitationReference {
   content?: {
     text?: string;
     [key: string]: any;
@@ -43,7 +43,7 @@ export interface CitationReference {
   [key: string]: any;
 }
 
-export interface Citation {
+interface Citation {
   retrievedReferences?: CitationReference[];
   generatedResponsePart?: {
     textResponsePart?: {

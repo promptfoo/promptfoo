@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -8,6 +9,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -30,15 +32,20 @@ import {
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+import {
+  CRESCENDO_SYSTEM_PROMPT,
+  EVAL_SYSTEM_PROMPT,
+  GOAL_RUBRIC_TEMPLATE,
+  REFUSAL_SYSTEM_PROMPT,
+} from './prompts';
 
-export const DEFAULT_MAX_TURNS = 10;
-export const DEFAULT_MAX_BACKTRACKS = 10;
+const DEFAULT_MAX_TURNS = 10;
+const DEFAULT_MAX_BACKTRACKS = 10;
 
 /**
  * Represents metadata for the Crescendo conversation process.
  */
-export interface CrescendoMetadata extends BaseRedteamMetadata {
+interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoRoundsCompleted: number;
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
@@ -54,12 +61,13 @@ export interface CrescendoMetadata extends BaseRedteamMetadata {
     response: string;
   }>;
   totalSuccessfulAttacks?: number;
+  storedGraderResult?: GradingResult;
 }
 
 /**
  * Represents the complete response from a Crescendo conversation.
  */
-export interface CrescendoResponse extends ProviderResponse {
+interface CrescendoResponse extends ProviderResponse {
   metadata: CrescendoMetadata;
 }
 
@@ -244,6 +252,7 @@ export class CrescendoProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
+    let storedGraderResult: any = undefined;
 
     let exitReason:
       | 'Grader failed'
@@ -271,9 +280,19 @@ export class CrescendoProvider implements ApiProvider {
       content: systemPrompt,
     });
 
-    const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    const assertToUse = test?.assert?.find(
+      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+    );
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
+
+    // Template for goal-specific evaluation
+    let additionalRubric = '';
+    if (this.userGoal) {
+      additionalRubric = this.nunjucks.renderString(GOAL_RUBRIC_TEMPLATE, {
+        goal: this.userGoal,
+      });
+    }
 
     while (roundNum < this.maxTurns) {
       try {
@@ -437,8 +456,11 @@ export class CrescendoProvider implements ApiProvider {
               test,
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              additionalRubric,
             );
+
             graderPassed = grade.pass;
+            storedGraderResult = grade;
             if (grade.tokensUsed) {
               totalTokenUsage.total += grade.tokensUsed.total || 0;
               totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
@@ -451,6 +473,23 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         logger.debug(`[Crescendo] graderPassed: ${graderPassed}`);
+
+        if (graderPassed === false) {
+          this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
+
+          // Only break early if continueAfterSuccess is false
+          if (this.config.continueAfterSuccess) {
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via External Grader at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
+            );
+          } else {
+            exitReason = 'Grader failed';
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via External Grader, EXITING at ROUND ${roundNum}`,
+            );
+            break;
+          }
+        }
 
         const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output);
         if (evalTokenUsage) {
@@ -471,7 +510,13 @@ export class CrescendoProvider implements ApiProvider {
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
-          // Continue or stop based on configuration
+          storedGraderResult = {
+            pass: false,
+            score: 0,
+            reason: objectiveScore?.rationale || 'Jailbreak goal achieved',
+          };
+
+          // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
             logger.debug(
               `[Crescendo] Jailbreak Successful via Internal Evaluator at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
@@ -488,7 +533,7 @@ export class CrescendoProvider implements ApiProvider {
         if (graderPassed === false) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
-          // Continue or stop based on configuration
+          // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
             logger.debug(
               `[Crescendo] Jailbreak Successful via External Grader at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
@@ -546,6 +591,7 @@ export class CrescendoProvider implements ApiProvider {
         // Include all successful attacks for analysis
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
+        storedGraderResult,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
@@ -881,5 +927,3 @@ export class CrescendoProvider implements ApiProvider {
     }
   }
 }
-
-export default CrescendoProvider;

@@ -196,10 +196,8 @@ function DownloadMenu() {
       return;
     }
 
-    type TableRow = (typeof table.body)[number];
-
     const humanEvalCases = table.body
-      .filter((row): row is TableRow => row.outputs.some((output) => output != null))
+      .filter((row) => row.outputs.some((output) => output != null))
       .map((row) => ({
         vars: {
           ...row.test.vars,
@@ -440,7 +438,9 @@ function DownloadMenu() {
                 color="secondary"
                 fullWidth
                 disabled={
-                  !table || table.body.every((row) => row.outputs.every((output) => output?.pass))
+                  !table ||
+                  !table.body ||
+                  table.body.every((row) => row.outputs.every((output) => output?.pass))
                 }
               >
                 Download Failed Tests Config

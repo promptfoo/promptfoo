@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -263,9 +264,15 @@ async function applyStrategies(
       const loadedStrategy = await loadStrategy(strategy.id);
       strategyAction = loadedStrategy.action;
     } else {
-      // Handle custom strategy variants (e.g., custom:aggressive)
-      const baseStrategyId = strategy.id.includes(':') ? strategy.id.split(':')[0] : strategy.id;
-      const builtinStrategy = Strategies.find((s) => s.id === baseStrategyId);
+      // First try to find the exact strategy ID (e.g., jailbreak:composite)
+      let builtinStrategy = Strategies.find((s) => s.id === strategy.id);
+
+      // If not found, handle custom strategy variants (e.g., custom:aggressive)
+      if (!builtinStrategy && strategy.id.includes(':')) {
+        const baseStrategyId = strategy.id.split(':')[0];
+        builtinStrategy = Strategies.find((s) => s.id === baseStrategyId);
+      }
+
       if (!builtinStrategy) {
         logger.warn(`Strategy ${strategy.id} not registered, skipping`);
         continue;

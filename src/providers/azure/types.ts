@@ -6,7 +6,7 @@ import type { AssistantFunctionCallback } from '../openai/types';
 /**
  * Options for configuring retry behavior
  */
-export interface RetryOptions {
+interface RetryOptions {
   /** Maximum number of retry attempts */
   maxRetries: number;
   /** Initial delay in milliseconds before the first retry */
@@ -42,6 +42,9 @@ export interface AzureCompletionOptions {
   apiKeyEnvar?: string;
   apiVersion?: string;
   headers?: { [key: string]: string };
+
+  // System prompt for chat models
+  systemPrompt?: string;
 
   // OpenAI params
   max_tokens?: number;

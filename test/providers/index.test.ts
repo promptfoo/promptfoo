@@ -42,6 +42,7 @@ import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import type { ProviderOptionsMap, ProviderFunction } from '../../src/types';
+import { createLiteLLMProvider } from '../../src/providers/litellm';
 
 jest.mock('fs');
 
@@ -238,7 +239,8 @@ describe('call provider apis', () => {
   it('OllamaCompletionProvider callApi', async () => {
     const mockResponse = {
       ...defaultMockResponse,
-      text: jest.fn()
+      text: jest
+        .fn()
         .mockResolvedValue(`{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.898068Z","response":"Gre","done":false}
 {"model":"llama2:13b","created_at":"2023-08-08T21:50:34.929199Z","response":"at","done":false}
 {"model":"llama2:13b","created_at":"2023-08-08T21:50:34.959989Z","response":" question","done":false}
@@ -261,7 +263,8 @@ describe('call provider apis', () => {
   it('OllamaChatProvider callApi', async () => {
     const mockResponse = {
       ...defaultMockResponse,
-      text: jest.fn()
+      text: jest
+        .fn()
         .mockResolvedValue(`{"model":"orca-mini","created_at":"2023-12-16T01:46:19.263682972Z","message":{"role":"assistant","content":" Because","images":null},"done":false}
 {"model":"orca-mini","created_at":"2023-12-16T01:46:19.275143974Z","message":{"role":"assistant","content":" of","images":null},"done":false}
 {"model":"orca-mini","created_at":"2023-12-16T01:46:19.288137727Z","message":{"role":"assistant","content":" Ray","images":null},"done":false}
@@ -446,7 +449,7 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
     expect(provider.id()).toBe('openai:gpt-4');
     expect(mockReadFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
+      expect.stringMatching(/path[\\/]to[\\/]mock-provider-file\.yaml/),
       'utf8',
     );
   });
@@ -463,7 +466,7 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('file://path/to/mock-provider-file.json');
     expect(provider.id()).toBe('openai:gpt-4');
     expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.json/),
+      expect.stringMatching(/path[\\/]to[\\/]mock-provider-file\.json/),
       'utf8',
     );
   });
@@ -610,6 +613,40 @@ describe('loadApiProvider', () => {
     );
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
+  });
+
+  it('loadApiProvider with litellm default (chat)', async () => {
+    const provider = await loadApiProvider('litellm:gpt-4');
+    expect(provider.id()).toBe('litellm:gpt-4');
+    expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
+    expect(provider.config.apiBaseUrl).toBe('http://0.0.0.0:4000');
+    expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
+  });
+
+  it('loadApiProvider with litellm:chat', async () => {
+    const provider = await loadApiProvider('litellm:chat:gpt-4');
+    expect(provider.id()).toBe('litellm:gpt-4');
+    expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
+  });
+
+  it('loadApiProvider with litellm:completion', async () => {
+    const provider = await loadApiProvider('litellm:completion:gpt-3.5-turbo-instruct');
+    expect(provider.id()).toBe('litellm:completion:gpt-3.5-turbo-instruct');
+    expect(provider.toString()).toBe('[LiteLLM Provider completion gpt-3.5-turbo-instruct]');
+  });
+
+  it('loadApiProvider with litellm:embedding', async () => {
+    const provider = await loadApiProvider('litellm:embedding:text-embedding-3-small');
+    expect(provider.id()).toBe('litellm:embedding:text-embedding-3-small');
+    expect(provider.toString()).toBe('[LiteLLM Provider embedding text-embedding-3-small]');
+    expect('callEmbeddingApi' in provider).toBe(true);
+  });
+
+  it('loadApiProvider with litellm:embeddings (alias)', async () => {
+    const provider = await loadApiProvider('litellm:embeddings:text-embedding-3-small');
+    expect(provider.id()).toBe('litellm:embedding:text-embedding-3-small');
+    expect(provider.toString()).toBe('[LiteLLM Provider embedding text-embedding-3-small]');
+    expect('callEmbeddingApi' in provider).toBe(true);
   });
 
   it('loadApiProvider with voyage', async () => {
@@ -865,7 +902,7 @@ describe('loadApiProvider', () => {
     expect(providers[0].id()).toBe('openai:gpt-4o-mini');
     expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
     expect(mockReadFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/path[\\\/]to[\\\/]mock-providers-file\.yaml/),
+      expect.stringMatching(/path[\\/]to[\\/]mock-providers-file\.yaml/),
       'utf8',
     );
   });

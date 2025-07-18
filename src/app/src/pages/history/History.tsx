@@ -23,9 +23,8 @@ import {
   gridFilteredSortedRowIdsSelector,
   gridVisibleColumnFieldsSelector,
 } from '@mui/x-data-grid';
-import type { StandaloneEval } from '@promptfoo/util';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   const apiRef = useGridApiContext();
 

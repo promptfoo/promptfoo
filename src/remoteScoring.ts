@@ -14,7 +14,7 @@ type RemotePiScoringPayload = {
   scoring_spec: PiScoringSpec;
 };
 
-export function getWithPiApiKey(): string | undefined {
+function getWithPiApiKey(): string | undefined {
   // Check env var first
   const withPiApiKey = getEnvString('WITHPI_API_KEY');
   if (withPiApiKey) {

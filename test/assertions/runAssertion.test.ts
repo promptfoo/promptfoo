@@ -2652,6 +2652,9 @@ describe('runAssertion', () => {
         score: 1,
         reason: 'Mocked reason',
         assertion,
+        metadata: {
+          context: 'Paris is the capital of France.',
+        },
       });
     });
 
@@ -2740,6 +2743,9 @@ describe('runAssertion', () => {
         score: 1,
         reason: 'Mocked reason',
         assertion,
+        metadata: {
+          context: 'Paris is the capital of France.',
+        },
       });
     });
 
