@@ -514,6 +514,8 @@ thead.sticky {
     --collapse--collapse-hidden-opacity: 1;
     --collapse--collapse-hidden-pointer-events: auto;
     --collapse--collapse-hidden-max-height: 1000px;
+
+    --collapsed--mui-form-label-margin-top: 0px;
   }
   to {
     --collapsed--header-dismiss-opacity: 1;
@@ -522,6 +524,8 @@ thead.sticky {
     --collapse--collapse-hidden-opacity: 0;
     --collapse--collapse-hidden-pointer-events: none;
     --collapse--collapse-hidden-max-height: 0px;
+
+    --collapsed--mui-form-label-margin-top: -8px;
   }
 }
 
@@ -554,8 +558,9 @@ thead .header-dismiss {
     pointer-events 0.2s ease-out;
 }
 
-.results-table thead.collapsed .MuiFormControlLabel-root {
-  margin-top: -8px;
+.results-table thead .MuiFormControlLabel-root {
+  margin-top: var(--collapsed--mui-form-label-margin-top);
+  transition: margin-top 0.2s ease-out;
 }
 
 /* Ensure the header cells have a solid background */
