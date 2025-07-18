@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { POSTHOG_KEY } from './generated-constants';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
 
@@ -32,14 +31,34 @@ const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 
+/**
+ * Get the PostHog key.
+ *
+ * If the key is not set in the environment, try to load it from the generated-constants.ts file,
+ * which is generated during the production build.
+ *
+ * @returns The PostHog key, if it is set.
+ */
+function getPostHogKey(): string | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { POSTHOG_KEY } = require('./generated-constants');
+    return POSTHOG_KEY;
+  } catch {
+    return process.env.PROMPTFOO_POSTHOG_KEY;
+  }
+}
+
 function getPostHogClient(): PostHog | null {
   if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
     return null;
   }
 
-  if (posthogClient === null && POSTHOG_KEY) {
+  const posthogKey = getPostHogKey();
+
+  if (posthogClient === null && posthogKey) {
     try {
-      posthogClient = new PostHog(POSTHOG_KEY, {
+      posthogClient = new PostHog(posthogKey, {
         host: EVENTS_ENDPOINT,
       });
     } catch {
