@@ -32,7 +32,12 @@ import {
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+import {
+  CRESCENDO_SYSTEM_PROMPT,
+  EVAL_SYSTEM_PROMPT,
+  GOAL_RUBRIC_TEMPLATE,
+  REFUSAL_SYSTEM_PROMPT,
+} from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -278,6 +283,14 @@ export class CrescendoProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
+    // Template for goal-specific evaluation
+    let additionalRubric = '';
+    if (this.userGoal) {
+      additionalRubric = this.nunjucks.renderString(GOAL_RUBRIC_TEMPLATE, {
+        goal: this.userGoal,
+      });
+    }
+
     while (roundNum < this.maxTurns) {
       try {
         roundNum++;
@@ -436,6 +449,7 @@ export class CrescendoProvider implements ApiProvider {
               test,
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              additionalRubric,
             );
 
             graderPassed = grade.pass;
