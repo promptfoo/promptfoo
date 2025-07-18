@@ -514,6 +514,17 @@ export default function ResultsView({
     }, 5); // 5ms debounce to prevent rapid state changes that cause UI oscillations
   }, [atInitialVerticalScrollPosition]);
 
+  /**
+   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
+   * (and the rendering of duplicative, useless scrollbars).
+   */
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
+
   return (
     <>
       <Box
