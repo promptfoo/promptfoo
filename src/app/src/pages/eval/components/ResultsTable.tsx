@@ -1233,7 +1233,7 @@ function ResultsTable({
               inputProps={{ 'aria-label': 'Results per page' }}
               size="small"
               sx={{ m: 1, minWidth: 80 }}
-              disabled={totalResultsCount <= 10}
+              disabled={filteredResultsCount <= 10}
             >
               <MenuItem value={10}>10</MenuItem>
               <MenuItem value={50} disabled={filteredResultsCount <= 10}>
