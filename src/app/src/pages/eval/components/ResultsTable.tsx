@@ -1042,6 +1042,9 @@ function ResultsTable({
           borderTop: '1px solid',
           borderColor:
             atInitialVerticalScrollPosition || stickyHeader ? 'transparent' : 'var(--border-color)',
+          // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
+          // won't extend to the bottom of the viewport.
+          flexGrow: 1
         }}
         onScroll={onResultsContainerScroll}
       >
