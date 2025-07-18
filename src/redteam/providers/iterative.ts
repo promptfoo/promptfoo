@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -260,7 +261,9 @@ export async function runRedteamConversation({
       continue;
     }
 
-    const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    const assertToUse = test?.assert?.find(
+      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+    );
     const { getGraderById } = await import('../graders');
     let graderPassed: boolean | undefined;
 

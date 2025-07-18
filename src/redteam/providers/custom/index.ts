@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -297,7 +298,9 @@ export class CustomProvider implements ApiProvider {
       cached: 0,
     };
 
-    const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    const assertToUse = test?.assert?.find(
+      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+    );
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
