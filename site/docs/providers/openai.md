@@ -733,10 +733,10 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
          * Map of function tool names to function callback.
          */
         functionToolCallbacks: {
-          // this function should accept a string, and return a string
+          // this function should accept a JSON-parsed value, and return a string
           // or a `Promise<string>`.
-          addNumbers: (parametersJsonString) => {
-            const { a, b } = JSON.parse(parametersJsonString);
+          addNumbers: (parameters) => {
+            const { a, b } = parameters;
             return JSON.stringify(a + b);
           },
         },
