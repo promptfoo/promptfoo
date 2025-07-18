@@ -508,8 +508,12 @@ thead.sticky {
 
 @keyframes collapseHeader {
   from {
+    --collapsed--header-dismiss-opacity: 0;
+    --collapsed--header-dismiss-pointer-events: none;
   }
   to {
+    --collapsed--header-dismiss-opacity: 1;
+    --collapsed--header-dismiss-pointer-events: auto;
   }
 }
 
@@ -525,8 +529,10 @@ thead.sticky {
   background: #444;
 }
 
-thead.collapsed .header-dismiss {
-  display: block;
+thead .header-dismiss {
+  opacity: var(--collapsed--header-dismiss-opacity);
+  pointer-events: var(--header-dismiss-pointer-events, none);
+  transition: opacity 0.2s ease-out;
 }
 
 .results-table thead.collapsed .prompt-detail,
