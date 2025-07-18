@@ -6,10 +6,14 @@ pre {
   font-weight: bold;
 }
 
-.results-table-container {
+#results-table-container {
   overflow: scroll;
   margin: 1rem -1rem 0 -1rem;
   padding: 0 1rem;
+
+  scroll-timeline: --collapseTimeline y;
+  scroll-timeline: --collapseTimeline vertical;
+  will-change: scroll-position;
 }
 
 table.results-table,
@@ -479,6 +483,7 @@ table.results-table,
   background: #1a1a1a;
 }
 
+/** TODO: Absolute doesn't work because parent isn't relative */
 .header-dismiss {
   position: absolute;
   top: 8px;
@@ -488,7 +493,24 @@ table.results-table,
   padding: 4px;
   border-radius: 4px;
   background: #eee;
-  display: none;
+}
+
+thead.sticky {
+  animation-name: collapseHeader;
+  animation-duration: 1ms;
+  animation-timeline: --collapseTimeline;
+  animation-range-start: 0px;
+  animation-range-end: 50px;
+  animation-fill-mode: both;
+
+  will-change: contents;
+}
+
+@keyframes collapseHeader {
+  from {
+  }
+  to {
+  }
 }
 
 [data-theme='dark'] .header-dismiss {
