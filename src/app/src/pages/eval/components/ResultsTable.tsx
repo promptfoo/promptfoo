@@ -1169,11 +1169,6 @@ function ResultsTable({
         </table>
       </div>
 
-      {
-        // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
-        // filters does not hide the pagination controls.
-        // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
-        totalResultsCount > 10 && (
           <Box
             className="pagination"
             px={2}
@@ -1312,8 +1307,6 @@ function ResultsTable({
               </ButtonGroup>
             </Box>
           </Box>
-        )
-      }
     </>
   );
 }
