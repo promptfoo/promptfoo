@@ -540,10 +540,9 @@ export default function ResultsView({
         <Box>
           <ResponsiveStack
             direction="row"
-            mb={3}
             spacing={1}
             alignItems="center"
-            className="eval-header"
+            className={`eval-header ${atInitialVerticalScrollPosition ? 'expanded' : 'collapsed'}`}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField

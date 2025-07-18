@@ -15,8 +15,19 @@
   display: flex;
   align-items: center;
   flex-grow: 1;
+  transition: height 0.3s ease;
 }
 
 .eval-header strong {
   font-weight: 500;
+}
+
+.eval-header.expanded {
+  margin-bottom: 24px;
+  height: auto;
+}
+
+.eval-header.collapsed {
+  height: 0;
+  overflow: hidden;
 }
