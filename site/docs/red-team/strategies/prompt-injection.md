@@ -38,6 +38,25 @@ strategies:
       harmfulOnly: true
 ```
 
+### Understanding Harmful Plugins
+
+The `harmfulOnly` option filters prompt injections to only apply to plugins that are classified as "harmful". A plugin is considered harmful if its ID starts with `harmful:`, which includes:
+
+- `harmful:hate` - Hate speech and discrimination
+- `harmful:harassment` - Harassment and bullying
+- `harmful:illegal` - Illegal activities
+- `harmful:self-harm` - Self-harm content
+- `harmful:sexual` - Sexual content
+- `harmful:violence` - Violent content
+- `harmful:*` - Any other harmful category
+
+This filtering is useful because:
+1. **Efficiency**: Reduces test volume by ~50-70% in typical configurations
+2. **Relevance**: Prompt injections are most relevant for testing harmful content bypasses
+3. **Cost optimization**: Fewer API calls while maintaining coverage of critical safety areas
+
+Non-harmful plugins (like `pii`, `contracts`, `politics`) test different vulnerabilities and may not benefit as much from prompt injection combinations.
+
 ## How It Works
 
 The prompt injection strategy:
@@ -55,6 +74,43 @@ The prompt injection strategy:
 ## Importance in Gen AI Red Teaming
 
 Prompt injection is a widely known attack vector. Although foundation labs are making efforts to mitigate injections at the model level, it's still necessary to test your application's handling of user-provided prompts.
+
+## Cross-Strategy Interactions
+
+The prompt injection strategy works well in combination with other strategies:
+
+### With Encoding Strategies
+When combined with encoding strategies (base64, rot13, leetspeak), prompt injections become harder to detect:
+- First, the injection is added to the test case
+- Then, the encoding strategy transforms the entire prompt
+- This double-layer approach can bypass both injection and encoding filters
+
+### With Multilingual Strategy
+Prompt injections translated into other languages may bypass English-focused safety measures:
+- Injections like "ignore previous instructions" work in many languages
+- Some models have weaker safety training in non-English languages
+- The combination tests both linguistic and injection vulnerabilities
+
+### Strategy Order
+The order matters when combining strategies:
+1. Prompt injection is applied first (prepending/appending to the original)
+2. Other strategies then transform the injected content
+3. This ensures the injection pattern is preserved through transformations
+
+### Configuration Example
+```yaml
+strategies:
+  - id: prompt-injection
+    config:
+      sample: 5
+  - multilingual
+  - base64
+```
+
+This configuration will:
+1. Add 5 different injection patterns to each test
+2. Translate each injected test into multiple languages
+3. Encode the multilingual injections in base64
 
 ## Related Concepts
 

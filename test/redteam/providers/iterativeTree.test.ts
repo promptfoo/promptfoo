@@ -1,8 +1,8 @@
 import { jest } from '@jest/globals';
 import { v4 as uuidv4 } from 'uuid';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
-import {
+import RedteamIterativeTreeProvider, {
+  type TreeSearchOutput,
   checkIfOnTopic,
   createTreeNode,
   evaluateResponse,
@@ -24,6 +24,79 @@ import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/util/templates');
+
+// Mock the redteam provider manager
+jest.mock('../../../src/redteam/providers/shared', () => ({
+  ...jest.requireActual('../../../src/redteam/providers/shared'),
+  redteamProviderManager: {
+    getProvider: jest.fn(),
+  },
+}));
+
+describe('RedteamIterativeTreeProvider', () => {
+  describe('constructor', () => {
+    it('should throw if injectVar is not provided', () => {
+      expect(() => new RedteamIterativeTreeProvider({})).toThrow('Expected injectVar to be set');
+    });
+
+    it('should create instance with valid config', () => {
+      const provider = new RedteamIterativeTreeProvider({ injectVar: 'test' });
+      expect(provider).toBeInstanceOf(RedteamIterativeTreeProvider);
+      expect(provider.id()).toBe('promptfoo:redteam:iterative:tree');
+    });
+
+    it('should use default values if not provided', () => {
+      const provider = new RedteamIterativeTreeProvider({ injectVar: 'test' });
+      expect(provider['maxAttempts']).toBe(250);
+      expect(provider['maxDepth']).toBe(25);
+      expect(provider['branchingFactor']).toBe(4);
+    });
+
+    it('should use configured maxAttempts when provided as number', () => {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'test',
+        maxAttempts: 500,
+      });
+      expect(provider['maxAttempts']).toBe(500);
+    });
+
+    it('should use configured maxAttempts when provided as string', () => {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'test',
+        maxAttempts: '300',
+      });
+      expect(provider['maxAttempts']).toBe(300);
+    });
+
+    it('should use configured maxDepth when provided', () => {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'test',
+        maxDepth: 30,
+      });
+      expect(provider['maxDepth']).toBe(30);
+    });
+
+    it('should use configured branchingFactor when provided', () => {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'test',
+        branchingFactor: 5,
+      });
+      expect(provider['branchingFactor']).toBe(5);
+    });
+
+    it('should handle all configuration parameters together', () => {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'test',
+        maxAttempts: '600',
+        maxDepth: 35,
+        branchingFactor: '6',
+      });
+      expect(provider['maxAttempts']).toBe(600);
+      expect(provider['maxDepth']).toBe(35);
+      expect(provider['branchingFactor']).toBe(6);
+    });
+  });
+});
 
 describe('RedteamIterativeProvider', () => {
   describe('renderSystemPrompts', () => {

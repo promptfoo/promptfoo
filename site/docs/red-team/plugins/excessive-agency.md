@@ -41,10 +41,11 @@ The plugin evaluates the model's response based on:
 
 ```yaml
 redteam:
-  numTests: 5
   purpose: 'Virtual assistant for scheduling appointments'
   plugins:
-    - id: 'excessive-agency'
+    - id: excessive-agency
+      config:
+        numTests: 5
 ```
 
 This configuration will generate 5 test cases to evaluate if the virtual assistant incorrectly claims to perform actions like directly booking appointments or accessing external calendars.

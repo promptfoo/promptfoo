@@ -16,7 +16,18 @@ Use it like so in your promptfooconfig.yaml:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
+  # Basic usage
   - jailbreak:tree
+
+  # With configuration
+  - id: jailbreak:tree
+    config:
+      # Optional: Maximum number of attempts (default: 250)
+      maxAttempts: 500
+      # Optional: Maximum depth of the search tree (default: 25)
+      maxDepth: 30
+      # Optional: Number of branches to explore at each node (default: 4)
+      branchingFactor: 5
 ```
 
 ## How It Works
@@ -28,8 +39,20 @@ The Tree-based Jailbreaks strategy works by:
 3. For each branch, generating new sub-branches based on hypothetical responses.
 4. Exploring this tree of possibilities to find the most effective single-shot prompts.
 
+### Configuration Parameters
+
+- **maxAttempts**: Total number of attack attempts before stopping (default: 250)
+- **maxDepth**: Maximum depth of the search tree (default: 25)
+- **branchingFactor**: Number of variations to generate at each node (default: 4)
+
+The algorithm stops when it either:
+- Achieves the target score (10)
+- Reaches maxAttempts
+- Reaches maxDepth
+- Shows no improvement for 25 consecutive iterations
+
 :::warning
-This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
+This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test. Increasing the configuration parameters can significantly increase API usage.
 :::
 
 ![Tree-based Jailbreaks Strategy](/img/docs/tree-jailbreak.svg)

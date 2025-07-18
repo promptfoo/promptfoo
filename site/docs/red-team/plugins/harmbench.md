@@ -31,7 +31,8 @@ You can control the number of test cases using the `numTests` parameter:
 redteam:
   plugins:
     - id: harmbench
-      numTests: 25 # The default is 5, but you can define the limit here.
+      config:
+        numTests: 25 # Default: 5
 ```
 
 ## References

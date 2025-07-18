@@ -49,7 +49,8 @@ You can control the number of test cases using the `numTests` parameter:
 redteam:
   plugins:
     - id: aegis
-      numTests: 25 # Default is 5
+      config:
+        numTests: 25 # Default: 5
 ```
 
 ## Grading

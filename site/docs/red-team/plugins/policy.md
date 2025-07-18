@@ -23,9 +23,9 @@ To include the Policy plugin in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - id: 'policy'
-      numTests: 10
+    - id: policy
       config:
+        numTests: 10 # Default: 5
         policy: 'Your custom policy statement here'
 ```
 

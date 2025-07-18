@@ -36,7 +36,8 @@ You can control the number of injections using the `config.numTests` parameter (
 redteam:
   plugins:
     - id: pliny
-      numTests: 25
+      config:
+        numTests: 25 # Default: 5
 ```
 
 ## Related Concepts

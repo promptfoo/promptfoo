@@ -38,7 +38,8 @@ redteam:
   purpose: "Description of your agent's intended purpose"
   plugins:
     - id: agentic:memory-poisoning
-      numTests: 30 # Optional, defaults to 5
+      config:
+        numTests: 30 # Default: 5
 ```
 
 :::note
@@ -78,7 +79,8 @@ redteam:
     that allow it to check the weather, lookup and book flights, and book hotels.
   plugins:
     - id: agentic:memory-poisoning
-      numTests: 30
+      config:
+        numTests: 30 # Default: 5
 ```
 
 ## Working With Results

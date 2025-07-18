@@ -53,7 +53,8 @@ You can control the number of test cases using the `config.numTests` parameter (
 redteam:
   plugins:
     - id: cyberseceval
-      numTests: 25
+      config:
+        numTests: 25 # Default: 5
 ```
 
 You can also enable multilingual prompt injection by setting the `config.multilingual` parameter to `true`:

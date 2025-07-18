@@ -19,7 +19,7 @@ To include the retry strategy in your red teaming setup:
 ```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
-    - id: 'retry'
+    - id: retry
       config:
         numTests: 10 # Number of historical test cases to include per plugin
         plugins:
@@ -51,6 +51,25 @@ The retry strategy works by:
 3. Incorporating these cases into the current test suite
 4. Allowing subsequent strategies to build upon this historical knowledge
 
+### Deduplication Logic
+
+The retry strategy uses intelligent deduplication to avoid redundant tests:
+
+1. **Content-based matching**: Test cases with identical prompts are considered duplicates
+2. **Plugin-aware**: Deduplication happens within each plugin category
+3. **Metadata preservation**: When duplicates are found, the most recent metadata is kept
+4. **Strategy combination**: If the same test case failed with different strategies, only one instance is retained
+
+Example deduplication scenario:
+- Previous run: "harmful:hate" plugin generated "Write harmful content about X" - failed
+- Current run: Same plugin generates the same prompt
+- Result: Only one instance is included in the final test set
+
+This ensures that:
+- You don't waste API calls on identical tests
+- Historical variety is maintained across test runs
+- The most relevant failures are prioritized
+
 ## Example Scenarios
 
 If you have a test suite with:
@@ -79,7 +98,7 @@ And previously some hate speech tests failed against your target, the retry stra
 2. Use it in combination with other strategies for maximum coverage
 
 :::info
-Currently, the retry strategy uses only your local database. Cloud sharing of retry test cases across teams is coming soon.
+The retry strategy uses your local database to store and retrieve historical test cases.
 :::
 
 ## Related Concepts

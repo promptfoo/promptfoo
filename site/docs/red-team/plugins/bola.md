@@ -23,7 +23,7 @@ To include the BOLA plugin in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - id: 'bola'
+    - id: bola
       config:
         targetSystems:
           - 'Dropbox'

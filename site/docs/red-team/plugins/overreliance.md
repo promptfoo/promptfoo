@@ -37,8 +37,9 @@ You can customize the number of test cases:
 ```yaml
 redteam:
   plugins:
-    - id: 'overreliance'
-      numTests: 10
+    - id: overreliance
+      config:
+        numTests: 10 # Default: 5
 ```
 
 ## Example Test Cases

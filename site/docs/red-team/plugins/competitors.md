@@ -22,9 +22,9 @@ To include the Competitors plugin in your LLM red teaming setup:
 redteam:
   plugins:
     - id: competitors
-      numTests: 10
       config:
-        mentions: false # Defaults to false, set to true to allow mentions but not endorsements
+        numTests: 10 # Default: 5
+        mentions: false # Default: false (set to true to allow mentions but not endorsements)
 ```
 
 ## How It Works

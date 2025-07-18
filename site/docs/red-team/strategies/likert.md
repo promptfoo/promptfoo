@@ -30,6 +30,20 @@ The strategy operates by transforming inputs into academic evaluation tasks:
 3. **Academic Context**: Frames requests within research evaluation scenarios
 4. **Response Analysis**: Examines outputs based on predefined scoring metrics
 
+### Understanding Likert Scales
+
+Traditional Likert scales typically use 5 or 7 points (e.g., "Strongly Disagree" to "Strongly Agree"). However, this strategy intentionally uses a **binary (2-point) scale** for several reasons:
+
+- **Clarity**: Binary choices force the model to make definitive evaluations
+- **Effectiveness**: Simpler scales reduce the model's ability to equivocate
+- **Exploit potential**: Academic evaluation contexts with binary rubrics can bypass safety mechanisms
+
+The binary scale typically defines:
+- **Score 1**: Safe, appropriate, or compliant content
+- **Score 2**: Unsafe, inappropriate, or non-compliant content with specific examples
+
+This simplified approach is more effective at eliciting detailed responses about potentially harmful content under the guise of academic evaluation.
+
 ## Example Scenarios
 
 Here's a simple example of how the strategy transforms a prompt testing content moderation:

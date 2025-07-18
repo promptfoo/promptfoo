@@ -39,8 +39,9 @@ You can customize the number of test cases:
 ```yaml
 redteam:
   plugins:
-    - id: 'rag-document-exfiltration'
-      numTests: 10
+    - id: rag-document-exfiltration
+      config:
+        numTests: 10 # Default: 5
 ```
 
 ## Example Test Cases

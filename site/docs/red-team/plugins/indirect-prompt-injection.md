@@ -25,7 +25,7 @@ You can then configure the Indirect Prompt Injection plugin to test for vulnerab
 ```yaml
 redteam:
   plugins:
-    - id: 'indirect-prompt-injection'
+    - id: indirect-prompt-injection
       config:
         indirectInjectionVar: 'name'
 ```

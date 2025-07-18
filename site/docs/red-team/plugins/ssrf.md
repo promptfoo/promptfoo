@@ -23,7 +23,7 @@ To include the SSRF plugin in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - id: 'ssrf'
+    - id: ssrf
       config:
         targetUrls:
           - 'https://internal-api.example.com'

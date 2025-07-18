@@ -6,7 +6,18 @@ description: Test how AI systems handle malicious content encoded within mathema
 
 # Math Prompt Strategy
 
-The Math Prompt strategy tests an AI system's ability to handle harmful inputs using mathematical concepts like set theory, group theory, and abstract algebra. This technique can bypass content filters designed for natural language threats. Research by Bethany et al. (["Jailbreaking Large Language Models with Symbolic Mathematics"](https://arxiv.org/abs/2409.11445)) revealed that encoding harmful prompts into mathematical problems can bypass safety mechanisms in large language models (LLMs) with a 73.6% success rate across 13 state-of-the-art LLMs.
+The Math Prompt strategy tests an AI system's ability to handle harmful inputs using mathematical concepts like set theory, group theory, and abstract algebra. This technique can bypass content filters designed for natural language threats. 
+
+## Research Background
+
+Research by Bethany et al. (["Jailbreaking Large Language Models with Symbolic Mathematics"](https://arxiv.org/abs/2409.11445)) revealed that encoding harmful prompts into mathematical problems can bypass safety mechanisms with significant success:
+
+- **73.6% average success rate** across 13 state-of-the-art LLMs
+- **Success criteria**: Models produced harmful content when presented with mathematically-encoded requests
+- **Tested models**: GPT-4, Claude, Llama, and others
+- **Key finding**: Mathematical notation creates a "blind spot" in safety training
+
+The high success rate demonstrates that while models are extensively trained to refuse direct harmful requests in natural language, they often fail to recognize the same harmful intent when expressed through mathematical abstractions.
 
 ## Implementation
 

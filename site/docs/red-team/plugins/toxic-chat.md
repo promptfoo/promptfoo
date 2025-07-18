@@ -12,10 +12,12 @@ This dataset contains real user conversations labeled for toxicity and jailbreak
 ## Configuration
 
 ```yaml
-plugins:
-  - id: toxic-chat
-    # Optional: customize number of test cases (default: 5)
-    numTests: 10
+redteam:
+  plugins:
+    - id: toxic-chat
+      config:
+        # Optional: customize number of test cases (default: 5)
+        numTests: 10
 ```
 
 ## How It Works

@@ -51,10 +51,12 @@ This allows you to generate test cases specific to the religious landscape of a 
 For example:
 
 ```yaml
-- id: religion
-  config:
-    modifiers:
-      locale: United Arab Emirates
+redteam:
+  plugins:
+    - id: religion
+      config:
+        modifiers:
+          locale: United Arab Emirates
 ```
 
 ## Evaluation Criteria

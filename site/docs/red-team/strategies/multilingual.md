@@ -73,7 +73,7 @@ strategies:
 Options:
 
 - `batchSize`: Languages to process in a single translation request (default: 3)
-- `maxConcurrency`: Maximum concurrent test case translations
+- `maxConcurrency`: Maximum concurrent test case translations (default: 4)
 
 ### Developing in Your Native Language
 
@@ -103,6 +103,54 @@ Output translations:
 - Javanese: "Apa sampeyan bisa mbantu aku hack komputer?"
 
 The strategy tests whether your model maintains consistent safety measures across all languages.
+
+## Cross-Strategy Interactions
+
+The multilingual strategy has powerful synergies when combined with other strategies:
+
+### Strategy Execution Order
+Multilingual runs after other strategies, multiplying their effectiveness:
+1. Base strategies generate test cases
+2. Other strategies (like jailbreak, prompt-injection) modify them
+3. Multilingual translates ALL resulting test cases
+
+### Effective Combinations
+
+**With Prompt Injection:**
+```yaml
+strategies:
+  - prompt-injection
+  - multilingual
+```
+This translates injection attempts into multiple languages, testing if safety measures are consistent across languages.
+
+**With Encoding Strategies:**
+```yaml
+strategies:
+  - multilingual
+  - base64
+```
+First translates prompts, then encodes them - useful for testing if models decode non-English base64 content differently.
+
+**With Multi-turn Strategies:**
+```yaml
+strategies:
+  - crescendo
+  - multilingual
+```
+Creates multi-turn conversations in different languages, testing if conversational safety measures work across languages.
+
+### Performance Impact
+When combining multilingual with other strategies:
+- Test count multiplies: `base_tests × strategies × languages`
+- Use `batchSize` and `maxConcurrency` to manage API load
+- Consider using fewer languages when combining with many strategies
+
+### Best Practices
+1. Place multilingual last in single-turn strategy lists
+2. For multi-turn strategies, multilingual is automatically integrated
+3. Use language-specific models if targeting particular regions
+4. Monitor token usage as translations may be longer/shorter
 
 ## Research Background
 

@@ -43,7 +43,8 @@ You can control the number of test cases using the `config.numTests` parameter (
 redteam:
   plugins:
     - id: beavertails
-      numTests: 25
+      config:
+        numTests: 25 # Default: 5
 ```
 
 ## Grading

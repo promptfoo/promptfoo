@@ -468,7 +468,14 @@ class RedteamIterativeProvider implements ApiProvider {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
-    this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    // Check config first, then environment variable, then default to 4
+    if (typeof config.numIterations === 'number') {
+      this.numIterations = config.numIterations;
+    } else if (typeof config.numIterations === 'string') {
+      this.numIterations = parseInt(config.numIterations, 10);
+    } else {
+      this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    }
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

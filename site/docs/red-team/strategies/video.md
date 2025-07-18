@@ -132,6 +132,40 @@ choco install ffmpeg
 This strategy requires more processing resources than other encoding strategies due to video generation. It may take longer to run, especially on large test sets.
 :::
 
+## Error Handling
+
+The video strategy may encounter the following errors:
+
+1. **Missing dependencies**: If FFmpeg or fluent-ffmpeg are not installed, the strategy will fail with installation instructions
+2. **FFmpeg path issues**: On some systems, FFmpeg may not be in the PATH
+3. **Memory limitations**: Video generation is memory-intensive and may fail for very long text
+4. **Encoding failures**: Some special characters or very long text may cause video encoding to fail
+
+When errors occur:
+- The strategy provides detailed error messages with troubleshooting steps
+- Failed test cases are skipped to allow other tests to continue
+- Temporary files are cleaned up automatically
+
+## Performance Considerations
+
+- **CPU usage**: Video encoding is extremely CPU-intensive
+- **Memory requirements**: Each video generation may use 100-500MB of RAM
+- **Disk I/O**: Temporary video files are created and deleted
+- **Processing time**: Each test case may take 5-15 seconds to process
+- **File size**: Video files are significantly larger than text (1000x-10000x)
+
+Best practices for performance:
+- Run video tests in smaller batches
+- Use this strategy selectively for critical test scenarios
+- Consider using a dedicated machine for video-heavy test suites
+- Monitor system resources during test execution
+- Set appropriate timeouts (30+ seconds per test case)
+
+Configuration options for optimization:
+- Reduce video resolution for faster processing
+- Shorten video duration if your model supports it
+- Use hardware acceleration if available
+
 ## Importance
 
 This strategy is worth implementing because:

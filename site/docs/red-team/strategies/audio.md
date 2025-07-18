@@ -64,6 +64,33 @@ This strategy is worth implementing because:
 3. It can reveal inconsistencies in how models handle the same content presented in different formats
 4. Audio modalities may have different thresholds or processing pipelines for harmful content
 
+## Error Handling
+
+The audio strategy may encounter the following errors:
+
+1. **Remote generation unavailable**: If remote generation is disabled, the strategy will fail immediately
+2. **Network issues**: Connection problems will result in timeout errors
+3. **Text-to-speech limitations**: Very long text or special characters may fail to convert
+4. **Language code errors**: Invalid language codes will fall back to English
+
+When errors occur:
+- The strategy logs descriptive error messages
+- Failed test cases are skipped without stopping the entire test suite
+- Network errors include retry logic with exponential backoff
+
+## Performance Considerations
+
+- **Remote dependency**: All audio generation requires network requests to the remote service
+- **Latency**: Each text-to-audio conversion adds 1-3 seconds per test case
+- **File size**: Audio files are significantly larger than text (100x-1000x)
+- **API rate limits**: The remote service may have rate limits for audio generation
+
+For optimal performance:
+- Use audio strategy selectively for specific test scenarios
+- Consider batching test cases when possible
+- Monitor network bandwidth usage
+- Set appropriate timeout values for your network conditions
+
 ## Related Concepts
 
 - [Image Jailbreaking](/docs/red-team/strategies/image.md) - Similar approach using images instead of audio

@@ -62,7 +62,7 @@ redteam:
 ```
 
 :::note
-You should only disable all other strategies when using the image strategy. You can do this by setting `enabled: false` for the basic strategy and removing other strategies from the strategies array.
+When you want to test ONLY image-encoded attacks (without combining with other strategies), you need to disable other strategies. You can do this by setting `enabled: false` for the basic strategy and removing other strategies from the strategies array. If you want to combine image encoding with other strategies, leave them enabled.
 :::
 
 Your prompt.json file should look like this:
@@ -103,6 +103,31 @@ npm i sharp
 ```
 
 :::
+
+## Error Handling
+
+The image strategy may encounter the following errors:
+
+1. **Missing dependency**: If the `sharp` package is not installed, the strategy will fail with a clear error message
+2. **Memory limitations**: Very long text may exceed image size limits
+3. **Invalid characters**: Some Unicode characters may not render properly in the image
+
+When errors occur:
+- The strategy will log a descriptive error message
+- The test case will be skipped rather than failing the entire test suite
+- You can check the logs for specific error details
+
+## Performance Considerations
+
+- **Image generation**: Creating images is CPU-intensive and may slow down test generation
+- **Memory usage**: Each image requires memory for both generation and base64 encoding
+- **API limits**: Base64-encoded images are larger than text and may hit API size limits
+- **Concurrency**: The strategy respects the `maxConcurrency` configuration to prevent resource exhaustion
+
+For large test suites, consider:
+- Running image tests separately from other strategies
+- Limiting the number of test cases when using this strategy
+- Monitoring system resources during test generation
 
 ## Related Concepts
 

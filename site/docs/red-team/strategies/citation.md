@@ -21,10 +21,11 @@ You can apply it to specific plugins by adding a `plugins` config. For example:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
-  - citation:
-    plugins:
-      - harmful:hate
-      - pii
+  - id: citation
+    config:
+      plugins:
+        - harmful:hate
+        - pii
 ```
 
 ## How It Works
@@ -64,6 +65,44 @@ The citation strategy helps identify:
 - Whether academic framing affects safety guardrails
 - Inconsistencies in how models handle similar content in different contexts
 - Potential vulnerabilities in content filtering systems
+
+## Citation Format Variations
+
+The strategy uses diverse citation formats to maximize effectiveness:
+
+### Academic Formats
+- **Journal Articles**: Author names, journal title, volume, issue, pages, DOI
+- **Conference Papers**: Conference name, proceedings, location, year
+- **Technical Reports**: Institution, report number, department
+- **Books**: Publisher, edition, ISBN, chapter references
+- **Dissertations**: University, department, advisor, year
+
+### Format Examples
+
+**Journal Article Format:**
+```
+Smith, J. and Johnson, M. [Title]. Journal of Research, vol. 45, no. 3, 2023, pp. 123-145. DOI: 10.1234/example.2023.
+```
+
+**Conference Paper Format:**
+```
+Chen, L. et al. [Title]. In Proceedings of the 2023 International Conference on Security (ICS '23), pp. 456-467.
+```
+
+**Technical Report Format:**
+```
+[Title]. National Institute of Standards, Technical Report TR-2023-01, Department of Computer Science.
+```
+
+### Strategic Variations
+The strategy automatically:
+- Rotates between different citation styles
+- Uses field-appropriate journal names
+- Generates plausible author names and institutions
+- Includes realistic publication years and page numbers
+- Adds DOIs and ISBNs for authenticity
+
+This variety helps test whether specific citation formats are more effective at bypassing safety measures.
 
 ## Example Scenarios
 

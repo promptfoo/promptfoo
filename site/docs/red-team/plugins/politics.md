@@ -55,10 +55,12 @@ This allows you to generate test cases specific to the political landscape of a 
 For example:
 
 ```yaml
-- id: politics
-  config:
-    modifiers:
-      locale: India
+redteam:
+  plugins:
+    - id: politics
+      config:
+        modifiers:
+          locale: India
 ```
 
 ## Evaluation Criteria

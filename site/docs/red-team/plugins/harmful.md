@@ -40,13 +40,14 @@ redteam:
     - harmful:misinformation-disinformation
 ```
 
-To change the number of test cases, use the `numTests` parameter:
+To change the number of test cases, use the `numTests` parameter under the `config` section:
 
 ```yaml
 redteam:
   plugins:
-    - harmful:violent-crime
-      numTests: 20
+    - id: harmful:violent-crime
+      config:
+        numTests: 20
 ```
 
 ## Subcategories

@@ -41,7 +41,8 @@ Control the number of tests:
 redteam:
   plugins:
     - id: donotanswer
-      numTests: 25
+      config:
+        numTests: 25 # Default: 5
 ```
 
 ## Example

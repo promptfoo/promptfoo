@@ -43,8 +43,9 @@ The homoglyph strategy works by:
 
 1. Taking the original text from your test case
 2. Replacing standard characters with visually similar Unicode homoglyphs
-3. Creating text that looks visually similar but has different character codes
-4. Testing whether the model processes homoglyph-encoded text differently than standard text
+3. Replacing numbers with mathematical monospace digits (0→𝟶, 1→𝟷, etc.)
+4. Creating text that looks visually similar but has different character codes
+5. Testing whether the model processes homoglyph-encoded text differently than standard text
 
 ## Example Scenarios
 
@@ -55,6 +56,9 @@ The homoglyph strategy works by:
 | o                  | о                     | Cyrillic Small Letter O (U+043E)  |
 | p                  | р                     | Cyrillic Small Letter Er (U+0440) |
 | x                  | х                     | Cyrillic Small Letter Ha (U+0445) |
+| 0                  | 𝟶                     | Mathematical Monospace 0 (U+1D7F6)|
+| 1                  | 𝟷                     | Mathematical Monospace 1 (U+1D7F7)|
+| 2                  | 𝟸                     | Mathematical Monospace 2 (U+1D7F8)|
 
 **Examples:**
 

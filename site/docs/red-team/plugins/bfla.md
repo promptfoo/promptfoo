@@ -23,7 +23,7 @@ To include the BFLA plugin in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - id: 'bfla'
+    - id: bfla
       config:
         targetIdentifiers:
           - 'john.doe@example.com'
