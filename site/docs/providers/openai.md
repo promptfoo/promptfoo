@@ -708,37 +708,39 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
     {
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config: {
-          model: 'gpt-4.1',
-          instructions: 'You can add two numbers together using the `addNumbers` tool',
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'addNumbers',
-                description: 'Add two numbers together',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    a: { type: 'number' },
-                    b: { type: 'number' },
-                  },
-                  required: ['a', 'b'],
+        model: 'gpt-4.1',
+        instructions: 'You can add two numbers together using the `addNumbers` tool',
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'addNumbers',
+              description: 'Add two numbers together',
+              parameters: {
+                type: 'object',
+                properties: {
+                  a: { type: 'number' },
+                  b: { type: 'number' },
                 },
+                required: ['a', 'b'],
+                additionalProperties: false,
               },
-            },
-          ],
-          /**
-           * Map of function tool names to function callback.
-           */
-          functionToolCallbacks: {
-            // this function receives parsed parameters as an object and should
-            // return a string or a `Promise<string>`.
-            addNumbers: (parameters) => {
-              const { a, b } = parameters;
-              return JSON.stringify(a + b);
+              strict: true,
             },
           },
+        ],
+        /**
+         * Map of function tool names to function callback.
+         */
+        functionToolCallbacks: {
+          // this function receives parsed parameters as an object and should
+          // return a string or a `Promise<string>`.
+          addNumbers: (parameters) => {
+            const { a, b } = parameters;
+            return JSON.stringify(a + b);
+          },
         },
+      },
     },
   ],
   tests: [
