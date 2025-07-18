@@ -817,6 +817,7 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    onMetricFilter={handleMetricFilterClick}
                   />
                 </ErrorBoundary>
               ) : (
