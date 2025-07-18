@@ -1248,7 +1248,16 @@ function ResultsTable({
               </Typography>
 
               {/* PAGE NAVIGATOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography
+            component="span"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              opacity: pageCount > 1 ? 1 : 0.5,
+              pointerEvents: pageCount > 1 ? 'auto' : 'none',
+            }}
+          >
                 <span>Go to:</span>
                 <TextField
                   size="small"
@@ -1273,6 +1282,7 @@ function ResultsTable({
                       max: pageCount,
                     },
                   }}
+              disabled={pageCount === 1}
                 />
               </Typography>
 
