@@ -62,7 +62,7 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
               return '*'.repeat(text.trim().length);
             },
           },
-          opt_out_capturing_by_default: process.env.NODE_ENV === 'development',
+          opt_out_capturing_by_default: import.meta.env.DEV,
           advanced_disable_decide: false,
         });
       } catch (error) {
