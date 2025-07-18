@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
@@ -323,6 +324,7 @@ export abstract class RedteamGraderBase {
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
     renderedValue: AssertionValue | undefined,
+    additionalRubric?: string,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
@@ -347,7 +349,10 @@ export abstract class RedteamGraderBase {
         '\n\n' +
         graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
     }
-    const finalRubric = this.renderRubric(vars) + graderExamplesString;
+    const finalRubric =
+      this.renderRubric(vars) +
+      (additionalRubric ? '\n\n' + additionalRubric : '') +
+      graderExamplesString;
 
     if (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput)) {
       return {
