@@ -33,6 +33,7 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
+  onMetricFilter?: (metric: string | null) => void;
 }
 
 function EvalOutputCell({
@@ -47,6 +48,7 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
+  onMetricFilter,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
@@ -625,7 +627,7 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} />
+          <CustomMetrics lookup={output.namedScores} onMetricFilter={onMetricFilter} />
           {!output.pass && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
