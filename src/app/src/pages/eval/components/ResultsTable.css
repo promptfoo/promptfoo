@@ -593,12 +593,6 @@ thead .header-dismiss {
   transition: max-height 0.2s ease-out;
 }
 
-/* Update these styles */
-.results-table thead.collapsed {
-  border-bottom: 2px solid var(--border-color);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
 .results-table thead.collapsed .output-header .pills,
 .results-table thead.collapsed .output-header .prompt-container {
   font-size: 12px;
