@@ -478,7 +478,8 @@ export default function ResultsView({
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  const [atInitialVerticalScrollPosition, setAtInitialVerticalScrollPosition] = React.useState(true);
+  const [atInitialVerticalScrollPosition, setAtInitialVerticalScrollPosition] =
+    React.useState(true);
   const scrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Cleanup timeout on unmount
@@ -494,25 +495,28 @@ export default function ResultsView({
    * This callback is triggered when the table container is scrolled. It is used to determine if the table
    * has scrolled vertically and, if so, updates the state to trigger dependent layout changes.
    */
-  const onResultsContainerScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const yOffset = 10;
-    const currentScrollTop = e.currentTarget.scrollTop;
-    
-    // Clear any existing timeout to debounce rapid scroll events
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
+  const onResultsContainerScroll = React.useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const yOffset = 0;
+      const currentScrollTop = e.currentTarget.scrollTop;
 
-    // Debounce the state update to prevent oscillations caused by header layout changes
-    scrollTimeoutRef.current = setTimeout(() => {
-      const shouldBeAtInitial = currentScrollTop <= yOffset;
-
-      // Only update state if it actually needs to change
-      if (shouldBeAtInitial !== atInitialVerticalScrollPosition) {
-        setAtInitialVerticalScrollPosition(shouldBeAtInitial);
+      // Clear any existing timeout to debounce rapid scroll events
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
       }
-    }, 5); // 5ms debounce to prevent rapid state changes that cause UI oscillations
-  }, [atInitialVerticalScrollPosition]);
+
+      // Debounce the state update to prevent oscillations caused by header layout changes
+      scrollTimeoutRef.current = setTimeout(() => {
+        const shouldBeAtInitial = currentScrollTop <= yOffset;
+
+        // Only update state if it actually needs to change
+        if (shouldBeAtInitial !== atInitialVerticalScrollPosition) {
+          setAtInitialVerticalScrollPosition(shouldBeAtInitial);
+        }
+      }, 5); // 5ms debounce to prevent rapid state changes that cause UI oscillations
+    },
+    [atInitialVerticalScrollPosition],
+  );
 
   /**
    * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
