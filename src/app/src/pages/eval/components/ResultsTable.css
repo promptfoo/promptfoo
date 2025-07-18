@@ -516,6 +516,8 @@ thead.sticky {
     --collapse--collapse-hidden-max-height: 1000px;
 
     --collapsed--mui-form-label-margin-top: 0px;
+
+    --collapsed--th-padding-y: 16px;
   }
   to {
     --collapsed--header-dismiss-opacity: 1;
@@ -526,6 +528,8 @@ thead.sticky {
     --collapse--collapse-hidden-max-height: 0px;
 
     --collapsed--mui-form-label-margin-top: -8px;
+
+    --collapsed--th-padding-y: 4px;
   }
 }
 
@@ -574,9 +578,9 @@ thead .header-dismiss {
   border-spacing: 0;
 }
 
-.results-table thead.collapsed th {
-  padding-top: 4px;
-  padding-bottom: 4px;
+.results-table thead th {
+  padding-top: var(--collapsed--th-padding-y);
+  padding-bottom: var(--collapsed--th-padding-y);
 }
 
 /* Ensure content below header doesn't jump when header collapses */
