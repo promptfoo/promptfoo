@@ -724,7 +724,7 @@ function ResultsTable({
               );
               return (
                 <div className="output-header">
-                  <div className="pills">
+                  <div className="pills collapse-font-small">
                     {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
                     <div className="summary">
                       <div
@@ -759,7 +759,7 @@ function ResultsTable({
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
                   </div>
                   <TableHeader
-                    className="prompt-container"
+                    className="prompt-container collapse-font-small"
                     text={prompt.label || prompt.display || prompt.raw}
                     expandedText={prompt.raw}
                     maxLength={maxTextLength}

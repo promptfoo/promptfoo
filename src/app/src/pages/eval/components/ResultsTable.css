@@ -518,6 +518,8 @@ thead.sticky {
     --collapsed--mui-form-label-margin-top: 0px;
 
     --collapsed--th-padding-y: 16px;
+
+    --collapsed--font-small-font-size: 15px;
   }
   to {
     --collapsed--header-dismiss-opacity: 1;
@@ -530,6 +532,8 @@ thead.sticky {
     --collapsed--mui-form-label-margin-top: -8px;
 
     --collapsed--th-padding-y: 4px;
+
+    --collapsed--font-small-font-size: 12px;
   }
 }
 
@@ -593,9 +597,9 @@ thead .header-dismiss {
   transition: max-height 0.2s ease-out;
 }
 
-.results-table thead.collapsed .output-header .pills,
-.results-table thead.collapsed .output-header .prompt-container {
-  font-size: 12px;
+.results-table thead .collapse-font-small {
+  font-size: var(--collapsed--font-small-font-size);
+  transition: font-size 0.2s ease-out;
 }
 
 /* Ensure the header cells have a solid background */
