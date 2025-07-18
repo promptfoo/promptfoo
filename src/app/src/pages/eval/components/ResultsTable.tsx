@@ -156,7 +156,7 @@ function ResultsTable({
   setFilterMode,
   zoom,
   onResultsContainerScroll,
-  atInitialVerticalScrollPosition
+  atInitialVerticalScrollPosition,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -1037,7 +1037,12 @@ function ResultsTable({
 
       <div
         className="results-table-container"
-        style={{ zoom }}
+        style={{
+          zoom,
+          borderTop: '1px solid',
+          borderColor:
+            atInitialVerticalScrollPosition || stickyHeader ? 'transparent' : 'var(--border-color)',
+        }}
         onScroll={onResultsContainerScroll}
       >
         <table
@@ -1047,7 +1052,9 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
-          <thead className={`${isHeaderCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
+          <thead
+            className={`${isHeaderCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}
+          >
             {stickyHeader && isHeaderCollapsed && (
               <div className="header-dismiss">
                 <IconButton
