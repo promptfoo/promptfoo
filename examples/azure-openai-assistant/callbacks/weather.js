@@ -1,13 +1,16 @@
 /**
  * Sample weather function callback implementation
- * @param {object} args - Object with the function arguments (already parsed)
+ * @param {string} args - JSON string with the function arguments
  * @returns {string} - JSON string with the weather information
  */
 function getWeather(args) {
   try {
+    // Parse the JSON string from the Azure API
+    const parsedArgs = JSON.parse(args);
+
     // Extract parameters with defaults
-    const location = args.location;
-    const unit = args.unit || 'celsius';
+    const location = parsedArgs.location;
+    const unit = parsedArgs.unit || 'celsius';
 
     if (!location) {
       return JSON.stringify({ error: 'Location is required' });
