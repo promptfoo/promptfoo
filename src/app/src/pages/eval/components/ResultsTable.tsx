@@ -129,8 +129,6 @@ interface ResultsTableProps {
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
   zoom: number;
-  onResultsContainerScroll: (e: React.UIEvent<HTMLDivElement>) => void;
-  atInitialVerticalScrollPosition: boolean;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -155,8 +153,6 @@ function ResultsTable({
   onSearchTextChange,
   setFilterMode,
   zoom,
-  onResultsContainerScroll,
-  atInitialVerticalScrollPosition,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -990,8 +986,6 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
-  const isHeaderCollapsed = !atInitialVerticalScrollPosition;
-
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
     // of this component. This ensures that the pagination footer is always pinned to the bottom
@@ -1036,14 +1030,15 @@ function ResultsTable({
         )}
 
       <div
-        className="results-table-container"
+        id="results-table-container"
         style={{
           zoom,
           borderTop: '1px solid',
-          borderColor:
-            atInitialVerticalScrollPosition || stickyHeader ? 'transparent' : 'var(--border-color)',
+          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
+          // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
+          // won't extend to the bottom of the viewport.
+          flexGrow: 1,
         }}
-        onScroll={onResultsContainerScroll}
       >
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
@@ -1052,10 +1047,9 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
-          <thead
-            className={`${isHeaderCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}
-          >
-            {stickyHeader && isHeaderCollapsed && (
+          <thead className={`${stickyHeader && 'sticky'}`}>
+            {stickyHeader && (
+              // TODO: Fix this position in the CSS.
               <div className="header-dismiss">
                 <IconButton
                   onClick={() => setStickyHeader(false)}
