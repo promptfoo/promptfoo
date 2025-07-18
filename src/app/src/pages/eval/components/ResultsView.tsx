@@ -598,6 +598,29 @@ export default function ResultsView({
           </ResponsiveStack>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
             <Box>
+              <FormControl>
+                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
+                <Select
+                  labelId="results-table-zoom-label"
+                  size="small"
+                  label="Zoom"
+                  value={resultsTableZoom}
+                  onChange={(e: SelectChangeEvent<number>) =>
+                    setResultsTableZoom(e.target.value as number)
+                  }
+                  sx={{ minWidth: 100 }}
+                >
+                  <MenuItem value={0.5}>50%</MenuItem>
+                  <MenuItem value={0.75}>75%</MenuItem>
+                  <MenuItem value={0.9}>90%</MenuItem>
+                  <MenuItem value={1}>100%</MenuItem>
+                  <MenuItem value={1.25}>125%</MenuItem>
+                  <MenuItem value={1.5}>150%</MenuItem>
+                  <MenuItem value={2}>200%</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Box>
               <FilterModeSelector
                 filterMode={filterMode}
                 onChange={handleFilterModeChange}
@@ -666,29 +689,6 @@ export default function ResultsView({
               ) : (
                 <>{filteredResultsCount} results</>
               )}
-            </Box>
-            <Box>
-              <FormControl>
-                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
-                <Select
-                  labelId="results-table-zoom-label"
-                  size="small"
-                  label="Zoom"
-                  value={resultsTableZoom}
-                  onChange={(e: SelectChangeEvent<number>) =>
-                    setResultsTableZoom(e.target.value as number)
-                  }
-                  sx={{ minWidth: 100 }}
-                >
-                  <MenuItem value={0.5}>50%</MenuItem>
-                  <MenuItem value={0.75}>75%</MenuItem>
-                  <MenuItem value={0.9}>90%</MenuItem>
-                  <MenuItem value={1}>100%</MenuItem>
-                  <MenuItem value={1.25}>125%</MenuItem>
-                  <MenuItem value={1.5}>150%</MenuItem>
-                  <MenuItem value={2}>200%</MenuItem>
-                </Select>
-              </FormControl>
             </Box>
             {highlightedResultsCount > 0 && (
               <Chip
