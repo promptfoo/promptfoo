@@ -371,6 +371,13 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
   );
 
+  const selectedPresetHasAgenticStrategies =
+    selectedPreset && selectedPreset !== 'Custom' &&
+    Object.values(STRATEGY_PRESETS[selectedPreset as PresetId]?.strategies ?? {}).some((s) =>
+      AGENTIC_STRATEGIES.includes(s as any),
+    );
+
+
   // ----------------------------------------------
   // Render
   // ----------------------------------------------
@@ -430,7 +437,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       />
 
       {/* Recommended-specific options */}
-      {(selectedPreset === PRESET_IDS.MEDIUM || selectedPreset === PRESET_IDS.LARGE) && (
+      {selectedPresetHasAgenticStrategies && (
         <RecommendedOptions
           isMultiTurnEnabled={isMultiTurnEnabled}
           isStatefulValue={isStatefulValue}
@@ -505,7 +512,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       )}
 
       {/* Additional system config section, if needed */}
-      {showSystemConfig && (
+      {showSystemConfig && !selectedPresetHasAgenticStrategies && (
         <SystemConfiguration
           isStatefulValue={isStatefulValue}
           onStatefulChange={handleStatefulChange}
