@@ -624,7 +624,7 @@ function ResultsTable({
               const isChecked = failureFilter[columnId] || false;
 
               const details = showStats ? (
-                <div className="prompt-detail">
+                <div className="prompt-detail collapse-hidden">
                   {numAsserts[idx] ? (
                     <div>
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
@@ -746,13 +746,15 @@ function ResultsTable({
                     ) : null}
                     {prompt.metrics?.namedScores &&
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                      <CustomMetrics
-                        lookup={prompt.metrics.namedScores}
-                        counts={prompt.metrics.namedScoresCount}
-                        metricTotals={metricTotals}
-                        onSearchTextChange={onSearchTextChange}
-                        onMetricFilter={handleMetricFilterClick}
-                      />
+                      <Box className="collapse-hidden">
+                        <CustomMetrics
+                          lookup={prompt.metrics.namedScores}
+                          counts={prompt.metrics.namedScoresCount}
+                          metricTotals={metricTotals}
+                          onSearchTextChange={onSearchTextChange}
+                          onMetricFilter={handleMetricFilterClick}
+                        />
+                      </Box>
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
                   </div>

@@ -510,10 +510,18 @@ thead.sticky {
   from {
     --collapsed--header-dismiss-opacity: 0;
     --collapsed--header-dismiss-pointer-events: none;
+
+    --collapse--collapse-hidden-opacity: 1;
+    --collapse--collapse-hidden-pointer-events: auto;
+    --collapse--collapse-hidden-max-height: 1000px;
   }
   to {
     --collapsed--header-dismiss-opacity: 1;
     --collapsed--header-dismiss-pointer-events: auto;
+
+    --collapse--collapse-hidden-opacity: 0;
+    --collapse--collapse-hidden-pointer-events: none;
+    --collapse--collapse-hidden-max-height: 0px;
   }
 }
 
@@ -535,9 +543,15 @@ thead .header-dismiss {
   transition: opacity 0.2s ease-out;
 }
 
-.results-table thead.collapsed .prompt-detail,
-.results-table thead.collapsed .custom-metric-container {
-  display: none;
+.results-table thead .collapse-hidden {
+  opacity: var(--collapse--collapse-hidden-opacity);
+  pointer-events: var(--collapse--collapse-hidden-pointer-events);
+  max-height: var(--collapse--collapse-hidden-max-height);
+  overflow: hidden;
+  transition:
+    opacity 0.1s ease-out,
+    max-height 0.2s ease-out,
+    pointer-events 0.2s ease-out;
 }
 
 .results-table thead.collapsed .MuiFormControlLabel-root {
