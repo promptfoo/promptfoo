@@ -109,6 +109,8 @@ describe('ResultsTable Metrics Display', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
@@ -539,6 +541,8 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(async () => {
@@ -847,6 +851,8 @@ describe('ResultsTable handleRating', () => {
     setFilterMode: vi.fn(),
     selectedMetric: null,
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(() => {
@@ -948,6 +954,8 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(() => {
@@ -1054,6 +1062,8 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(() => {
@@ -1208,6 +1218,8 @@ describe('ResultsTable Empty State', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   it('should display the "No results found for the current filters." message when filteredResultsCount is 0, isFetching is false, and filters.appliedCount is greater than 0', () => {
@@ -1256,6 +1268,8 @@ describe('ResultsTable', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(() => {
@@ -1397,6 +1411,8 @@ describe('ResultsTable Pagination', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   it('should render pagination controls when totalResultsCount is greater than 10', () => {
