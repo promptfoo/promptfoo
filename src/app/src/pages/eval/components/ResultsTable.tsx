@@ -129,6 +129,8 @@ interface ResultsTableProps {
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
   zoom: number;
+  onResultsContainerScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+  atInitialVerticalScrollPosition: boolean;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -138,29 +140,6 @@ interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
 
 interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
-}
-
-
-/**
- * Returns the scroll vertical position of a component.
- * @param ref - The ref to the component.
- * @returns The scroll vertical position of the component.
- */
-function useScrollY(ref: React.RefObject<HTMLElement>): number {
-  const [scrollY, setScrollY] = useState(0);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrollY(ref.current?.scrollTop || 0);
-    }
-
-    if (ref.current) {
-      ref.current.addEventListener('scroll', handleScroll, { passive: true });
-      return () => ref.current?.removeEventListener('scroll', handleScroll);
-    }
-  }, [ref]);
-
-  return scrollY;
 }
 
 function ResultsTable({
@@ -176,6 +155,8 @@ function ResultsTable({
   onSearchTextChange,
   setFilterMode,
   zoom,
+  onResultsContainerScroll,
+  atInitialVerticalScrollPosition
 }: ResultsTableProps) {
   const {
     evalId,
@@ -1009,13 +990,7 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const containerScrollY = useScrollY(containerRef);
-  const isHeaderCollapsed = containerScrollY > 200;
-
-  // TODO: Resume here – my hypothesis is that the container height is changing when the header is collapsed, causing the scroll position to change.
-  // Thus the recursive loop I'm observing when scroll is within a certain range.
-  console.log('isHeaderCollapsed (scrollY)', containerScrollY, isHeaderCollapsed);
+  const isHeaderCollapsed = !atInitialVerticalScrollPosition;
 
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
@@ -1060,7 +1035,11 @@ function ResultsTable({
           </Box>
         )}
 
-      <div className="results-table-container" style={{ zoom }} ref={containerRef}>
+      <div
+        className="results-table-container"
+        style={{ zoom }}
+        onScroll={onResultsContainerScroll}
+      >
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
