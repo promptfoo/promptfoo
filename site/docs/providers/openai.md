@@ -707,8 +707,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   providers: [
     {
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
-      config:
-        /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
+      config: {
           model: 'gpt-4.1',
           instructions: 'You can add two numbers together using the `addNumbers` tool',
           tools: [
@@ -732,14 +731,14 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
            * Map of function tool names to function callback.
            */
           functionToolCallbacks: {
-            // this function should accept a string, and return a string
-            // or a `Promise<string>`.
-            addNumbers: (parametersJsonString) => {
-              const { a, b } = JSON.parse(parametersJsonString);
+            // this function receives parsed parameters as an object and should
+            // return a string or a `Promise<string>`.
+            addNumbers: (parameters) => {
+              const { a, b } = parameters;
               return JSON.stringify(a + b);
             },
           },
-        }),
+        },
     },
   ],
   tests: [
