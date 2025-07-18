@@ -478,6 +478,57 @@ export default function ResultsView({
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
+  const [atInitialVerticalScrollPosition, setAtInitialVerticalScrollPosition] =
+    React.useState(true);
+  const scrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  /**
+   * This callback is triggered when the table container is scrolled. It is used to determine if the table
+   * has scrolled vertically and, if so, updates the state to trigger dependent layout changes.
+   */
+  const onResultsContainerScroll = React.useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const yOffset = 0;
+      const currentScrollTop = e.currentTarget.scrollTop;
+
+      // Clear any existing timeout to debounce rapid scroll events
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      // Debounce the state update to prevent oscillations caused by header layout changes
+      scrollTimeoutRef.current = setTimeout(() => {
+        const shouldBeAtInitial = currentScrollTop <= yOffset;
+
+        // Only update state if it actually needs to change
+        if (shouldBeAtInitial !== atInitialVerticalScrollPosition) {
+          setAtInitialVerticalScrollPosition(shouldBeAtInitial);
+        }
+      }, 5); // 5ms debounce to prevent rapid state changes that cause UI oscillations
+    },
+    [atInitialVerticalScrollPosition],
+  );
+
+  /**
+   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
+   * (and the rendering of duplicative, useless scrollbars).
+   */
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
+
   return (
     <>
       <Box
@@ -493,10 +544,9 @@ export default function ResultsView({
         <Box>
           <ResponsiveStack
             direction="row"
-            mb={3}
             spacing={1}
             alignItems="center"
-            className="eval-header"
+            className={`eval-header ${atInitialVerticalScrollPosition ? 'expanded' : 'collapsed'}`}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
@@ -551,6 +601,29 @@ export default function ResultsView({
             ))}
           </ResponsiveStack>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
+            <Box>
+              <FormControl>
+                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
+                <Select
+                  labelId="results-table-zoom-label"
+                  size="small"
+                  label="Zoom"
+                  value={resultsTableZoom}
+                  onChange={(e: SelectChangeEvent<number>) =>
+                    setResultsTableZoom(e.target.value as number)
+                  }
+                  sx={{ minWidth: 100 }}
+                >
+                  <MenuItem value={0.5}>50%</MenuItem>
+                  <MenuItem value={0.75}>75%</MenuItem>
+                  <MenuItem value={0.9}>90%</MenuItem>
+                  <MenuItem value={1}>100%</MenuItem>
+                  <MenuItem value={1.25}>125%</MenuItem>
+                  <MenuItem value={1.5}>150%</MenuItem>
+                  <MenuItem value={2}>200%</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
             <Box>
               <FilterModeSelector
                 filterMode={filterMode}
@@ -620,29 +693,6 @@ export default function ResultsView({
               ) : (
                 <>{filteredResultsCount} results</>
               )}
-            </Box>
-            <Box>
-              <FormControl>
-                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
-                <Select
-                  labelId="results-table-zoom-label"
-                  size="small"
-                  label="Zoom"
-                  value={resultsTableZoom}
-                  onChange={(e: SelectChangeEvent<number>) =>
-                    setResultsTableZoom(e.target.value as number)
-                  }
-                  sx={{ minWidth: 100 }}
-                >
-                  <MenuItem value={0.5}>50%</MenuItem>
-                  <MenuItem value={0.75}>75%</MenuItem>
-                  <MenuItem value={0.9}>90%</MenuItem>
-                  <MenuItem value={1}>100%</MenuItem>
-                  <MenuItem value={1.25}>125%</MenuItem>
-                  <MenuItem value={1.5}>150%</MenuItem>
-                  <MenuItem value={2}>200%</MenuItem>
-                </Select>
-              </FormControl>
             </Box>
             {highlightedResultsCount > 0 && (
               <Chip
@@ -791,6 +841,8 @@ export default function ResultsView({
           onSearchTextChange={handleSearchTextChange}
           setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
+          onResultsContainerScroll={onResultsContainerScroll}
+          atInitialVerticalScrollPosition={atInitialVerticalScrollPosition}
         />
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />

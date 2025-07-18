@@ -548,6 +548,11 @@ thead.collapsed .header-dismiss {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.results-table thead.collapsed .output-header .pills,
+.results-table thead.collapsed .output-header .prompt-container {
+  font-size: 12px;
+}
+
 /* Ensure the header cells have a solid background */
 .results-table th {
   background: #fff;

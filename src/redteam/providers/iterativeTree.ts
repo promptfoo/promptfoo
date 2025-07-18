@@ -16,6 +16,7 @@
 import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -618,7 +619,14 @@ async function runRedteamConversation({
 
         const { getGraderById } = await import('../graders');
         let graderPassed: boolean | undefined;
-        const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+        let assertToUse = test?.assert?.find(
+          (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+        );
+
+        // Fallback: if no assertion matches the pluginId, use the first assertion with a type
+        if (!assertToUse) {
+          assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+        }
 
         if (assertToUse) {
           const grader = getGraderById(assertToUse.type);
