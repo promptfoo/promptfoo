@@ -48,6 +48,7 @@ interface IterativeMetadata {
   highestScore: number;
   redteamFinalPrompt?: string;
   storedGraderResult?: GradingResult;
+  stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached';
   redteamHistory: {
     prompt: string;
     output: string;
@@ -131,7 +132,9 @@ export async function runRedteamConversation({
   let finalIteration = 0;
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
-  let storedGraderResult: any = undefined;
+  let storedGraderResult: GradingResult | undefined = undefined;
+  let stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached' =
+    'Max iterations reached';
 
   const totalTokenUsage = {
     total: 0,
@@ -389,6 +392,14 @@ export async function runRedteamConversation({
       // Check if we should exit early (but don't break yet)
       if (currentScore >= 10 || storedGraderResult?.pass === false) {
         shouldExitEarly = true;
+
+        // Set the appropriate stop reason
+        if (storedGraderResult?.pass === false) {
+          stopReason = 'Grader failed';
+        } else if (currentScore >= 10) {
+          stopReason = 'Judge success';
+        }
+
         // If we're exiting early due to high judge score and don't have a grader result, create one from the judge result
         if (currentScore >= 10 && !storedGraderResult) {
           storedGraderResult = {
@@ -506,6 +517,7 @@ export async function runRedteamConversation({
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
       storedGraderResult,
+      stopReason: stopReason,
     },
     tokenUsage: totalTokenUsage,
   };
