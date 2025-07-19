@@ -1,8 +1,8 @@
-import { getDefaultProviders } from '../../src/providers/defaults';
-import { getEnvString } from '../../src/envars';
+import { getDefaultProviders } from '../../../src/providers/defaults';
+import { getEnvString } from '../../../src/envars';
 
-jest.mock('../../src/envars');
-jest.mock('../../src/logger', () => ({
+jest.mock('../../../src/envars');
+jest.mock('../../../src/logger', () => ({
   __esModule: true,
   default: {
     debug: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock('../../src/logger', () => ({
     error: jest.fn(),
   },
 }));
-jest.mock('../../src/providers/google/util', () => ({
+jest.mock('../../../src/providers/google/util', () => ({
   hasGoogleDefaultCredentials: jest.fn().mockResolvedValue(false),
 }));
 

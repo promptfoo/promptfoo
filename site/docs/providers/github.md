@@ -41,7 +41,7 @@ GitHub Models provides access to industry-leading AI models from various provide
 - Anthropic Claude series (claude-3.7-sonnet, claude-3.5-sonnet, claude-3.5-haiku)
 - Google Gemini series (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash)
 - Meta Llama series (llama-3.3-70b-instruct)
-- xAI Grok series (grok-3, grok-3-mini, grok-4)
+- xAI Grok series (grok-3, grok-3-mini)
 - DeepSeek models (deepseek-r1, deepseek-v3)
 
 **Specialized Models**
@@ -164,7 +164,7 @@ Examples:
 - `github:openai/gpt-4.1-nano`
 - `github:anthropic/claude-3.7-sonnet`
 - `github:google/gemini-2.5-pro`
-- `github:xai/grok-4`
+- `github:xai/grok-3`
 - `github:deepseek/deepseek-r1`
 - `github:azureml/Phi-4`
 - `github:azureml-mistral/Codestral-2501`
