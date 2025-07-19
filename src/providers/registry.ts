@@ -522,12 +522,12 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
+      const modelName = splits.slice(1).join(':') || 'openai/gpt-4o';
       return new OpenAiChatCompletionProvider(modelName, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          apiBaseUrl: 'https://models.inference.ai.azure.com',
+          apiBaseUrl: 'https://models.github.ai',
           apiKeyEnvar: 'GITHUB_TOKEN',
         },
       });

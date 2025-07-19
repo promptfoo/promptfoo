@@ -1,0 +1,62 @@
+# GitHub Models Provider Test Configuration
+# This file demonstrates how to use various GitHub Models with promptfoo
+
+description: "Test GitHub Models provider with latest models (January 2025)"
+
+providers:
+  # Latest models added in January 2025
+  - id: codestral
+    provider: github:azureml-mistral/Codestral-2501
+    config:
+      temperature: 0.1
+      max_tokens: 2048
+  
+  - id: phi4
+    provider: github:azureml/Phi-4
+    config:
+      temperature: 0.5
+      max_tokens: 1024
+  
+  - id: deepseek
+    provider: github:azureml-deepseek/DeepSeek-R1
+    config:
+      temperature: 0.3
+      max_tokens: 4096
+  
+  - id: o3mini
+    provider: github:openai/o3-mini
+    config:
+      temperature: 0.2
+  
+  # Existing popular models
+  - id: gpt4o
+    provider: github:openai/gpt-4o
+  
+  - id: claude37
+    provider: github:anthropic/claude-3.7-sonnet
+  
+  - id: gemini
+    provider: github:google/gemini-2.0-flash
+
+prompts:
+  - |
+    Write a Python function that implements binary search.
+    Include proper error handling and type hints.
+
+tests:
+  - description: "Binary search implementation"
+    assert:
+      - type: contains
+        value: "def binary_search"
+      - type: contains
+        value: "left"
+      - type: contains
+        value: "right"
+      - type: javascript
+        value: |
+          // Check for type hints
+          output.includes('->') && output.includes(':')
+      - type: javascript
+        value: |
+          // Check for error handling
+          output.includes('try') || output.includes('if') || output.includes('raise')
