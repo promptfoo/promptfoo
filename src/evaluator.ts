@@ -71,6 +71,9 @@ const LATE_INTERPOLATION_PROPERTIES = new Set([
 /**
  * Properties that should not be recursively interpolated to preserve
  * their original structure and avoid unintended modifications.
+ *
+ * - 'config': Provider and test configuration must remain as-is for proper functionality
+ * - 'metadata': Test metadata and tracing information should not be modified
  */
 const INTERPOLATION_EXCLUSIONS = new Set(['config', 'metadata']);
 
