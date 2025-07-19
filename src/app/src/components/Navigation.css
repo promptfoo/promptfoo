@@ -44,3 +44,27 @@
 .nav a:hover {
   color: #ddd;
 }
+
+/* Ensure analytics links have consistent dark mode colors */
+[data-theme='dark'] .nav a,
+[data-theme='dark'] .nav button {
+  color: #f0f0f0;
+}
+
+[data-theme='dark'] .nav a:hover,
+[data-theme='dark'] .nav button:hover {
+  color: #ddd;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Specific styling for analytics link to ensure consistency */
+.nav .analytics-link,
+[data-theme='dark'] .nav .analytics-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+[data-theme='dark'] .nav .analytics-link:hover {
+  color: #ddd;
+  background-color: rgba(255, 255, 255, 0.08);
+}
