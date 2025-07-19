@@ -89,6 +89,7 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+import { createGitHubProvider } from './github/index';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -520,18 +521,7 @@ export const providerMap: ProviderFactory[] = [
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':') || 'openai/gpt-4.1';
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://models.github.ai',
-          apiKeyEnvar: 'GITHUB_TOKEN',
-        },
-      });
-    },
+    ) => createGitHubProvider(providerPath, providerOptions, context),
   },
   {
     test: (providerPath: string) => providerPath.startsWith('groq:'),
