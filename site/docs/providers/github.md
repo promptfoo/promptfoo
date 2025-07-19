@@ -30,7 +30,9 @@ GitHub Models provides access to industry-leading AI models from various provide
 ### Model Categories
 
 **Language Models**
-- OpenAI GPT series (gpt-4o, gpt-4o-mini, o1-preview, o1-mini, o3-mini)
+- OpenAI GPT-4.1 series (gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
+- OpenAI GPT-4o series (gpt-4o, gpt-4o-mini) - Deprecated, use GPT-4.1 instead
+- OpenAI reasoning models (o1-preview, o1-mini, o3-mini)
 - Anthropic Claude series (claude-3.7-sonnet, claude-3.5-sonnet)
 - Google Gemini series (gemini-2.5-pro, gemini-2.0-flash)
 - Meta Llama series (including Llama 4 with up to 10M context)
@@ -49,7 +51,7 @@ For the most up-to-date list of available models, visit the [GitHub Models marke
 
 ```yaml
 providers:
-  - github:openai/gpt-4o
+  - github:openai/gpt-4.1
 ```
 
 ### With Configuration
@@ -68,12 +70,17 @@ providers:
 ```yaml
 providers:
   - id: github-fast
-    provider: github:openai/gpt-4o-mini
+    provider: github:openai/gpt-4.1-nano
     config:
       temperature: 0.5
   
+  - id: github-balanced
+    provider: github:openai/gpt-4.1-mini
+    config:
+      temperature: 0.6
+  
   - id: github-smart
-    provider: github:anthropic/claude-3.7-sonnet
+    provider: github:openai/gpt-4.1
     config:
       temperature: 0.7
   
@@ -87,11 +94,13 @@ providers:
 
 Choose models based on your specific needs:
 
-- **Code Generation**: Look for models optimized for coding tasks (e.g., Codestral series)
-- **Reasoning**: Choose models with strong reasoning capabilities (e.g., o1/o3 series, DeepSeek-R1)
-- **Speed**: Select "mini" or "flash" variants for faster responses
-- **Context Length**: Check model specifications for context window sizes (ranging from standard to 10M+ tokens)
-- **Multimodal**: Use models that explicitly support vision, audio, or other modalities
+- **Best Overall**: GPT-4.1 - Superior coding, instruction following, and long-context understanding
+- **Fast & Cheap**: GPT-4.1-nano - Lowest latency and cost while maintaining GPT-4.1 capabilities
+- **Balanced**: GPT-4.1-mini - Good performance with lower cost than full GPT-4.1
+- **Code Generation**: Codestral series for specialized code tasks
+- **Reasoning**: o1/o3 series or DeepSeek-R1 for complex reasoning
+- **Long Context**: GPT-4.1 models support up to 1M tokens, Llama 4 Scout supports 10M tokens
+- **Multimodal**: GPT-4.1 models support text and vision
 
 Visit the [GitHub Models marketplace](https://github.com/marketplace/models/) to compare model capabilities and pricing.
 
@@ -142,7 +151,9 @@ Models are accessed using the format `github:[model-id]` where `model-id` follow
 - Partner models: `azureml-[vendor]/[model-name]`
 
 Examples:
-- `github:openai/gpt-4o`
+- `github:openai/gpt-4.1` (recommended)
+- `github:openai/gpt-4.1-mini`
+- `github:openai/gpt-4.1-nano`
 - `github:anthropic/claude-3.5-sonnet`
 - `github:azureml/Phi-4`
 - `github:azureml-mistral/Codestral-2501`
@@ -154,7 +165,7 @@ import promptfoo from 'promptfoo';
 
 // Basic usage
 const results = await promptfoo.evaluate({
-  providers: ['github:openai/gpt-4o', 'github:anthropic/claude-3.7-sonnet'],
+  providers: ['github:openai/gpt-4.1', 'github:anthropic/claude-3.7-sonnet'],
   prompts: ['Write a function to {{task}}'],
   tests: [
     {

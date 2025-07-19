@@ -4,39 +4,41 @@
 description: "Test GitHub Models provider with latest models"
 
 providers:
-  # Latest models
+  # GPT-4.1 models (recommended)
+  - id: gpt41
+    provider: github:openai/gpt-4.1
+    config:
+      temperature: 0.7
+      max_tokens: 4096
+  
+  - id: gpt41mini
+    provider: github:openai/gpt-4.1-mini
+    config:
+      temperature: 0.5
+      max_tokens: 2048
+  
+  - id: gpt41nano
+    provider: github:openai/gpt-4.1-nano
+    config:
+      temperature: 0.3
+      max_tokens: 1024
+  
+  # Other specialized models
   - id: codestral
     provider: github:azureml-mistral/Codestral-2501
     config:
       temperature: 0.1
       max_tokens: 2048
   
-  - id: phi4
-    provider: github:azureml/Phi-4
+  - id: claude37
+    provider: github:anthropic/claude-3.7-sonnet
     config:
-      temperature: 0.5
-      max_tokens: 1024
-  
-  - id: deepseek
-    provider: github:azureml-deepseek/DeepSeek-R1
-    config:
-      temperature: 0.3
-      max_tokens: 4096
+      temperature: 0.7
   
   - id: o3mini
     provider: github:openai/o3-mini
     config:
       temperature: 0.2
-  
-  # Existing popular models
-  - id: gpt4o
-    provider: github:openai/gpt-4o
-  
-  - id: claude37
-    provider: github:anthropic/claude-3.7-sonnet
-  
-  - id: gemini
-    provider: github:google/gemini-2.0-flash
 
 prompts:
   - |

@@ -522,7 +522,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':') || 'openai/gpt-4o';
+      const modelName = splits.slice(1).join(':') || 'openai/gpt-4.1';
       return new OpenAiChatCompletionProvider(modelName, {
         ...providerOptions,
         config: {

@@ -32,9 +32,9 @@ describe('GitHub Models Default Providers', () => {
     const providers = await getDefaultProviders();
 
     // Should use GitHub Models for grading and suggestions
-    expect(providers.gradingProvider.id()).toBe('openai/gpt-4o');
-    expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-4o');
-    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-4o');
+    expect(providers.gradingProvider.id()).toBe('openai/gpt-4.1');
+    expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-4.1');
+    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-4.1');
     
     // Should fall back to OpenAI for embeddings and moderation (not supported by GitHub)
     expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
@@ -75,7 +75,7 @@ describe('GitHub Models Default Providers', () => {
     });
 
     // Should use GitHub Models
-    expect(providers.gradingProvider.id()).toBe('openai/gpt-4o');
-    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-4o');
+    expect(providers.gradingProvider.id()).toBe('openai/gpt-4.1');
+    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-4.1');
   });
 });
