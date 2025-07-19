@@ -707,39 +707,40 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   providers: [
     {
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
-      config:
-        /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
-          model: 'gpt-4.1',
-          instructions: 'You can add two numbers together using the `addNumbers` tool',
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'addNumbers',
-                description: 'Add two numbers together',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    a: { type: 'number' },
-                    b: { type: 'number' },
-                  },
-                  required: ['a', 'b'],
+      config: {
+        model: 'gpt-4.1',
+        instructions: 'You can add two numbers together using the `addNumbers` tool',
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'addNumbers',
+              description: 'Add two numbers together',
+              parameters: {
+                type: 'object',
+                properties: {
+                  a: { type: 'number' },
+                  b: { type: 'number' },
                 },
+                required: ['a', 'b'],
+                additionalProperties: false,
               },
-            },
-          ],
-          /**
-           * Map of function tool names to function callback.
-           */
-          functionToolCallbacks: {
-            // this function should accept a string, and return a string
-            // or a `Promise<string>`.
-            addNumbers: (parametersJsonString) => {
-              const { a, b } = JSON.parse(parametersJsonString);
-              return JSON.stringify(a + b);
+              strict: true,
             },
           },
-        }),
+        ],
+        /**
+         * Map of function tool names to function callback.
+         */
+        functionToolCallbacks: {
+          // this function should accept a JSON-parsed value, and return a string
+          // or a `Promise<string>`.
+          addNumbers: (parameters) => {
+            const { a, b } = parameters;
+            return JSON.stringify(a + b);
+          },
+        },
+      },
     },
   ],
   tests: [

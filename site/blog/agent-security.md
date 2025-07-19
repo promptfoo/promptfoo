@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2025-02-14
 authors: [vanessa]
+tags: [security-vulnerability, best-practices, agents]
 ---
 
 # Understanding AI Agent Security

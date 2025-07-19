@@ -1,10 +1,6 @@
 import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
-import {
-  DoNotAnswerPlugin,
-  PLUGIN_ID,
-  fetchDataset,
-} from '../../../src/redteam/plugins/donotanswer';
+import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/donotanswer';
 
 jest.mock('fs');
 jest.mock('../../../src/fetch');
@@ -50,7 +46,7 @@ describe('DoNotAnswerPlugin', () => {
 
   describe('DoNotAnswerPlugin class', () => {
     it('should have correct plugin ID', () => {
-      expect(plugin.id).toBe(PLUGIN_ID);
+      expect(plugin.id).toBe('promptfoo:redteam:donotanswer');
     });
 
     it('should set canGenerateRemote to false', () => {

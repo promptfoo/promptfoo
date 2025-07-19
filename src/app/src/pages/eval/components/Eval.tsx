@@ -36,6 +36,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
+    resetFilters,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -108,6 +109,10 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
 
   useEffect(() => {
+    // Reset filters when navigating to a different eval; necessary because Zustand
+    // is a global store.
+    resetFilters();
+
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
@@ -128,7 +133,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      async function handleResultsFile(data: ResultsFile) {
+      const handleResultsFile = async (data: ResultsFile) => {
         setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author ?? null);
@@ -139,7 +144,7 @@ export default function Eval({ fetchId }: EvalOptions) {
           setEvalId(newId);
           loadEvalById(newId);
         }
-      }
+      };
 
       socket
         .on('init', async (data) => {
@@ -194,6 +199,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
+    resetFilters,
   ]);
 
   usePageMeta({

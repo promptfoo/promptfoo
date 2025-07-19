@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider, AtomicTestCase, CallApiContextParams, Prompt } from '../../../src/types';
@@ -210,6 +211,7 @@ describe('RedteamGoatProvider', () => {
           value: 'expected content',
         },
       ],
+      metadata: { pluginId: 'contains' },
     } as AtomicTestCase;
 
     const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
@@ -347,6 +349,7 @@ describe('RedteamGoatProvider', () => {
       const testConfig = {
         vars: {},
         assert: [{ type: 'contains', value: 'harmful' }],
+        metadata: { pluginId: 'contains' },
       } as AtomicTestCase;
 
       const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
@@ -418,6 +421,7 @@ describe('RedteamGoatProvider', () => {
         test: {
           vars: {},
           assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
         } as AtomicTestCase,
       };
 
@@ -471,6 +475,7 @@ describe('RedteamGoatProvider', () => {
         test: {
           vars: {},
           assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
         } as AtomicTestCase,
       };
 
@@ -532,6 +537,7 @@ describe('RedteamGoatProvider', () => {
         test: {
           vars: {},
           assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
         } as AtomicTestCase,
       };
 

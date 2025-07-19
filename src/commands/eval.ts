@@ -260,6 +260,8 @@ export async function doEval(
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
       testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
+      // Flatten the scenarios array in case glob patterns were used
+      testSuite.scenarios = testSuite.scenarios.flat();
     }
     for (const scenario of testSuite.scenarios || []) {
       if (scenario.tests) {
@@ -657,11 +659,8 @@ export async function doEval(
             ),
           );
         }
-        logger.info('\nDone.');
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
-      } else {
-        logger.info('\nDone.');
       }
     }
     if (testSuite.redteam) {
@@ -848,6 +847,10 @@ export function evalCommand(
         return;
       }
       if (command.args.length > 0) {
+        if (command.args[0] === 'help') {
+          evalCmd.help();
+          return;
+        }
         logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
 
@@ -894,3 +897,5 @@ export function evalCommand(
 
   return evalCmd;
 }
+
+export { EvalCommandSchema };

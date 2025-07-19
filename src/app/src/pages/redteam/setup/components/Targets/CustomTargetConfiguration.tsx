@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import ProviderConfigDialog from '@app/pages/eval-creator/components/ProviderConfigDialog';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { Box, Typography, TextField, Button } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import type { ProviderOptions } from '../../types';
 
 interface CustomTargetConfigurationProps {

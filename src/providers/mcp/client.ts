@@ -51,6 +51,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args,
+          env: process.env as Record<string, string>,
         });
         await client.connect(transport);
       } else if (server.path) {
@@ -71,6 +72,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command,
           args: [server.path],
+          env: process.env as Record<string, string>,
         });
         await client.connect(transport);
       } else if (server.url) {

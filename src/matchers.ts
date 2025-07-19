@@ -227,10 +227,11 @@ export async function matchesSimilarity(
     }
   }
 
+  const defaults = await getDefaultProviders();
   const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    (await getDefaultProviders()).embeddingProvider,
+    defaults.embeddingProvider,
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
@@ -537,13 +538,27 @@ export async function matchesLlmRubric(
     jsonObjects = [resp.output];
   } else {
     return fail(
-      'llm-rubric produced malformed response - output must be string or object',
+      `llm-rubric produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
+  }
+
+  if (!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
+    return fail(
+      `llm-rubric produced malformed response - We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
       resp.tokenUsage,
     );
   }
 
   // expects properties pass, score, and reason
   const parsed = jsonObjects[0] as Partial<GradingResult>;
+
+  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
+    return fail(
+      `llm-rubric produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
+  }
 
   let pass = parsed.pass ?? true;
   if (typeof pass !== 'boolean') {
@@ -795,7 +810,7 @@ export async function matchesClosedQa(
     const pass = resp.output.trimEnd().endsWith('Y');
     let reason;
     if (pass) {
-      reason = 'The submission meets the criterion';
+      reason = `The submission meets the criterion:\n${resp.output}`;
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {

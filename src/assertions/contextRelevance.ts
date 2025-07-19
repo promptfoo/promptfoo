@@ -43,5 +43,8 @@ export const handleContextRelevance = async ({
       assertion.threshold ?? 0,
       test.options,
     )),
+    metadata: {
+      context,
+    },
   };
 };

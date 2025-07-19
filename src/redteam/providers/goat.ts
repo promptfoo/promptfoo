@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -23,7 +24,7 @@ import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from '
 /**
  * Represents metadata for the GOAT conversation process.
  */
-export interface GoatMetadata extends BaseRedteamMetadata {
+interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached';
   successfulAttacks?: Array<{
@@ -37,7 +38,7 @@ export interface GoatMetadata extends BaseRedteamMetadata {
 /**
  * Represents the complete response from a GOAT conversation.
  */
-export interface GoatResponse extends ProviderResponse {
+interface GoatResponse extends ProviderResponse {
   metadata: GoatMetadata;
 }
 
@@ -131,7 +132,14 @@ export default class GoatProvider implements ApiProvider {
 
     if (context?.test) {
       test = context?.test;
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+      assertToUse = test?.assert?.find(
+        (a: { type: string }) => a.type && a.type.includes(test?.metadata?.pluginId),
+      );
+
+      // Fallback: if no assertion matches the pluginId, use the first assertion with a type
+      if (!assertToUse) {
+        assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+      }
     }
 
     let previousAttackerMessage = '';

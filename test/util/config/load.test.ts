@@ -1297,7 +1297,7 @@ describe('resolveConfigs', () => {
           modelName: 'gpt-4',
         }),
       ],
-      scenarios: ['file://scenarios.yaml'],
+      scenarios,
       tests: externalTests,
       defaultTest: expect.objectContaining({
         metadata: {},
@@ -1306,7 +1306,7 @@ describe('resolveConfigs', () => {
 
     expect(testSuite.prompts[0].raw).toBe(prompt);
     expect(testSuite.tests).toEqual(externalTests);
-    expect(testSuite.scenarios).toEqual(['file://scenarios.yaml']);
+    expect(testSuite.scenarios).toEqual(scenarios);
   });
 
   it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
