@@ -18,6 +18,7 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
+import * as fileUtils from '../src/util/file';
 
 jest.mock('../src/util/transform', () => ({
   TransformInputType: {
@@ -2517,6 +2518,183 @@ describe('evaluator', () => {
       },
     });
   });
+
+  it('should handle metric interpolation in assert-set type assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { metric1: 'performance', metric2: 'quality' } }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'assert-set' as const,
+            metric: 'combined-metrics',
+            assert: [
+              {
+                type: 'llm-rubric' as const,
+                value: 'Check performance',
+                metric: '{{metric1}}',
+              },
+              {
+                type: 'llm-rubric' as const,
+                value: 'Check quality',
+                metric: '{{metric2}}',
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+    const assertSet = result.testCase.assert[0];
+    expect(assertSet.type).toBe('assert-set');
+    expect(assertSet.assert[0].metric).toBe('performance');
+    expect(assertSet.assert[1].metric).toBe('quality');
+  });
+
+  it('should interpolate rubricPrompt property in assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { criteria: 'accuracy and completeness', threshold: '0.8' } }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            value: 'Check output',
+            rubricPrompt: 'Evaluate based on {{criteria}} with minimum score {{threshold}}',
+            metric: 'custom-rubric',
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+    expect(result.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      rubricPrompt: 'Evaluate based on accuracy and completeness with minimum score 0.8',
+      metric: 'custom-rubric',
+    });
+  });
+
+  it.skip('should handle file:// references in assertion properties', async () => {
+    // Mock maybeLoadFromExternalFile to return test content
+    const originalMaybeLoadFromExternalFile = fileUtils.maybeLoadFromExternalFile;
+    jest.spyOn(fileUtils, 'maybeLoadFromExternalFile').mockImplementation((path: string) => {
+      if (path === 'file://rubric.txt') {
+        return 'Evaluate based on {{criteria}}';
+      }
+      if (path === 'file://values.json') {
+        return ['expected1', 'expected2'];
+      }
+      return path;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { criteria: 'performance' } }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            rubricPrompt: 'file://rubric.txt',
+            metric: 'file-based-rubric',
+          },
+          {
+            type: 'contains-any' as const,
+            value: 'file://values.json' as any,
+            metric: 'file-based-values',
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+
+    // Check that file content was loaded and interpolated
+    expect(result.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      rubricPrompt: 'Evaluate based on performance', // File content interpolated
+      metric: 'file-based-rubric',
+    });
+
+    // Check that array values were loaded from file
+    expect(result.testCase.assert[1]).toMatchObject({
+      type: 'contains-any',
+      value: ['expected1', 'expected2'],
+      metric: 'file-based-values',
+    });
+
+    // Restore original function
+    jest.restoreAllMocks();
+  });
+
+  it('should interpolate metric property in defaultTest assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        { vars: { metric: 'metric1', value: 'test1', grader: 'openai:gpt-4' } },
+        { vars: { metric: 'accuracy', value: 'test2', grader: 'openai:gpt-3.5' } },
+      ],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            value: 'Output should be {{value}}',
+            metric: '{{metric}}',
+            provider: '{{grader}}',
+          },
+          {
+            type: 'equals' as const,
+            value: 'test',
+            metric: 'static-metric',
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Check that metric properties were interpolated correctly
+    const firstResult = summary.results[0] as any;
+    expect(firstResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Output should be {{value}}', // Should NOT be interpolated (late interpolation)
+      metric: 'metric1', // Should be interpolated
+      provider: 'openai:gpt-4', // Should be interpolated
+    });
+
+    const secondResult = summary.results[1] as any;
+    expect(secondResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Output should be {{value}}', // Should NOT be interpolated (late interpolation)
+      metric: 'accuracy', // Should be interpolated
+      provider: 'openai:gpt-3.5', // Should be interpolated
+    });
+
+    // Static metric should remain unchanged
+    expect(firstResult.testCase.assert[1]).toMatchObject({
+      type: 'equals',
+      metric: 'static-metric',
+    });
+  });
 });
 
 describe('generateVarCombinations', () => {
@@ -3015,6 +3193,10 @@ describe('formatVarsForDisplay', () => {
 });
 
 describe('Evaluator with external defaultTest', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -3129,5 +3311,96 @@ describe('Evaluator with external defaultTest', () => {
     expect(result.testCase.options?.transformVars).toBe('vars.transformed = true; return vars;');
     // But other options should be merged
     expect(result.testCase.options?.provider).toBe('default-provider');
+  });
+
+  it('should interpolate metric property in defaultTest assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        { vars: { metric: 'metric1', value: 'test1', grader: 'openai:gpt-4' } },
+        { vars: { metric: 'accuracy', value: 'test2', grader: 'openai:gpt-3.5' } },
+      ],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            value: 'Output should be {{value}}',
+            metric: '{{metric}}',
+            provider: '{{grader}}',
+          },
+          {
+            type: 'equals' as const,
+            value: 'test',
+            metric: 'static-metric',
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Check that metric properties were interpolated correctly
+    const firstResult = summary.results[0] as any;
+    expect(firstResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Output should be {{value}}', // Should NOT be interpolated (late interpolation)
+      metric: 'metric1', // Should be interpolated
+      provider: 'openai:gpt-4', // Should be interpolated
+    });
+
+    const secondResult = summary.results[1] as any;
+    expect(secondResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Output should be {{value}}', // Should NOT be interpolated (late interpolation)
+      metric: 'accuracy', // Should be interpolated
+      provider: 'openai:gpt-3.5', // Should be interpolated
+    });
+
+    // Static metric should remain unchanged
+    expect(firstResult.testCase.assert[1]).toMatchObject({
+      type: 'equals',
+      metric: 'static-metric',
+    });
+  });
+
+  it('should handle metric interpolation in assert-set type assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { metric1: 'performance', metric2: 'quality' } }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'assert-set' as const,
+            metric: 'combined-metrics',
+            assert: [
+              {
+                type: 'llm-rubric' as const,
+                value: 'Check performance',
+                metric: '{{metric1}}',
+              },
+              {
+                type: 'llm-rubric' as const,
+                value: 'Check quality',
+                metric: '{{metric2}}',
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+    const assertSet = result.testCase.assert[0];
+    expect(assertSet.type).toBe('assert-set');
+    expect(assertSet.assert[0].metric).toBe('performance');
+    expect(assertSet.assert[1].metric).toBe('quality');
   });
 });
