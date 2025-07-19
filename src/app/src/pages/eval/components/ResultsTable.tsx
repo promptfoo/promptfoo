@@ -9,6 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
+import { usePaginationWithUrl } from '@app/hooks/usePaginationWithUrl';
 import {
   type EvaluateTable,
   type EvaluateTableOutput,
@@ -209,10 +210,14 @@ function ResultsTable({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
-  const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
-    pageIndex: 0,
-    pageSize: 50,
-  });
+  const {
+    pagination,
+    setPagination,
+    gotoPageValue,
+    handleGotoPageChange,
+    handleGotoPageBlur,
+    resetPagination,
+  } = usePaginationWithUrl();
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -373,8 +378,8 @@ function ResultsTable({
   };
 
   React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
+    resetPagination();
+  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount, resetPagination]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -382,13 +387,21 @@ function ResultsTable({
   // Reset pagination when evalId changes
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
-      setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+      resetPagination();
       previousEvalIdRef.current = evalId;
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
     }
-  }, [evalId]);
+  }, [evalId, resetPagination]);
+
+  // Reset to page 0 if current page is invalid after filtering
+  React.useEffect(() => {
+    const maxPageIndex = Math.max(0, Math.ceil(filteredResultsCount / pagination.pageSize) - 1);
+    if (pagination.pageIndex > maxPageIndex && filteredResultsCount > 0) {
+      resetPagination();
+    }
+  }, [filteredResultsCount, pagination.pageSize, resetPagination]);
 
   // Only fetch data when pagination or filters change, but not when evalId changes
   React.useEffect(() => {
@@ -1236,10 +1249,18 @@ function ResultsTable({
                 <Select
                   value={pagination.pageSize}
                   onChange={(e) => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageSize: Number(e.target.value),
-                    }));
+                    const newPageSize = Number(e.target.value);
+                    const currentFirstItem = pagination.pageIndex * pagination.pageSize;
+                    const newPageIndex = Math.floor(currentFirstItem / newPageSize);
+                    const newMaxPageIndex = Math.max(
+                      0,
+                      Math.ceil(filteredResultsCount / newPageSize) - 1,
+                    );
+
+                    setPagination({
+                      pageSize: newPageSize,
+                      pageIndex: Math.min(newPageIndex, newMaxPageIndex),
+                    });
                     window.scrollTo(0, 0);
                   }}
                   displayEmpty
@@ -1269,16 +1290,9 @@ function ResultsTable({
                 <TextField
                   size="small"
                   type="number"
-                  onChange={(e) => {
-                    const page = e.target.value ? Number(e.target.value) - 1 : null;
-                    if (page !== null && page >= 0 && page < pageCount) {
-                      setPagination((prev) => ({
-                        ...prev,
-                        pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                      }));
-                      clearRowIdFromUrl();
-                    }
-                  }}
+                  value={gotoPageValue}
+                  onChange={(e) => handleGotoPageChange(e.target.value, pageCount)}
+                  onBlur={() => handleGotoPageBlur(pageCount)}
                   sx={{
                     width: '60px',
                     textAlign: 'center',

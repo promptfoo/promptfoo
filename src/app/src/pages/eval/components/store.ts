@@ -99,6 +99,7 @@ interface TableState {
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+  abortController: AbortController | null;
 
   /**
    * Adds a new filter to the filters array.
@@ -291,6 +292,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   highlightedResultsCount: 0,
 
   isFetching: false,
+  abortController: null,
 
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
@@ -304,7 +306,15 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
-    set({ isFetching: true });
+    // Cancel any in-flight request
+    const currentController = get().abortController;
+    if (currentController) {
+      currentController.abort();
+    }
+
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    set({ isFetching: true, abortController });
 
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
@@ -344,6 +354,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
         url
           .toString()
           .replace(window.location.origin, ''),
+        {
+          signal: abortController.signal,
+        },
       );
 
       if (resp.ok) {
@@ -359,6 +372,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
           author: data.author,
           evalId: skipSettingEvalId ? get().evalId : id,
           isFetching: false,
+          abortController: null,
+          error: null,
           filters: {
             ...prevState.filters,
             options: {
@@ -370,11 +385,24 @@ export const useTableStore = create<TableState>()((set, get) => ({
         return data;
       }
 
-      set({ isFetching: false });
+      const errorText = await resp.text();
+      set({
+        isFetching: false,
+        abortController: null,
+        error: `Failed to fetch eval data: ${resp.status} ${resp.statusText}${errorText ? ` - ${errorText}` : ''}`,
+      });
       return null;
     } catch (error) {
+      // Ignore abort errors
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return null;
+      }
       console.error('Error fetching eval data:', error);
-      set({ isFetching: false });
+      set({
+        isFetching: false,
+        abortController: null,
+      });
       return null;
     }
   },
