@@ -69,6 +69,12 @@ const LATE_INTERPOLATION_PROPERTIES = new Set([
 ]);
 
 /**
+ * Properties that should not be recursively interpolated to preserve
+ * their original structure and avoid unintended modifications.
+ */
+const INTERPOLATION_EXCLUSIONS = new Set(['config', 'metadata']);
+
+/**
  * Interpolates a single property value with variables, handling file:// references
  * and different value types appropriately.
  */
@@ -87,20 +93,25 @@ async function interpolatePropertyValue(
   if (typeof value === 'string') {
     // Check for file:// references first
     if (value.startsWith('file://')) {
-      // Interpolate variables in the file path itself
-      const interpolatedPath = nunjucks.renderString(value, vars);
-      // Load the file content
-      const fileContent = await maybeLoadFromExternalFile(interpolatedPath);
-      // If the file content is a string, try to interpolate it as well
-      if (typeof fileContent === 'string' && !LATE_INTERPOLATION_PROPERTIES.has(propertyName)) {
-        try {
-          return nunjucks.renderString(fileContent, vars);
-        } catch {
-          // If interpolation fails, return the raw content
-          return fileContent;
+      try {
+        // Interpolate variables in the file path itself
+        const interpolatedPath = nunjucks.renderString(value, vars);
+        // Load the file content
+        const fileContent = await maybeLoadFromExternalFile(interpolatedPath);
+        // If the file content is a string, try to interpolate it as well
+        if (typeof fileContent === 'string' && !LATE_INTERPOLATION_PROPERTIES.has(propertyName)) {
+          try {
+            return nunjucks.renderString(fileContent, vars);
+          } catch {
+            // If interpolation fails, return the raw content
+            return fileContent;
+          }
         }
+        return fileContent;
+      } catch (error) {
+        logger.debug(`Failed to interpolate file path ${value}: ${error}`);
+        return value;
       }
-      return fileContent;
     }
 
     // Regular string interpolation
@@ -133,11 +144,7 @@ async function interpolatePropertyValue(
   }
 
   // Handle nested objects (but not for properties that should remain as-is)
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    !['config', 'metadata'].includes(propertyName)
-  ) {
+  if (typeof value === 'object' && value !== null && !INTERPOLATION_EXCLUSIONS.has(propertyName)) {
     const result: Record<string, any> = {};
     for (const [key, val] of Object.entries(value)) {
       result[key] = await interpolatePropertyValue(val, vars, `${propertyName}.${key}`);
@@ -996,9 +1003,6 @@ class Evaluator {
         ...(testCase.assert || []),
       ];
 
-      // Interpolate metric properties in assertions
-      testCase.assert = await interpolateAssertionProperties(testCase.assert, testCase.vars);
-
       testCase.threshold =
         testCase.threshold ??
         (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.threshold : undefined);
@@ -1061,12 +1065,20 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
-                test: (() => {
+                test: await (async () => {
                   const baseTest = {
                     ...testCase,
                     vars,
                     options: testCase.options,
                   };
+
+                  // Interpolate assertion properties with the specific vars from var combinations
+                  const interpolatedAssertions = await interpolateAssertionProperties(
+                    testCase.assert || [],
+                    vars,
+                  );
+                  baseTest.assert = interpolatedAssertions;
+
                   // Only add tracing metadata fields if tracing is actually enabled
                   const tracingEnabled =
                     testCase.metadata?.tracingEnabled === true ||
