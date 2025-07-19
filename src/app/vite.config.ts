@@ -85,10 +85,7 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
     ),
-    'import.meta.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING': JSON.stringify(
-      process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING
-        ? process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING === 'true'
-        : false,
-    ),
+    'import.meta.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING':
+      process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING === 'true',
   },
 });

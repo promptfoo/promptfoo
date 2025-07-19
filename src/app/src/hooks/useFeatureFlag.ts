@@ -7,6 +7,7 @@ export type FeatureFlag = keyof typeof FEATURE_FLAGS;
 
 export const useFeatureFlag = (flag: FeatureFlag): boolean => {
   const flagKey = FEATURE_FLAGS[flag];
-  // Cast to boolean to ensure consistent return type
-  return Boolean(import.meta.env[flagKey]);
+  // Now that we're passing actual booleans from vite.config.ts,
+  // we can directly return the value with a fallback to false
+  return import.meta.env[flagKey] ?? false;
 };
