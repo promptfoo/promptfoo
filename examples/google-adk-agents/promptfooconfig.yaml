@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Google ADK Examples - Single and Multi-Agent
+
+providers:
+  - id: file://provider.py:call_provider
+    label: ADK Examples
+
+prompts:
+  - '{{message}}'
+
+tests:
+  # ============ SINGLE AGENT TESTS ============
+  # Test 1: Basic weather query
+  - vars:
+      message: "What's the weather in San Francisco?"
+      system: single
+    assert:
+      - type: contains-any
+        value: ['San Francisco', 'weather', 'temperature']
+
+  # Test 2: Different location
+  - vars:
+      message: 'Is it raining in London?'
+      system: single
+    assert:
+      - type: contains
+        value: 'London'
+      - type: llm-rubric
+        value: 'The response mentions weather conditions for London'
+        threshold: 0.8
+
+  # Test 3: Non-weather query (should redirect)
+  - vars:
+      message: "What's 2 + 2?"
+      system: single
+    assert:
+      - type: llm-rubric
+        value: "The response politely explains that it's a weather specialist"
+        threshold: 0.8
+
+  # ============ MULTI-AGENT TESTS ============
+  # Test 4: Birthday party planning
+  - vars:
+      message: 'I want to plan a birthday party for 20 people with a $500 budget'
+      system: multi
+    assert:
+      - type: contains-any
+        value: ['birthday', 'party', 'budget', 'task', 'plan']
+      - type: llm-rubric
+        value: 'Response provides party planning guidance including tasks or budget information'
+        threshold: 0.8
+
+  # Test 5: Wedding budget breakdown
+  - vars:
+      message: 'Create a budget breakdown for a wedding reception with 100 guests and $5000 budget'
+      system: multi
+    assert:
+      - type: contains-any
+        value: ['wedding', 'budget', 'guests', 'breakdown']
+      - type: llm-rubric
+        value: 'Response includes financial breakdown or cost estimates for wedding planning'
+        threshold: 0.8
+
+  # Test 6: Venue search
+  - vars:
+      message: 'Search for outdoor party venues in San Francisco'
+      system: multi
+    assert:
+      - type: contains-any
+        value: ['venue', 'San Francisco', 'outdoor', 'party']
+      - type: llm-rubric
+        value: 'Response attempts to find or suggest venues for parties in San Francisco'
+        threshold: 0.8
+
+  # Test 7: Timeline generation
+  - vars:
+      message: 'Generate a timeline for planning a corporate event in 2 weeks'
+      system: multi
+    assert:
+      - type: contains-any
+        value: ['timeline', 'corporate', 'event', 'planning', 'weeks']
+      - type: llm-rubric
+        value: 'Response provides a timeline or schedule for event planning'
+        threshold: 0.8
+
+  # Test 8: Food calculation
+  - vars:
+      message: 'Calculate how much pizza I need for 30 people at a kids party'
+      system: multi
+    assert:
+      - type: contains-any
+        value: ['pizza', '30', 'people', 'kids', 'food']
+      - type: llm-rubric
+        value: 'Response provides food quantity calculations or recommendations'
+        threshold: 0.8
