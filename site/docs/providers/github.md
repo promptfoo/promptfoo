@@ -231,6 +231,6 @@ For more information on specific models and their capabilities, refer to the [Gi
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) - Compatible provider with similar API format
-- [Configuration Reference](/docs/configuration/) - General configuration options
+- [Configuration Reference](/docs/configuration/guide) - General configuration options
 - [Provider Options](/docs/providers/) - Overview of all available providers
 - [GitHub Models Documentation](https://docs.github.com/en/github-models) - Official GitHub Models documentation
