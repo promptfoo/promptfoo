@@ -277,9 +277,15 @@ export class CrescendoProvider implements ApiProvider {
       content: systemPrompt,
     });
 
-    const assertToUse = test?.assert?.find(
+    let assertToUse = test?.assert?.find(
       (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
     );
+
+    // Fallback: if no assertion matches the pluginId, use the first assertion with a type
+    if (!assertToUse) {
+      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    }
+
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
