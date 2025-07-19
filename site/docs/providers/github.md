@@ -38,18 +38,19 @@ GitHub Models provides access to industry-leading AI models from various provide
 - OpenAI GPT-4.1 series (gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
 - OpenAI GPT-4o series (gpt-4o, gpt-4o-mini)
 - OpenAI reasoning models (o1-preview, o1-mini, o3-mini)
-- Anthropic Claude series (claude-3.7-sonnet, claude-3.5-sonnet, claude-3.5-haiku)
+- Anthropic Claude series (claude-4-opus, claude-4-sonnet, claude-3.7-sonnet, claude-3.5-sonnet, claude-3.5-haiku)
 - Google Gemini series (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash)
-- Meta Llama series (llama-3.3-70b-instruct)
-- xAI Grok series (grok-3, grok-3-mini)
+- Meta Llama series (llama-4-behemoth, llama-4-maverick, llama-4-scout, llama-3.3-70b-instruct)
+- xAI Grok series (grok-4, grok-3, grok-3-mini)
 - DeepSeek models (deepseek-r1, deepseek-v3)
 
 **Specialized Models**
 
 - Code generation: Mistral Codestral models
-- Reasoning: DeepSeek-R1, Microsoft Phi-4 series
-- Multimodal: Vision-capable models from various providers
+- Reasoning: DeepSeek-R1, Microsoft Phi-4 series, Grok-4 (256K context)
+- Multimodal: Vision-capable models from various providers, Llama 4 series
 - Fast inference: Flash and mini model variants
+- Long context: Llama 4 Scout (10M tokens), Llama 4 Maverick (1M tokens), Llama 4 Behemoth
 
 For the most up-to-date list of available models, visit the [GitHub Models marketplace](https://github.com/marketplace/models/).
 
@@ -66,7 +67,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: github:anthropic/claude-3.7-sonnet
+  - id: github:anthropic/claude-4-opus
     config:
       temperature: 0.7
       max_tokens: 4096
@@ -93,22 +94,28 @@ providers:
       temperature: 0.7
 
   - id: github-multimodal
-    provider: github:google/gemini-2.5-flash
+    provider: github:meta/llama-4-maverick
     config:
       temperature: 0.8
+
+  - id: github-reasoning
+    provider: github:xai/grok-4
+    config:
+      temperature: 0.7
 ```
 
 ## Model Selection Guidelines
 
 Choose models based on your specific needs:
 
-- **Best Overall**: GPT-4.1 - Superior coding, instruction following, and long-context understanding
+- **Best Overall**: GPT-4.1 or Claude 4 Opus - Superior coding, instruction following, and long-context understanding
 - **Fast & Cheap**: GPT-4.1-nano - Lowest latency and cost while maintaining strong capabilities
-- **Balanced**: GPT-4.1-mini - Good performance with lower cost than full GPT-4.1
+- **Balanced**: GPT-4.1-mini or Claude 4 Sonnet - Good performance with lower cost than full models
+- **Extended Context**: Llama 4 Scout (10M tokens) for processing entire codebases or multiple documents
 - **Code Generation**: Codestral series for specialized code tasks
-- **Reasoning**: DeepSeek-R1 or o-series models for complex reasoning
+- **Reasoning**: DeepSeek-R1, o-series models, or Grok-4 for complex reasoning tasks
 - **Long Context**: Models with extended context windows for processing large documents
-- **Multimodal**: Vision-capable models for text and image processing
+- **Multimodal**: Vision-capable models for text and image processing, including Llama 4 series
 
 Visit the [GitHub Models marketplace](https://github.com/marketplace/models/) to compare model capabilities and pricing.
 
@@ -162,9 +169,14 @@ Examples:
 - `github:openai/gpt-4.1`
 - `github:openai/gpt-4.1-mini`
 - `github:openai/gpt-4.1-nano`
-- `github:anthropic/claude-3.7-sonnet`
+- `github:anthropic/claude-4-opus`
+- `github:anthropic/claude-4-sonnet`
 - `github:google/gemini-2.5-pro`
+- `github:xai/grok-4`
 - `github:xai/grok-3`
+- `github:meta/llama-4-behemoth`
+- `github:meta/llama-4-scout`
+- `github:meta/llama-4-maverick`
 - `github:deepseek/deepseek-r1`
 - `github:azureml/Phi-4`
 - `github:azureml-mistral/Codestral-2501`
@@ -176,7 +188,7 @@ import promptfoo from 'promptfoo';
 
 // Basic usage
 const results = await promptfoo.evaluate({
-  providers: ['github:openai/gpt-4.1', 'github:anthropic/claude-3.7-sonnet'],
+  providers: ['github:openai/gpt-4.1', 'github:anthropic/claude-4-opus'],
   prompts: ['Write a function to {{task}}'],
   tests: [
     {
@@ -196,8 +208,8 @@ const specializedModels = await promptfoo.evaluate({
   providers: [
     'github:azureml-mistral/Codestral-2501', // Code generation
     'github:deepseek/deepseek-r1', // Advanced reasoning
-    'github:azureml/Phi-4', // Fast & efficient
-    'github:openai/o3-mini', // Cost-effective reasoning
+    'github:xai/grok-4', // Powerful reasoning and analysis
+    'github:meta/llama-4-scout', // Extended context (10M tokens)
   ],
   prompts: ['Implement {{algorithm}} with optimal time complexity'],
   tests: [

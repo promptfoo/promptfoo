@@ -44,7 +44,7 @@ providers:
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface                    | `f5:path-name`                                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                                 | `fal:image:fal-ai/fast-sdxl`                                    |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                                     | `fireworks:accounts/fireworks/models/qwen-v2p5-7b`              |
-| [GitHub](./github.md)                               | GitHub Models - OpenAI, Anthropic, Google, and more      | `github:openai/gpt-4.1` or `github:anthropic/claude-3.7-sonnet` |
+| [GitHub](./github.md)                               | GitHub Models - OpenAI, Anthropic, Google, and more       | `github:openai/gpt-4.1` or `github:anthropic/claude-3.7-sonnet` |
 | [Google AI Studio](./google.md)                     | Gemini models and Live API                                | `google:gemini-2.5-pro`, `google:live:gemini-2.0-flash-exp`     |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                                | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`              |
 | [Groq](./groq.md)                                   | High-performance inference API                            | `groq:llama-3.3-70b-versatile`                                  |
