@@ -22,10 +22,12 @@ describe('GitHub Models Default Providers', () => {
     jest.clearAllMocks();
   });
 
-  it('should use GitHub Models as default when only GITHUB_TOKEN is available', async () => {
+  it('should use GitHub token for github: model when only GITHUB_TOKEN is available', async () => {
     // Mock environment where only GITHUB_TOKEN is set
     mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
-      if (key === 'GITHUB_TOKEN') return 'test-github-token';
+      if (key === 'GITHUB_TOKEN') {
+        return 'test-github-token';
+      }
       return defaultValue;
     });
 
@@ -35,7 +37,7 @@ describe('GitHub Models Default Providers', () => {
     expect(providers.gradingProvider.id()).toBe('openai/gpt-4.1');
     expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-4.1');
     expect(providers.suggestionsProvider.id()).toBe('openai/gpt-4.1');
-    
+
     // Should fall back to OpenAI for embeddings and moderation (not supported by GitHub)
     expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
     expect(providers.moderationProvider.id()).toBe('openai:omni-moderation-latest');
@@ -43,8 +45,12 @@ describe('GitHub Models Default Providers', () => {
 
   it('should prefer OpenAI over GitHub when both tokens are available', async () => {
     mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
-      if (key === 'OPENAI_API_KEY') return 'test-openai-key';
-      if (key === 'GITHUB_TOKEN') return 'test-github-token';
+      if (key === 'OPENAI_API_KEY') {
+        return 'test-openai-key';
+      }
+      if (key === 'GITHUB_TOKEN') {
+        return 'test-github-token';
+      }
       return defaultValue;
     });
 
@@ -56,8 +62,12 @@ describe('GitHub Models Default Providers', () => {
 
   it('should prefer Anthropic over GitHub when Anthropic is available', async () => {
     mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
-      if (key === 'ANTHROPIC_API_KEY') return 'test-anthropic-key';
-      if (key === 'GITHUB_TOKEN') return 'test-github-token';
+      if (key === 'ANTHROPIC_API_KEY') {
+        return 'test-anthropic-key';
+      }
+      if (key === 'GITHUB_TOKEN') {
+        return 'test-github-token';
+      }
       return defaultValue;
     });
 
