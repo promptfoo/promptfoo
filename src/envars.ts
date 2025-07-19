@@ -216,6 +216,9 @@ type EnvVars = {
   // FAL
   FAL_KEY?: string;
 
+  // GitHub
+  GITHUB_TOKEN?: string;
+
   // Groq
   GROQ_API_KEY?: string;
 
