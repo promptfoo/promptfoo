@@ -45,26 +45,76 @@
   color: #ddd;
 }
 
-/* Ensure analytics links have consistent dark mode colors */
+/* Ensure all navigation elements have consistent dark mode colors */
 [data-theme='dark'] .nav a,
-[data-theme='dark'] .nav button {
-  color: #f0f0f0;
+[data-theme='dark'] .nav button,
+[data-theme='dark'] .nav .MuiIconButton-root,
+[data-theme='dark'] .nav .MuiButton-root {
+  color: #f0f0f0 !important;
 }
 
 [data-theme='dark'] .nav a:hover,
-[data-theme='dark'] .nav button:hover {
-  color: #ddd;
-  background-color: rgba(255, 255, 255, 0.08);
+[data-theme='dark'] .nav button:hover,
+[data-theme='dark'] .nav .MuiIconButton-root:hover,
+[data-theme='dark'] .nav .MuiButton-root:hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
-/* Specific styling for analytics link to ensure consistency */
-.nav .analytics-link,
-[data-theme='dark'] .nav .analytics-link {
-  color: inherit;
+/* Ensure SVG icons inherit proper colors in dark mode */
+[data-theme='dark'] .nav svg,
+[data-theme='dark'] .nav .MuiSvgIcon-root {
+  color: inherit !important;
+}
+
+/* Specific styling for any dashboard/analytics elements */
+[data-theme='dark'] .nav .dashboard-link,
+[data-theme='dark'] .nav .analytics-link,
+[data-theme='dark'] .nav [data-testid*="dashboard"],
+[data-theme='dark'] .nav [data-testid*="analytics"] {
+  color: #f0f0f0 !important;
   text-decoration: none;
 }
 
-[data-theme='dark'] .nav .analytics-link:hover {
-  color: #ddd;
-  background-color: rgba(255, 255, 255, 0.08);
+[data-theme='dark'] .nav .dashboard-link:hover,
+[data-theme='dark'] .nav .analytics-link:hover,
+[data-theme='dark'] .nav [data-testid*="dashboard"]:hover,
+[data-theme='dark'] .nav [data-testid*="analytics"]:hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Additional coverage for Material-UI components in the navbar */
+[data-theme='dark'] .MuiAppBar-root .MuiIconButton-root {
+  color: #ffffff !important;
+}
+
+[data-theme='dark'] .MuiAppBar-root .MuiIconButton-root:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme='dark'] .MuiAppBar-root .MuiButton-root {
+  color: #ffffff !important;
+}
+
+[data-theme='dark'] .MuiAppBar-root .MuiButton-root:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Comprehensive dark mode fix for ALL navigation elements */
+[data-theme='dark'] nav *,
+[data-theme='dark'] .MuiAppBar-root *,
+[data-theme='dark'] [role="navigation"] * {
+  color: #ffffff !important;
+}
+
+/* Ensure proper hover states for all interactive elements */
+[data-theme='dark'] nav button:hover,
+[data-theme='dark'] nav a:hover,
+[data-theme='dark'] .MuiAppBar-root button:hover,
+[data-theme='dark'] .MuiAppBar-root a:hover,
+[data-theme='dark'] [role="navigation"] button:hover,
+[data-theme='dark'] [role="navigation"] a:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
 }

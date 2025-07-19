@@ -69,24 +69,14 @@ const createAppTheme = (darkMode: boolean) =>
             fontWeight: 500,
             padding: '8px 16px',
             transition: 'all 0.2s ease-in-out',
-            color: darkMode ? '#ffffff' : '#0f172a',
             '&:hover': {
               transform: 'translateY(-1px)',
-              backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-              color: darkMode ? '#ffffff' : '#0f172a',
             },
           },
           contained: {
             boxShadow: 'none',
             '&:hover': {
               boxShadow: '0 4px 8px -2px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06)',
-            },
-          },
-          text: {
-            color: darkMode ? '#ffffff' : '#0f172a',
-            '&:hover': {
-              backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-              color: darkMode ? '#ffffff' : '#0f172a',
             },
           },
         },
@@ -178,6 +168,24 @@ const createAppTheme = (darkMode: boolean) =>
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
             boxShadow: 'none',
             borderBottom: `1px solid ${darkMode ? '#2c2c2c' : '#e2e8f0'}`,
+          },
+        },
+      },
+      MuiIconButton: {
+        styleOverrides: {
+          root: {
+            color: darkMode ? '#ffffff' : '#0f172a',
+            '&:hover': {
+              backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+              color: darkMode ? '#ffffff' : '#0f172a',
+            },
+            '&[color="inherit"]': {
+              color: darkMode ? '#ffffff' : '#0f172a',
+              '&:hover': {
+                backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                color: darkMode ? '#ffffff' : '#0f172a',
+              },
+            },
           },
         },
       },

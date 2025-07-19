@@ -29,24 +29,11 @@ RouterLink.displayName = 'RouterLink';
 
 const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
   color: theme.palette.text.primary,
-  textDecoration: 'none',
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
-    color: theme.palette.text.primary,
-    textDecoration: 'none',
   },
   '&.active': {
     backgroundColor: theme.palette.action.selected,
-    color: theme.palette.text.primary,
-  },
-  // Ensure link styling is consistent
-  '&[href]': {
-    color: theme.palette.text.primary,
-    textDecoration: 'none',
-    '&:hover': {
-      color: theme.palette.text.primary,
-      textDecoration: 'none',
-    },
   },
 }));
 
@@ -200,24 +187,6 @@ export default function Navigation({
                   <EngineeringIcon />
                 </IconButton>
               </Tooltip>
-            )}
-            {!IS_RUNNING_LOCALLY && (
-              <NavButton 
-                component="a" 
-                href="/analytics" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                sx={{
-                  color: 'text.primary',
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                    color: 'text.primary',
-                  },
-                  textDecoration: 'none',
-                }}
-              >
-                General Analytics
-              </NavButton>
             )}
             <DarkMode onToggleDarkMode={onToggleDarkMode} />
           </NavSection>
