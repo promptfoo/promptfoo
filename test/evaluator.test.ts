@@ -2698,6 +2698,44 @@ describe('evaluator', () => {
       metric: 'static-metric',
     });
   });
+
+  it('should handle array variables in metric interpolation', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{
+        vars: { 
+          metric: ['accuracy', 'performance'],
+          grader: 'openai:gpt-4'
+        }
+      }],
+      defaultTest: {
+        assert: [
+          { 
+            type: 'llm-rubric' as const,
+            value: 'Check output',
+            metric: '{{metric}}',
+            provider: '{{grader}}'
+          }
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // With the fix, array variables should be expanded first, then interpolated individually
+    expect(summary.results).toHaveLength(2);
+    
+    const firstResult = summary.results[0] as any;
+    expect(firstResult.testCase.assert[0].metric).toBe('accuracy');
+    expect(firstResult.testCase.vars.metric).toBe('accuracy');
+    
+    const secondResult = summary.results[1] as any;
+    expect(secondResult.testCase.assert[0].metric).toBe('performance');
+    expect(secondResult.testCase.vars.metric).toBe('performance');
+  });
 });
 
 describe('generateVarCombinations', () => {
