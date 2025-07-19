@@ -1,15 +1,20 @@
 ---
 sidebar_label: Custom Strategy
 title: Custom Strategy - AI-Powered Red Team Conversations
-description: Create reusable red team strategies by writing simple instructions that guide AI through multi-turn conversations
+description: Create reusable red team strategies by writing natural language instructions that guide AI through multi-turn conversations
 keywords:
-  [red team, custom strategy, ai security, llm testing, conversation strategy, multi-turn attacks]
+  - red team
+  - custom strategy
+  - ai security
+  - llm testing
+  - conversation strategy
+  - multi-turn attacks
 tags: [red-team, strategies, custom, multi-turn]
 ---
 
 # Custom Strategy
 
-Write simple instructions to create powerful multi-turn red team strategies. No coding required.
+Write natural language instructions to create powerful multi-turn red team strategies. No coding required.
 
 :::tip Quick Start
 
@@ -43,7 +48,7 @@ You've spent hours manually testing an LLM and discovered that a specific conver
 
 ### The Solution
 
-Convert your manual discovery into a reusable strategy by writing simple instructions.
+Convert your manual discovery into a reusable strategy by writing instructions in plain language.
 
 ## Real-World Examples
 
@@ -183,7 +188,9 @@ strategies:
 ```
 
 :::note
-There's also a global redteam configuration option `excludeTargetOutputFromAgenticAttackGeneration` that prevents the AI from seeing target responses when generating follow-up attacks. This applies to all strategies, not just custom.
+
+There's also a global red team configuration option `excludeTargetOutputFromAgenticAttackGeneration` that prevents the AI from seeing target responses when generating follow-up attacks. This applies to all strategies, not just custom.
+
 :::
 
 ## Stateful vs Stateless Mode
@@ -257,7 +264,7 @@ This helps find alternative paths to the objective.
 
 ## Best Practices
 
-### DO:
+### DO
 
 - Start with strategies that worked in manual testing
 - Use clear, specific instructions
@@ -265,7 +272,7 @@ This helps find alternative paths to the objective.
 - Create named variants for different approaches
 - Include conditional logic ("if refused, try X")
 
-### DON'T:
+### DON'T
 
 - Don't make instructions too complex
 - Don't assume the AI understands implicit context
