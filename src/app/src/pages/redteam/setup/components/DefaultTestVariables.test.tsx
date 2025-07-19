@@ -244,6 +244,14 @@ describe('DefaultTestVariables Component', () => {
         );
       });
     });
+
+    it('renders the empty state container with correct background and border colors', () => {
+      render(<DefaultTestVariables />);
+
+      const emptyStateContainer = screen.getByText('No test variables configured').closest('div');
+      expect(emptyStateContainer).toHaveStyle('background-color: rgba(0, 0, 0, 0.04)');
+      expect(emptyStateContainer).toHaveStyle('border-color: rgba(0, 0, 0, 0.12)');
+    });
   });
 
   describe('Edge Cases', () => {
