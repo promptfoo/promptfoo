@@ -121,7 +121,7 @@ Each model has specific rate limits and pricing. Check the [GitHub Models docume
 - **Format**: OpenAI-compatible API
 - **Endpoints**: Standard chat completions and embeddings
 
-**Important**: The legacy Azure endpoint (`https://models.inference.ai.azure.com`) was deprecated in July 2025. Always use `https://models.github.ai`.
+**Important**: The legacy Azure endpoint (`https://models.inference.ai.azure.com`) is deprecated. Always use `https://models.github.ai`.
 
 ## Advanced Features
 

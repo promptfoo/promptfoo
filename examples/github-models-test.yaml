@@ -1,10 +1,10 @@
 # GitHub Models Provider Test Configuration
 # This file demonstrates how to use various GitHub Models with promptfoo
 
-description: "Test GitHub Models provider with latest models (January 2025)"
+description: "Test GitHub Models provider with latest models"
 
 providers:
-  # Latest models added in January 2025
+  # Latest models
   - id: codestral
     provider: github:azureml-mistral/Codestral-2501
     config:
