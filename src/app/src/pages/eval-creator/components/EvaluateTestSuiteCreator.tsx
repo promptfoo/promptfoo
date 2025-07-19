@@ -39,7 +39,7 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, updateConfig, updateProviderConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
   // Ensure providers is always an array of ProviderOptions
@@ -138,6 +138,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
             <ProviderSelector
               providers={normalizedProviders}
               onChange={(p) => updateConfig({ providers: p })}
+              onProviderConfigUpdate={updateProviderConfig}
             />
           </Stack>
         </ErrorBoundary>

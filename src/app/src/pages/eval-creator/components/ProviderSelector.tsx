@@ -607,9 +607,14 @@ const getProviderGroup = (option: string | ProviderOptions): string => {
 interface ProviderSelectorProps {
   providers: ProviderOptions[];
   onChange: (providers: ProviderOptions[]) => void;
+  onProviderConfigUpdate?: (providerId: string, config: Record<string, any>) => void;
 }
 
-const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
+const ProviderSelector: React.FC<ProviderSelectorProps> = ({
+  providers,
+  onChange,
+  onProviderConfigUpdate,
+}) => {
   const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
   const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
@@ -628,7 +633,13 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   };
 
   const handleSave = (providerId: string, config: Record<string, any>) => {
-    onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
+    if (onProviderConfigUpdate) {
+      // Use granular update when available
+      onProviderConfigUpdate(providerId, config);
+    } else {
+      // Fallback to full array replacement
+      onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
+    }
     setSelectedProvider(null);
   };
 
