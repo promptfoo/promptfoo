@@ -23,7 +23,7 @@
 }
 
 .eval-header {
-  animation-name: collapseEvalHeader;
+  /* animation-name: collapseEvalHeader;
   animation-duration: 1ms;
   animation-timeline: --collapseTimeline;
   animation-range-start: 0px;
@@ -31,11 +31,23 @@
   animation-fill-mode: both;
 
   will-change: contents;
+
+  max-height: var(--max-height, 200px);
+  opacity: var(--opacity, 1);
+  pointer-events: var(--pointer-events, auto);
+  margin-bottom: var(--margin-bottom, 24px);
+  transition:
+    max-height 0.2s ease-out,
+    opacity 0.2s ease-out,
+    pointer-events 0.2s ease-out,
+    margin-bottom 0.2s ease-out; */
+
+  margin-bottom: 24px;
 }
 
-@keyframes collapseEvalHeader {
+/* @keyframes collapseEvalHeader {
   from {
-    --max-height: 100px;
+    --max-height: 200px;
     --opacity: 1;
     --pointer-events: auto;
     --margin-bottom: 24px;
@@ -46,19 +58,7 @@
     --pointer-events: none;
     --margin-bottom: 0px;
   }
-}
-
-.eval-header {
-  max-height: var(--max-height);
-  opacity: var(--opacity);
-  pointer-events: var(--pointer-events);
-  margin-bottom: var(--margin-bottom);
-  transition:
-    max-height 0.2s ease-out,
-    opacity 0.2s ease-out,
-    pointer-events 0.2s ease-out,
-    margin-bottom 0.2s ease-out;
-}
+} */
 
 .eval-header strong {
   font-weight: 500;
