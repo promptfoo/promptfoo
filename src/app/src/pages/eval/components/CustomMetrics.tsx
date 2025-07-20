@@ -77,7 +77,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
             <div
               data-testid={`metric-${metric}`}
               onClick={() => handleMetricClick(metric)}
-              className="metric-chip clickable"
+              className={`metric-chip ${onMetricFilter ? 'filterable' : ''}`}
             >
               <div className="metric-content">
                 <span data-testid={`metric-name-${metric}`} className="metric-name">
@@ -92,7 +92,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
                   />
                 </span>
               </div>
-              <FilterAltIcon className="filter-icon" sx={{ opacity: 0.35 }} />
+              {onMetricFilter && <FilterAltIcon className="filter-icon" sx={{ opacity: 0.35 }} />}
             </div>
           ) : null,
         )}
