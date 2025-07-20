@@ -1,8 +1,10 @@
-import gradio as gr
 import asyncio
-import shutil
 import os
+import shutil
+
+import gradio as gr
 from orchestrator import main  # Import orchestrator to run agent pipeline
+
 
 # Async function to generate the book using orchestrator and update Gradio progress bar
 async def generate_book_async(title, model, progress=gr.Progress()):

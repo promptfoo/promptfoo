@@ -31,11 +31,15 @@ python --version  # e.g., >= 3.11
 node --version    # e.g., >= 20.x
 npm --version     # e.g., >= 10.x
 ```
+
 **Set your OpenAI API key**
+
 ```bash
 export OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
 ```
+
 **Install Python dependencies**
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -43,11 +47,14 @@ pip install -r requirements.txt
 ## Step-by-step setup
 
 **Initialize your project**
+
 ```bash
 uv init --python '>=3.11' my_acp_project
 cd my_acp_project
 ```
+
 **Add the ACP SDK**
+
 ```bash
 uv add acp-sdk
 ```
@@ -55,6 +62,7 @@ uv add acp-sdk
 ## Create an agent
 
 **Create agent.py:**
+
 ```python
 import asyncio
 from collections.abc import AsyncGenerator
@@ -74,27 +82,35 @@ async def echo(input: list[Message], context: Context) -> AsyncGenerator[RunYiel
 
 server.run()
 ```
+
 **Start the ACP server**
+
 ```bash
 uv run agent.py
 ```
+
 **Server runs at:**
+
 ```arduino
 http://localhost:8000
 ```
+
 **Verify your agent**
+
 ```bash
 curl http://localhost:8000/agents
 ```
+
 **You should see:**
+
 ```json
 {
-  "agents": [
-    { "name": "echo", "description": "Echoes everything", "metadata": {} }
-  ]
+  "agents": [{ "name": "echo", "description": "Echoes everything", "metadata": {} }]
 }
 ```
+
 **Run the agent via HTTP**
+
 ```bash
 curl -X POST http://localhost:8000/runs \
   -H "Content-Type: application/json" \
@@ -110,6 +126,7 @@ curl -X POST http://localhost:8000/runs \
         ]
       }'
 ```
+
 **You should see the echoed response.**
 
 ## Expand to multi-agent system
@@ -145,34 +162,40 @@ Provides single entry point:
 ## Add Gradio interface
 
 **Create gradio app.py to interact via browser.**
+
 ```bash
 python gradio app.py
 ```
+
 **Open:**
+
 ```arduino
 http://localhost:7860
 ```
+
 ## Setup Promptfoo for evaluation
 
 ```bash
 npm install -g promptfoo
 promptfoo init
 ```
+
 ## Write Promptfoo configuration
 
 - `promptfooconfig.yaml` → defines test prompts + providers
 - `provider.py` → links to ACP endpoints
 
 - `promptfooconfig.yaml`
-Defines test prompts, providers, and assertions for Promptfoo.
+  Defines test prompts, providers, and assertions for Promptfoo.
 - `provider.py`
-Sends HTTP requests to local ACP agents, extracts clean text outputs, and returns them to Promptfoo.
+  Sends HTTP requests to local ACP agents, extracts clean text outputs, and returns them to Promptfoo.
 
 ## Run Evaluation
 
 ```bash
 promptfoo eval
 ```
+
 This will:
 
 - Run multi-agent test cases
@@ -184,15 +207,17 @@ Explore results in browser:
 ```bash
 promptfoo view
 ```
+
 ## How It Works
 
 **Outline Agent**
+
 - Generates book outline from title
-**Chapter Agent**
+  **Chapter Agent**
 - Writes ~3000-word chapters
-**Editor Agent**
+  **Editor Agent**
 - Polishes chapters for style + coherence
-**Compiler Agent**
+  **Compiler Agent**
 - Joins everything into .txt and .pdf
 
 ## Example Output
@@ -210,6 +235,7 @@ Final book exported as:
 - final_book.txt
 - final_book.pdf
 ```
+
 ## Cost Considerations
 
 - Real OpenAI API calls per test case

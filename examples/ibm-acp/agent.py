@@ -1,7 +1,8 @@
 import asyncio
 import os
-import openai
 from collections.abc import AsyncGenerator
+
+import openai
 from acp_sdk.models import Message
 from acp_sdk.server import Context, RunYield, RunYieldResume, Server
 
