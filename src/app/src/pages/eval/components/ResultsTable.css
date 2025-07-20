@@ -11,6 +11,10 @@ pre {
   margin: 1rem -1rem 0 -1rem;
   padding: 0 1rem;
 
+  /*
+    NOTE: The timeline is defined on the `#results-view-container` element
+    in `ResultsView.css`.
+  */
   scroll-timeline: --collapseTimeline y;
   scroll-timeline: --collapseTimeline vertical;
   will-change: scroll-position;

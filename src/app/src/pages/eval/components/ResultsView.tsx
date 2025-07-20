@@ -492,6 +492,7 @@ export default function ResultsView({
   return (
     <>
       <Box
+        id="results-view-container"
         px={2}
         sx={{
           display: 'flex',
