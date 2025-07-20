@@ -1,0 +1,9 @@
+[project]
+name = "my-acp-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "acp-sdk>=1.0.0",
+]

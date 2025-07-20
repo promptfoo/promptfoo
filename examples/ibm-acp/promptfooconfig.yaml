@@ -1,0 +1,43 @@
+description: "ACP Agent Evaluation"  # Description of this evaluation suite
+
+prompts:
+  - "{{book_title}}"  # Dynamic prompt variable used in each test case
+
+providers:
+  - id: file://./provider.py  # Connects to local provider script
+    label: ACP Outline Agent  # Label shown in Promptfoo UI
+    config:
+      agent_name: outline     # Tell provider.py to call the 'outline' agent
+
+  - id: file://./provider.py
+    label: ACP Chapter Agent
+    config:
+      agent_name: chapter     # Tell provider.py to call the 'chapter' agent
+
+  - id: file://./provider.py
+    label: ACP Editor Agent
+    config:
+      agent_name: editor      # Tell provider.py to call the 'editor' agent
+
+defaultTest:
+  assert:
+    # ✅ Check the output is a string (using JS in Promptfoo)
+    - type: javascript
+      value: typeof output === 'string'
+
+    # ✅ Check the output is not an empty string
+    - type: javascript
+      value: output.trim().length > 0
+
+tests:
+  - description: "Generate outline for book"  # Test outline agent
+    vars:
+      book_title: "The Quantum Cat's Journey"
+
+  - description: "Generate chapter draft"     # Test chapter agent
+    vars:
+      book_title: "The Quantum Cat's Journey - Chapter 1"
+
+  - description: "Edit draft content"         # Test editor agent
+    vars:
+      book_title: "Refine The Quantum Cat's Journey draft"
