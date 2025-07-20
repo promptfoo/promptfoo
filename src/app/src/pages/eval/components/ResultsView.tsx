@@ -503,12 +503,7 @@ export default function ResultsView({
         }}
       >
         <Box>
-          <ResponsiveStack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            className="eval-header"
-          >
+          <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
                 variant="outlined"
