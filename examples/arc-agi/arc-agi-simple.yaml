@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Simple ARC-AGI evaluation
+
+prompts:
+  - |
+    You are solving an ARC-AGI puzzle. Look at the input-output examples and determine the pattern.
+
+    Examples:
+    {{training_examples}}
+
+    Now solve this:
+    Input: {{test_input}}
+
+    Output the result as a JSON array only.
+
+providers:
+  - anthropic:claude-3-5-sonnet-20241022
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      # A simple pattern: fill the 3x3 grid with the non-zero color
+      training_examples: |
+        Example 1:
+        Input: [[0,7,7],[7,7,7],[0,7,7]]
+        Output: [[0,0,0,0,7,7,0,7,7],[0,0,0,7,7,7,7,7,7],[0,0,0,0,7,7,0,7,7],[0,7,7,0,7,7,0,7,7],[7,7,7,7,7,7,7,7,7],[0,7,7,0,7,7,0,7,7],[0,0,0,0,7,7,0,7,7],[0,0,0,7,7,7,7,7,7],[0,0,0,0,7,7,0,7,7]]
+        
+        Example 2:
+        Input: [[4,0,4],[0,0,0],[0,4,0]]
+        Output: [[4,0,4,0,0,0,4,0,4],[0,0,0,0,0,0,0,0,0],[0,4,0,0,0,0,0,4,0],[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0],[0,0,0,4,0,4,0,0,0],[0,0,0,0,0,0,0,0,0],[0,0,0,0,4,0,0,0,0]]
+      test_input: "[[7,0,7],[7,0,7],[7,7,0]]"
+      expected_output: [[7,0,7,0,0,0,7,0,7],[7,0,7,0,0,0,7,0,7],[7,7,0,0,0,0,7,7,0],[7,0,7,0,0,0,7,0,7],[7,0,7,0,0,0,7,0,7],[7,7,0,0,0,0,7,7,0],[7,0,7,7,0,7,0,0,0],[7,0,7,7,0,7,0,0,0],[7,7,0,7,7,0,0,0,0]]
+    assert:
+      - type: javascript
+        value: |
+          // Simple output extraction
+          let predicted;
+          try {
+            // Try direct JSON parsing
+            predicted = JSON.parse(output);
+          } catch (e) {
+            // Look for array pattern
+            const match = output.match(/\[\[[\s\S]*?\]\]/);
+            if (match) {
+              predicted = JSON.parse(match[0]);
+            }
+          }
+          
+          if (!predicted) {
+            return { pass: false, score: 0, reason: 'No valid output found' };
+          }
+          
+          const expected = context.vars.expected_output;
+          const match = JSON.stringify(predicted) === JSON.stringify(expected);
+          
+          return {
+            pass: match,
+            score: match ? 1.0 : 0.0,
+            reason: match ? 'Correct!' : 'Incorrect pattern'
+          }; 

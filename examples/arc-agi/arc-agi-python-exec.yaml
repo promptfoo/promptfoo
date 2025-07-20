@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ARC-AGI with Python code execution
+
+prompts:
+  # Program synthesis with execution
+  - id: python-synthesis
+    label: |
+      You must solve an ARC-AGI task by writing Python code. Here are input→output examples:
+
+      {{training_examples}}
+
+      Write a Python function that transforms input grids to output grids following the pattern shown:
+
+      ```python
+      def transform(input_grid):
+          # Implement the transformation pattern here
+          # input_grid is a 2D list of integers (0-9)
+          # Return the transformed output grid
+          pass
+      ```
+
+      IMPORTANT: Only provide the Python code. Do not explain or provide tutorials.
+
+  # Step-by-step synthesis
+  - id: python-step-by-step
+    label: |
+      You must solve this ARC-AGI puzzle by writing Python code. DO NOT provide explanations or tutorials about Python.
+
+      Training examples showing input→output transformations:
+      {{training_examples}}
+
+      Analyze the pattern and write a Python function that transforms any input grid according to this pattern:
+
+      ```python
+      def transform(input_grid):
+          # Your code to transform the input grid
+          # Must return the transformed output grid
+          return output_grid
+      ```
+
+      Your function MUST work correctly for all the training examples shown above.
+
+providers:
+  - anthropic:claude-3-5-sonnet-20241022
+  - openai:gpt-4o
+  - openai:o1-mini
+
+tests:
+  # Test with the 3x3 to 9x9 pattern
+  - vars:
+      task_file: file://tasks/grid/sample_task_1.json
+      training_examples:
+        __js: |
+          const task = JSON.parse(context.vars.task_file);
+          return task.train.map((ex, i) => 
+            `Example ${i + 1}:\nInput: ${JSON.stringify(ex.input)}\nOutput: ${JSON.stringify(ex.output)}`
+          ).join('\n\n');
+      test_input:
+        __js: |
+          const task = JSON.parse(context.vars.task_file);
+          return JSON.stringify(task.test[0].input);
+      expected_output:
+        __js: |
+          const task = JSON.parse(context.vars.task_file);
+          return task.test[0].output;
+    assert:
+      - type: javascript
+        value: file://evaluators/python_executor.js
+
+  # Test with the dimension doubling pattern
+  - vars:
+      task_file: file://tasks/grid/sample_task_2.json
+      training_examples:
+        __js: |
+          const task = JSON.parse(context.vars.task_file);
+          return task.train.map((ex, i) => 
+            `Example ${i + 1}:\nInput: ${JSON.stringify(ex.input)}\nOutput: ${JSON.stringify(ex.output)}`
+          ).join('\n\n');
+      test_input:
+        __js: |
+          const task = JSON.parse(context.vars.task_file);
+          return JSON.stringify(task.test[0].input);
+      expected_output:
+        __js: |
+          const task = JSON.parse(context.vars.task_file);
+          return task.test[0].output;
+    assert:
+      - type: javascript
+        value: file://evaluators/python_executor.js
+
+  # Test with a simple color filling pattern
+  - vars:
+      training_examples: |
+        Example 1:
+        Input: [[1, 0], [0, 0]]
+        Output: [[1, 1], [1, 1]]
+        
+        Example 2:
+        Input: [[0, 2], [2, 0]]
+        Output: [[2, 2], [2, 2]]
+        
+        Example 3:
+        Input: [[0, 0], [3, 0]]
+        Output: [[3, 3], [3, 3]]
+      test_input: "[[4, 0], [0, 4]]"
+      expected_output: [[4, 4], [4, 4]]
+    assert:
+      - type: javascript
+        value: file://evaluators/python_executor.js 

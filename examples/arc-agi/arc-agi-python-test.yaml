@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test Python code execution for ARC-AGI
+
+prompts:
+  - |
+    Look at these ARC-AGI transformations and write Python code to solve them:
+
+    Example 1: [[1,0],[0,0]] → [[1,1],[1,1]]
+    Example 2: [[0,2],[2,0]] → [[2,2],[2,2]]
+    Example 3: [[0,0],[3,0]] → [[3,3],[3,3]]
+
+    Pattern: Fill the entire grid with the non-zero color.
+
+    Write this function:
+    ```python
+    def transform(input_grid):
+        # Your code here
+        pass
+    ```
+
+providers:
+  - anthropic:claude-3-5-sonnet-20241022
+
+tests:
+  - vars:
+      training_examples: "shown above"
+      test_input: "[[4,0],[0,4]]"
+      expected_output: [[4,4],[4,4]]
+    assert:
+      - type: javascript
+        value: file://evaluators/python_executor.js 

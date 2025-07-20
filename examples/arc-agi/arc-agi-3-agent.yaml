@@ -1,0 +1,104 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ARC-AGI-3 game agent evaluation
+
+# This example shows how to evaluate Python-based agents for ARC-AGI-3 games
+# It requires the ARC-AGI-3-Agents repository and an ARC_API_KEY
+
+prompts:
+  # LLM-based agent
+  - id: llm-agent
+    label: |
+      You are an AI agent playing an ARC-AGI-3 game. Write Python code to decide your next action.
+      
+      Game state:
+      {{game_state}}
+      
+      Available actions:
+      {{available_actions}}
+      
+      Previous actions: {{action_history}}
+      
+      Write a Python function that analyzes the current state and returns the best action:
+      
+      ```python
+      def choose_action(state, available_actions, history):
+          # Analyze the state
+          # Consider previous actions
+          # Return the best action as a dict: {"action": "ACTION_NAME", "parameters": {...}}
+          pass
+      ```
+
+  # Reasoning agent
+  - id: reasoning-agent
+    label: |
+      You are playing an ARC-AGI-3 game. Think step by step about the best move.
+      
+      Current situation:
+      - State: {{game_state}}
+      - Score: {{score}}
+      - Actions available: {{available_actions}}
+      - Goal: {{objective}}
+      
+      Write Python code that implements your strategy:
+      
+      ```python
+      def choose_action(state, available_actions, history):
+          # Step 1: Understand current position
+          # Step 2: Identify goal direction
+          # Step 3: Check for obstacles
+          # Step 4: Select best action
+          
+          # Return action dictionary
+          return {"action": "MOVE_RIGHT", "parameters": {}}
+      ```
+      
+      Consider exploration vs exploitation trade-offs.
+
+providers:
+  - anthropic:claude-3-5-sonnet-20241022
+  - openai:gpt-4o
+  - openai:o1-mini
+
+tests:
+  # Test case for a simple navigation game
+  - vars:
+      game_state: |
+        {
+          "grid_size": [5, 5],
+          "player_pos": [2, 2],
+          "target_pos": [4, 4],
+          "obstacles": [[1, 1], [3, 3]],
+          "score": 0,
+          "moves_left": 10
+        }
+      available_actions: '["MOVE_UP", "MOVE_DOWN", "MOVE_LEFT", "MOVE_RIGHT", "RESET"]'
+      action_history: '[]'
+      objective: "Reach the target position while avoiding obstacles"
+      score: 0
+      # Expected action should move towards target
+      expected_action_type: "MOVE_RIGHT"
+    
+    assert:
+      - type: javascript
+        value: file://evaluators/arc_agi_3_agent_evaluator.js
+
+  # Test case for exploration vs exploitation
+  - vars:
+      game_state: |
+        {
+          "grid_size": [10, 10],
+          "player_pos": [5, 5],
+          "explored_cells": [[5, 5], [5, 4], [4, 5]],
+          "items_found": 2,
+          "total_items": 5,
+          "energy": 20
+        }
+      available_actions: '["MOVE_UP", "MOVE_DOWN", "MOVE_LEFT", "MOVE_RIGHT", "EXPLORE", "COLLECT"]'
+      action_history: '["MOVE_LEFT", "MOVE_UP", "EXPLORE"]'
+      objective: "Find and collect all items while managing energy"
+      score: 2
+      expected_action_type: "EXPLORE"
+    
+    assert:
+      - type: javascript
+        value: file://evaluators/arc_agi_3_agent_evaluator.js 

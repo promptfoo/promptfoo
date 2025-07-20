@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ARC-AGI-3 game-based evaluation
+
+# Note: This is a conceptual example for ARC-AGI-3 game evaluation
+# Actual implementation would require integration with the ARC-AGI-3 API
+
+prompts:
+  - id: game-agent
+    label: |
+      You are an AI agent playing an ARC-AGI-3 game. 
+      
+      Current game state:
+      {{game_state}}
+      
+      Available actions:
+      {{available_actions}}
+      
+      Your goal is to {{objective}}.
+      
+      Based on the current state, what action should you take next? 
+      Respond with the action name and any required parameters in JSON format:
+      {
+        "action": "ACTION_NAME",
+        "parameters": { ... }
+      }
+
+providers:
+  - anthropic:claude-3-5-sonnet-20241022
+  - openai:gpt-4o-mini
+
+tests:
+  # Example test case for a hypothetical ARC-AGI-3 game
+  - vars:
+      game_state: |
+        Grid: 5x5
+        Player position: (2, 2)
+        Target: (4, 4)
+        Obstacles: [(1, 1), (3, 3)]
+        Score: 0
+      available_actions: |
+        - MOVE_UP
+        - MOVE_DOWN
+        - MOVE_LEFT
+        - MOVE_RIGHT
+        - RESET
+      objective: "reach the target position while avoiding obstacles"
+      expected_action: "MOVE_RIGHT"
+    
+    assert:
+      - type: javascript
+        value: |
+          // Parse the JSON response
+          let response;
+          try {
+            response = JSON.parse(output);
+          } catch (e) {
+            const match = output.match(/\{[\s\S]*?\}/);
+            if (match) {
+              response = JSON.parse(match[0]);
+            }
+          }
+          
+          if (!response || !response.action) {
+            return { pass: false, score: 0, reason: 'Invalid response format' };
+          }
+          
+          // Check if the action moves towards the target
+          const validActions = ['MOVE_RIGHT', 'MOVE_DOWN'];
+          const isValid = validActions.includes(response.action);
+          
+          return {
+            pass: isValid,
+            score: isValid ? 1.0 : 0.0,
+            reason: isValid ? `Good move: ${response.action}` : `Suboptimal action: ${response.action}`
+          };
+
+# Note: Full ARC-AGI-3 integration would include:
+# - Connection to ARC-AGI-3 API
+# - Game loop management
+# - Score tracking across multiple moves
+# - Different game types (ls20, maze, etc.)
+# - Performance metrics (time, efficiency, etc.) 
