@@ -15,8 +15,11 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
   try {
     return fetchWithProxy(url, {
       method,
-      body: JSON.stringify(body),
-      headers: { Authorization: `Bearer ${apiKey}` },
+      body: body ? JSON.stringify(body) : undefined,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);

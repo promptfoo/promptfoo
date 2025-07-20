@@ -18,6 +18,7 @@ import { listCommand } from './commands/list';
 import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { simbaCommand } from './commands/simba';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
@@ -105,6 +106,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  simbaCommand(program, defaultConfig, defaultConfigPath);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
