@@ -79,13 +79,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.4 / 1e6,
     },
   })),
-  ...['gpt-4.5-preview', 'gpt-4.5-preview-2025-02-27'].map((model) => ({
-    id: model,
-    cost: {
-      input: 75 / 1e6,
-      output: 150 / 1e6,
-    },
-  })),
+  // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
     id: model,
     cost: {

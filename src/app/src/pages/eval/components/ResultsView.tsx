@@ -478,46 +478,6 @@ export default function ResultsView({
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  const [atInitialVerticalScrollPosition, setAtInitialVerticalScrollPosition] =
-    React.useState(true);
-  const scrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
-  // Cleanup timeout on unmount
-  React.useEffect(() => {
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  /**
-   * This callback is triggered when the table container is scrolled. It is used to determine if the table
-   * has scrolled vertically and, if so, updates the state to trigger dependent layout changes.
-   */
-  const onResultsContainerScroll = React.useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const yOffset = 0;
-      const currentScrollTop = e.currentTarget.scrollTop;
-
-      // Clear any existing timeout to debounce rapid scroll events
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-
-      // Debounce the state update to prevent oscillations caused by header layout changes
-      scrollTimeoutRef.current = setTimeout(() => {
-        const shouldBeAtInitial = currentScrollTop <= yOffset;
-
-        // Only update state if it actually needs to change
-        if (shouldBeAtInitial !== atInitialVerticalScrollPosition) {
-          setAtInitialVerticalScrollPosition(shouldBeAtInitial);
-        }
-      }, 5); // 5ms debounce to prevent rapid state changes that cause UI oscillations
-    },
-    [atInitialVerticalScrollPosition],
-  );
-
   /**
    * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
    * (and the rendering of duplicative, useless scrollbars).
@@ -532,6 +492,7 @@ export default function ResultsView({
   return (
     <>
       <Box
+        id="results-view-container"
         px={2}
         sx={{
           display: 'flex',
@@ -542,12 +503,7 @@ export default function ResultsView({
         }}
       >
         <Box>
-          <ResponsiveStack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            className={`eval-header ${atInitialVerticalScrollPosition ? 'expanded' : 'collapsed'}`}
-          >
+          <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
                 variant="outlined"
@@ -841,8 +797,6 @@ export default function ResultsView({
           onSearchTextChange={handleSearchTextChange}
           setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
-          onResultsContainerScroll={onResultsContainerScroll}
-          atInitialVerticalScrollPosition={atInitialVerticalScrollPosition}
         />
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
