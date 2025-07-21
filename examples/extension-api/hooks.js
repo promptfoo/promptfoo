@@ -41,6 +41,11 @@ async function extensionHook(hookName, context) {
     console.log(
       `Completed test ${counter++}${context.result ? `, Result: ${context.result.success ? 'Pass' : 'Fail'}, Score: ${context.result.score}` : ''}`,
     );
+    
+    // Access sessionId if available (from multi-turn conversations or stateful tests)
+    if (context.result?.metadata?.sessionId) {
+      console.log(`Session ID: ${context.result.metadata.sessionId}`);
+    }
   } else if (hookName === 'afterAll') {
     console.log('Test suite completed');
     console.log(`Total tests run: ${context.results?.length || 0}`);

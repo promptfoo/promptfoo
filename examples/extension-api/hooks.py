@@ -93,6 +93,12 @@ def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
             score = result.get("score", 0)
             result_str = f", Result: {success}, Score: {score}"
         logging.info(f"Completed test {counter}{result_str}")
+        
+        # Access sessionId if available (from multi-turn conversations or stateful tests)
+        session_id = result.get("metadata", {}).get("sessionId")
+        if session_id:
+            logging.info(f"Session ID: {session_id}")
+        
         counter += 1
 
     elif hook_name == "afterAll":
