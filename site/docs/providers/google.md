@@ -27,16 +27,22 @@ You have three options for providing your API key:
 
 #### Option 1: Environment Variable (Recommended)
 
-Set the `GOOGLE_API_KEY` environment variable:
+Set the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable:
 
 ```bash
 # Using export (Linux/macOS)
+export GEMINI_API_KEY="your_api_key_here"
+# or
 export GOOGLE_API_KEY="your_api_key_here"
 
 # Using set (Windows Command Prompt)
+set GEMINI_API_KEY=your_api_key_here
+# or
 set GOOGLE_API_KEY=your_api_key_here
 
 # Using $env (Windows PowerShell)
+$env:GEMINI_API_KEY="your_api_key_here"
+# or
 $env:GOOGLE_API_KEY="your_api_key_here"
 ```
 
@@ -46,6 +52,8 @@ Create a `.env` file in your project root:
 
 ```bash
 # .env
+GEMINI_API_KEY=your_api_key_here
+# or
 GOOGLE_API_KEY=your_api_key_here
 ```
 
@@ -68,7 +76,9 @@ providers:
 providers:
   - id: google:gemini-2.5-flash
     config:
-      apiKey: ${GOOGLE_API_KEY}
+      apiKey: ${GEMINI_API_KEY}
+      # or
+      # apiKey: ${GOOGLE_API_KEY}
 ```
 
 ### 3. Verify Authentication
@@ -153,7 +163,9 @@ tests:
 providers:
   - id: google:gemini-2.5-flash
     config:
-      apiKey: ${GOOGLE_API_KEY}
+      apiKey: ${GEMINI_API_KEY}
+      # or
+      # apiKey: ${GOOGLE_API_KEY}
       temperature: ${TEMPERATURE:-0.7} # Default to 0.7 if not set
 ```
 
