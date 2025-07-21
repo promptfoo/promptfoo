@@ -78,8 +78,8 @@ function TextField_({
   );
 }
 
-function Filter({ value, index }: { value: ResultsFilter; index: number }) {
-  const { filters, updateFilter, removeFilter } = useTableStore();
+function Filter({ value, index, onRemoveFilter }: { value: ResultsFilter; index: number, onRemoveFilter: (id: string) => void }) {
+  const { filters, updateFilter } = useTableStore();
 
   /**
    * Updates the filter type.
@@ -175,7 +175,7 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
 
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
-      <IconButton onClick={() => removeFilter(value.id)}>
+      <IconButton onClick={() => onRemoveFilter(value.id)}>
         <CloseIcon />
       </IconButton>
 
@@ -245,7 +245,7 @@ export default function FiltersForm({
   onClose: () => void;
   anchorEl: HTMLElement | null;
 }) {
-  const { filters, addFilter, removeAllFilters } = useTableStore();
+  const { filters, addFilter, removeAllFilters, removeFilter } = useTableStore();
 
   /**
    * Adds a new filter with default values.
@@ -266,6 +266,18 @@ export default function FiltersForm({
   const handleRemoveAllFilters = () => {
     onClose();
     removeAllFilters();
+  };
+
+  /**
+   * Removes a filter or closes the popover if there is only one filter.
+   * @param id - The ID of the filter to remove.
+   */
+  const handleRemoveFilter = (id: string) => {
+    if (filterValuesList.length === 1) {
+      handleRemoveAllFilters();
+    }else{
+      removeFilter(id);
+    }
   };
 
   /**
@@ -294,7 +306,7 @@ export default function FiltersForm({
         <Stack direction="column" spacing={1}>
           <Stack direction="column" spacing={1}>
             {filterValuesList.map((filter, index) => (
-              <Filter key={filter.id} value={filter} index={index} />
+              <Filter key={filter.id} value={filter} index={index} onRemoveFilter={handleRemoveFilter} />
             ))}
           </Stack>
           {filterValuesList.length > 0 && <Divider />}
