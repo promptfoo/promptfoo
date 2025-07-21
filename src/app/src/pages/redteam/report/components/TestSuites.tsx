@@ -325,7 +325,6 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                         variant="contained"
                         size="small"
                         onClick={() => {
-
                           const pluginId = subCategory.pluginName;
                           const categoryType = subCategory.type;
 

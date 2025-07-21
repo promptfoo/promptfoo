@@ -103,7 +103,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     fireEvent.click(viewAllLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Atest-plugin',
+      '/eval/test-eval-123?metric=test-plugin',
     );
     expect(window.open).not.toHaveBeenCalled();
   });
@@ -117,7 +117,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
     expect(window.open).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Atest-plugin',
+      '/eval/test-eval-123?metric=test-plugin',
       '_blank',
     );
     expect(mockNavigate).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     fireEvent.click(viewAllLogsButton, { metaKey: true });
 
     expect(window.open).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Atest-plugin',
+      '/eval/test-eval-123?metric=test-plugin',
       '_blank',
     );
     expect(mockNavigate).not.toHaveBeenCalled();
@@ -158,7 +158,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     fireEvent.click(viewAllLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metric%3DTest%20Category',
+      '/eval/test-eval-123?metric=Test%20Category',
     );
   });
 

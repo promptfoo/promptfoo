@@ -208,7 +208,6 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             const testWithPluginId = firstFailure || firstPass;
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
-
             const metricName = getMetricNameFromPlugin(pluginId || categoryName, categoryName);
 
             const url = `/eval/${evalId}?metric=${encodeURIComponent(metricName)}`;
