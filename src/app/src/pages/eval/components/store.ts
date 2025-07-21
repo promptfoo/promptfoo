@@ -124,6 +124,8 @@ export interface PaginationState {
 
 export type ResultsFilterType = 'metric' | 'metadata';
 
+export type ResultsFilterOperator = 'equals' | 'contains';
+
 export type ResultsFilter = {
   /**
    * A unique identifier for the filter.
@@ -131,7 +133,7 @@ export type ResultsFilter = {
   id: string;
   type: ResultsFilterType;
   value: string;
-  operator: 'equals';
+  operator: 'equals' | 'contains' | 'not-contains';
   logicOperator: 'and' | 'or';
   /**
    * For metadata filters, specifies which metadata key to filter on.
@@ -449,7 +451,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
           isFetching: false,
           filters: {
             ...prevState.filters,
-            fields: makeFilterFields(data.table),
+            // Only update fields if no filters are applied to avoid losing metadata options
+            // when a filter returns no results
+            fields:
+              filters.length === 0 && filterMode === 'all' && !searchText
+                ? makeFilterFields(data.table)
+                : prevState.filters.fields,
           },
         }));
 

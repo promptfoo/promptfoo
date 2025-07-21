@@ -408,7 +408,9 @@ describe('useTableStore', () => {
         .filters.fields.find((field) => field.id === 'metric');
       const availableMetrics =
         metricField?.type === 'select' ? metricField.options.map((option) => option.id) : [];
-      expect(availableMetrics).toEqual([longMetricName, 'metric-with-dashes', 'metric.with.dots']);
+      expect(availableMetrics.sort()).toEqual(
+        [longMetricName, 'metric-with-dashes', 'metric.with.dots'].sort(),
+      );
     });
 
     it('should handle gracefully when a prompt has metrics.namedScores set to null', () => {
@@ -440,6 +442,109 @@ describe('useTableStore', () => {
       const availableMetrics =
         metricField?.type === 'select' ? metricField.options.map((option) => option.id) : [];
       expect(availableMetrics).toEqual([]);
+    });
+  });
+
+  describe('preserveMetadataFilterFields', () => {
+    it('should preserve metadata filter fields when filters return no results', async () => {
+      const evalId = 'test-eval-id';
+
+      // Initial table with metadata
+      const initialTable: EvaluateTable = {
+        head: {
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt', provider: 'test-provider' }],
+          vars: [],
+        },
+        body: [
+          {
+            testIdx: 0,
+            test: {},
+            outputs: [
+              {
+                pass: true,
+                score: 1,
+                metadata: {
+                  environment: 'production',
+                  version: '1.0.0',
+                },
+                cost: 0,
+                failureReason: 0,
+                id: 'output-1',
+                latencyMs: 100,
+                namedScores: {},
+                prompt: 'Test prompt',
+                text: 'Test response',
+                testCase: {},
+              } as any,
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      const emptyTable: EvaluateTable = {
+        head: initialTable.head,
+        body: [], // No results after filtering
+      };
+
+      const mockCallApi = vi.mocked(callApi);
+
+      // First call returns initial data with metadata
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: initialTable,
+          totalCount: 1,
+          filteredCount: 1,
+        }),
+      } as any);
+
+      // Fetch initial data
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(evalId);
+      });
+
+      // Verify metadata fields are computed
+      const initialFields = useTableStore.getState().filters.fields;
+      const metadataField = initialFields.find((field) => field.id === 'metadata');
+      expect(metadataField).toBeDefined();
+      expect(metadataField?.type).toBe('field');
+
+      if (metadataField?.type === 'field') {
+        const metadataOptions = metadataField.options;
+        expect(metadataOptions).toHaveLength(2);
+        expect(metadataOptions.map((opt) => opt.id)).toContain('environment');
+        expect(metadataOptions.map((opt) => opt.id)).toContain('version');
+      }
+
+      // Second call returns empty results due to filter
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: emptyTable,
+          totalCount: 1,
+          filteredCount: 0,
+        }),
+      } as any);
+
+      // Apply a filter that returns no results
+      const filter: ResultsFilter = {
+        id: 'test-filter',
+        type: 'metadata',
+        operator: 'equals',
+        value: 'nonexistent',
+        field: 'environment',
+        logicOperator: 'and',
+      };
+
+      // Fetch with filter
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
+      });
+
+      // Verify metadata fields are preserved despite empty results
+      const fieldsAfterFilter = useTableStore.getState().filters.fields;
+      expect(fieldsAfterFilter).toEqual(initialFields);
     });
   });
 });

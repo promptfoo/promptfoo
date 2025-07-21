@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -15,6 +15,7 @@ import {
   Divider,
   TextField,
 } from '@mui/material';
+import { useDebounce } from 'use-debounce';
 import { useTableStore, type ResultsFilter, type FilterableField } from '../store';
 
 function Dropdown({
@@ -66,12 +67,30 @@ function TextField_({
   onChange: (value: string) => void;
   width?: number;
 }) {
+  // Local state for immediate UI updates
+  const [localValue, setLocalValue] = useState(value);
+  
+  // Debounced value that triggers the actual filter update
+  const [debouncedValue] = useDebounce(localValue, 500);
+
+  // Update local value when external value changes (e.g., filter reset)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  // Call onChange when debounced value changes
+  useEffect(() => {
+    if (debouncedValue !== value) {
+      onChange(debouncedValue);
+    }
+  }, [debouncedValue, value, onChange]);
+
   return (
     <TextField
       id={id}
       label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
       sx={{ width }}
       size="small"
     />
@@ -87,7 +106,12 @@ function Filter({ value, index, onRemoveFilter }: { value: ResultsFilter; index:
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      updateFilter({ ...value, type: filterType, value: '', field: undefined });
+      // Reset operator to 'equals' if switching to metric and current operator is not supported
+      const newOperator = filterType === 'metric' && (value.operator === 'contains' || value.operator === 'not-contains')
+        ? 'equals'
+        : value.operator;
+      
+      updateFilter({ ...value, type: filterType, value: '', field: undefined, operator: newOperator });
     },
     [value, updateFilter],
   );
@@ -138,6 +162,15 @@ function Filter({ value, index, onRemoveFilter }: { value: ResultsFilter; index:
 
   // Find the current field to get its options
   const currentField = filters.fields.find((field) => field.id === value.type) as FilterableField;
+
+  // Determine available operators based on filter type
+  const operatorOptions = value.type === 'metric' 
+    ? [{ label: 'Equals', value: 'equals' }]
+    : [
+        { label: 'Equals', value: 'equals' },
+        { label: 'Contains', value: 'contains' },
+        { label: 'Not Contains', value: 'not-contains' }
+      ];
 
   let valueInput = null;
 
@@ -224,7 +257,7 @@ function Filter({ value, index, onRemoveFilter }: { value: ResultsFilter; index:
         <Dropdown
           id={`${index}-operator-select`}
           label="Operator"
-          values={[{ label: 'Equals', value: 'equals' }]}
+          values={operatorOptions}
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
           width={125}

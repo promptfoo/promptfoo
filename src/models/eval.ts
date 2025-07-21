@@ -452,15 +452,31 @@ export default class Eval {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
-        if (type === 'metric' && operator === 'equals') {
+        if (type === 'metric') {
           const sanitizedValue = value.replace(/'/g, "''");
-          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
-          // in double quotes.
-          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
-        } else if (type === 'metadata' && operator === 'equals' && field) {
+
+          if (operator === 'equals') {
+            // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
+            // in double quotes.
+            condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+          } else if (operator === 'contains') {
+            // For contains, check if any metric name contains the search value
+            condition = `EXISTS (SELECT 1 FROM json_each(named_scores) WHERE key LIKE '%${sanitizedValue}%')`;
+          } else if (operator === 'not-contains') {
+            // For not-contains, check that no metric name contains the search value
+            condition = `NOT EXISTS (SELECT 1 FROM json_each(named_scores) WHERE key LIKE '%${sanitizedValue}%')`;
+          }
+        } else if (type === 'metadata' && field) {
           const sanitizedField = field.replace(/'/g, "''");
           const sanitizedValue = value.replace(/'/g, "''");
-          condition = `json_extract(metadata, '$.${sanitizedField}') = '${sanitizedValue}'`;
+
+          if (operator === 'equals') {
+            condition = `json_extract(metadata, '$.${sanitizedField}') = '${sanitizedValue}'`;
+          } else if (operator === 'contains') {
+            condition = `json_extract(metadata, '$.${sanitizedField}') LIKE '%${sanitizedValue}%'`;
+          } else if (operator === 'not-contains') {
+            condition = `json_extract(metadata, '$.${sanitizedField}') NOT LIKE '%${sanitizedValue}%'`;
+          }
         }
 
         if (condition) {
