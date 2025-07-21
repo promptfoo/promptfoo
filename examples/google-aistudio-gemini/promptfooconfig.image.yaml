@@ -1,16 +1,21 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Image captioning with Gemini
 
-prompts: |
-  {{imageFile}}
-  Describe what you see.
+prompts:
+  - |
+    {{imageFile1}}
+    {{imageFile2}}
+    Compare the two images.
 
 providers:
   - id: google:gemini-2.5-flash
 
 tests:
   - vars:
-      imageFile: file://assets/red-panda.jpg
+      imageFile1: file://assets/red-panda.jpg
+      imageFile2: file://assets/raccoon.jpg
     assert:
-      - type: contains
-        value: red panda
+      - type: contains-all
+        value:
+          - red panda
+          - raccoon

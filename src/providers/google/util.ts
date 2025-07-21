@@ -53,6 +53,7 @@ interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 export interface GeminiErrorResponse {
@@ -79,6 +80,7 @@ interface GeminiPromptFeedback {
 interface GeminiUsageMetadata {
   promptTokenCount: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 interface GeminiBlockedResponse {
@@ -126,7 +128,6 @@ const ContentSchema = z.object({
 const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
-export type GeminiPart = z.infer<typeof PartSchema>;
 
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;

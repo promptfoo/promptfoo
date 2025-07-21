@@ -46,3 +46,6 @@ redteam:
     - id: crescendo
       config:
         stateful: false
+    - id: mischievous-user
+      config:
+        stateful: false

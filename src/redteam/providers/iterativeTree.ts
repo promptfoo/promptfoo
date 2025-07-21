@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -301,7 +302,7 @@ export function updateRedteamHistory(
 /**
  * Represents a node in the search tree.
  */
-export interface TreeNode {
+interface TreeNode {
   id: string; // UUID
   prompt: string;
   score: number;
@@ -410,7 +411,7 @@ export interface TreeSearchOutput {
 /**
  * Represents metadata for the iterative tree search process.
  */
-export interface TreeIterativeMetadata extends BaseRedteamMetadata {
+interface TreeIterativeMetadata extends BaseRedteamMetadata {
   highestScore: number;
   redteamFinalPrompt?: string;
   stopReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
@@ -421,7 +422,7 @@ export interface TreeIterativeMetadata extends BaseRedteamMetadata {
 /**
  * Represents the complete response from a red team conversation.
  */
-export interface RedteamTreeResponse extends ProviderResponse {
+interface RedteamTreeResponse extends ProviderResponse {
   metadata: TreeIterativeMetadata;
 }
 
@@ -430,7 +431,7 @@ export interface RedteamTreeResponse extends ProviderResponse {
  * @param params - The parameters for the red team conversation.
  * @returns A promise that resolves to an object with the output and metadata.
  */
-export async function runRedteamConversation({
+async function runRedteamConversation({
   context,
   filters,
   injectVar,
@@ -662,7 +663,14 @@ export async function runRedteamConversation({
 
         const { getGraderById } = await import('../graders');
         let graderPassed: boolean | undefined;
-        const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+        let assertToUse = test?.assert?.find(
+          (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+        );
+
+        // Fallback: if no assertion matches the pluginId, use the first assertion with a type
+        if (!assertToUse) {
+          assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+        }
 
         if (assertToUse) {
           const grader = getGraderById(assertToUse.type);

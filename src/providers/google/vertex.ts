@@ -1,4 +1,3 @@
-import type { GaxiosError } from 'gaxios';
 import path from 'path';
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
@@ -35,6 +34,9 @@ import {
   mergeParts,
   formatCandidateContents,
 } from './util';
+
+// Type for Google API errors - using 'any' to avoid gaxios dependency
+type GaxiosError = any;
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -80,7 +82,13 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.VERTEX_API_KEY || getEnvString('VERTEX_API_KEY');
+    return (
+      this.config.apiKey ||
+      this.env?.GEMINI_API_KEY ||
+      this.env?.VERTEX_API_KEY ||
+      getEnvString('GEMINI_API_KEY') ||
+      getEnvString('VERTEX_API_KEY')
+    );
   }
 
   getRegion(): string {
@@ -400,6 +408,13 @@ export class VertexChatProvider extends VertexGenericProvider {
           total: lastData.usageMetadata?.totalTokenCount || 0,
           prompt: lastData.usageMetadata?.promptTokenCount || 0,
           completion: lastData.usageMetadata?.candidatesTokenCount || 0,
+          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+            completionDetails: {
+              reasoning: lastData.usageMetadata.thoughtsTokenCount,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          }),
         };
         response = {
           cached: false,

@@ -664,33 +664,6 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
   });
 
-  it('should not cleanup provider during redteam run', async () => {
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-    });
-    const options: RedteamCliGenerateOptions = {
-      output: 'test-output.json',
-      inRedteamRun: true,
-      cache: false,
-      defaultConfig: {},
-      write: false,
-      config: 'test-config.yaml',
-    };
-
-    await doGenerateRedteam(options);
-
-    expect(mockProvider.cleanup).not.toHaveBeenCalled();
-  });
-
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
     jest.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',

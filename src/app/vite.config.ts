@@ -4,6 +4,7 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
+import 'dotenv/config';
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -34,6 +35,9 @@ export default defineConfig({
       '@promptfoo': path.resolve(__dirname, '../'),
     },
   },
+  optimizeDeps: {
+    exclude: ['react-syntax-highlighter'],
+  },
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
@@ -58,7 +62,7 @@ export default defineConfig({
           'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
           'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
-          'vendor-syntax': ['prismjs', 'react-syntax-highlighter'],
+          'vendor-syntax': ['prismjs'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
         },
       },
@@ -79,6 +83,11 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_KEY': JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
+    ),
+    'import.meta.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING': JSON.stringify(
+      process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING
+        ? process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING === 'true'
+        : false,
     ),
   },
 });

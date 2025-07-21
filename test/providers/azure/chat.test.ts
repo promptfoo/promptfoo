@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
-import { logger } from '../../../src/logger';
+import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
 jest.mock('../../../src/cache', () => ({

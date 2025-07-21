@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import type { AssertionValue, ResultSuggestion } from '../../types';
 import { RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:competitors';
+const PLUGIN_ID = 'promptfoo:redteam:competitors';
 
 export class CompetitorsGrader extends RedteamGraderBase {
   id = PLUGIN_ID;

@@ -295,4 +295,115 @@ describe('DownloadMenu', () => {
     expect(screen.getByText('Table Data')).toBeInTheDocument();
     expect(screen.getByText('Advanced Options')).toBeInTheDocument();
   });
+
+  describe('Failed Tests Config Button disabled state', () => {
+    it('disables the button when table is null', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: null,
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('disables the button when table.body is null', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          head: mockTable.head,
+          body: null as any,
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('disables the button when table.body is undefined', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          head: mockTable.head,
+          body: undefined as any,
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('disables the button when all tests pass', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [
+            {
+              test: { vars: { testVar: 'value' } },
+              vars: ['value1', 'value2'],
+              outputs: [{ pass: true, text: 'passed output' }],
+            },
+            {
+              test: { vars: { testVar: 'value2' } },
+              vars: ['value3', 'value4'],
+              outputs: [{ pass: true, text: 'another passed output' }],
+            },
+          ],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      expect(button).toBeDisabled();
+    });
+
+    it('enables the button when there are failed tests', async () => {
+      // Using the default mockTable which has failed tests
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: mockTable,
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      expect(button).not.toBeDisabled();
+    });
+
+    it('handles edge case with empty body array', async () => {
+      (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      render(<DownloadMenu />);
+      await userEvent.click(screen.getByText('Download'));
+
+      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      // Empty body means no tests, so should be disabled
+      expect(button).toBeDisabled();
+    });
+  });
 });

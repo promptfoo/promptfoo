@@ -108,6 +108,3 @@ export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompleti
     return super.getApiUrl();
   }
 }
-
-// Export for backward compatibility
-export { DatabricksMosaicAiChatCompletionProvider as DatabricksProvider };

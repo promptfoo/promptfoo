@@ -14,7 +14,7 @@ import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
 import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
 import { failApiCall, getTokenUsage } from './util';
 
-export type OpenAiAssistantOptions = OpenAiSharedOptions & {
+type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
   tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];

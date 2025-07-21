@@ -5,6 +5,8 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  ApiEmbeddingProvider,
+  ProviderEmbeddingResponse,
 } from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -103,13 +105,20 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
 /**
  * LiteLLM Embedding Provider
  */
-class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper {
+class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbeddingProvider {
+  private embeddingProvider: OpenAiEmbeddingProvider;
+
   constructor(modelName: string, options: ProviderOptions) {
     const provider = new OpenAiEmbeddingProvider(modelName, options);
     super(provider, 'embedding');
+    this.embeddingProvider = provider;
     if (provider.getApiKey) {
       this.getApiKey = provider.getApiKey.bind(provider);
     }
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    return this.embeddingProvider.callEmbeddingApi(text);
   }
 }
 

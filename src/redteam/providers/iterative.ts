@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -306,7 +307,15 @@ export async function runRedteamConversation({
       continue;
     }
 
-    const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    let assertToUse = test?.assert?.find(
+      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+    );
+
+    // Fallback: if no assertion matches the pluginId, use the first assertion with a type
+    if (!assertToUse) {
+      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    }
+
     const { getGraderById } = await import('../graders');
     let graderPassed: boolean | undefined;
 

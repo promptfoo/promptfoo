@@ -4,7 +4,7 @@ import type { ApiProvider, Assertion, TestCase, AtomicTestCase, GradingResult } 
 import { isBasicRefusal } from '../util';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:aegis';
+const PLUGIN_ID = 'promptfoo:redteam:aegis';
 export const DATASET_PATH =
   'huggingface://datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0?split=train';
 

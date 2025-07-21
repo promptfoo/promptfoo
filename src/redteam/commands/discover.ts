@@ -23,7 +23,7 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 // Schemas
 // ========================================================
 
-export const TargetPurposeDiscoveryStateSchema = z.object({
+const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
   answers: z.array(z.string()),
 });
@@ -35,7 +35,7 @@ export const TargetPurposeDiscoveryRequestSchema = z.object({
   email: z.string().optional().nullable(),
 });
 
-export const TargetPurposeDiscoveryResultSchema = z.object({
+const TargetPurposeDiscoveryResultSchema = z.object({
   purpose: z.string().nullable(),
   limitations: z.string().nullable(),
   user: z.string().nullable(),
@@ -87,8 +87,8 @@ type Args = z.infer<typeof ArgsSchema>;
 // Constants
 // ========================================================
 
-export const DEFAULT_TURN_COUNT = 5;
-export const MAX_TURN_COUNT = 10;
+const DEFAULT_TURN_COUNT = 5;
+const MAX_TURN_COUNT = 10;
 const LOG_PREFIX = '[Target Discovery Agent]';
 const COMMAND = 'discover';
 
