@@ -8,6 +8,7 @@ import Grid from '@mui/material/Grid';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { StatCard } from '../ModelAudit.styles';
+
 import type { ScanResult } from '../ModelAudit.types';
 
 interface ScanStatisticsProps {

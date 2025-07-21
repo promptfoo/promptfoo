@@ -28,8 +28,10 @@ import Editor from 'react-simple-code-editor';
 import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
-import type { ProviderOptions } from '../../types';
+
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+
+import type { ProviderOptions } from '../../types';
 import './syntax-highlighting.css';
 
 interface HttpEndpointConfigurationProps {

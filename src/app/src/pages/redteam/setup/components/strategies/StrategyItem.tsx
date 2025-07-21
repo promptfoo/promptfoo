@@ -12,6 +12,7 @@ import {
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
 } from '@promptfoo/redteam/constants';
+
 import type { StrategyCardData } from './types';
 
 interface StrategyItemProps {

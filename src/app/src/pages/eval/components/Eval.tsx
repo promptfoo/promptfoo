@@ -6,13 +6,13 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import './Eval.css';
 
 interface EvalOptions {

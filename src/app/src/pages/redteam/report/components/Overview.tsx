@@ -9,9 +9,9 @@ import {
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import React from 'react';
 import { useReportStore } from './store';
+import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
 interface OverviewProps {

@@ -1,11 +1,4 @@
 import dedent from 'dedent';
-import type {
-  BedrockAI21GenerationOptions,
-  BedrockClaudeMessagesCompletionOptions,
-  IBedrockModel,
-  LlamaMessage,
-  TextGenerationOptions,
-} from '../../../src/providers/bedrock';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
@@ -19,6 +12,14 @@ import {
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
+} from '../../../src/providers/bedrock';
+
+import type {
+  BedrockAI21GenerationOptions,
+  BedrockClaudeMessagesCompletionOptions,
+  IBedrockModel,
+  LlamaMessage,
+  TextGenerationOptions,
 } from '../../../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => ({

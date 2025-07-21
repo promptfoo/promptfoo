@@ -38,16 +38,17 @@ import {
   riskCategories,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { PluginConfig } from '@promptfoo/redteam/types';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import type { LocalPluginConfig } from '../types';
 import CustomIntentSection from './CustomIntentPluginSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
+import type { PluginConfig } from '@promptfoo/redteam/types';
+
+import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
   onNext: () => void;

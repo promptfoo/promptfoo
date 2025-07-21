@@ -6,6 +6,7 @@ import {
   generateTraceparent,
   isOtlpReceiverStarted,
 } from '../../src/tracing/evaluatorTracing';
+
 import type { TestCase } from '../../src/types';
 
 // Mock the logger

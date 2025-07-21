@@ -1,20 +1,18 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
-import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
 import {
   type CsvRow,
   type EvaluateResult,
@@ -33,6 +31,10 @@ import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
+
+import type Eval from '../models/eval';
+import type EvalResult from '../models/evalResult';
+import type { Vars } from '../types';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass

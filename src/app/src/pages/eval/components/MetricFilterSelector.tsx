@@ -2,10 +2,10 @@ import Box from '@mui/material/Box';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
-import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
 import React from 'react';
 import { useTableStore } from './store';
+import type { SelectChangeEvent } from '@mui/material/Select';
 
 export const MetricFilterSelector: React.FC<{}> = () => {
   const { filters, addFilter, resetFilters } = useTableStore();

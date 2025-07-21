@@ -1,5 +1,4 @@
 import cliState from '../src/cliState';
-import type { EnvVarKey } from '../src/envars';
 import {
   getEnvBool,
   getEnvFloat,
@@ -8,6 +7,8 @@ import {
   getMaxEvalTimeMs,
   isCI,
 } from '../src/envars';
+
+import type { EnvVarKey } from '../src/envars';
 
 describe('envars', () => {
   const originalEnv = process.env;

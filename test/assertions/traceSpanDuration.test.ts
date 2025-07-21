@@ -1,4 +1,5 @@
 import { handleTraceSpanDuration } from '../../src/assertions/traceSpanDuration';
+
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
 import type { TraceData } from '../../src/types/tracing';
 

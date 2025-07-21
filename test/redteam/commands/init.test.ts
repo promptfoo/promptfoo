@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 import yaml from 'js-yaml';
 import { renderRedteamConfig } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
+
 import type { RedteamFileConfig } from '../../../src/redteam/types';
 
 describe('renderRedteamConfig', () => {

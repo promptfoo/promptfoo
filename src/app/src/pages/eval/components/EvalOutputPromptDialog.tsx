@@ -17,13 +17,14 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
-import type React from 'react';
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ellipsize } from '../../../../../util/text';
 import TraceView from '../../../components/traces/TraceView';
 import ChatMessages, { type Message } from './ChatMessages';
 import Citations from './Citations';
+import type React from 'react';
+
 import type { GradingResult } from './types';
 
 // Common style object for copy buttons

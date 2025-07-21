@@ -6,6 +6,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useState } from 'react';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import { useTableStore } from './store';
+
 import type { ResultLightweightWithLabel } from './types';
 
 interface CompareEvalMenuItemProps {

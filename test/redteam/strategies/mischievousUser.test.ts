@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { addMischievousUser } from '../../../src/redteam/strategies/mischievousUser';
+
 import type { TestCase } from '../../../src/types';
 
 describe('Mischievous User Strategy', () => {

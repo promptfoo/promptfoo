@@ -15,8 +15,9 @@ import ConfigurationTab from './components/ConfigurationTab';
 import InstallationCheck from './components/InstallationCheck';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
-import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
+
+import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
 
 export default function ModelAudit() {
   const [paths, setPaths] = useState<ScanPath[]>([]);

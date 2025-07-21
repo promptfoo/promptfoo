@@ -5,9 +5,9 @@ import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import type { ResultsFile } from '@promptfoo/types';
 import React, { useState } from 'react';
 import { convertEvalDataToCsv } from '../utils/csvExport';
+import type { ResultsFile } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalDescription: string;

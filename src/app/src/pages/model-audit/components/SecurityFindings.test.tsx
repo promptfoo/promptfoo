@@ -1,8 +1,9 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ScanResult } from '../ModelAudit.types';
 import SecurityFindings from './SecurityFindings';
+
+import type { ScanResult } from '../ModelAudit.types';
 
 describe('SecurityFindings', () => {
   const mockOnSeverityChange = vi.fn();

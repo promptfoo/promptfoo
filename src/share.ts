@@ -1,16 +1,18 @@
+import { URL } from 'url';
+
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { URL } from 'url';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
+import { makeRequest as makeCloudRequest } from './util/cloud';
+
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
-import { makeRequest as makeCloudRequest } from './util/cloud';
 
 interface ShareDomainResult {
   domain: string;

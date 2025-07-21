@@ -1,5 +1,3 @@
-import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
@@ -8,8 +6,11 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
-import type { Content, FunctionCall, Part, Tool } from './types';
 import { VALID_SCHEMA_TYPES } from './types';
+import type { AnySchema } from 'ajv';
+import type { GoogleAuth } from 'google-auth-library';
+
+import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.

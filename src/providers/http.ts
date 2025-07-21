@@ -1,21 +1,15 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
-import httpZ from 'http-z';
 import path from 'path';
+
+import httpZ from 'http-z';
 import { z } from 'zod';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -23,6 +17,14 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.

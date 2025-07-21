@@ -1,7 +1,5 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, DefaultProviders } from '../types';
-import type { EnvOverrides } from '../types/env';
 import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
@@ -25,6 +23,9 @@ import {
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
+
+import type { ApiProvider, DefaultProviders } from '../types';
+import type { EnvOverrides } from '../types/env';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'gradingJsonProvider',

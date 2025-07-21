@@ -15,11 +15,12 @@ import { Plugins } from './redteam/plugins';
 import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
 import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies';
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
-import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import { maybeLoadFromExternalFile } from './util/file';
 import { readTests } from './util/testCaseReader';
+
+import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
+import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
 export * from './types';

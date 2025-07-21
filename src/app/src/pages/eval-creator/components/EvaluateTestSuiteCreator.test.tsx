@@ -1,5 +1,10 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 import type {
   DerivedMetric,
   EnvOverrides,
@@ -8,11 +13,6 @@ import type {
   Scenario,
   TestCase,
 } from '@promptfoo/types';
-import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 
 // Mock child components
 vi.mock('./ConfigureEnvButton', () => ({

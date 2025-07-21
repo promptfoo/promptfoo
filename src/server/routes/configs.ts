@@ -1,10 +1,10 @@
 import { and, eq } from 'drizzle-orm';
-import type { Request, Response } from 'express';
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../../database';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
+import type { Request, Response } from 'express';
 
 export const configsRouter = Router();
 

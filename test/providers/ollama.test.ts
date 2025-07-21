@@ -4,6 +4,7 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+
 import type { CallApiContextParams } from '../../src/types';
 
 jest.mock('../../src/cache');

@@ -1,9 +1,9 @@
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import type { TestCasesWithMetadata } from '@promptfoo/types';
 import { useEffect, useState } from 'react';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Datasets from './Datasets';
+import type { TestCasesWithMetadata } from '@promptfoo/types';
 
 function DatasetsPageContent() {
   const [testCases, setTestCases] = useState<

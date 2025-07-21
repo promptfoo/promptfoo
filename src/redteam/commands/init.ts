@@ -1,3 +1,6 @@
+import fs from 'fs';
+import * as path from 'path';
+
 import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
@@ -5,10 +8,7 @@ import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'fs';
-import * as path from 'path';
 import { getDefaultPort } from '../../constants';
 import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -16,7 +16,6 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
-import type { ProviderOptions, RedteamPluginObject } from '../../types';
 import { isRunningUnderNpx, setupEnv } from '../../util';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -31,6 +30,9 @@ import {
   subCategoryDescriptions,
 } from '../constants';
 import { doGenerateRedteam } from './generate';
+import type { Command } from 'commander';
+
+import type { ProviderOptions, RedteamPluginObject } from '../../types';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 

@@ -8,9 +8,10 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
+import { useEffect, useState } from 'react';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
-import { useEffect, useState } from 'react';
+
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {

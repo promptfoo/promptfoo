@@ -1,7 +1,8 @@
 import * as fs from 'fs';
+import path from 'path';
+
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import path from 'path';
 import cliState from '../../src/cliState';
 import {
   getResolvedRelativePath,

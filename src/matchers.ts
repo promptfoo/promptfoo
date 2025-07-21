@@ -1,4 +1,5 @@
 import path from 'path';
+
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
@@ -24,6 +25,12 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
+import { maybeLoadFromExternalFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
+import invariant from './util/invariant';
+import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { getNunjucksEngine } from './util/templates';
+
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -38,11 +45,6 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types';
-import { maybeLoadFromExternalFile } from './util/file';
-import { isJavascriptFile } from './util/fileExtensions';
-import invariant from './util/invariant';
-import { extractFirstJsonObject, extractJsonObjects } from './util/json';
-import { getNunjucksEngine } from './util/templates';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {

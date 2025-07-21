@@ -14,13 +14,13 @@ import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/system';
-import type { UnifiedConfig } from '@promptfoo/types';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Editor from 'react-simple-code-editor';
+import type { UnifiedConfig } from '@promptfoo/types';
 import 'prismjs/components/prism-yaml';
 import './YamlEditor.css';
 import 'prismjs/themes/prism.css';

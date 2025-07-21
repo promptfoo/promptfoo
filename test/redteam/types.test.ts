@@ -1,4 +1,5 @@
 import { Severity } from '../../src/redteam/constants';
+
 import type {
   BaseRedteamMetadata,
   PluginActionParams,

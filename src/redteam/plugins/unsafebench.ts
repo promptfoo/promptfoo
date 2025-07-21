@@ -2,8 +2,9 @@ import dedent from 'dedent';
 import { fetchWithProxy } from '../../fetch';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+
+import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
 const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';

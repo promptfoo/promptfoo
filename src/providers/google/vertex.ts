@@ -1,9 +1,24 @@
 import path from 'path';
+
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { isValidJson } from '../../util/json';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToGoogle } from '../mcp/transform';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import {
+  formatCandidateContents,
+  geminiFormatAndSystemInstructions,
+  getCandidate,
+  getGoogleClient,
+  loadFile,
+  mergeParts,
+} from './util';
+
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -13,11 +28,6 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { isJavascriptFile } from '../../util/fileExtensions';
-import { isValidJson } from '../../util/json';
-import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
@@ -25,14 +35,6 @@ import type {
   GeminiFormat,
   GeminiResponseData,
   Palm2ApiResponse,
-} from './util';
-import {
-  formatCandidateContents,
-  geminiFormatAndSystemInstructions,
-  getCandidate,
-  getGoogleClient,
-  loadFile,
-  mergeParts,
 } from './util';
 
 // Type for Google API errors - using 'any' to avoid gaxios dependency

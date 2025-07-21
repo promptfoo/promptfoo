@@ -22,6 +22,7 @@ import Typography from '@mui/material/Typography';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+
 import type { ApplicationDefinition } from '../types';
 
 interface PromptsProps {

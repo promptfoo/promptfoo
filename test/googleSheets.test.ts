@@ -6,8 +6,9 @@ import {
   writeCsvToGoogleSheet,
 } from '../src/googleSheets';
 import logger from '../src/logger';
-import type { CsvRow } from '../src/types';
 import { createMockResponse } from './util/utils';
+
+import type { CsvRow } from '../src/types';
 
 interface MockSpreadsheets {
   get: jest.Mock;

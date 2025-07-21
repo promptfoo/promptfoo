@@ -1,9 +1,9 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import type { ProviderOptions } from '@promptfoo/types';
 import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import type { ProviderOptions } from '@promptfoo/types';
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({

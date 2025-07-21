@@ -8,6 +8,7 @@ import {
   SexualContentGrader,
 } from '../../../../src/redteam/plugins/harmful/graders';
 import { isBasicRefusal } from '../../../../src/redteam/util';
+
 import type { ApiProvider, AtomicTestCase } from '../../../../src/types';
 
 jest.mock('../../../../src/redteam/util');

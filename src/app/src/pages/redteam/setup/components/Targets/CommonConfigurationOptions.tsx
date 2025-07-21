@@ -5,9 +5,9 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import React from 'react';
 import ExtensionEditor from './ExtensionEditor';
+import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/themes/prism.css';
 
 interface CommonConfigurationOptionsProps {

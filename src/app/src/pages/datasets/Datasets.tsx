@@ -15,10 +15,10 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
-import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import DatasetDialog from './DatasetDialog';
+import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 
 // augment the props for the toolbar slot
 declare module '@mui/x-data-grid' {

@@ -4,9 +4,10 @@ import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types';
 
 /**
  * Converts text to audio using the remote API

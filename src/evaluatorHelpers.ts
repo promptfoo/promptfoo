@@ -1,6 +1,7 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as path from 'path';
+
+import yaml from 'js-yaml';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -8,7 +9,6 @@ import { getPrompt as getHeliconePrompt } from './integrations/helicone';
 import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
 import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
-import type EvalResult from './models/evalResult';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
@@ -26,6 +26,8 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+
+import type EvalResult from './models/evalResult';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 

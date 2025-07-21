@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import {
   coerceString,
   getFinalTest,
@@ -8,6 +9,7 @@ import {
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+
 import type { ApiProvider, Assertion, TestCase } from '../../src/types';
 
 jest.mock('fs');

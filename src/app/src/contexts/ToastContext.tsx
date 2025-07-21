@@ -1,8 +1,8 @@
-import type { AlertColor } from '@mui/material/Alert';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import React, { useCallback, useState } from 'react';
 import { ToastContext, type ToastProviderProps } from './ToastContextDef';
+import type { AlertColor } from '@mui/material/Alert';
 
 export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   const [open, setOpen] = useState(false);

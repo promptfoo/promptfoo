@@ -2,6 +2,12 @@ import dedent from 'dedent';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject } from '../../util/json';
+import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -11,11 +17,6 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
 } from '../../types';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
-import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
 
 interface ImageGenerationOutput {
   prompt: string;

@@ -2,9 +2,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { AnthropicGenericProvider } from './generic';
+
 import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { AnthropicGenericProvider } from './generic';
 import type { AnthropicCompletionOptions } from './types';
 
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {

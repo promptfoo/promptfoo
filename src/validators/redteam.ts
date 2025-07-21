@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-
 import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
@@ -21,9 +20,10 @@ import {
   type Strategy,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
+
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),

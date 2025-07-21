@@ -18,7 +18,6 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import StrategyConfigDialog from './StrategyConfigDialog';
@@ -26,7 +25,6 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import {
   PRESET_IDS,
   type PresetId,
@@ -34,6 +32,9 @@ import {
   type StrategyPreset,
 } from './strategies/types';
 import { getEstimatedProbes, getStrategyId } from './strategies/utils';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+
+import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 
 // ------------------------------------------------------------------
 // Types & Interfaces

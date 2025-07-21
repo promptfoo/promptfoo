@@ -1,8 +1,9 @@
-import chalk from 'chalk';
 import { exec, spawn } from 'child_process';
-import type { Command } from 'commander';
 import { promisify } from 'util';
+
+import chalk from 'chalk';
 import logger from '../logger';
+import type { Command } from 'commander';
 
 const execAsync = promisify(exec);
 

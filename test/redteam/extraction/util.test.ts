@@ -9,6 +9,7 @@ import {
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache', () => ({

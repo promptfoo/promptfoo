@@ -1,8 +1,9 @@
-import type { ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { PythonShell } from 'python-shell';
 import { Readable, Writable } from 'stream';
+import type { ChildProcess } from 'child_process';
+
+import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import { execAsync } from '../../src/python/execAsync';

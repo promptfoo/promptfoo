@@ -12,6 +12,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+
 import type { ScanPath, ScanResult } from '../ModelAudit.types';
 
 interface ScannedFilesDialogProps {

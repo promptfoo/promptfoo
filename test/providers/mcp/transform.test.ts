@@ -1,9 +1,10 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import {
   transformMCPToolsToAnthropic,
   transformMCPToolsToGoogle,
   transformMCPToolsToOpenAi,
 } from '../../../src/providers/mcp/transform';
+import type Anthropic from '@anthropic-ai/sdk';
+
 import type { MCPTool } from '../../../src/providers/mcp/types';
 import type { OpenAiTool } from '../../../src/providers/openai/util';
 

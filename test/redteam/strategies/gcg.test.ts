@@ -3,6 +3,7 @@ import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
+
 import type { TestCase } from '../../../src/types';
 
 jest.mock('../../../src/cache');

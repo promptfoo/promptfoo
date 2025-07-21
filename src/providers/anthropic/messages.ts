@@ -1,16 +1,12 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import type { ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { AnthropicGenericProvider } from './generic';
-import type { AnthropicMessageOptions } from './types';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
@@ -18,6 +14,11 @@ import {
   outputFromMessage,
   parseMessages,
 } from './util';
+import type Anthropic from '@anthropic-ai/sdk';
+
+import type { ProviderResponse } from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { AnthropicMessageOptions } from './types';
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;

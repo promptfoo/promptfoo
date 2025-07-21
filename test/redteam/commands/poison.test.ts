@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import {
   doPoisonDocuments,

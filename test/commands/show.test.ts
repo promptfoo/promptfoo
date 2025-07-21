@@ -2,8 +2,9 @@ import { Command } from 'commander';
 import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import type { Prompt } from '../../src/types/prompts';
 import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../../src/util/database';
+
+import type { Prompt } from '../../src/types/prompts';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/models/eval');

@@ -1,7 +1,8 @@
 import { matchesFactuality } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export const handleFactuality = async ({
   assertion,

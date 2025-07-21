@@ -1,4 +1,5 @@
 import path from 'path';
+
 import { configCache, loadDefaultConfig } from '../../../src/util/config/default';
 import { maybeReadConfig } from '../../../src/util/config/load';
 

@@ -20,9 +20,9 @@ import TableRow from '@mui/material/TableRow';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import React from 'react';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 interface TestWithMetadata {
   prompt: string;

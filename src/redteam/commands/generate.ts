@@ -1,10 +1,10 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
 import { createHash } from 'crypto';
-import dedent from 'dedent';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import chalk from 'chalk';
+import dedent from 'dedent';
+import yaml from 'js-yaml';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
@@ -16,7 +16,6 @@ import logger from '../../logger';
 import { getProviderIds } from '../../providers';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
@@ -39,6 +38,9 @@ import {
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import type { Command } from 'commander';
+
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,

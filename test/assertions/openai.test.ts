@@ -1,11 +1,14 @@
 import fs from 'fs';
 import path from 'path';
+
 import { runAssertion } from '../../src/assertions';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import type { OpenAiTool } from '../../src/providers/openai/util';
 import { validateFunctionCall } from '../../src/providers/openai/util';
+import { maybeLoadToolsFromExternalFile } from '../../src/util';
+
+import type { OpenAiTool } from '../../src/providers/openai/util';
 import type {
   ApiProvider,
   Assertion,
@@ -13,7 +16,6 @@ import type {
   AtomicTestCase,
   GradingResult,
 } from '../../src/types';
-import { maybeLoadToolsFromExternalFile } from '../../src/util';
 
 jest.mock('fs');
 jest.mock('path', () => ({

@@ -1,9 +1,10 @@
-import chalk from 'chalk';
 import child_process from 'child_process';
-import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';
 import Stream from 'stream';
+
+import chalk from 'chalk';
+import dedent from 'dedent';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
@@ -41,6 +42,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types';
 
 jest.mock('fs');

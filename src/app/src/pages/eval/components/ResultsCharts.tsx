@@ -9,7 +9,6 @@ import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import { useTheme } from '@mui/material/styles';
-import type { VisibilityState } from '@tanstack/table-core';
 import {
   BarController,
   BarElement,
@@ -27,6 +26,8 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTableStore } from './store';
+import type { VisibilityState } from '@tanstack/table-core';
+
 import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {

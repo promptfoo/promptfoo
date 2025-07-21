@@ -33,14 +33,14 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import type { RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
+import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job } from '@promptfoo/types';
 
 interface PolicyPlugin {
   id: 'policy';

@@ -1,9 +1,9 @@
 import fs from 'fs';
+import path from 'path';
+
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import path from 'path';
 import { z } from 'zod';
-import type { TestSuite } from '../../src/types';
 import {
   AssertionSchema,
   BaseAssertionTypesSchema,
@@ -15,6 +15,8 @@ import {
   UnifiedConfigSchema,
   VarsSchema,
 } from '../../src/types';
+
+import type { TestSuite } from '../../src/types';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {

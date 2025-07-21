@@ -4,6 +4,7 @@
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
 import fs from 'fs';
+
 import logger from '../../../src/logger';
 import {
   addVideoToBase64,
@@ -11,6 +12,7 @@ import {
   getFallbackBase64,
   writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
+
 import type { TestCase } from '../../../src/types';
 
 // Mock for dummy video data

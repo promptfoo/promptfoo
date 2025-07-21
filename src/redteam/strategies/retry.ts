@@ -2,8 +2,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database';
 import { evalResultsTable } from '../../database/tables';
 import logger from '../../logger';
-import type { TestCase, TestCaseWithPlugin } from '../../types';
 import invariant from '../../util/invariant';
+
+import type { TestCase, TestCaseWithPlugin } from '../../types';
 
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();

@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
+
 import type { TestCase } from '../../../src/types';
 
 // Mock the remoteGeneration module

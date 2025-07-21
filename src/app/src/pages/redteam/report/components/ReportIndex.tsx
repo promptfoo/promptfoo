@@ -13,10 +13,10 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
 import fuzzysearch from 'fuzzysearch';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 type SortField = 'description' | 'createdAt' | 'evalId';
 

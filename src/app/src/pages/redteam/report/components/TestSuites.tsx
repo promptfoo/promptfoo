@@ -20,9 +20,9 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
 interface TestSuitesProps {

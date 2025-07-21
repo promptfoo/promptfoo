@@ -1,17 +1,18 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import type { OpenAiCompletionOptions } from './types';
 import {
   calculateOpenAICost,
   formatOpenAiError,
   getTokenUsage,
   OPENAI_COMPLETION_MODELS,
 } from './util';
+
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;

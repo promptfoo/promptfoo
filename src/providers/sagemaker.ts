@@ -1,9 +1,12 @@
 import crypto from 'crypto';
+
 import z from 'zod';
 import { fromError } from 'zod-validation-error';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { transform } from '../util/transform';
+
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -15,7 +18,6 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { TransformContext } from '../util/transform';
-import { transform } from '../util/transform';
 
 /**
  * Sleep utility function for implementing delays

@@ -6,8 +6,9 @@ import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelAudit from './ModelAudit';
-import type { ScanResult } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
+
+import type { ScanResult } from './ModelAudit.types';
 
 vi.mock('@app/utils/api');
 vi.mock('./store');

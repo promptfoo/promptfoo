@@ -9,6 +9,7 @@ import {
   encodeMathPrompt,
   generateMathPrompt,
 } from '../../../src/redteam/strategies/mathPrompt';
+
 import type { ApiProvider } from '../../../src/types/providers';
 
 jest.mock('cli-progress');

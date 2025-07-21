@@ -1,8 +1,14 @@
 import fs from 'fs';
 import path from 'path';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
+import { parsePathOrGlob } from '../util';
+import { sha256 } from '../util/createHash';
+import { processConfigFileReferences } from '../util/fileReference';
+import { safeJsonStringify } from '../util/json';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -11,10 +17,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { parsePathOrGlob } from '../util';
-import { sha256 } from '../util/createHash';
-import { processConfigFileReferences } from '../util/fileReference';
-import { safeJsonStringify } from '../util/json';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;

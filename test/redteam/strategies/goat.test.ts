@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { addGoatTestCases } from '../../../src/redteam/strategies/goat';
+
 import type { AssertionType, TestCaseWithPlugin } from '../../../src/types';
 
 describe('GOAT Strategy', () => {

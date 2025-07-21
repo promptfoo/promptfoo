@@ -26,14 +26,16 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import dedent from 'dedent';
 import React from 'react';
 import Editor from 'react-simple-code-editor';
+import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/components/prism-clike';
+
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
+
 import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 import 'prismjs/themes/prism.css';
 

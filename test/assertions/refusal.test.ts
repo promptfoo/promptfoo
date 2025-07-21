@@ -1,4 +1,5 @@
 import { handleIsRefusal } from '../../src/assertions/refusal';
+
 import type {
   Assertion,
   AssertionValueFunctionContext,

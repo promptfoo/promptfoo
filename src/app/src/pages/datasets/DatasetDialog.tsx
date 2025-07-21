@@ -16,10 +16,10 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { TestCasesWithMetadata } from '@promptfoo/types';
 import yaml from 'js-yaml';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import type { TestCasesWithMetadata } from '@promptfoo/types';
 
 interface DatasetDialogProps {
   openDialog: boolean;

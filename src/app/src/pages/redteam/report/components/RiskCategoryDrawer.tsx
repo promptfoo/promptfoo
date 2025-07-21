@@ -17,13 +17,13 @@ import {
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromTest } from './shared';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {

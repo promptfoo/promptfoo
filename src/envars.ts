@@ -1,5 +1,7 @@
 import 'dotenv/config';
+
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types

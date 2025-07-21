@@ -1,11 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import type { Logger } from 'winston';
+
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { runPython } from '../../src/python/pythonUtils';
 import { parsePathOrGlob } from '../../src/util';
 import { processConfigFileReferences } from '../../src/util/fileReference';
+import type { Logger } from 'winston';
 
 jest.mock('fs');
 jest.mock('path');

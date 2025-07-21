@@ -1,6 +1,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -9,7 +11,6 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {
   apiKey?: string;

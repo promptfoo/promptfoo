@@ -1,4 +1,5 @@
 import { type ChildProcess, exec, spawn } from 'child_process';
+
 import { Command } from 'commander';
 import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';

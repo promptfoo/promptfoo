@@ -26,6 +26,42 @@
     "lineWidth": 100,
     "lineEnding": "lf"
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              {
+                "type": false,
+                "source": [":NODE:", ":BUN:"]
+              },
+              [":NODE:", ":BUN:"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["**"]
+              },
+              ["**", "!./**", "!../**", "!src/**", "!test/**", "!examples/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["src/**", "test/**", "examples/**"]
+              },
+              ["src/**", "test/**", "examples/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["./**", "../**"]
+              },
+              ["./**", "../**"]
+            ]
+          }
+        }
+      }
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {

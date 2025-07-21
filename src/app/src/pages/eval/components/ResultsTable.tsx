@@ -28,7 +28,6 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -40,9 +39,12 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
+import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+
+import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
+
 import ButtonGroup from '@mui/material/ButtonGroup';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;

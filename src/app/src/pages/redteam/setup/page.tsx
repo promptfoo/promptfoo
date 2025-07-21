@@ -28,7 +28,6 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import React, { useEffect, useRef, useState } from 'react';
@@ -42,8 +41,10 @@ import Strategies from './components/Strategies';
 import Targets from './components/Targets';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
-import type { Config, RedteamUITarget } from './types';
 import { generateOrderedYaml } from './utils/yamlHelpers';
+import type { RedteamStrategy } from '@promptfoo/types';
+
+import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({

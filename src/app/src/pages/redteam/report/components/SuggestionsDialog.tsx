@@ -15,8 +15,8 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import type { GradingResult, ResultSuggestion } from '@promptfoo/types';
 import React from 'react';
+import type { GradingResult, ResultSuggestion } from '@promptfoo/types';
 
 interface SuggestionsDialogProps {
   open: boolean;

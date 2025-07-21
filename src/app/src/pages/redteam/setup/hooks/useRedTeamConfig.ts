@@ -1,7 +1,8 @@
-import type { Plugin } from '@promptfoo/redteam/constants';
 import { DEFAULT_PLUGINS, REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Plugin } from '@promptfoo/redteam/constants';
+
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
 
 interface RecentlyUsedPlugins {

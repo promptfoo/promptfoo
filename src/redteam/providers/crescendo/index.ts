@@ -1,29 +1,14 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../../types';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
-import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
-import type { Message } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
@@ -38,6 +23,21 @@ import {
   GOAL_RUBRIC_TEMPLATE,
   REFUSAL_SYSTEM_PROMPT,
 } from './prompts';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../../types';
+import type { BaseRedteamMetadata } from '../../types';
+import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;

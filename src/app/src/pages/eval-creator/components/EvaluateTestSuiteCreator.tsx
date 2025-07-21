@@ -9,7 +9,6 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import React, { useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
@@ -18,6 +17,7 @@ import ProviderSelector from './ProviderSelector';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
+import type { ProviderOptions } from '@promptfoo/types';
 import './EvaluateTestSuiteCreator.css';
 
 function ErrorFallback({

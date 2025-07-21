@@ -1,8 +1,12 @@
-import type { Cache } from 'cache-manager';
-import type Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
+import { safeJsonStringify } from '../util/json';
+import { ellipsize } from '../util/text';
+import { parseChatPrompt } from './shared';
+import type { Cache } from 'cache-manager';
+import type Replicate from 'replicate';
+
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -13,9 +17,6 @@ import type {
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { safeJsonStringify } from '../util/json';
-import { ellipsize } from '../util/text';
-import { parseChatPrompt } from './shared';
 
 async function getReplicateClient(): Promise<typeof Replicate> {
   try {

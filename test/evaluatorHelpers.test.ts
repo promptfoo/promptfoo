@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
 import * as path from 'path';
+
 import {
   collectFileMetadata,
   extractTextFromPDF,
@@ -8,8 +9,9 @@ import {
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
-import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types';
 import { transform } from '../src/util/transform';
+
+import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

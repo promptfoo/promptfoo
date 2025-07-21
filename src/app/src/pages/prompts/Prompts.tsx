@@ -14,10 +14,10 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
-import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import PromptDialog from './PromptDialog';
+import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 // augment the props for the toolbar slot
 declare module '@mui/x-data-grid' {

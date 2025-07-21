@@ -1,8 +1,9 @@
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import PresetCard from '../PresetCard';
-import type { PresetId, StrategyPreset } from './types';
 import { STRATEGY_PRESETS } from './types';
+
+import type { PresetId, StrategyPreset } from './types';
 
 interface PresetSelectorProps {
   presets: StrategyPreset[];

@@ -21,9 +21,9 @@ import {
   gridVisibleColumnFieldsSelector,
   useGridApiContext,
 } from '@mui/x-data-grid';
-import type { StandaloneEval } from '@promptfoo/util/database';
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
 function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   const apiRef = useGridApiContext();

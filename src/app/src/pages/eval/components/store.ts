@@ -1,9 +1,10 @@
 import { callApi } from '@app/utils/api';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import type { VisibilityState } from '@tanstack/table-core';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { VisibilityState } from '@tanstack/table-core';
+
 import type {
   EvalTableDTO,
   EvaluateSummaryV2,

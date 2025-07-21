@@ -8,6 +8,7 @@ import {
   GROK_REASONING_MODELS,
   XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
+
 import type { ProviderOptions } from '../../../src/types/providers';
 
 jest.mock('../../../src/providers/openai/chat');

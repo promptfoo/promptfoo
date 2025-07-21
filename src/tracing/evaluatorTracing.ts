@@ -1,6 +1,8 @@
 import { randomBytes } from 'crypto';
+
 import logger from '../logger';
 import telemetry from '../telemetry';
+
 import type { TestCase, TestSuite } from '../types';
 
 // Track whether OTLP receiver has been started

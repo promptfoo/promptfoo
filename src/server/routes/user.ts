@@ -1,4 +1,3 @@
-import type { Request, Response } from 'express';
 import { Router } from 'express';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
@@ -12,6 +11,7 @@ import {
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { ApiSchemas } from '../apiSchemas';
+import type { Request, Response } from 'express';
 
 export const userRouter = Router();
 

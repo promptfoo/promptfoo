@@ -1,5 +1,6 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
+
+import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
@@ -7,7 +8,6 @@ import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
@@ -15,6 +15,8 @@ import {
   readTestFiles,
   readTests,
 } from '../../src/util/testCaseReader';
+
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/fetch', () => ({

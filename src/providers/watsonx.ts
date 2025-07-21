@@ -1,16 +1,18 @@
-import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
-import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+
 import { z } from 'zod';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import invariant from '../util/invariant';
+import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
+import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
+import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+
+import type { EnvVarKey } from '../envars';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
-import invariant from '../util/invariant';
-import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
 
 interface TextGenRequestParametersModel {
   max_new_tokens: number;

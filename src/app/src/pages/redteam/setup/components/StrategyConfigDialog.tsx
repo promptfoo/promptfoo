@@ -14,6 +14,7 @@ import {
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
 import React from 'react';
+
 import type { StrategyCardData } from './strategies/types';
 
 const DEFAULT_LANGUAGES: Record<string, string> = {

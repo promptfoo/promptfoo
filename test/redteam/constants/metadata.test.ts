@@ -16,6 +16,7 @@ import {
   strategyDisplayNames,
   subCategoryDescriptions,
 } from '../../../src/redteam/constants/metadata';
+
 import type { Plugin } from '../../../src/redteam/constants/plugins';
 import type { Strategy } from '../../../src/redteam/constants/strategies';
 

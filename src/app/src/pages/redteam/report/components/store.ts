@@ -1,7 +1,7 @@
 import { del, get, set } from 'idb-keyval';
 import { create } from 'zustand';
-import type { StateStorage } from 'zustand/middleware';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { StateStorage } from 'zustand/middleware';
 
 const storage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {

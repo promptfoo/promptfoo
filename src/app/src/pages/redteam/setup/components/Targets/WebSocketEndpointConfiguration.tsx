@@ -2,6 +2,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import React from 'react';
+
 import type { ProviderOptions } from '../../types';
 
 interface WebSocketEndpointConfigurationProps {
