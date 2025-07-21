@@ -316,36 +316,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
       const data = (await response.json()) as ProviderTestResponse;
 
-      // Handle Target Server Errors:
-      if (
-        !data.providerResponse?.metadata?.http?.status ||
-        data.providerResponse?.metadata?.http?.status >= 400
-      ) {
-        let errorMessage = 'Target Server Error: ';
-
-        if (data.providerResponse.raw) {
-          try {
-            // Attempt to parse the raw response as JSON
-            const parsedResponse = JSON.parse(data.providerResponse.raw);
-            if (parsedResponse.error) {
-              // Check for an error property on the JSON
-              errorMessage += parsedResponse.error;
-            } else {
-              // Fallback: render the raw response
-              errorMessage += data.providerResponse.raw;
-            }
-          } catch {
-            // Fallback: render the raw response
-            errorMessage += data.providerResponse.raw;
-          }
-        } else {
-          // If there's no raw response, render the metadata.statusText
-          errorMessage += data.providerResponse?.metadata?.statusText || 'Unknown error';
-        }
-
-        throw new Error(errorMessage);
-      }
-
       const result = data.testResult;
 
       if (result.error) {

@@ -1,3 +1,4 @@
+import { Alert } from '@mui/material';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -7,7 +8,7 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
 export default function ProviderResponse({ providerResponse }: { providerResponse: any }) {
-  return (
+  return providerResponse && providerResponse.raw !== undefined ? (
     <>
       <Typography variant="subtitle2" gutterBottom>
         Headers:
@@ -113,5 +114,7 @@ export default function ProviderResponse({ providerResponse }: { providerRespons
         </pre>
       </Paper>
     </>
+  ) : (
+    <Alert severity="error">{providerResponse?.error || 'No response from provider'}</Alert>
   );
 }
