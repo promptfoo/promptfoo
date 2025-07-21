@@ -182,6 +182,7 @@ export default function ResultsView({
     totalResultsCount,
     highlightedResultsCount,
     filters,
+    removeFilter,
   } = useTableStore();
 
   const {
@@ -669,6 +670,27 @@ export default function ResultsView({
                       sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                     />
                   )}
+                  {filters.appliedCount > 0 && Object.values(filters.values).map((filter) => {
+                    if (!filter.value) {
+                      return null;
+                    }
+                    const truncatedValue = filter.value.length > 50 
+                      ? filter.value.slice(0, 50) + '...' 
+                      : filter.value;
+                    const label = filter.type === 'metric' 
+                      ? `Metric: ${truncatedValue}`
+                      : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                    return (
+                      <Chip
+                        key={filter.id}
+                        size="small"
+                        label={label}
+                        title={filter.value} // Show full value on hover
+                        onDelete={() => removeFilter(filter.id)}
+                        sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                      />
+                    );
+                  })}
                 </>
               ) : (
                 <>{filteredResultsCount} results</>

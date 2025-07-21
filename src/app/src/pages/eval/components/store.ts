@@ -41,6 +41,25 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
+function computeAvailableMetadataFields(table: EvaluateTable | null): string[] {
+  if (!table || !table.body) {
+    return [];
+  }
+
+  const metadataFields = new Set<string>();
+  
+  // Scan through all rows and outputs to find unique metadata fields
+  table.body.forEach((row) => {
+    row.outputs.forEach((output) => {
+      if (output?.metadata && typeof output.metadata === 'object') {
+        Object.keys(output.metadata).forEach((field) => metadataFields.add(field));
+      }
+    });
+  });
+
+  return Array.from(metadataFields).sort();
+}
+
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
@@ -60,7 +79,9 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric';
+export type ResultsFilterType = 'metric' | 'metadata';
+
+export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
 export type ResultsFilter = {
   /**
@@ -69,8 +90,12 @@ export type ResultsFilter = {
   id: string;
   type: ResultsFilterType;
   value: string;
-  operator: 'equals';
+  operator: ResultsFilterOperator;
   logicOperator: 'and' | 'or';
+  /**
+   * For metadata filters, this is the field name in the metadata object
+   */
+  field?: string;
 };
 
 interface TableState {
@@ -110,6 +135,7 @@ interface TableState {
     operator: ResultsFilter['operator'];
     value: string;
     logicOperator?: ResultsFilter['logicOperator'];
+    field?: string;
   }) => void;
 
   /**
@@ -150,6 +176,10 @@ interface TableState {
     options: {
       [key in ResultsFilterType]: string[];
     };
+    /**
+     * Available metadata fields extracted from eval results
+     */
+    metadataFields: string[];
   };
 }
 
@@ -249,7 +279,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
         ...prevState.filters,
         options: {
           metric: computeAvailableMetrics(table),
+          metadata: [],
         },
+        metadataFields: computeAvailableMetadataFields(table),
       },
     })),
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
@@ -263,7 +295,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           ...prevState.filters,
           options: {
             metric: computeAvailableMetrics(table),
+            metadata: [],
           },
+          metadataFields: computeAvailableMetadataFields(table),
         },
       }));
     } else {
@@ -276,7 +310,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           ...prevState.filters,
           options: {
             metric: computeAvailableMetrics(results.table),
+            metadata: [],
           },
+          metadataFields: computeAvailableMetadataFields(results.table),
         },
       }));
     }
@@ -336,6 +372,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             type: filter.type,
             operator: filter.operator,
             value: filter.value,
+            field: filter.field,
           }),
         );
       });
@@ -364,7 +401,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(data.table),
+              metadata: [],
             },
+            metadataFields: computeAvailableMetadataFields(data.table),
           },
         }));
 
@@ -385,7 +424,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
     appliedCount: 0,
     options: {
       metric: [],
+      metadata: [],
     },
+    metadataFields: [],
   },
 
   addFilter: (filter) => {
@@ -404,6 +445,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
               id: filterId,
               // Default to 'and' logic operator if not provided.
               logicOperator: filter.logicOperator ?? 'and',
+              // Include field for metadata filters
+              field: filter.field,
             },
           },
           appliedCount,

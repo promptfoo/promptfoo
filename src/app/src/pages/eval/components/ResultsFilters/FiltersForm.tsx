@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
@@ -14,11 +14,20 @@ import {
   Popover,
   Select,
   Stack,
+  TextField,
 } from '@mui/material';
+import { useDebounce } from 'use-debounce';
 import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
+  metadata: 'Metadata',
+};
+
+const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
+  equals: 'Equals',
+  contains: 'Contains',
+  not_contains: 'Not Contains',
 };
 
 function Dropdown({
@@ -34,10 +43,10 @@ function Dropdown({
   values: { label: string; value: string }[];
   value: string;
   onChange: (value: string) => void;
-  width?: number;
+  width?: number | string;
 }) {
   return (
-    <FormControl variant="outlined" size="small">
+    <FormControl variant="outlined" size="small" sx={{ minWidth: width }}>
       {label && <InputLabel id={`${id}-label`}>{label}</InputLabel>}
       <Select
         labelId={`${id}-label`}
@@ -45,7 +54,12 @@ function Dropdown({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         label={label}
-        sx={{ width }}
+        sx={{
+          backgroundColor: 'background.paper',
+          '& .MuiSelect-select': {
+            py: 1,
+          },
+        }}
       >
         {values.map((value) => (
           <MenuItem key={value.value} value={value.value}>
@@ -57,8 +71,59 @@ function Dropdown({
   );
 }
 
-function Filter({ value, index }: { value: ResultsFilter; index: number }) {
+function DebouncedTextField({
+  value,
+  onChange,
+  ...props
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  [key: string]: any;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+  const [debouncedValue] = useDebounce(localValue, 500);
+
+  // Update parent when debounced value changes
+  useEffect(() => {
+    if (debouncedValue !== value) {
+      onChange(debouncedValue);
+    }
+  }, [debouncedValue, value, onChange]);
+
+  // Sync with external value changes
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  return (
+    <TextField
+      {...props}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      sx={{
+        backgroundColor: 'background.paper',
+        '& .MuiInputBase-input': {
+          py: 1,
+        },
+        ...props.sx,
+      }}
+    />
+  );
+}
+
+function Filter({ value, index, onClose }: { value: ResultsFilter; index: number; onClose: () => void }) {
   const { filters, updateFilter, removeFilter } = useTableStore();
+
+  /**
+   * Updates the metadata field.
+   * @param field - The new metadata field.
+   */
+  const handleFieldChange = useCallback(
+    (field: string) => {
+      updateFilter({ ...value, field });
+    },
+    [value, updateFilter],
+  );
 
   /**
    * Updates the filter type.
@@ -104,13 +169,42 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
     [value, updateFilter],
   );
 
+  const handleRemove = useCallback(() => {
+    const filterCount = Object.keys(filters.values).length;
+    removeFilter(value.id);
+    // Close the popover if this was the last filter
+    if (filterCount === 1) {
+      onClose();
+    }
+  }, [filters.values, removeFilter, value.id, onClose]);
+
   return (
-    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
-      <IconButton onClick={() => removeFilter(value.id)}>
-        <CloseIcon />
+    <Box
+      sx={{
+        display: 'flex',
+        gap: 1.5,
+        alignItems: 'center',
+        p: 1,
+        borderRadius: 1,
+        '&:hover': {
+          backgroundColor: 'action.hover',
+        },
+      }}
+    >
+      <IconButton
+        onClick={handleRemove}
+        size="small"
+        sx={{
+          color: 'text.secondary',
+          '&:hover': {
+            color: 'error.main',
+          },
+        }}
+      >
+        <CloseIcon fontSize="small" />
       </IconButton>
 
-      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+      <Box sx={{ display: 'flex', gap: 1.5, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
         {index !== 0 && (
           <Dropdown
             id={`${index}-logic-operator-select`}
@@ -127,32 +221,71 @@ function Filter({ value, index }: { value: ResultsFilter; index: number }) {
         <Dropdown
           id={`${index}-filter-type-select`}
           label="Filter Type"
-          values={[{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]}
+          values={[
+            { label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' },
+            { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
+          ]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
-          width={125}
+          width={150}
         />
 
         <Dropdown
           id={`${index}-operator-select`}
           label="Operator"
-          values={[{ label: 'Equals', value: 'equals' }]}
+          values={
+            value.type === 'metric'
+              ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
+              : [
+                  { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                ]
+          }
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
-          width={125}
+          width={150}
         />
 
-        <Dropdown
-          id={`${index}-value-select`}
-          label={TYPE_LABELS_BY_TYPE[value.type]}
-          values={(filters.options[value.type] ?? []).map((value) => ({
-            label: value,
-            value,
-          }))}
-          value={value.value}
-          onChange={(e) => handleValueChange(e)}
-          width={275}
-        />
+        {value.type === 'metadata' && (
+          <Dropdown
+            id={`${index}-field-select`}
+            label="Field"
+            values={filters.metadataFields.map((field) => ({
+              label: field,
+              value: field,
+            }))}
+            value={value.field || ''}
+            onChange={(e) => handleFieldChange(e)}
+            width={180}
+          />
+        )}
+
+        <Box sx={{ flex: 1, minWidth: 250 }}>
+          {value.type === 'metric' ? (
+            <Dropdown
+              id={`${index}-value-select`}
+              label={TYPE_LABELS_BY_TYPE[value.type]}
+              values={(filters.options[value.type] ?? []).map((value) => ({
+                label: value,
+                value,
+              }))}
+              value={value.value}
+              onChange={(e) => handleValueChange(e)}
+              width="100%"
+            />
+          ) : (
+            <DebouncedTextField
+              id={`${index}-value-input`}
+              label="Value"
+              variant="outlined"
+              size="small"
+              value={value.value}
+              onChange={handleValueChange}
+              fullWidth
+            />
+          )}
+        </Box>
       </Box>
     </Box>
   );
@@ -211,24 +344,53 @@ export default function FiltersForm({
         vertical: 'bottom',
         horizontal: 'left',
       }}
+      transformOrigin={{
+        vertical: 'top',
+        horizontal: 'left',
+      }}
+      PaperProps={{
+        sx: {
+          mt: 1,
+          minWidth: 600,
+          maxWidth: '90vw',
+          maxHeight: '80vh',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        },
+      }}
     >
-      <Box sx={{ p: 2 }}>
-        <Stack direction="column" spacing={1}>
-          <Stack direction="column" spacing={1}>
-            {filterValuesList.map((filter, index) => (
-              <Filter key={filter.id} value={filter} index={index} />
-            ))}
-          </Stack>
-          {filterValuesList.length > 0 && <Divider />}
-          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
-            <Button startIcon={<AddIcon />} onClick={handleAddFilter}>
-              Add Filter
-            </Button>
-            <Button startIcon={<DeleteIcon />} onClick={handleRemoveAllFilters}>
+      <Box sx={{ px: 2, pt: 2, pb: 1, flex: 1, overflowY: 'auto' }}>
+        <Stack direction="column" spacing={0.5}>
+          {filterValuesList.map((filter, index) => (
+            <Filter key={filter.id} value={filter} index={index} onClose={onClose} />
+          ))}
+        </Stack>
+      </Box>
+
+      <Box sx={{ px: 2, pt: 1, pb: 2 }}>
+        {filterValuesList.length > 0 && <Divider sx={{ mb: 1.5 }} />}
+        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
+          <Button
+            startIcon={<AddIcon />}
+            onClick={handleAddFilter}
+            variant="contained"
+            size="small"
+          >
+            Add Filter
+          </Button>
+          {filterValuesList.length > 0 && (
+            <Button
+              startIcon={<DeleteIcon />}
+              onClick={handleRemoveAllFilters}
+              color="error"
+              variant="outlined"
+              size="small"
+            >
               Remove All
             </Button>
-          </Box>
-        </Stack>
+          )}
+        </Box>
       </Box>
     </Popover>
   );
