@@ -7,7 +7,16 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.mjs", "**/*.cjs"]
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "**/*.mjs",
+      "**/*.cjs",
+      "!src/app/public/scripts/**/*"
+    ]
   },
   "formatter": {
     "enabled": true,

@@ -14,7 +14,7 @@ keywords:
     political AI filtering,
   ]
 date: 2025-01-28
-authors: [vanessa]
+authors: [ian]
 tags: [research-analysis]
 ---
 

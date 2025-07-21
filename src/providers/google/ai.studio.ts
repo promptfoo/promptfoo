@@ -92,8 +92,10 @@ class AIStudioGenericProvider implements ApiProvider {
   getApiKey(): string | undefined {
     const apiKey =
       this.config.apiKey ||
+      this.env?.GEMINI_API_KEY ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.PALM_API_KEY ||
+      getEnvString('GEMINI_API_KEY') ||
       getEnvString('GOOGLE_API_KEY') ||
       getEnvString('PALM_API_KEY');
     if (apiKey) {
@@ -136,7 +138,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
     if (!this.getApiKey()) {
       throw new Error(
-        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
