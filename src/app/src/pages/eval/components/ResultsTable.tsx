@@ -186,6 +186,16 @@ function ResultsTable({
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
 
+  /**
+   * Reset the pagination state when the filtered results count changes.
+   */
+  React.useEffect(() => {
+    setPagination({
+      pageIndex: 0,
+      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    });
+  }, [filteredResultsCount]);
+
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
     setLightboxOpen(!lightboxOpen);
