@@ -916,7 +916,7 @@ function ResultsTable({
 
     if (rowId) {
       const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, tableBody.length - 1));
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -986,7 +986,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
 
   const tableWidth = React.useMemo(() => {
     let width = 0;
