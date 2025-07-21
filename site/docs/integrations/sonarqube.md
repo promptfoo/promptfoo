@@ -108,7 +108,7 @@ jobs:
           node-version: '18'
 
       - name: Cache promptfoo
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/promptfoo
           key: ${{ runner.os }}-promptfoo-${{ hashFiles('**/promptfooconfig.yaml') }}
@@ -177,7 +177,7 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: promptfoo-reports
           path: |
