@@ -19,7 +19,6 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
   PII_PLUGINS,
-  PLUGIN_PRESET_DESCRIPTIONS,
   pluginDescriptions,
   REDTEAM_MODEL,
   REDTEAM_PROVIDER_HARM_PLUGINS,
@@ -67,6 +66,7 @@ describe('constants', () => {
       'harmful',
       'pii',
       'bias',
+      'medical',
       'guardrails-eval',
     ]);
   });

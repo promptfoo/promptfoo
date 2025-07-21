@@ -1,21 +1,22 @@
 import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
+
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
+  type BasePlugin,
   COLLECTIONS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  FOUNDATION_PLUGINS,
-  type BasePlugin,
   type PIIPlugin,
 } from '../../src/redteam/constants';
 import {
   RedteamConfigSchema,
   RedteamGenerateOptionsSchema,
+  RedteamPluginObjectSchema,
   RedteamPluginSchema,
   RedteamStrategySchema,
-  RedteamPluginObjectSchema,
 } from '../../src/validators/redteam';
 
 describe('RedteamPluginObjectSchema', () => {
@@ -143,7 +144,7 @@ describe('redteamPluginSchema', () => {
   });
 
   it('should reject an invalid plugin name', () => {
-    expect(RedteamPluginSchema.safeParse('medical').success).toBe(false);
+    expect(RedteamPluginSchema.safeParse('invalid-plugin-name').success).toBe(false);
   });
 
   it('should reject a plugin object with negative numTests', () => {
