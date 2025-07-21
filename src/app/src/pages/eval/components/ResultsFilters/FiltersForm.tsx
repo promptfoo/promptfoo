@@ -230,6 +230,20 @@ function Filter({ value, index, onClose }: { value: ResultsFilter; index: number
           width={150}
         />
 
+        {value.type === 'metadata' && (
+          <Dropdown
+            id={`${index}-field-select`}
+            label="Field"
+            values={filters.metadataFields.map((field) => ({
+              label: field,
+              value: field,
+            }))}
+            value={value.field || ''}
+            onChange={(e) => handleFieldChange(e)}
+            width={180}
+          />
+        )}
+
         <Dropdown
           id={`${index}-operator-select`}
           label="Operator"
@@ -246,20 +260,6 @@ function Filter({ value, index, onClose }: { value: ResultsFilter; index: number
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
           width={150}
         />
-
-        {value.type === 'metadata' && (
-          <Dropdown
-            id={`${index}-field-select`}
-            label="Field"
-            values={filters.metadataFields.map((field) => ({
-              label: field,
-              value: field,
-            }))}
-            value={value.field || ''}
-            onChange={(e) => handleFieldChange(e)}
-            width={180}
-          />
-        )}
 
         <Box sx={{ flex: 1, minWidth: 250 }}>
           {value.type === 'metric' ? (
