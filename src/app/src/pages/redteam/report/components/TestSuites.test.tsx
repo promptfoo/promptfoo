@@ -174,9 +174,7 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
     fireEvent.click(viewLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?metric=Test%20Plugin',
-    );
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?metric=Test%20Plugin');
   });
 });
 
