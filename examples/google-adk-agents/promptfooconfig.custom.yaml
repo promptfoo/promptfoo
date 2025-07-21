@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Google ADK with Different Model Example
+
+providers:
+  - id: file://provider.py:call_api
+    label: ADK with Gemini Pro
+    config:
+      # Use a different model - gemini-1.5-pro for more sophisticated responses
+      model: gemini-1.5-pro # More capable model for complex planning
+
+prompts:
+  - '{{message}}'
+
+tests:
+  # Test 1: Complex event planning
+  - vars:
+      message: 'Plan a multi-day corporate retreat for 50 executives including team building, presentations, and entertainment'
+    assert:
+      - type: contains-any
+        value: ['retreat', 'corporate', 'executives', 'team building']
+      - type: llm-rubric
+        value: 'Response provides comprehensive multi-day event planning'
+        threshold: 0.8
+
+  # Test 2: Detailed budget analysis
+  - vars:
+      message: 'Create a detailed cost-benefit analysis for a $10,000 company holiday party vs team bonuses'
+    assert:
+      - type: contains-any
+        value: ['cost', 'benefit', 'analysis', 'budget', 'party', 'bonus']
+      - type: llm-rubric
+        value: 'Response provides thoughtful financial analysis and comparison'
+        threshold: 0.8
+
+  # Test 3: Creative theme planning
+  - vars:
+      message: 'Design a unique 1920s Gatsby-themed wedding reception with authentic details'
+    assert:
+      - type: contains-any
+        value: ['Gatsby', '1920s', 'themed', 'wedding', 'authentic']
+      - type: llm-rubric
+        value: 'Response shows creativity and attention to theme-specific details'
+        threshold: 0.8

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Google ADK Weather Assistant Setup Script
+# Google ADK Multi-Agent System Setup Script
 
-echo "Setting up Google ADK Weather Assistant..."
+echo "Setting up Google ADK Multi-Agent System..."
 
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
@@ -27,5 +27,5 @@ fi
 
 echo "Setup complete! To run the example:"
 echo "1. Edit .env and add your GOOGLE_API_KEY"
-echo "2. Run: python simple_agent.py"
+echo "2. Run: python multi_agent_example.py"
 echo "3. Test with promptfoo: npx promptfoo@latest eval" 

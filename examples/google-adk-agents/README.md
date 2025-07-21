@@ -1,21 +1,23 @@
 # google-adk-agents
 
-This example demonstrates how to build AI agents using Google's Agent Development Kit (ADK) with promptfoo.
+This example demonstrates how to build collaborative AI agents using Google's Agent Development Kit (ADK) with promptfoo.
 
 ## Overview
 
-We provide two examples showing ADK best practices:
+This example shows a **Multi-Agent Party Planning System** with three collaborative agents:
 
-1. **Single Agent** (`simple_agent.py`): A focused weather assistant
-2. **Multi-Agent** (`multi_agent_example.py`): A party planning system with three collaborative agents
+- **Coordinator**: Manages the overall planning process, delegates to specialists
+- **Task Planner**: Creates organized task lists with priorities
+- **Budget Calculator**: Handles financial planning and budget breakdowns
 
-Both examples demonstrate:
+Key features demonstrated:
 
 - Clean agent configuration
-- Tool integration (including web search and code execution)
-- Clear instructions for specialized behavior
+- Tool integration (custom functions)
+- Automatic delegation using `sub_agents`
+- Collaborative problem solving
 - Comprehensive testing with promptfoo
-- Latest Gemini 2.5 Flash model
+- Configurable Gemini model selection
 
 ## Quick Start
 
@@ -47,17 +49,9 @@ npx promptfoo@latest init --example google-adk-agents
    pip install -r requirements.txt
    ```
 
-## Running the Examples
+## Running the Example
 
-### Test the Agents Directly
-
-**Single Agent (Weather):**
-
-```bash
-python simple_agent.py
-```
-
-**Multi-Agent System (Party Planning):**
+### Test the Multi-Agent System Directly
 
 ```bash
 python multi_agent_example.py
@@ -65,7 +59,7 @@ python multi_agent_example.py
 
 ### Run promptfoo Evaluation
 
-Test both examples:
+Test the system:
 
 ```bash
 npx promptfoo@latest eval
@@ -77,76 +71,101 @@ View results:
 npx promptfoo@latest view
 ```
 
-## Examples Explained
+### Run with Different Model
 
-### Single Agent Example
+Test with Gemini Pro model:
 
-The weather assistant (`simple_agent.py`) shows:
-
-- Simple agent with one tool
-- Focused behavior through clear instructions
-- Tool integration (`get_weather`)
-- Proper error handling
-
-```python
-weather_agent = Agent(
-    name="weather_assistant",
-    model="gemini-2.5-flash",
-    instruction="...",
-    tools=[FunctionTool(get_weather)]
-)
+```bash
+npx promptfoo@latest eval -c promptfooconfig.custom.yaml
 ```
 
-### Multi-Agent Party Planning System
+## Configuration
 
-The party planning system (`multi_agent_example.py`) demonstrates:
+The system supports configuring which Gemini model to use. Simply update the `model` field in your promptfoo configuration:
 
-- **Coordinator**: Manages the overall planning process, has web search
-- **Task Planner**: Creates organized task lists with priorities
-- **Python Executor**: Handles calculations, budgets, and visualizations
+```yaml
+providers:
+  - id: file://provider.py:call_api
+    config:
+      model: gemini-2.0-flash # Options: gemini-2.0-flash, gemini-2.0-pro, etc.
+```
 
-Key features:
+### Available Models
 
-- Automatic delegation using `sub_agents`
-- Multiple tool types (custom functions, web search, code execution)
-- Collaborative problem solving
+- `gemini-2.0-flash` - Fast, efficient model for most tasks (default)
+- `gemini-1.5-pro` - More capable model for complex planning scenarios
+- `gemini-1.5-flash` - Previous generation flash model
+- Other Gemini models as they become available
+
+### Example Configurations
+
+**Default (Flash model for speed):**
+
+```yaml
+config:
+  model: gemini-2.0-flash
+```
+
+**Pro model for complex tasks:**
+
+```yaml
+config:
+  model: gemini-1.5-pro
+```
+
+## Multi-Agent Party Planning System
+
+The party planning system demonstrates advanced multi-agent collaboration:
+
+### Agent Roles
+
+1. **Party Coordinator** (`party_coordinator`):
+   - Main entry point for user requests
+   - Understands party planning needs
+   - Delegates to specialized agents
+   - Provides venue and theme suggestions based on knowledge
+
+2. **Task Planner** (`task_planner`):
+   - Creates organized task lists
+   - Prioritizes activities
+   - Estimates time requirements
+   - Uses `create_task_list` tool
+
+3. **Budget Calculator** (`budget_calculator`):
+   - Handles financial planning
+   - Creates budget breakdowns
+   - Suggests cost-saving measures
+   - Uses `calculate_party_budget` tool
+
+### Implementation Example
 
 ```python
 coordinator = Agent(
     name="party_coordinator",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",  # Configurable model
     instruction="...",
-    sub_agents=[task_planner, budget_calculator],
-    tools=[google_search_tool]
+    sub_agents=[task_planner, budget_calculator]
 )
 ```
 
-### Tools Available
+### Available Tools
 
-1. **Custom Tools**: `get_weather`, `create_task_list`
-2. **Built-in Tools**:
-   - `google_search`: Find venues, vendors, ideas
-   - `code_execution_tool`: Budget calculations, visualizations
+**Custom Tools**:
+
+- `create_task_list`: Generates prioritized task lists
+- `calculate_party_budget`: Computes budget breakdowns
 
 ## Test Configuration
 
-The `promptfooconfig.yaml` includes tests for both systems:
+The `promptfooconfig.yaml` includes comprehensive tests:
 
-**Single Agent Tests:**
-
-- Weather queries
-- Non-weather handling
-- Tool usage verification
-
-**Multi-Agent Tests:**
-
-- Party planning tasks
-- Budget calculations
-- Venue searches
-- Timeline generation
+- Party planning for different events (birthdays, weddings)
+- Budget calculations for various guest counts
+- Venue suggestions for specific locations
+- Timeline generation for events
 - Food quantity calculations
 
-## Extending the Examples
+## Extending the Example
 
 ### Add a New Tool
 
@@ -168,14 +187,14 @@ agent = Agent(
 # Create entertainment specialist
 entertainment_agent = Agent(
     name="entertainment_specialist",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",
     instruction="Plan games, music, and activities",
     tools=[FunctionTool(search_entertainment)]
 )
 
 # Add to coordinator
 coordinator = Agent(
-    sub_agents=[task_planner, code_executor, entertainment_agent]
+    sub_agents=[task_planner, budget_calculator, entertainment_agent]
 )
 ```
 
@@ -184,10 +203,10 @@ coordinator = Agent(
 ```
 google-adk-agents/
 ├── README.md               # This file
-├── simple_agent.py         # Weather assistant (single agent)
-├── multi_agent_example.py  # Party planning (multi-agent)
+├── multi_agent_example.py  # Party planning multi-agent system
 ├── provider.py             # Promptfoo provider
 ├── promptfooconfig.yaml    # Test configuration
+├── promptfooconfig.custom.yaml  # Example with different model
 ├── requirements.txt        # Dependencies
 ├── setup.sh               # Setup script
 └── env.example            # Environment template
@@ -196,7 +215,7 @@ google-adk-agents/
 ## Key ADK Concepts
 
 1. **Agent**: AI assistant with model, instructions, and tools
-2. **Tool**: Functions agents can call (custom, web search, code execution)
+2. **Tool**: Functions agents can call (custom functions)
 3. **Sub-agents**: Specialized agents managed by a coordinator
 4. **Provider**: Connects agents to promptfoo for testing
 
@@ -216,7 +235,7 @@ google-adk-agents/
 
 - Check the promptfoo viewer for actual vs expected responses
 - Review agent instructions if behavior doesn't match
-- Some tools (like code execution) may require additional setup
+- Some models may have limitations with certain tool configurations
 
 ## Learn More
 

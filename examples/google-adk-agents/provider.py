@@ -1,64 +1,59 @@
 """
-Promptfoo provider for Google ADK examples.
-Supports both single agent (weather) and multi-agent (party planning) examples.
+Promptfoo provider for Google ADK multi-agent example.
 """
 
 import os
 import sys
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from simple_agent import WeatherAssistant
 from multi_agent_example import PartyPlanningSystem
 
 
-# Initialize both systems
-weather_assistant = WeatherAssistant()
-party_planning_system = PartyPlanningSystem()
+# Initialize the party planning system with empty config (will be configured per request)
+party_planning_system = None
 
 
-async def call_provider(prompt: str, options: Optional[Dict[str, Any]] = None, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_or_create_system(config: Dict[str, Any]):
+    """Get or create a party planning system with the given configuration."""
+    global party_planning_system
+    
+    # For now, recreate the system with new config each time
+    # In production, you might want to cache based on config
+    party_planning_system = PartyPlanningSystem(config)
+    return party_planning_system
+
+
+async def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Main entry point for promptfoo evaluation.
     
     Args:
         prompt: The user's input message
-        options: Provider options including which system to use
+        options: Provider options including configuration
         context: Additional context from promptfoo
         
     Returns:
-        Dict with output and metadata for assertions
+        Dict with output
     """
     try:
-        # Get the system to use from context vars (default to single agent)
-        vars = context.get('vars', {}) if context else {}
-        system_type = vars.get('system', 'single')
+        # Extract configuration from options
+        config = options.get('config', {})
         
-        # Route to appropriate system
-        if system_type == 'multi':
-            # Use the party planning multi-agent system
-            result = await party_planning_system.process_message_async(prompt)
-        else:
-            # Use the simple weather assistant
-            result = await weather_assistant.process_message_async(prompt)
+        # Get or create system with configuration
+        system = get_or_create_system(config)
         
-        # Format response for promptfoo
-        output = result['response']
+        # Process the message through the party planning system
+        result = await system.process_message_async(prompt)
         
-        # Add metadata for assertions
-        metadata = result.get('metadata', {})
-        
+        # Return just the output
         return {
-            'output': output,
-            'metadata': metadata,
-            'success': result.get('success', True)
+            'output': result['response']
         }
         
     except Exception as e:
         return {
-            'output': f'Error: {str(e)}',
-            'metadata': {'error': str(e)},
-            'success': False
+            'output': f'Error: {str(e)}'
         }

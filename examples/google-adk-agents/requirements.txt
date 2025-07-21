@@ -1,4 +1,4 @@
-# Google ADK Weather Assistant Requirements
+# Google ADK Multi-Agent System Requirements
 
 # Google ADK - Agent Development Kit (latest version from July 2025)
 google-adk>=1.7.0
