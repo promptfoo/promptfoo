@@ -89,11 +89,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   >
                     <List>
                       {testResult.suggestions.map((suggestion: string, index: number) => (
-                        <ListItem key={index}>
-                          <ListItemIcon>
-                            <InfoIcon color="primary" />
-                          </ListItemIcon>
-                          <ListItemText primary={suggestion} />
+                        <ListItem
+                          sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}
+                          key={index}
+                        >
+                          <InfoIcon sx={{ mt: 0.5 }} color="primary" />
+                          <ListItemText sx={{ margin: 0 }} primary={suggestion} />
                         </ListItem>
                       ))}
                     </List>
@@ -102,7 +103,20 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               )}
             </>
           )}
-          <Accordion sx={{ mt: 2 }} expanded>
+          <Accordion
+            sx={{
+              mt: 2,
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              overflow: 'hidden',
+              '& .MuiAccordionDetails-root': {
+                overflowX: 'hidden',
+                wordBreak: 'break-all',
+              },
+            }}
+            expanded
+          >
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}
               aria-controls="provider-response-content"
@@ -142,7 +156,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         mb: 2,
                       }}
                     >
-                      <pre> - {testResult.unalignedProviderResult.outputs.join('\n - ')}</pre>
+                      <pre>{' - ' + testResult.unalignedProviderResult.outputs.join('\n - ')}</pre>
                     </Paper>
                   </Box>
                   <Typography variant="h6" sx={{ mt: 10 }} gutterBottom>
