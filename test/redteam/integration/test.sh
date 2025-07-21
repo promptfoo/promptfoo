@@ -16,10 +16,10 @@ else
 fi
 
 # Check for expected output patterns
-if echo "$output" | grep -q "Wrote 8 test cases to redteam.yaml"; then
-  echo "Expected line (Wrote 8 test cases to redteam.yaml) found for promptfoo redteam generate"
+if echo "$output" | grep -q "Wrote 24 test cases to redteam.yaml"; then
+  echo "Expected line (Wrote 24 test cases to redteam.yaml) found for promptfoo redteam generate"
 else
-  echo "ERROR: Expected line (Wrote 8 test cases to redteam.yaml) not found in output."
+  echo "ERROR: Expected line (Wrote 24 test cases to redteam.yaml) not found in output."
   echo "$output"
   exit 1
 fi

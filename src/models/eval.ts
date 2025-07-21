@@ -454,7 +454,9 @@ export default class Eval {
 
         if (type === 'metric' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
-          condition = `json_extract(named_scores, '$.${sanitizedValue}') IS NOT NULL`;
+          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
+          // in double quotes.
+          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && operator === 'equals' && field) {
           const sanitizedField = field.replace(/'/g, "''");
           const sanitizedValue = value.replace(/'/g, "''");

@@ -28,7 +28,7 @@ const TargetPurposeDiscoveryStateSchema = z.object({
   answers: z.array(z.string()),
 });
 
-const TargetPurposeDiscoveryRequestSchema = z.object({
+export const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
   version: z.string(),
@@ -56,7 +56,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
   ),
 });
 
-const TargetPurposeDiscoveryTaskResponseSchema = z.object({
+export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   done: z.boolean(),
   question: z.string().optional(),
   purpose: TargetPurposeDiscoveryResultSchema.optional(),

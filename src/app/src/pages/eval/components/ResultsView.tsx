@@ -24,6 +24,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import type { StackProps } from '@mui/material/Stack';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -53,6 +54,8 @@ import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -162,8 +165,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-
   const [searchParams, setSearchParams] = useSearchParams();
+
   const {
     author,
     table,
@@ -200,7 +203,7 @@ export default function ResultsView({
       setSearchParams((prev) => ({ ...prev, search: text }));
       setSearchText(text);
     },
-    [searchParams],
+    [setSearchParams],
   );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
@@ -468,13 +471,49 @@ export default function ResultsView({
 
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
 
+  // Handle metric parameter from URL
+  React.useEffect(() => {
+    const metricParam = searchParams.get('metric');
+    if (metricParam) {
+      const { addFilter, resetFilters } = useTableStore.getState();
+
+      resetFilters();
+
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value: metricParam,
+      });
+
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        newParams.delete('metric');
+        return newParams;
+      });
+    }
+  }, [searchParams, setSearchParams]);
+
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
+  const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
+
+  /**
+   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
+   * (and the rendering of duplicative, useless scrollbars).
+   */
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
+
   return (
     <>
       <Box
+        id="results-view-container"
         px={2}
         sx={{
           display: 'flex',
@@ -485,13 +524,7 @@ export default function ResultsView({
         }}
       >
         <Box>
-          <ResponsiveStack
-            direction="row"
-            mb={3}
-            spacing={1}
-            alignItems="center"
-            className="eval-header"
-          >
+          <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
                 variant="outlined"
@@ -545,6 +578,29 @@ export default function ResultsView({
             ))}
           </ResponsiveStack>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
+            <Box>
+              <FormControl>
+                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
+                <Select
+                  labelId="results-table-zoom-label"
+                  size="small"
+                  label="Zoom"
+                  value={resultsTableZoom}
+                  onChange={(e: SelectChangeEvent<number>) =>
+                    setResultsTableZoom(e.target.value as number)
+                  }
+                  sx={{ minWidth: 100 }}
+                >
+                  <MenuItem value={0.5}>50%</MenuItem>
+                  <MenuItem value={0.75}>75%</MenuItem>
+                  <MenuItem value={0.9}>90%</MenuItem>
+                  <MenuItem value={1}>100%</MenuItem>
+                  <MenuItem value={1.25}>125%</MenuItem>
+                  <MenuItem value={1.5}>150%</MenuItem>
+                  <MenuItem value={2}>200%</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
             <Box>
               <FilterModeSelector
                 filterMode={filterMode}
@@ -763,6 +819,7 @@ export default function ResultsView({
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}
           setFilterMode={setFilterMode}
+          zoom={resultsTableZoom}
         />
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />

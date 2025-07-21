@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -41,7 +42,7 @@ interface GoatResponse extends ProviderResponse {
   metadata: GoatMetadata;
 }
 
-interface ExtractAttackFailureResponse {
+export interface ExtractAttackFailureResponse {
   message: string;
   task: string;
 }
@@ -131,7 +132,14 @@ export default class GoatProvider implements ApiProvider {
 
     if (context?.test) {
       test = context?.test;
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+      assertToUse = test?.assert?.find(
+        (a: { type: string }) => a.type && a.type.includes(test?.metadata?.pluginId),
+      );
+
+      // Fallback: if no assertion matches the pluginId, use the first assertion with a type
+      if (!assertToUse) {
+        assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+      }
     }
 
     let previousAttackerMessage = '';

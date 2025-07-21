@@ -45,8 +45,8 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 import ButtonGroup from '@mui/material/ButtonGroup';
 
-const VARIABLE_COLUMN_SIZE_PX = 100;
-const PROMPT_COLUMN_SIZE_PX = 300;
+const VARIABLE_COLUMN_SIZE_PX = 200;
+const PROMPT_COLUMN_SIZE_PX = 400;
 const DESCRIPTION_COLUMN_SIZE_PX = 100;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -128,6 +128,7 @@ interface ResultsTableProps {
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
+  zoom: number;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -137,33 +138,6 @@ interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
 
 interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
-}
-
-// TODO(Will): This is deprecated; remove it.
-function useScrollHandler() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const { stickyHeader } = useResultsViewSettingsStore();
-  const lastScrollY = useRef(0);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      const shouldCollapse = currentScrollY > 500;
-
-      if (shouldCollapse !== isCollapsed || currentScrollY < 100) {
-        setIsCollapsed(shouldCollapse);
-      }
-
-      lastScrollY.current = currentScrollY;
-    };
-
-    if (stickyHeader) {
-      window.addEventListener('scroll', handleScroll, { passive: true });
-      return () => window.removeEventListener('scroll', handleScroll);
-    }
-  }, [stickyHeader]);
-
-  return { isCollapsed };
 }
 
 function ResultsTable({
@@ -178,6 +152,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
+  zoom,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -186,7 +161,6 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
-    totalResultsCount,
     fetchEvalData,
     isFetching,
     filters,
@@ -209,8 +183,18 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: 50,
+    pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  /**
+   * Reset the pagination state when the filtered results count changes.
+   */
+  React.useEffect(() => {
+    setPagination({
+      pageIndex: 0,
+      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    });
+  }, [filteredResultsCount]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -649,7 +633,7 @@ function ResultsTable({
               const isChecked = failureFilter[columnId] || false;
 
               const details = showStats ? (
-                <div className="prompt-detail">
+                <div className="prompt-detail collapse-hidden">
                   {numAsserts[idx] ? (
                     <div>
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
@@ -749,7 +733,7 @@ function ResultsTable({
               );
               return (
                 <div className="output-header">
-                  <div className="pills">
+                  <div className="pills collapse-font-small">
                     {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
                     <div className="summary">
                       <div
@@ -771,18 +755,20 @@ function ResultsTable({
                     ) : null}
                     {prompt.metrics?.namedScores &&
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                      <CustomMetrics
-                        lookup={prompt.metrics.namedScores}
-                        counts={prompt.metrics.namedScoresCount}
-                        metricTotals={metricTotals}
-                        onSearchTextChange={onSearchTextChange}
-                        onMetricFilter={handleMetricFilterClick}
-                      />
+                      <Box className="collapse-hidden">
+                        <CustomMetrics
+                          lookup={prompt.metrics.namedScores}
+                          counts={prompt.metrics.namedScoresCount}
+                          metricTotals={metricTotals}
+                          onSearchTextChange={onSearchTextChange}
+                          onMetricFilter={handleMetricFilterClick}
+                        />
+                      </Box>
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
                   </div>
                   <TableHeader
-                    className="prompt-container"
+                    className="prompt-container collapse-font-small"
                     text={prompt.label || prompt.display || prompt.raw}
                     expandedText={prompt.raw}
                     maxLength={maxTextLength}
@@ -838,6 +824,7 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    onMetricFilter={handleMetricFilterClick}
                   />
                 </ErrorBoundary>
               ) : (
@@ -913,7 +900,6 @@ function ResultsTable({
     enableColumnResizing: true,
   });
 
-  const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
   const clearRowIdFromUrl = React.useCallback(() => {
@@ -928,9 +914,9 @@ function ResultsTable({
     const params = parseQueryParams(window.location.search);
     const rowId = params['rowId'];
 
-    if (rowId) {
+    if (rowId && Number.isInteger(Number(rowId))) {
       const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, tableBody.length - 1));
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -1000,7 +986,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
 
   const tableWidth = React.useMemo(() => {
     let width = 0;
@@ -1055,7 +1041,17 @@ function ResultsTable({
           </Box>
         )}
 
-      <div className="results-table-container">
+      <div
+        id="results-table-container"
+        style={{
+          zoom,
+          borderTop: '1px solid',
+          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
+          // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
+          // won't extend to the bottom of the viewport.
+          flexGrow: 1,
+        }}
+      >
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1063,8 +1059,9 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
-          <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
-            {stickyHeader && isCollapsed && (
+          <thead className={`${stickyHeader && 'sticky'}`}>
+            {stickyHeader && (
+              // TODO: Fix this position in the CSS.
               <div className="header-dismiss">
                 <IconButton
                   onClick={() => setStickyHeader(false)}
@@ -1178,30 +1175,31 @@ function ResultsTable({
         </table>
       </div>
 
-      {
-        // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
-        // filters does not hide the pagination controls.
-        // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
-        totalResultsCount > 10 && (
-          <Box
-            className="pagination"
-            px={2}
-            mx={-2}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-              backgroundColor: 'background.paper',
-              borderTop: '1px solid',
-              borderColor: 'divider',
-              width: '100vw',
-              boxShadow: 3,
-            }}
-          >
-            <Box>
-              Showing{' '}
+      <Box
+        className="pagination"
+        px={2}
+        mx={-2}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          backgroundColor: 'background.paper',
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          width: '100vw',
+          boxShadow: 3,
+        }}
+      >
+        <Box>
+          Showing{' '}
+          {filteredResultsCount === 0 ? (
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              0
+            </Typography>
+          ) : (
+            <>
               <Typography component="span" sx={{ fontWeight: 600 }}>
                 {pagination.pageIndex * pagination.pageSize + 1}
               </Typography>{' '}
@@ -1212,110 +1210,130 @@ function ResultsTable({
               of{' '}
               <Typography component="span" sx={{ fontWeight: 600 }}>
                 {filteredResultsCount}
-              </Typography>{' '}
-              results
-            </Box>
-
-            <Box>
-              Page{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {reactTable.getState().pagination.pageIndex + 1}
-              </Typography>{' '}
-              of{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {pageCount}
               </Typography>
-            </Box>
+            </>
+          )}{' '}
+          results
+        </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {/* PAGE SIZE SELECTOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Results per page:</span>
-                <Select
-                  value={pagination.pageSize}
-                  onChange={(e) => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageSize: Number(e.target.value),
-                    }));
-                    window.scrollTo(0, 0);
-                  }}
-                  displayEmpty
-                  inputProps={{ 'aria-label': 'Results per page' }}
-                  size="small"
-                  sx={{ m: 1, minWidth: 80 }}
-                >
-                  <MenuItem value={10}>10</MenuItem>
-                  <MenuItem value={50} disabled={filteredResultsCount <= 10}>
-                    50
-                  </MenuItem>
-                  <MenuItem value={100} disabled={filteredResultsCount <= 50}>
-                    100
-                  </MenuItem>
-                  <MenuItem value={500} disabled={filteredResultsCount <= 100}>
-                    500
-                  </MenuItem>
-                  <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
-                    1000
-                  </MenuItem>
-                </Select>
-              </Typography>
-
-              {/* PAGE NAVIGATOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Go to:</span>
-                <TextField
-                  size="small"
-                  type="number"
-                  defaultValue={1}
-                  onChange={(e) => {
-                    const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                    }));
-                    clearRowIdFromUrl();
-                  }}
-                  sx={{
-                    width: '60px',
-                    textAlign: 'center',
-                  }}
-                />
-              </Typography>
-
-              {/* PAGE NAVIGATION BUTTONS */}
-              <ButtonGroup>
-                <IconButton
-                  onClick={() => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.max(prev.pageIndex - 1, 0),
-                    }));
-                    clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
-                  }}
-                  disabled={reactTable.getState().pagination.pageIndex === 0}
-                >
-                  <ArrowBackIcon />
-                </IconButton>
-                <IconButton
-                  onClick={() => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
-                    }));
-                    clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
-                  }}
-                  disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-                >
-                  <ArrowForwardIcon />
-                </IconButton>
-              </ButtonGroup>
-            </Box>
+        {filteredResultsCount > 0 && (
+          <Box>
+            Page{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {reactTable.getState().pagination.pageIndex + 1}
+            </Typography>{' '}
+            of{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {pageCount}
+            </Typography>
           </Box>
-        )
-      }
+        )}
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* PAGE SIZE SELECTOR */}
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <span>Results per page:</span>
+            <Select
+              value={pagination.pageSize}
+              onChange={(e) => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageSize: Number(e.target.value),
+                }));
+                window.scrollTo(0, 0);
+              }}
+              displayEmpty
+              inputProps={{ 'aria-label': 'Results per page' }}
+              size="small"
+              sx={{ m: 1, minWidth: 80 }}
+              disabled={filteredResultsCount <= 10}
+            >
+              <MenuItem value={10}>10</MenuItem>
+              <MenuItem value={50} disabled={filteredResultsCount <= 10}>
+                50
+              </MenuItem>
+              <MenuItem value={100} disabled={filteredResultsCount <= 50}>
+                100
+              </MenuItem>
+              <MenuItem value={500} disabled={filteredResultsCount <= 100}>
+                500
+              </MenuItem>
+              <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
+                1000
+              </MenuItem>
+            </Select>
+          </Typography>
+
+          {/* PAGE NAVIGATOR */}
+          <Typography
+            component="span"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              opacity: pageCount > 1 ? 1 : 0.5,
+              pointerEvents: pageCount > 1 ? 'auto' : 'none',
+            }}
+          >
+            <span>Go to:</span>
+            <TextField
+              size="small"
+              type="number"
+              onChange={(e) => {
+                const page = e.target.value ? Number(e.target.value) - 1 : null;
+                if (page !== null && page >= 0 && page < pageCount) {
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
+                  }));
+                  clearRowIdFromUrl();
+                }
+              }}
+              sx={{
+                width: '60px',
+                textAlign: 'center',
+              }}
+              slotProps={{
+                htmlInput: {
+                  min: 1,
+                  max: pageCount,
+                },
+              }}
+              disabled={pageCount === 1}
+            />
+          </Typography>
+
+          {/* PAGE NAVIGATION BUTTONS */}
+          <ButtonGroup>
+            <IconButton
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.max(prev.pageIndex - 1, 0),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex === 0}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+            <IconButton
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+            >
+              <ArrowForwardIcon />
+            </IconButton>
+          </ButtonGroup>
+        </Box>
+      </Box>
     </>
   );
 }
