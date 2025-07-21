@@ -1,6 +1,7 @@
+import path from 'path';
+
 import axios from 'axios';
 import dedent from 'dedent';
-import path from 'path';
 import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';

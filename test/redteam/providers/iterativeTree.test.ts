@@ -1,7 +1,5 @@
 import { jest } from '@jest/globals';
 import { v4 as uuidv4 } from 'uuid';
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import {
   checkIfOnTopic,
   createTreeNode,
@@ -19,8 +17,11 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
+import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../../src/types';
 
 jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/util/templates');

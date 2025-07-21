@@ -1,8 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
-import type { EvaluateResult, AtomicTestCase, ResultFailureReason } from '@promptfoo/types';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
+import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({

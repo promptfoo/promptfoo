@@ -1,6 +1,7 @@
 import { getGraderById } from '../redteam/graders';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export const handleRedteam = async ({
   assertion,

@@ -1,5 +1,5 @@
 import React from 'react';
-import Editor from 'react-simple-code-editor';
+
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -24,15 +24,19 @@ import RadioGroup from '@mui/material/RadioGroup';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import type { ProviderOptions } from '@promptfoo/types';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
+import Editor from 'react-simple-code-editor';
+import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/components/prism-clike';
+
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
+
 import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 import 'prismjs/themes/prism.css';
 
@@ -55,8 +59,110 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
     !!selectedTarget.config.signatureAuth,
   );
 
+  // Add state for transform input types
+  const [requestTransformType, setRequestTransformType] = React.useState(() => {
+    const current = selectedTarget.config.transformRequest || defaultRequestTransform || '';
+    if (current.startsWith('file://')) {
+      return 'file';
+    }
+    if (current.includes('=>') || current.startsWith('(')) {
+      return 'function';
+    }
+    return 'expression';
+  });
+
+  const [responseTransformType, setResponseTransformType] = React.useState(() => {
+    const current = selectedTarget.config.transformResponse || '';
+    if (current.startsWith('file://')) {
+      return 'file';
+    }
+    if (current.includes('=>') || current.startsWith('(')) {
+      return 'function';
+    }
+    return 'expression';
+  });
+
   const handleSignatureAuthChange = (_event: React.SyntheticEvent, isExpanded: boolean) => {
     setSignatureAuthExpanded(isExpanded);
+  };
+
+  const getRequestTransformPlaceholder = (type: string) => {
+    switch (type) {
+      case 'expression':
+        return dedent`JavaScript expression or Nunjucks template. Examples:
+
+                      // JSON object with prompt variable
+                      { "messages": [{ "role": "user", "content": "{{prompt}}" }] }
+                      
+                      // String template
+                      "Translate this: {{prompt}}"`;
+      case 'function':
+        return dedent`JavaScript function that receives the prompt. Examples:
+
+                      // Simple function
+                      (prompt) => ({ text: prompt, timestamp: Date.now() })
+                      
+                      // Function with metadata
+                      (prompt) => ({
+                        messages: [{ role: 'user', content: prompt }],
+                        model: 'gpt-4',
+                        temperature: 0.7
+                      })`;
+      case 'file':
+        return dedent`Path to JavaScript file. Examples:
+
+                      // Relative path
+                      file://transforms/request.js
+                      
+                      // Specific function export
+                      file://transforms/request.js:transformRequest`;
+      default:
+        return '';
+    }
+  };
+
+  const getResponseTransformPlaceholder = (type: string) => {
+    switch (type) {
+      case 'expression':
+        return dedent`JavaScript expression with available variables: json, text, context. Examples:
+
+                      // Extract from JSON response
+                      json.choices[0].message.content
+                      
+                      // With fallback to text
+                      json.output || text
+                      
+                      // With guardrails
+                      { 
+                        output: json.choices[0].message.content, 
+                        guardrails: { flagged: context.response.status === 500 } 
+                      }`;
+      case 'function':
+        return dedent`JavaScript function with parameters (json, text, context). Examples:
+
+                      // Simple extraction
+                      (json, text) => json.choices[0].message.content
+                      
+                      // With token usage
+                      (json, text, context) => ({
+                        output: json.output,
+                        tokenUsage: {
+                          prompt: json.usage.input_tokens,
+                          completion: json.usage.output_tokens,
+                          total: json.usage.input_tokens + json.usage.output_tokens
+                        }
+                      })`;
+      case 'file':
+        return dedent`Path to JavaScript file. Examples:
+
+                      // Default export
+                      file://parsers/response.js
+                      
+                      // Named function
+                      file://parsers/response.js:parseResponse`;
+      default:
+        return '';
+    }
   };
 
   return (
@@ -82,11 +188,51 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#request-transform"
                 target="_blank"
+                rel="noopener noreferrer"
               >
                 docs
               </a>{' '}
               for more information.
             </Typography>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Input Method
+              </Typography>
+              <RadioGroup
+                row
+                value={requestTransformType}
+                onChange={(e) => {
+                  setRequestTransformType(e.target.value);
+                  // Clear the current value when switching types
+                  updateCustomTarget('transformRequest', '');
+                }}
+              >
+                <FormControlLabel
+                  value="expression"
+                  control={<Radio />}
+                  label="JavaScript Expression"
+                />
+                <FormControlLabel value="function" control={<Radio />} label="Function" />
+                <FormControlLabel value="file" control={<Radio />} label="File" />
+              </RadioGroup>
+            </Box>
+
+            {requestTransformType === 'function' && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Function signature:</strong>{' '}
+                  <code>
+                    (
+                    <Tooltip title="String - The rendered prompt for this test case" arrow>
+                      <span style={{ textDecoration: 'underline', cursor: 'help' }}>prompt</span>
+                    </Tooltip>
+                    ) =&gt; {'{ ... }'}
+                  </code>
+                </Typography>
+              </Box>
+            )}
+
             <Box
               sx={{
                 border: 1,
@@ -94,6 +240,9 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                 borderRadius: 1,
                 position: 'relative',
                 backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                resize: 'vertical',
+                overflow: 'hidden',
+                minHeight: '180px',
               }}
             >
               <Editor
@@ -101,14 +250,12 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
-
-                      A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
-                    `}
+                placeholder={getRequestTransformPlaceholder(requestTransformType)}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
-                  minHeight: '100px',
+                  height: '100%',
+                  minHeight: '180px',
                 }}
               />
             </Box>
@@ -130,11 +277,75 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
                 target="_blank"
+                rel="noopener noreferrer"
               >
                 docs
               </a>{' '}
               for more information.
             </Typography>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Input Method
+              </Typography>
+              <RadioGroup
+                row
+                value={responseTransformType}
+                onChange={(e) => {
+                  setResponseTransformType(e.target.value);
+                  // Clear the current value when switching types
+                  updateCustomTarget('transformResponse', '');
+                }}
+              >
+                <FormControlLabel
+                  value="expression"
+                  control={<Radio />}
+                  label="JavaScript Expression"
+                />
+                <FormControlLabel value="function" control={<Radio />} label="Function" />
+                <FormControlLabel value="file" control={<Radio />} label="File" />
+              </RadioGroup>
+            </Box>
+
+            {(responseTransformType === 'function' || responseTransformType === 'expression') && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  <code>
+                    (
+                    <Tooltip title="Object - The parsed JSON response (if valid JSON)" arrow>
+                      <span style={{ textDecoration: 'underline', cursor: 'help' }}>json</span>
+                    </Tooltip>
+                    ,{' '}
+                    <Tooltip title="String - The raw text response" arrow>
+                      <span style={{ textDecoration: 'underline', cursor: 'help' }}>text</span>
+                    </Tooltip>
+                    ,{' '}
+                    <Tooltip
+                      title={
+                        <div style={{ fontFamily: 'monospace', fontSize: '12px', lineHeight: 1.4 }}>
+                          <div>context: {`{`}</div>
+                          <div>&nbsp;&nbsp;response: {`{`}</div>
+                          <div>&nbsp;&nbsp;&nbsp;&nbsp;data: any;</div>
+                          <div>&nbsp;&nbsp;&nbsp;&nbsp;cached: boolean;</div>
+                          <div>&nbsp;&nbsp;&nbsp;&nbsp;status: number;</div>
+                          <div>&nbsp;&nbsp;&nbsp;&nbsp;statusText: string;</div>
+                          <div>&nbsp;&nbsp;&nbsp;&nbsp;headers?: Record&lt;string, string&gt;;</div>
+                          <div>&nbsp;&nbsp;{`}`};</div>
+                          <div>&nbsp;&nbsp;vars: Record&lt;string, any&gt;;</div>
+                          <div>&nbsp;&nbsp;uuid: string;</div>
+                          <div>{`}`}</div>
+                        </div>
+                      }
+                      arrow
+                    >
+                      <span style={{ textDecoration: 'underline', cursor: 'help' }}>context</span>
+                    </Tooltip>
+                    ) =&gt; {'{'}
+                  </code>
+                </Typography>
+              </Box>
+            )}
+
             <Box
               sx={{
                 border: 1,
@@ -142,6 +353,9 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                 borderRadius: 1,
                 position: 'relative',
                 backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                resize: 'vertical',
+                overflow: 'hidden',
+                minHeight: '180px',
               }}
             >
               <Editor
@@ -149,16 +363,12 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder={dedent`Optional: Transform the API response before using it. Format as either:
-
-                      1. A JavaScript object path: \`json.choices[0].message.content\`
-                      2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
-
-                      With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
+                placeholder={getResponseTransformPlaceholder(responseTransformType)}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
-                  minHeight: '100px',
+                  height: '100%',
+                  minHeight: '180px',
                 }}
               />
             </Box>

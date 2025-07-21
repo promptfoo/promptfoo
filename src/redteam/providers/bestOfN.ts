@@ -5,6 +5,10 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -12,9 +16,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 interface BestOfNResponse {
   modifiedPrompts: string[];

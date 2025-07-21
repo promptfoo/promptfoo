@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
@@ -19,12 +19,13 @@ import {
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getMetricNameFromPlugin } from '../utils/metricMapping';
 import { getStrategyIdFromTest } from './shared';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {

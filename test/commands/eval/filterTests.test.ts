@@ -1,8 +1,10 @@
+import path from 'path';
+
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
-import type { TestSuite, TestCase } from '../../../src/types';
 import { ResultFailureReason } from '../../../src/types';
-import path from 'path';
+
+import type { TestCase, TestSuite } from '../../../src/types';
 
 jest.mock('../../../src/models/eval', () => ({
   findById: jest.fn(),

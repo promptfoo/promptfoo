@@ -1,7 +1,7 @@
-import cliProgress from 'cli-progress';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 
+import cliProgress from 'cli-progress';
+import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
@@ -18,9 +18,10 @@ import { Plugins } from '../../src/redteam/plugins';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
-import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
+
+import type { TestCaseWithPlugin } from '../../src/types';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');

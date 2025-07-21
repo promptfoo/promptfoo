@@ -1,6 +1,7 @@
 import { importModule } from '../../esm';
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
 import invariant from '../../util/invariant';
+
+import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
 
 export const transformContext = (context: {
   vars: Record<string, string | object>;

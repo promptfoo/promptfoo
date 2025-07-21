@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
+import { PromptSchema } from './prompts';
+import { NunjucksFilterMapSchema } from './shared';
+
 import type {
   CallApiFunction,
   ProviderClassificationResponse,
@@ -8,8 +11,6 @@ import type {
   ProviderLabel,
   ProviderResponse,
 } from '../types/providers';
-import { PromptSchema } from './prompts';
-import { NunjucksFilterMapSchema } from './shared';
 
 export const ProviderOptionsSchema = z
   .object({

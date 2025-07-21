@@ -1,14 +1,15 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { maybeLoadToolsFromExternalFile } from '../util';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
-import { maybeLoadToolsFromExternalFile } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161

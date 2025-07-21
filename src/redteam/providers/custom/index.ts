@@ -1,9 +1,24 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { shouldGenerateRemote } from '../../remoteGeneration';
+import { isBasicRefusal } from '../../util';
+import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -15,23 +30,8 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import { isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import type { Message } from '../shared';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;

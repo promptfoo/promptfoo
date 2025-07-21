@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+
 import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -9,6 +9,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Pagination from '@mui/material/Pagination';
+import { alpha } from '@mui/material/styles';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -17,9 +18,9 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { alpha } from '@mui/material/styles';
-import type { TestCasesWithMetadata } from '@promptfoo/types';
 import yaml from 'js-yaml';
+import { Link } from 'react-router-dom';
+import type { TestCasesWithMetadata } from '@promptfoo/types';
 
 interface DatasetDialogProps {
   openDialog: boolean;

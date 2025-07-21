@@ -1,6 +1,11 @@
 import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
+import invariant from '../../../util/invariant';
+import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
+import { getRemoteGenerationUrl } from '../../remoteGeneration';
+import { messagesToRedteamHistory } from '../shared';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -8,10 +13,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../../types/providers';
-import invariant from '../../../util/invariant';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
-import { getRemoteGenerationUrl } from '../../remoteGeneration';
-import { messagesToRedteamHistory } from '../shared';
 
 export class MemoryPoisoningProvider implements ApiProvider {
   constructor(readonly config: ProviderOptions) {}

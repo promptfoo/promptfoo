@@ -1,13 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type {
-  ApiProvider,
-  ProviderResponse,
-  CallApiContextParams,
-  GuardrailResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
@@ -15,13 +8,21 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
-import type { CompletionOptions } from './types';
 import {
-  loadFile,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  loadFile,
 } from './util';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  GuardrailResponse,
+  ProviderResponse,
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';

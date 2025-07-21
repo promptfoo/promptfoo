@@ -1,11 +1,11 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
 import { fetchWithProxy } from '../fetch';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import type { Command } from 'commander';
 
 export function authCommand(program: Command) {
   const authCommand = program.command('auth').description('Manage authentication');
