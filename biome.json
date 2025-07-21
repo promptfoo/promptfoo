@@ -35,6 +35,12 @@
             "groups": [
               {
                 "type": false,
+                "source": ["react", "react-dom", "react/**", "react-dom/**"]
+              },
+              ["react", "react-dom", "react/**", "react-dom/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
                 "source": [":NODE:", ":BUN:"]
               },
               [":NODE:", ":BUN:"],
@@ -43,7 +49,7 @@
                 "type": false,
                 "source": ["**"]
               },
-              ["**", "!./**", "!../**", "!src/**", "!test/**", "!examples/**"],
+              ["**", "!./**", "!../**", "!src/**", "!test/**", "!examples/**", "!react", "!react-dom", "!react/**", "!react-dom/**"],
               ":BLANK_LINE:",
               {
                 "type": false,

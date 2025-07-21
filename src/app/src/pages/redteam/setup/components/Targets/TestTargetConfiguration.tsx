@@ -1,3 +1,5 @@
+import React from 'react';
+
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import Accordion from '@mui/material/Accordion';
@@ -14,7 +16,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import React from 'react';
 import ProviderResponse from './ProviderResponse';
 
 import type { ProviderOptions } from '../../types';

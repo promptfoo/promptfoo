@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Button from '@mui/material/Button';
@@ -6,7 +8,6 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Box } from '@mui/system';
-import { useCallback } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 const promptExamples = {

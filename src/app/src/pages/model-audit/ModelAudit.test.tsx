@@ -1,8 +1,9 @@
+import { useState } from 'react';
+
 import { callApi } from '@app/utils/api';
 import { Button, CssBaseline } from '@mui/material';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelAudit from './ModelAudit';

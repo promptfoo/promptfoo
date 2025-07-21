@@ -1,9 +1,10 @@
 // PluginStrategyFlow.tsx
 
+import React, { useMemo } from 'react';
+
 import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
-import React, { useMemo } from 'react';
 import { Layer, Rectangle, ResponsiveContainer, Sankey, Tooltip } from 'recharts';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 

@@ -1,9 +1,10 @@
+import React from 'react';
+
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Badge, { badgeClasses } from '@mui/material/Badge';
 import IconButton from '@mui/material/IconButton';
 import { styled } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
-import React from 'react';
 
 const CountBadge = styled(Badge)`
   & .${badgeClasses.badge} {

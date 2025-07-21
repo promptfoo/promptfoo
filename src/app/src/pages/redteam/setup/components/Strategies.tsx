@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -18,7 +20,6 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';

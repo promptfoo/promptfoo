@@ -1,3 +1,5 @@
+import React from 'react';
+
 import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
@@ -17,7 +19,6 @@ import {
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';

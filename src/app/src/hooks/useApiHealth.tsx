@@ -1,5 +1,6 @@
-import { callApi } from '@app/utils/api';
 import { useCallback, useState } from 'react';
+
+import { callApi } from '@app/utils/api';
 import { useDebounce } from 'use-debounce';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading' | 'disabled';

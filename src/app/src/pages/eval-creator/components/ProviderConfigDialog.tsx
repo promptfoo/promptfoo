@@ -1,3 +1,5 @@
+import React, { useEffect, useState } from 'react';
+
 import JsonTextField from '@app/components/JsonTextField';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -8,7 +10,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import React, { useEffect, useState } from 'react';
 
 interface ProviderConfigDialogProps {
   open: boolean;

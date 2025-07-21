@@ -1,3 +1,5 @@
+import React from 'react';
+
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -17,7 +19,6 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { type GradingResult } from '@promptfoo/types';
-import React from 'react';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
 import './RiskCard.css';

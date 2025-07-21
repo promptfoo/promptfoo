@@ -1,7 +1,8 @@
+import React from 'react';
+
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportPage from './page';

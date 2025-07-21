@@ -1,6 +1,7 @@
+import React, { useContext } from 'react';
+
 import * as api from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
-import React, { useContext } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UserProvider } from './UserContext';
 import { UserContext } from './UserContextDef';

@@ -1,3 +1,5 @@
+import React from 'react';
+
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -20,7 +22,6 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';

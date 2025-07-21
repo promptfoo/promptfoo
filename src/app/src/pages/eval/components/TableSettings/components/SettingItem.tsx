@@ -1,3 +1,5 @@
+import React from 'react';
+
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
@@ -9,7 +11,6 @@ import Switch from '@mui/material/Switch';
 import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import React from 'react';
 import { tokens } from '../tokens';
 
 interface SettingItemProps {

@@ -1,8 +1,9 @@
+import React, { useCallback, useEffect, useState } from 'react';
+
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import React, { useCallback, useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 

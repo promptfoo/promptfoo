@@ -1,3 +1,5 @@
+import React from 'react';
+
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -6,7 +8,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
-import React from 'react';
 import type { ProviderOptions } from '@promptfoo/types';
 
 interface AddLocalProviderDialogProps {

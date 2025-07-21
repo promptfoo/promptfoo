@@ -1,6 +1,7 @@
+import React from 'react';
+
 import Stack from '@mui/material/Stack';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
-import React from 'react';
 import RiskCard from './RiskCard';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';

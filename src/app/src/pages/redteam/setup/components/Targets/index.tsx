@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -14,7 +16,6 @@ import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useEffect, useState } from 'react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { customTargetOption, predefinedTargets } from '../constants';
 import LoadExampleButton from '../LoadExampleButton';

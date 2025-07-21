@@ -1,3 +1,5 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
 import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -33,7 +35,6 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';

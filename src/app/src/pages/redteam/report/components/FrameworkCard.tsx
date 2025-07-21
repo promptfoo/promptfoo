@@ -1,3 +1,5 @@
+import React from 'react';
+
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
@@ -19,7 +21,6 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import React from 'react';
 import {
   type CategoryStats,
   categorizePlugins,

@@ -1,3 +1,5 @@
+import React from 'react';
+
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -20,7 +22,6 @@ import TableRow from '@mui/material/TableRow';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
-import React from 'react';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 

@@ -1,3 +1,5 @@
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+
 import { useToast } from '@app/hooks/useToast';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -13,7 +15,6 @@ import Paper from '@mui/material/Paper';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Convert from 'ansi-to-html';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 interface LogViewerProps {
   logs: string[];

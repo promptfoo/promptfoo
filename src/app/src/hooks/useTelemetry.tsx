@@ -1,5 +1,6 @@
-import { usePostHog } from '@app/components/PostHogContext';
 import { useCallback } from 'react';
+
+import { usePostHog } from '@app/components/PostHogContext';
 
 export const useTelemetry = () => {
   const { posthog, isInitialized } = usePostHog();

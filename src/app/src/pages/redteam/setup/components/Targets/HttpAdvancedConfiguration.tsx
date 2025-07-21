@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -27,7 +29,6 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
-import React from 'react';
 import Editor from 'react-simple-code-editor';
 import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/components/prism-clike';

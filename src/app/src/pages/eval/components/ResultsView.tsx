@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
@@ -27,7 +29,6 @@ import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import invariant from '@promptfoo/util/invariant';
-import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';

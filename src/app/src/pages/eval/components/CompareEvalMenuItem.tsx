@@ -1,9 +1,10 @@
+import { useState } from 'react';
+
 import CompareIcon from '@mui/icons-material/Compare';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import { useState } from 'react';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import { useTableStore } from './store';
 

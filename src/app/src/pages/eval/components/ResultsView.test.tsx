@@ -1,7 +1,8 @@
+import React from 'react';
+
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';

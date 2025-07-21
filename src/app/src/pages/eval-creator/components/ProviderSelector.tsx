@@ -1,3 +1,5 @@
+import React from 'react';
+
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -6,7 +8,6 @@ import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import React from 'react';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';

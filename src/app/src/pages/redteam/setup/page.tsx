@@ -1,3 +1,5 @@
+import React, { useEffect, useRef, useState } from 'react';
+
 import CrispChat from '@app/components/CrispChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { usePageMeta } from '@app/hooks/usePageMeta';
@@ -30,7 +32,6 @@ import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
-import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { customTargetOption, predefinedTargets } from './components/constants';
 import Plugins from './components/Plugins';

@@ -1,3 +1,5 @@
+import React from 'react';
+
 import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import {
@@ -9,7 +11,6 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import React from 'react';
 import {
   type CategoryStats,
   categorizePlugins,

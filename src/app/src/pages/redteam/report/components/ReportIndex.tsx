@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -14,7 +16,6 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import fuzzysearch from 'fuzzysearch';
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 

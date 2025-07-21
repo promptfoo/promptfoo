@@ -1,5 +1,6 @@
-import Box from '@mui/material/Box';
 import { useState } from 'react';
+
+import Box from '@mui/material/Box';
 import ScanStatistics from './ScanStatistics';
 import SecurityFindings from './SecurityFindings';
 

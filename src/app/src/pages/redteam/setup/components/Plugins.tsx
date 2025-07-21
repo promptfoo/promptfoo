@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -38,7 +40,6 @@ import {
   riskCategories,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';

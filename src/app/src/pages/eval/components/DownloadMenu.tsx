@@ -1,3 +1,5 @@
+import React from 'react';
+
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -18,7 +20,6 @@ import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types'
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
-import React from 'react';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 

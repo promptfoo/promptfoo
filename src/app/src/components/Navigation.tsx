@@ -1,3 +1,5 @@
+import React, { forwardRef, useState } from 'react';
+
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -11,7 +13,6 @@ import MenuItem from '@mui/material/MenuItem';
 import { styled } from '@mui/material/styles';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
-import React, { forwardRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';

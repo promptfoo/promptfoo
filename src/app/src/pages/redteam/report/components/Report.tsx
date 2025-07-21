@@ -1,3 +1,5 @@
+import React from 'react';
+
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -28,7 +30,6 @@ import {
   type SharedResults,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';

@@ -1,3 +1,5 @@
+import React from 'react';
+
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -15,7 +17,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import React from 'react';
 import type { GradingResult, ResultSuggestion } from '@promptfoo/types';
 
 interface SuggestionsDialogProps {

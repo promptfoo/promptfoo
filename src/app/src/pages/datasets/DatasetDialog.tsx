@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react';
+
 import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -17,7 +19,6 @@ import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
-import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
 

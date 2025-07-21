@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import MenuItem from '@mui/material/MenuItem';
@@ -21,7 +23,6 @@ import {
   gridVisibleColumnFieldsSelector,
   useGridApiContext,
 } from '@mui/x-data-grid';
-import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { StandaloneEval } from '@promptfoo/util/database';
 

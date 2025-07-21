@@ -1,3 +1,5 @@
+import React, { useCallback, useState } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -23,7 +25,6 @@ import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
-import React, { useCallback, useState } from 'react';
 import Editor from 'react-simple-code-editor';
 import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';

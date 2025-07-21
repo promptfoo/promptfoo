@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { useStore } from '@app/stores/evalConfig';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -17,7 +19,6 @@ import { styled } from '@mui/system';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
-import React from 'react';
 import { Link } from 'react-router-dom';
 import Editor from 'react-simple-code-editor';
 import type { UnifiedConfig } from '@promptfoo/types';

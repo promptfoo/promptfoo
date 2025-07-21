@@ -1,3 +1,5 @@
+import React from 'react';
+
 import Check from '@mui/icons-material/Check';
 import Download from '@mui/icons-material/Download';
 import FileCopy from '@mui/icons-material/FileCopy';
@@ -11,7 +13,6 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
-import React from 'react';
 import { useTableStore } from './store';
 
 interface ConfigModalProps {
