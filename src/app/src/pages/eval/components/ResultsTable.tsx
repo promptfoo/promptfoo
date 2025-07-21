@@ -161,7 +161,6 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
-    totalResultsCount,
     fetchEvalData,
     isFetching,
     filters,
@@ -184,8 +183,18 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: 50,
+    pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  /**
+   * Reset the pagination state when the filtered results count changes.
+   */
+  React.useEffect(() => {
+    setPagination({
+      pageIndex: 0,
+      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    });
+  }, [filteredResultsCount]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -905,9 +914,9 @@ function ResultsTable({
     const params = parseQueryParams(window.location.search);
     const rowId = params['rowId'];
 
-    if (rowId) {
+    if (rowId && Number.isInteger(Number(rowId))) {
       const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, tableBody.length - 1));
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -977,7 +986,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
 
   const tableWidth = React.useMemo(() => {
     let width = 0;
@@ -1166,30 +1175,31 @@ function ResultsTable({
         </table>
       </div>
 
-      {
-        // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
-        // filters does not hide the pagination controls.
-        // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
-        totalResultsCount > 10 && (
-          <Box
-            className="pagination"
-            px={2}
-            mx={-2}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-              backgroundColor: 'background.paper',
-              borderTop: '1px solid',
-              borderColor: 'divider',
-              width: '100vw',
-              boxShadow: 3,
-            }}
-          >
-            <Box>
-              Showing{' '}
+      <Box
+        className="pagination"
+        px={2}
+        mx={-2}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          backgroundColor: 'background.paper',
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          width: '100vw',
+          boxShadow: 3,
+        }}
+      >
+        <Box>
+          Showing{' '}
+          {filteredResultsCount === 0 ? (
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              0
+            </Typography>
+          ) : (
+            <>
               <Typography component="span" sx={{ fontWeight: 600 }}>
                 {pagination.pageIndex * pagination.pageSize + 1}
               </Typography>{' '}
@@ -1200,117 +1210,130 @@ function ResultsTable({
               of{' '}
               <Typography component="span" sx={{ fontWeight: 600 }}>
                 {filteredResultsCount}
-              </Typography>{' '}
-              results
-            </Box>
-
-            <Box>
-              Page{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {reactTable.getState().pagination.pageIndex + 1}
-              </Typography>{' '}
-              of{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {pageCount}
               </Typography>
-            </Box>
+            </>
+          )}{' '}
+          results
+        </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {/* PAGE SIZE SELECTOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Results per page:</span>
-                <Select
-                  value={pagination.pageSize}
-                  onChange={(e) => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageSize: Number(e.target.value),
-                    }));
-                    window.scrollTo(0, 0);
-                  }}
-                  displayEmpty
-                  inputProps={{ 'aria-label': 'Results per page' }}
-                  size="small"
-                  sx={{ m: 1, minWidth: 80 }}
-                >
-                  <MenuItem value={10}>10</MenuItem>
-                  <MenuItem value={50} disabled={filteredResultsCount <= 10}>
-                    50
-                  </MenuItem>
-                  <MenuItem value={100} disabled={filteredResultsCount <= 50}>
-                    100
-                  </MenuItem>
-                  <MenuItem value={500} disabled={filteredResultsCount <= 100}>
-                    500
-                  </MenuItem>
-                  <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
-                    1000
-                  </MenuItem>
-                </Select>
-              </Typography>
-
-              {/* PAGE NAVIGATOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Go to:</span>
-                <TextField
-                  size="small"
-                  type="number"
-                  onChange={(e) => {
-                    const page = e.target.value ? Number(e.target.value) - 1 : null;
-                    if (page !== null && page >= 0 && page < pageCount) {
-                      setPagination((prev) => ({
-                        ...prev,
-                        pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                      }));
-                      clearRowIdFromUrl();
-                    }
-                  }}
-                  sx={{
-                    width: '60px',
-                    textAlign: 'center',
-                  }}
-                  slotProps={{
-                    htmlInput: {
-                      min: 1,
-                      max: pageCount,
-                    },
-                  }}
-                />
-              </Typography>
-
-              {/* PAGE NAVIGATION BUTTONS */}
-              <ButtonGroup>
-                <IconButton
-                  onClick={() => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.max(prev.pageIndex - 1, 0),
-                    }));
-                    clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
-                  }}
-                  disabled={reactTable.getState().pagination.pageIndex === 0}
-                >
-                  <ArrowBackIcon />
-                </IconButton>
-                <IconButton
-                  onClick={() => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
-                    }));
-                    clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
-                  }}
-                  disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-                >
-                  <ArrowForwardIcon />
-                </IconButton>
-              </ButtonGroup>
-            </Box>
+        {filteredResultsCount > 0 && (
+          <Box>
+            Page{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {reactTable.getState().pagination.pageIndex + 1}
+            </Typography>{' '}
+            of{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {pageCount}
+            </Typography>
           </Box>
-        )
-      }
+        )}
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* PAGE SIZE SELECTOR */}
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <span>Results per page:</span>
+            <Select
+              value={pagination.pageSize}
+              onChange={(e) => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageSize: Number(e.target.value),
+                }));
+                window.scrollTo(0, 0);
+              }}
+              displayEmpty
+              inputProps={{ 'aria-label': 'Results per page' }}
+              size="small"
+              sx={{ m: 1, minWidth: 80 }}
+              disabled={filteredResultsCount <= 10}
+            >
+              <MenuItem value={10}>10</MenuItem>
+              <MenuItem value={50} disabled={filteredResultsCount <= 10}>
+                50
+              </MenuItem>
+              <MenuItem value={100} disabled={filteredResultsCount <= 50}>
+                100
+              </MenuItem>
+              <MenuItem value={500} disabled={filteredResultsCount <= 100}>
+                500
+              </MenuItem>
+              <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
+                1000
+              </MenuItem>
+            </Select>
+          </Typography>
+
+          {/* PAGE NAVIGATOR */}
+          <Typography
+            component="span"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              opacity: pageCount > 1 ? 1 : 0.5,
+              pointerEvents: pageCount > 1 ? 'auto' : 'none',
+            }}
+          >
+            <span>Go to:</span>
+            <TextField
+              size="small"
+              type="number"
+              onChange={(e) => {
+                const page = e.target.value ? Number(e.target.value) - 1 : null;
+                if (page !== null && page >= 0 && page < pageCount) {
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
+                  }));
+                  clearRowIdFromUrl();
+                }
+              }}
+              sx={{
+                width: '60px',
+                textAlign: 'center',
+              }}
+              slotProps={{
+                htmlInput: {
+                  min: 1,
+                  max: pageCount,
+                },
+              }}
+              disabled={pageCount === 1}
+            />
+          </Typography>
+
+          {/* PAGE NAVIGATION BUTTONS */}
+          <ButtonGroup>
+            <IconButton
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.max(prev.pageIndex - 1, 0),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex === 0}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+            <IconButton
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+            >
+              <ArrowForwardIcon />
+            </IconButton>
+          </ButtonGroup>
+        </Box>
+      </Box>
     </>
   );
 }
