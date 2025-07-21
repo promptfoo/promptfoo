@@ -205,24 +205,6 @@ Reasoning models "think before they answer," generating internal reasoning token
 
 Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
-### GPT-4.5 Models (Preview)
-
-GPT-4.5 is OpenAI's largest GPT model designed specifically for creative tasks and agentic planning, currently available in a research preview. It features a 128k token context length.
-
-Models in this series include:
-
-- `gpt-4.5-preview`
-- `gpt-4.5-preview-2025-02-27`
-
-You can specify the model name in the `providers` section:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:gpt-4.5-preview
-    config:
-      temperature: 0.7
-```
-
 ## Images
 
 ### Sending images in prompts
