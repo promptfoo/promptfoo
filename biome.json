@@ -49,7 +49,18 @@
                 "type": false,
                 "source": ["**"]
               },
-              ["**", "!./**", "!../**", "!src/**", "!test/**", "!examples/**", "!react", "!react-dom", "!react/**", "!react-dom/**"],
+              [
+                "**",
+                "!./**",
+                "!../**",
+                "!src/**",
+                "!test/**",
+                "!examples/**",
+                "!react",
+                "!react-dom",
+                "!react/**",
+                "!react-dom/**"
+              ],
               ":BLANK_LINE:",
               {
                 "type": false,
