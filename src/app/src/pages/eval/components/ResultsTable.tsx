@@ -1194,30 +1194,40 @@ function ResultsTable({
       >
         <Box>
           Showing{' '}
-          <Typography component="span" sx={{ fontWeight: 600 }}>
-            {pagination.pageIndex * pagination.pageSize + 1}
-          </Typography>{' '}
-          to{' '}
-          <Typography component="span" sx={{ fontWeight: 600 }}>
-            {Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredResultsCount)}
-          </Typography>{' '}
-          of{' '}
-          <Typography component="span" sx={{ fontWeight: 600 }}>
-            {filteredResultsCount}
-          </Typography>{' '}
+          {filteredResultsCount === 0 ? (
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              0
+            </Typography>
+          ) : (
+            <>
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {pagination.pageIndex * pagination.pageSize + 1}
+              </Typography>{' '}
+              to{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredResultsCount)}
+              </Typography>{' '}
+              of{' '}
+              <Typography component="span" sx={{ fontWeight: 600 }}>
+                {filteredResultsCount}
+              </Typography>
+            </>
+          )}{' '}
           results
         </Box>
 
-        <Box>
-          Page{' '}
-          <Typography component="span" sx={{ fontWeight: 600 }}>
-            {reactTable.getState().pagination.pageIndex + 1}
-          </Typography>{' '}
-          of{' '}
-          <Typography component="span" sx={{ fontWeight: 600 }}>
-            {pageCount}
-          </Typography>
-        </Box>
+        {filteredResultsCount > 0 && (
+          <Box>
+            Page{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {reactTable.getState().pagination.pageIndex + 1}
+            </Typography>{' '}
+            of{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {pageCount}
+            </Typography>
+          </Box>
+        )}
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {/* PAGE SIZE SELECTOR */}
