@@ -23,6 +23,7 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
+import { getMetricNameFromPlugin } from '../utils/metricMapping';
 import { getStrategyIdFromTest } from './shared';
 import './RiskCategoryDrawer.css';
 
@@ -207,10 +208,9 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             const testWithPluginId = firstFailure || firstPass;
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
-            const searchQuery = pluginId
-              ? `metadata=pluginId:${pluginId}`
-              : `metric=${categoryName}`;
-            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
+            const metricName = getMetricNameFromPlugin(pluginId || categoryName, categoryName);
+
+            const url = `/eval/${evalId}?metric=${encodeURIComponent(metricName)}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {

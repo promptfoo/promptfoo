@@ -165,7 +165,6 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -204,7 +203,7 @@ export default function ResultsView({
       setSearchParams((prev) => ({ ...prev, search: text }));
       setSearchText(text);
     },
-    [searchParams],
+    [setSearchParams],
   );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
@@ -471,6 +470,28 @@ export default function ResultsView({
   );
 
   const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
+
+  // Handle metric parameter from URL
+  React.useEffect(() => {
+    const metricParam = searchParams.get('metric');
+    if (metricParam) {
+      const { addFilter, resetFilters } = useTableStore.getState();
+
+      resetFilters();
+
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value: metricParam,
+      });
+
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        newParams.delete('metric');
+        return newParams;
+      });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;

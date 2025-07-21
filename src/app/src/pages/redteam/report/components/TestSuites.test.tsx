@@ -110,7 +110,7 @@ describe('TestSuites Component Navigation', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Aplugin-with-special-chars~!%40%23%24%25%5E%26*()_%2B%3D-%60',
+      '/eval/test-eval-123?metric=Plugin%20With%20Special%20Chars',
     );
   });
 
@@ -136,7 +136,7 @@ describe('TestSuites Component Navigation', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Aplugin-with-special-chars~!%40%23%24%25%5E%26*()_%2B%3D-%60',
+      '/eval/test-eval-123?metric=Plugin%20With%20Special%20Chars',
     );
   });
 });
@@ -174,9 +174,7 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
     fireEvent.click(viewLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/?evalId=null&search=metadata%3DpluginId%3Atest-plugin',
-    );
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?metric=Test%20Plugin');
   });
 });
 
