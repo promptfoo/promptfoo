@@ -914,7 +914,7 @@ function ResultsTable({
     const params = parseQueryParams(window.location.search);
     const rowId = params['rowId'];
 
-    if (rowId) {
+    if (rowId && Number.isInteger(Number(rowId))) {
       const parsedRowId = Number(rowId);
       const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
 
