@@ -129,7 +129,7 @@ export async function runRedteamConversation({
 
   let highestScore = 0;
   let bestResponse = '';
-  let finalIteration = 0;
+  let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;

@@ -339,7 +339,7 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      expect(result.metadata.finalIteration).toBe(0); // No early exit
+      expect(result.metadata.finalIteration).toBe(3); // Completed all 3 iterations
       expect(result.metadata.stopReason).toBe('Max iterations reached');
       expect(result.metadata.storedGraderResult).toBeUndefined();
       expect(result.metadata.redteamHistory).toHaveLength(3);

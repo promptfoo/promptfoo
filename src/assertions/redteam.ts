@@ -18,9 +18,6 @@ export const handleRedteam = async ({
     test.metadata?.pluginId &&
     assertion.type.includes(test.metadata.pluginId)
   ) {
-    console.log('=== ############################ ===');
-    console.log('using stored result');
-    console.log('=== ############################ ===');
     const storedResult = providerResponse.metadata.storedGraderResult;
     return {
       assertion: {
