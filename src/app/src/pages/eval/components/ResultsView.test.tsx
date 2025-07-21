@@ -115,7 +115,9 @@ let mockTableStoreData = {
     appliedCount: 0,
     options: {
       metric: [] as string[],
+      metadata: [] as string[],
     },
+    metadataFields: [] as string[],
   },
 };
 
@@ -219,7 +221,9 @@ describe('ResultsView', () => {
         appliedCount: 0,
         options: {
           metric: [] as string[],
+          metadata: [] as string[],
         },
+        metadataFields: [] as string[],
       },
     };
 
@@ -302,7 +306,18 @@ describe('ResultsView', () => {
     });
   });
 
-  it('renders FiltersButton and FiltersForm when multi-metric filtering is enabled and metric filters are available', () => {
+  it('renders FiltersButton and FiltersForm when filters are available', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      filters: {
+        ...mockTableStoreData.filters,
+        options: {
+          metric: ['accuracy', 'f1-score'],
+          metadata: [],
+        },
+      },
+    };
+
     renderWithProviders(
       <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
     );
@@ -322,7 +337,7 @@ describe('ResultsView', () => {
     expect(screen.queryByTestId('metric-filter-selector')).toBeNull();
   });
 
-  it('handles the case where there are no available metrics', () => {
+  it('handles the case where there are no available filters', () => {
 
     mockTableStoreData = {
       ...mockTableStoreData,
@@ -331,7 +346,9 @@ describe('ResultsView', () => {
         appliedCount: 0,
         options: {
           metric: [],
+          metadata: [],
         },
+        metadataFields: [],
       },
     };
 
@@ -339,8 +356,8 @@ describe('ResultsView', () => {
       <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
     );
 
-    // FiltersButton should still be visible even with no metrics
-    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument();
+    // FiltersButton should not be visible when there are no filters available
+    expect(screen.queryByRole('button', { name: 'Filters' })).not.toBeInTheDocument();
   });
 
   it('should not update charts visibility state on window resize after mount', () => {

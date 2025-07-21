@@ -471,7 +471,6 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-
   // Handle metric parameter from URL
   React.useEffect(() => {
     const metricParam = searchParams.get('metric');
@@ -618,16 +617,20 @@ export default function ResultsView({
               />
             </Box>
 
-            <FiltersButton
-              appliedFiltersCount={filters.appliedCount}
-              onClick={() => setFiltersFormOpen(true)}
-              ref={filtersButtonRef}
-            />
-            <FiltersForm
-              open={filtersFormOpen}
-              onClose={() => setFiltersFormOpen(false)}
-              anchorEl={filtersButtonRef.current}
-            />
+            {(filters.options.metric.length > 0 || filters.metadataFields.length > 0) && (
+              <>
+                <FiltersButton
+                  appliedFiltersCount={filters.appliedCount}
+                  onClick={() => setFiltersFormOpen(true)}
+                  ref={filtersButtonRef}
+                />
+                <FiltersForm
+                  open={filtersFormOpen}
+                  onClose={() => setFiltersFormOpen(false)}
+                  anchorEl={filtersButtonRef.current}
+                />
+              </>
+            )}
 
             <Box
               sx={{
@@ -661,27 +664,28 @@ export default function ResultsView({
                       sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                     />
                   )}
-                  {filters.appliedCount > 0 && Object.values(filters.values).map((filter) => {
-                    if (!filter.value) {
-                      return null;
-                    }
-                    const truncatedValue = filter.value.length > 50 
-                      ? filter.value.slice(0, 50) + '...' 
-                      : filter.value;
-                    const label = filter.type === 'metric' 
-                      ? `Metric: ${truncatedValue}`
-                      : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
-                    return (
-                      <Chip
-                        key={filter.id}
-                        size="small"
-                        label={label}
-                        title={filter.value} // Show full value on hover
-                        onDelete={() => removeFilter(filter.id)}
-                        sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                      />
-                    );
-                  })}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      if (!filter.value) {
+                        return null;
+                      }
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+                      const label =
+                        filter.type === 'metric'
+                          ? `Metric: ${truncatedValue}`
+                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      return (
+                        <Chip
+                          key={filter.id}
+                          size="small"
+                          label={label}
+                          title={filter.value} // Show full value on hover
+                          onDelete={() => removeFilter(filter.id)}
+                          sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                        />
+                      );
+                    })}
                 </>
               ) : (
                 <>{filteredResultsCount} results</>
