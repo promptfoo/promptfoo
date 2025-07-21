@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -28,7 +30,6 @@ import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
 import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/components/prism-clike';
-import React from 'react';
 
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
