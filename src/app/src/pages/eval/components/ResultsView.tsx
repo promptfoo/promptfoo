@@ -561,7 +561,9 @@ export default function ResultsView({
               />
             </Box>
 
-            {isMultiFilteringEnabled ? (
+            {isMultiFilteringEnabled &&
+            // If there are no filterable fields, don't show the filters button
+            filters.fields.length > 0 ? (
               <>
                 <FiltersButton
                   appliedFiltersCount={filters.appliedCount}
@@ -574,7 +576,7 @@ export default function ResultsView({
                   anchorEl={filtersButtonRef.current}
                 />
               </>
-            ) : filters.fields.find(field => field.id === 'metric') ? (
+            ) : filters.fields.find((field) => field.id === 'metric') ? (
               <MetricFilterSelector />
             ) : null}
 
