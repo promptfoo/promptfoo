@@ -1,0 +1,150 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Data science code evaluation
+
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - |
+    Write a Python function to {{task}}.
+    Use pandas and numpy as needed.
+    {{requirements}}
+    
+    Return only the function code.
+
+tests:
+  # Data preprocessing function
+  - description: Data cleaning function
+    vars:
+      task: clean a pandas DataFrame
+      requirements: |
+        Function name: clean_dataframe(df)
+        - Remove rows with any missing values
+        - Convert string columns to lowercase
+        - Remove duplicate rows
+        - Return the cleaned DataFrame
+    assert:
+      - type: contains
+        value: "def clean_dataframe"
+      - type: contains
+        value: "dropna()"
+      - type: contains
+        value: "drop_duplicates()"
+      - type: llm-rubric
+        value: Function should handle string columns appropriately with str.lower()
+
+  # Statistical analysis function
+  - description: Statistical summary
+    vars:
+      task: calculate statistical summary of numeric columns
+      requirements: |
+        Function name: get_stats_summary(df)
+        - Calculate mean, median, std for numeric columns
+        - Return a dictionary with column names as keys
+        - Each value should be a dict with 'mean', 'median', 'std' keys
+    assert:
+      - type: contains
+        value: "def get_stats_summary"
+      - type: javascript
+        value: |
+          return output.includes('.mean()') && 
+                 output.includes('.median()') && 
+                 output.includes('.std()');
+
+  # Execute data analysis code
+  - description: Data analysis execution
+    vars:
+      task: analyze sales data
+      requirements: |
+        Function name: analyze_sales_data(df)
+        Takes a DataFrame with columns: date, product, amount
+        Returns a dict with total_sales, avg_sale, top_product, best_month
+      testCode: |
+        import pandas as pd
+        import numpy as np
+        
+        # Create test data
+        data = {
+            'date': ['2024-01-15', '2024-01-20', '2024-02-10', '2024-02-15', '2024-03-05'],
+            'product': ['Widget', 'Gadget', 'Widget', 'Widget', 'Gadget'],
+            'amount': [100, 150, 200, 250, 180]
+        }
+        df = pd.DataFrame(data)
+        
+        # Test the function
+        try:
+            results = analyze_sales_data(df)
+            
+            # Verify results
+            expected = {
+                'total_sales': 880,
+                'avg_sale': 176.0,
+                'top_product': 'Widget',
+                'top_product_sales': 550,
+                'best_month': 2
+            }
+            
+            # Check each result
+            for key in ['total_sales', 'avg_sale', 'top_product']:
+                if key in results:
+                    print(f"PASS: {key} = {results[key]}")
+                else:
+                    print(f"FAIL: {key} missing")
+                    
+            if all(key in results for key in ['total_sales', 'avg_sale', 'top_product']):
+                print("DATA_ANALYSIS_TESTS_PASSED")
+        except Exception as e:
+            print(f"ERROR: {type(e).__name__}: {e}")
+    assert:
+      - type: contains
+        value: "def analyze_sales_data"
+      - type: javascript
+        value: |
+          const e2b = require('@e2b/code-interpreter');
+          async function test() {
+            const sandbox = await e2b.Sandbox.create();
+            try {
+              const fullCode = output + '\n\n' + context.vars.testCode;
+              const result = await sandbox.runCode(fullCode);
+              const stdout = result.logs.stdout.join('\n');
+              
+              const hasExpectedValues = 
+                stdout.includes('PASS: total_sales = 880') &&
+                stdout.includes('PASS: avg_sale = 176') &&
+                stdout.includes('PASS: top_product = Widget');
+                
+              const testsPassed = stdout.includes('DATA_ANALYSIS_TESTS_PASSED');
+              
+              return {
+                pass: testsPassed && hasExpectedValues,
+                score: testsPassed ? 1 : 0,
+                reason: testsPassed 
+                  ? 'Data analysis function works correctly' 
+                  : `Function failed: ${stdout}`
+              };
+            } finally {
+              await sandbox.kill();
+            }
+          }
+          return test();
+
+  # Machine learning preprocessing
+  - description: Feature engineering
+    vars:
+      task: create features for machine learning
+      requirements: |
+        Function name: engineer_features(df)
+        - Create one-hot encoding for categorical columns
+        - Normalize numeric columns to 0-1 range
+        - Handle missing values with mean imputation
+        - Return the transformed DataFrame
+    assert:
+      - type: contains
+        value: "def engineer_features"
+      - type: llm-rubric
+        value: |
+          The function should:
+          1. Use pd.get_dummies() for one-hot encoding
+          2. Use MinMaxScaler or manual normalization
+          3. Use fillna() with mean values
+          4. Return a DataFrame with all transformations applied 

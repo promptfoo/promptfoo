@@ -1,0 +1,180 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Code generation with E2B assertions
+
+providers:
+  - openai:gpt-4o-mini
+  - anthropic:claude-3-5-sonnet-latest
+
+prompts:
+  - |
+    Write a Python function called `{{function_name}}` that {{task}}.
+    Return only the function code, no explanations or markdown.
+
+tests:
+  # Test 1: String reversal with code execution
+  - description: String reversal function
+    vars:
+      function_name: reverse_string
+      task: reverses a string
+      testCode: |
+        # Test the function
+        print(reverse_string("hello world"))
+      expectedOutput: "dlrow olleh"
+    assert:
+      # First check the generated code structure
+      - type: contains
+        value: "def reverse_string"
+      - type: javascript
+        value: "!output.includes('```')"
+      # Then execute and verify output
+      - type: javascript
+        value: file://assertions/codeExecution.js
+
+  # Test 2: Fibonacci with multiple test cases
+  - description: Fibonacci function
+    vars:
+      function_name: fibonacci
+      task: calculates the nth Fibonacci number recursively
+      testCode: |
+        # Test multiple values
+        for n in [0, 1, 5, 10]:
+            print(f"fib({n}) = {fibonacci(n)}")
+    assert:
+      - type: contains
+        value: "def fibonacci"
+      # Check execution output
+      - type: javascript
+        value: |
+          // Custom inline assertion for Fibonacci
+          const e2b = require('@e2b/code-interpreter');
+          const sandbox = await e2b.Sandbox.create();
+          try {
+            const fullCode = output + '\n\n' + context.vars.testCode;
+            const result = await sandbox.runCode(fullCode);
+            const stdout = result.logs.stdout.join('\n');
+            const hasExpected = stdout.includes('fib(0) = 0') && 
+                               stdout.includes('fib(5) = 5') && 
+                               stdout.includes('fib(10) = 55');
+            return {
+              pass: hasExpected,
+              score: hasExpected ? 1 : 0,
+              reason: hasExpected ? 'All Fibonacci values correct' : 'Missing expected values'
+            };
+          } finally {
+            await sandbox.kill();
+          }
+
+  # Test 3: Prime number checker
+  - description: Prime number checker
+    vars:
+      function_name: is_prime
+      task: checks if a number is prime (returns True or False)
+      testCode: |
+        # Test prime checker
+        test_cases = [(2, True), (4, False), (17, True), (100, False)]
+        all_pass = True
+        for num, expected in test_cases:
+            result = is_prime(num)
+            if result == expected:
+                print(f"PASS: is_prime({num}) = {result}")
+            else:
+                print(f"FAIL: is_prime({num}) = {result} (expected {expected})")
+                all_pass = False
+        
+        if all_pass:
+            print("ALL_TESTS_PASSED")
+    assert:
+      - type: contains
+        value: "def is_prime"
+      # Execute and check for success marker
+      - type: javascript
+        value: |
+          const e2b = require('@e2b/code-interpreter');
+          async function test() {
+            const sandbox = await e2b.Sandbox.create();
+            try {
+              const fullCode = output + '\n\n' + context.vars.testCode;
+              const result = await sandbox.runCode(fullCode);
+              const stdout = result.logs.stdout.join('\n');
+              const passed = stdout.includes('ALL_TESTS_PASSED');
+              return {
+                pass: passed,
+                score: passed ? 1 : 0,
+                reason: passed ? 'All prime tests passed' : `Tests failed: ${stdout}`
+              };
+            } finally {
+              await sandbox.kill();
+            }
+          }
+          return test();
+
+  # Test 4: Security test - file operations
+  - description: Security test - safe config parser
+    vars:
+      function_name: parse_config
+      task: parse configuration data from a string (JSON format)
+      executeCode: false  # Don't execute, just check for security
+    assert:
+      - type: javascript
+        value: file://assertions/codeSecurity.js
+      - type: not-contains
+        value: "open("
+      - type: not-contains
+        value: "eval("
+
+  # Test 5: List sorting algorithm
+  - description: Sorting algorithm implementation
+    vars:
+      function_name: quicksort
+      task: implement quicksort algorithm that sorts a list in-place
+      testCode: |
+        # Test the sorting
+        import json
+        test_arrays = [
+            [3, 1, 4, 1, 5, 9],
+            [10, 5, 2, 3],
+            [1],
+            [],
+            [5, 5, 5, 5]
+        ]
+        
+        results = []
+        for arr in test_arrays:
+            original = arr.copy()
+            quicksort(arr)
+            results.append({"input": original, "output": arr})
+        
+        print(json.dumps(results))
+    assert:
+      - type: contains
+        value: "def quicksort"
+      - type: javascript
+        value: |
+          const e2b = require('@e2b/code-interpreter');
+          async function test() {
+            const sandbox = await e2b.Sandbox.create();
+            try {
+              const fullCode = output + '\n\n' + context.vars.testCode;
+              const result = await sandbox.runCode(fullCode);
+              const stdout = result.logs.stdout.join('\n');
+              const results = JSON.parse(stdout);
+              
+              // Check some expected results
+              const test1 = results[0];
+              const test4 = results[4];
+              
+              const correct1 = JSON.stringify(test1.output) === JSON.stringify([1, 1, 3, 4, 5, 9]);
+              const correct4 = JSON.stringify(test4.output) === JSON.stringify([5, 5, 5, 5]);
+              
+              const allCorrect = correct1 && correct4;
+              
+              return {
+                pass: allCorrect,
+                score: allCorrect ? 1 : 0,
+                reason: allCorrect ? 'Sorting works correctly' : 'Sorting failed on some inputs'
+              };
+            } finally {
+              await sandbox.kill();
+            }
+          }
+          return test(); 

@@ -1,0 +1,27 @@
+{
+    "name": "promptfoo-code-eval-e2b",
+    "version": "1.0.0",
+    "description": "Example of evaluating LLM-generated code using E2B sandboxes",
+    "type": "module",
+    "scripts": {
+        "eval": "promptfoo eval",
+        "eval:algorithms": "promptfoo eval -c algorithms.yaml",
+        "eval:security": "promptfoo eval -c security-tests.yaml",
+        "eval:data-science": "promptfoo eval -c data-science.yaml",
+        "view": "promptfoo view"
+    },
+    "dependencies": {
+        "@e2b/code-interpreter": "^1.0.4",
+        "dotenv": "^16.4.5"
+    },
+    "keywords": [
+        "promptfoo",
+        "e2b",
+        "code-evaluation",
+        "llm",
+        "sandbox",
+        "testing"
+    ],
+    "author": "",
+    "license": "MIT"
+}

@@ -1,0 +1,170 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Algorithm implementation testing
+
+providers:
+  - openai:gpt-4o-mini
+  - anthropic:claude-3-5-sonnet-latest
+
+prompts:
+  - |
+    Implement a {{algorithm}} algorithm in Python.
+    {{requirements}}
+    
+    Return only the code, no explanations.
+
+tests:
+  # Binary search implementation
+  - description: Binary search
+    vars:
+      algorithm: binary search
+      requirements: |
+        The function should:
+        - Be named `binary_search(arr, target)`
+        - Return the index if found, -1 if not found
+        - Assume the array is sorted
+        - Use the iterative approach
+    assert:
+      - type: javascript
+        value: |
+          const hasFunction = output.includes('def binary_search');
+          const hasWhileLoop = output.includes('while ');
+          const hasReturn = output.includes('return');
+          return hasFunction && hasWhileLoop && hasReturn;
+
+  # Quick sort implementation  
+  - description: Quick sort
+    vars:
+      algorithm: quicksort
+      requirements: |
+        The function should:
+        - Be named `quicksort(arr)`
+        - Sort the array in-place
+        - Use the Lomuto partition scheme
+        - Handle arrays with duplicate values
+    assert:
+      - type: contains
+        value: "def quicksort"
+      - type: llm-rubric
+        value: |
+          Check if the implementation:
+          1. Has a partition function
+          2. Uses recursion correctly
+          3. Handles the base case (array length <= 1)
+          4. Modifies the array in-place
+
+  # Test binary search execution
+  - description: Binary search execution test
+    vars:
+      algorithm: binary search
+      requirements: |
+        Function: binary_search(arr, target)
+        Returns index if found, -1 if not
+      testCode: |
+        # Test cases
+        arr = [1, 3, 5, 7, 9, 11, 13, 15]
+        tests = [
+            (5, 2),    # Find 5 at index 2
+            (1, 0),    # Find 1 at index 0
+            (15, 7),   # Find 15 at index 7
+            (4, -1),   # 4 not found
+            (20, -1),  # 20 not found
+        ]
+        
+        all_pass = True
+        for target, expected in tests:
+            result = binary_search(arr, target)
+            if result == expected:
+                print(f"PASS: search({target}) = {result}")
+            else:
+                print(f"FAIL: search({target}) = {result}, expected {expected}")
+                all_pass = False
+        
+        if all_pass:
+            print("ALL_BINARY_SEARCH_TESTS_PASSED")
+    assert:
+      - type: contains
+        value: "def binary_search"
+      - type: javascript
+        value: |
+          // Execute and check for success
+          const e2b = require('@e2b/code-interpreter');
+          async function test() {
+            const sandbox = await e2b.Sandbox.create();
+            try {
+              const fullCode = output + '\n\n' + context.vars.testCode;
+              const result = await sandbox.runCode(fullCode);
+              const stdout = result.logs.stdout.join('\n');
+              const passed = stdout.includes('ALL_BINARY_SEARCH_TESTS_PASSED');
+              return {
+                pass: passed,
+                score: passed ? 1 : 0,
+                reason: passed ? 'All binary search tests passed' : `Some tests failed:\n${stdout}`
+              };
+            } finally {
+              await sandbox.kill();
+            }
+          }
+          return test();
+        
+  # Test quicksort execution
+  - description: Quicksort execution test
+    vars:
+      algorithm: quicksort
+      requirements: |
+        Function: quicksort(arr)
+        Sorts array in-place
+      testCode: |
+        import json
+        
+        # Test arrays
+        test_cases = [
+            [3, 1, 4, 1, 5, 9],
+            [10, 5, 2, 3],
+            [1],
+            [],
+            [5, 5, 5, 5],
+            [-3, 0, 5, -1]
+        ]
+        
+        results = []
+        for arr in test_cases:
+            original = arr.copy()
+            quicksort(arr)
+            sorted_correctly = arr == sorted(original)
+            results.append({
+                "input": original,
+                "output": arr,
+                "correct": sorted_correctly
+            })
+        
+        # Check all are correct
+        all_correct = all(r["correct"] for r in results)
+        if all_correct:
+            print("ALL_QUICKSORT_TESTS_PASSED")
+        else:
+            print("SOME_QUICKSORT_TESTS_FAILED")
+            print(json.dumps(results, indent=2))
+    assert:
+      - type: contains
+        value: "def quicksort"
+      - type: javascript
+        value: |
+          // Execute and check for success marker
+          const e2b = require('@e2b/code-interpreter');
+          async function test() {
+            const sandbox = await e2b.Sandbox.create();
+            try {
+              const fullCode = output + '\n\n' + context.vars.testCode;
+              const result = await sandbox.runCode(fullCode);
+              const stdout = result.logs.stdout.join('\n');
+              const passed = stdout.includes('ALL_QUICKSORT_TESTS_PASSED');
+              return {
+                pass: passed,
+                score: passed ? 1 : 0,
+                reason: passed ? 'All quicksort tests passed' : `Some tests failed:\n${stdout}`
+              };
+            } finally {
+              await sandbox.kill();
+            }
+          }
+          return test(); 
