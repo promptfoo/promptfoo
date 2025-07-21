@@ -1,4 +1,3 @@
-import React from 'react';
 import { useStore } from '@app/stores/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
@@ -22,6 +21,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase } from '@promptfoo/types';
+import React from 'react';
 import TestCaseDialog from './TestCaseDialog';
 
 interface TestCasesSectionProps {

@@ -8,8 +8,8 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
-import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
+import { VALID_SCHEMA_TYPES } from './types';
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.

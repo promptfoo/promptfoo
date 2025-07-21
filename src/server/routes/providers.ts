@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';

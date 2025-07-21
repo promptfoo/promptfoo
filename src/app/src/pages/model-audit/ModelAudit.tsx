@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
 import SecurityIcon from '@mui/icons-material/Security';
 import Box from '@mui/material/Box';
@@ -10,12 +9,13 @@ import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
-import type { ScanPath, ScanOptions, ScanResult } from './ModelAudit.types';
+import React, { useEffect, useState } from 'react';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
 import InstallationCheck from './components/InstallationCheck';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
+import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
 
 export default function ModelAudit() {

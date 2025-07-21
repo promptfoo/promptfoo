@@ -5,8 +5,7 @@ import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { setConfigDirectoryPath } from '../../util/config/manage';
-import { checkServerRunning, openBrowser } from '../../util/server';
-import { BrowserBehavior } from '../../util/server';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 
 export function redteamReportCommand(program: Command) {
   program

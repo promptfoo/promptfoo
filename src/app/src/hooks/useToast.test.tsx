@@ -1,8 +1,7 @@
-import { renderHook } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import React from 'react';
-import type { ReactNode } from 'react';
 import { ToastContext } from '@app/contexts/ToastContextDef';
+import { renderHook } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 import { useToast } from './useToast';
 
 describe('useToast', () => {

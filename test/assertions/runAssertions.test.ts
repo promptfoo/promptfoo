@@ -67,7 +67,7 @@ jest.mock('../../src/matchers', () => {
   };
 });
 
-const Grader = new TestGrader();
+const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {

@@ -4,12 +4,12 @@ import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';
 import type { Tool } from '../../../src/providers/google/types';
 import {
-  maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
   loadFile,
+  maybeCoerceToGeminiFormat,
+  normalizeTools,
   parseStringObject,
   validateFunctionCall,
-  normalizeTools,
 } from '../../../src/providers/google/util';
 
 jest.mock('google-auth-library');

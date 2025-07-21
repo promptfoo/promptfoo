@@ -1,5 +1,5 @@
-import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
 

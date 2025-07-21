@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useResultsViewSettingsStore } from '../../store';
 
 interface SettingsState {

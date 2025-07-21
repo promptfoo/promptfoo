@@ -14,9 +14,9 @@ import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
-  HuggingfaceTextGenerationProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
@@ -41,8 +41,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
-import type { ProviderOptionsMap, ProviderFunction } from '../../src/types';
-import { createLiteLLMProvider } from '../../src/providers/litellm';
+import type { ProviderFunction, ProviderOptionsMap } from '../../src/types';
 
 jest.mock('fs');
 

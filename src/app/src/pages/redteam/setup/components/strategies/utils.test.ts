@@ -1,7 +1,7 @@
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import { describe, expect, it } from 'vitest';
 import type { Config } from '../../types';
-import { getStrategyId, getEstimatedProbes } from './utils';
+import { getEstimatedProbes, getStrategyId } from './utils';
 
 // Create a base config with all required properties for testing
 const baseConfig: Partial<Config> = {

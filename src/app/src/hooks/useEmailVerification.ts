@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
 import { callApi } from '@app/utils/api';
+import { useCallback, useState } from 'react';
 
 interface EmailStatus {
   hasEmail: boolean;

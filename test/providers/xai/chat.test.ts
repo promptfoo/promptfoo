@@ -2,11 +2,11 @@ import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat
 import {
   calculateXAICost,
   createXAIProvider,
-  XAI_CHAT_MODELS,
   GROK_3_MINI_MODELS,
-  GROK_REASONING_MODELS,
-  GROK_REASONING_EFFORT_MODELS,
   GROK_4_MODELS,
+  GROK_REASONING_EFFORT_MODELS,
+  GROK_REASONING_MODELS,
+  XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
 import type { ProviderOptions } from '../../../src/types/providers';
 

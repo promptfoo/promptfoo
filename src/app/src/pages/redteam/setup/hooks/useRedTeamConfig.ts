@@ -1,6 +1,5 @@
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Plugin } from '@promptfoo/redteam/constants';
-import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
+import { DEFAULT_PLUGINS, REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';

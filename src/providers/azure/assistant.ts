@@ -1,6 +1,5 @@
 import path from 'path';
-import { fetchWithCache } from '../../cache';
-import { getCache, isCacheEnabled } from '../../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';

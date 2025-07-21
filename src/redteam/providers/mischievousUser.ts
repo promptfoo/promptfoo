@@ -1,4 +1,4 @@
-import { SimulatedUser, type Message } from '../../providers/simulatedUser';
+import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import type { ProviderResponse, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';

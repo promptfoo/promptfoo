@@ -1,9 +1,9 @@
-import React, { useContext } from 'react';
+import * as api from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React, { useContext } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UserProvider } from './UserContext';
 import { UserContext } from './UserContextDef';
-import * as api from '@app/utils/api';
 
 vi.mock('@app/utils/api');
 

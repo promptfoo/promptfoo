@@ -1,4 +1,3 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import type {
@@ -7,6 +6,7 @@ import type {
   ProviderModerationResponse,
 } from '../../types';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 
 const OPENAI_MODERATION_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },

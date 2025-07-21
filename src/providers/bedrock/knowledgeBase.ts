@@ -4,7 +4,7 @@ import type {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getEnvInt } from '../../envars';
+import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { EnvOverrides } from '../../types/env';

@@ -5,7 +5,7 @@ import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
 import { printBorder, setupEnv } from '../util';
-import { getEvalFromId, getPromptFromHash, getDatasetFromHash } from '../util/database';
+import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
 import invariant from '../util/invariant';
 
 export async function handlePrompt(id: string) {

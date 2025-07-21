@@ -1,10 +1,10 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
-  generateTraceId,
   generateSpanId,
+  generateTraceContextIfNeeded,
+  generateTraceId,
   generateTraceparent,
   isOtlpReceiverStarted,
-  generateTraceContextIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
 import type { TestCase } from '../../src/types';
 

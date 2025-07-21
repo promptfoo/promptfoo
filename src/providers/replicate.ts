@@ -1,7 +1,7 @@
 import type { Cache } from 'cache-manager';
 import type Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiModerationProvider,

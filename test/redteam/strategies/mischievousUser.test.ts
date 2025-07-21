@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, expect, it } from '@jest/globals';
 import { addMischievousUser } from '../../../src/redteam/strategies/mischievousUser';
 import type { TestCase } from '../../../src/types';
 

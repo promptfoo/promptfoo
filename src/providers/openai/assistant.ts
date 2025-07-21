@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import type { Metadata } from 'openai/resources/shared';
 import path from 'path';
-import { OpenAiGenericProvider } from '.';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
@@ -10,7 +9,8 @@ import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
 import { failApiCall, getTokenUsage } from './util';
 

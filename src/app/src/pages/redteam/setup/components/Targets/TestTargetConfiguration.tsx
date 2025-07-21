@@ -1,4 +1,3 @@
-import React from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import Accordion from '@mui/material/Accordion';
@@ -10,12 +9,12 @@ import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
-import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
+import React from 'react';
 import type { ProviderOptions } from '../../types';
 import ProviderResponse from './ProviderResponse';
 

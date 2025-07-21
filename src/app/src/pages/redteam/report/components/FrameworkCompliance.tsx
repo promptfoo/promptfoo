@@ -1,4 +1,3 @@
-import React from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -11,10 +10,11 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
+import React from 'react';
 import FrameworkCard from './FrameworkCard';
 import {
-  expandPluginCollections,
   categorizePlugins,
+  expandPluginCollections,
   getProgressColor,
 } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';

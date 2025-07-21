@@ -1,21 +1,21 @@
 import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 import {
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
+  type BasePlugin,
   COLLECTIONS,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  FOUNDATION_PLUGINS,
-  type BasePlugin,
   type PIIPlugin,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from '../../src/redteam/constants';
 import {
   RedteamConfigSchema,
   RedteamGenerateOptionsSchema,
+  RedteamPluginObjectSchema,
   RedteamPluginSchema,
   RedteamStrategySchema,
-  RedteamPluginObjectSchema,
 } from '../../src/validators/redteam';
 
 describe('RedteamPluginObjectSchema', () => {

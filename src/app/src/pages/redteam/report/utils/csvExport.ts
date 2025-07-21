@@ -1,4 +1,4 @@
-import type { ResultsFile, EvaluateResult } from '@promptfoo/types';
+import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
 

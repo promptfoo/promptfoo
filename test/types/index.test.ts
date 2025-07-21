@@ -7,13 +7,13 @@ import type { TestSuite } from '../../src/types';
 import {
   AssertionSchema,
   BaseAssertionTypesSchema,
-  isGradingResult,
-  VarsSchema,
-  TestCaseSchema,
   CommandLineOptionsSchema,
+  isGradingResult,
+  TestCaseSchema,
   TestSuiteConfigSchema,
-  UnifiedConfigSchema,
   TestSuiteSchema,
+  UnifiedConfigSchema,
+  VarsSchema,
 } from '../../src/types';
 
 describe('AssertionSchema', () => {

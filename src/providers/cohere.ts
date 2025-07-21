@@ -2,11 +2,11 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
+  ApiEmbeddingProvider,
   ApiProvider,
+  ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-  ApiEmbeddingProvider,
-  ProviderEmbeddingResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { REQUEST_TIMEOUT_MS } from './shared';

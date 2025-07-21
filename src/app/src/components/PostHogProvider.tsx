@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
 import { useUserStore } from '@app/stores/userStore';
 import posthog from 'posthog-js';
+import React, { useEffect, useState } from 'react';
 import { PostHogContext, type PostHogContextType } from './PostHogContext';
 
 // PostHog configuration - using the same key system as the backend

@@ -1,4 +1,3 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -7,9 +6,9 @@ import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage } from './util';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [

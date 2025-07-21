@@ -49,7 +49,7 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 

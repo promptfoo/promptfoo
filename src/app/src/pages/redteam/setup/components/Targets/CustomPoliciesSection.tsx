@@ -1,4 +1,3 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -10,6 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 

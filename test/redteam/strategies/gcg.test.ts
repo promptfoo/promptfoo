@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
-import { neverGenerateRemote, getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
 import type { TestCase } from '../../../src/types';
 

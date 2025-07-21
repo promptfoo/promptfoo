@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
@@ -9,6 +7,8 @@ import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';

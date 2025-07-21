@@ -1,4 +1,4 @@
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { TestCase } from '../../types';

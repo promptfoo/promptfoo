@@ -1,4 +1,4 @@
-import type { ProviderOptions, GuardrailResponse } from '../../src/types/providers';
+import type { GuardrailResponse, ProviderOptions } from '../../src/types/providers';
 import { isApiProvider, isProviderOptions } from '../../src/types/providers';
 
 describe('isApiProvider', () => {

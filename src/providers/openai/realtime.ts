@@ -1,5 +1,4 @@
 import WebSocket from 'ws';
-import { OpenAiGenericProvider } from '.';
 import logger from '../../logger';
 import type {
   CallApiContextParams,
@@ -9,6 +8,7 @@ import type {
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
+import { OpenAiGenericProvider } from '.';
 import type { OpenAiCompletionOptions } from './types';
 import { OPENAI_REALTIME_MODELS } from './util';
 

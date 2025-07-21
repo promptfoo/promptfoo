@@ -4,7 +4,7 @@ import http from 'http';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
-import { fetchWithCache, type FetchWithCacheResult } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';

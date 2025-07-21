@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
+import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import type { TraceData, TraceSpan } from '@promptfoo/types';
+import { useMemo } from 'react';
 
 // Use TraceSpan from base types
 type SpanData = TraceSpan;

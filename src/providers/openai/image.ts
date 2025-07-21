@@ -1,10 +1,10 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import type { OpenAiSharedOptions } from './types';
 import { formatOpenAiError } from './util';
 

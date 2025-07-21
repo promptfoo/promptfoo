@@ -1,4 +1,4 @@
-import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
 import logger from '../logger';
 import type {
   ApiProvider,

@@ -14,15 +14,15 @@ import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import {
   type ApiProvider,
-  type NunjucksFilterMap,
-  type Prompt,
-  type TestSuite,
   type CompletedPrompt,
   type EvaluateResult,
+  type NunjucksFilterMap,
+  type Prompt,
   type TestCase,
+  type TestSuite,
 } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
+import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';

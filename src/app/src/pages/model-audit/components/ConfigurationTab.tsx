@@ -1,4 +1,3 @@
-import React from 'react';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Alert from '@mui/material/Alert';

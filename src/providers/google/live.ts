@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess, spawn } from 'child_process';
 import path from 'path';
 import WebSocket from 'ws';
 import cliState from '../../cliState';

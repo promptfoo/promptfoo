@@ -5,11 +5,11 @@ import { fetchWithRetries } from '../../src/fetch';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import type {
-  Assertion,
   ApiProvider,
+  Assertion,
   AtomicTestCase,
-  ProviderResponse,
   GradingResult,
+  ProviderResponse,
 } from '../../src/types';
 import { TestGrader } from '../util/utils';
 

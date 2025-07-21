@@ -1,5 +1,3 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -22,23 +20,25 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   type EvaluateResult,
+  type EvaluateSummaryV2,
+  type GradingResult,
+  isProviderOptions,
+  type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
-  type GradingResult,
-  type ResultLightweightWithLabel,
-  type EvaluateSummaryV2,
-  isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {

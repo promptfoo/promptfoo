@@ -4,7 +4,7 @@ import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } fro
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
 import invariant from '../../util/invariant';
-import { OpenAiImageProvider, formatOutput, callOpenAiImageApi } from '../openai/image';
+import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
 import type { OpenAiSharedOptions } from '../openai/types';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 

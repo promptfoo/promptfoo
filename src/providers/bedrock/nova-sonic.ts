@@ -1,15 +1,13 @@
+import { Buffer } from 'node:buffer';
+import { randomUUID } from 'node:crypto';
 import {
   BedrockRuntimeClient,
   InvokeModelWithBidirectionalStreamCommand,
   type InvokeModelWithBidirectionalStreamInput,
 } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
-import { Buffer } from 'node:buffer';
-import { randomUUID } from 'node:crypto';
-import { Subject } from 'rxjs';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
-import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -17,6 +15,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 // Configuration types
 interface SessionState {

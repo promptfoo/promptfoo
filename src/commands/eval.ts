@@ -27,11 +27,9 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';

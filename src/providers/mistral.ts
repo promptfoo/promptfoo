@@ -9,7 +9,7 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({

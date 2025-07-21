@@ -16,16 +16,16 @@ import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import type { Vars } from '../types';
 import {
+  type CsvRow,
   type EvaluateResult,
   type EvaluateTableOutput,
-  type NunjucksFilterMap,
-  type TestCase,
-  type OutputFile,
-  type CsvRow,
   isApiProvider,
   isProviderOptions,
+  type NunjucksFilterMap,
+  type OutputFile,
   OutputFileExtension,
   ResultFailureReason,
+  type TestCase,
 } from '../types';
 import invariant from '../util/invariant';
 import { convertTestResultsToTableRow } from './exportToFile';

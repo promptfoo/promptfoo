@@ -39,7 +39,7 @@
       },
       "correctness": {
         "noUnusedVariables": "error",
-        "noUnusedImports": "off",
+        "noUnusedImports": "error",
         "useExhaustiveDependencies": "off",
         "noUnusedFunctionParameters": "off"
       },

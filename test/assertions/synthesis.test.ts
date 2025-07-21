@@ -1,8 +1,8 @@
 import dedent from 'dedent';
 import {
+  convertQuestionToPythonPrompt,
   generateNewQuestionsPrompt,
   synthesize,
-  convertQuestionToPythonPrompt,
 } from '../../src/assertions/synthesis';
 import { loadApiProvider } from '../../src/providers';
 import type { TestCase } from '../../src/types';

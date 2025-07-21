@@ -2,9 +2,9 @@ import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../ty
 import invariant from '../../../util/invariant';
 import type { HARM_PLUGINS } from '../../constants';
 import { RedteamPluginBase } from '../base';
-import { getHarmfulAssertions, createTestCase } from './common';
-import { REDTEAM_MODEL_CATEGORIES } from './constants';
+import { createTestCase, getHarmfulAssertions } from './common';
 import type { HarmfulCategory } from './constants';
+import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
   private harmCategory: keyof typeof HARM_PLUGINS;

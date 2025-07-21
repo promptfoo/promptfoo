@@ -1,10 +1,10 @@
 import compression from 'compression';
 import cors from 'cors';
 import 'dotenv/config';
-import type { Request, Response } from 'express';
-import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
+import type { Request, Response } from 'express';
+import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';

@@ -1,4 +1,3 @@
-import React from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
@@ -7,6 +6,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { ProviderOptions } from '@promptfoo/types';
+import React from 'react';
 import ExtensionEditor from './ExtensionEditor';
 import 'prismjs/themes/prism.css';
 

@@ -18,7 +18,6 @@ import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import {
-  UnifiedConfigSchema,
   type CommandLineOptions,
   type Prompt,
   type ProviderOptions,
@@ -28,6 +27,7 @@ import {
   type TestCase,
   type TestSuite,
   type UnifiedConfig,
+  UnifiedConfigSchema,
 } from '../../types';
 import { isRunningUnderNpx, readFilters } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';

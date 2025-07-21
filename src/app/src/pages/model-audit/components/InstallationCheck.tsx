@@ -1,4 +1,3 @@
-import React from 'react';
 import SecurityIcon from '@mui/icons-material/Security';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';

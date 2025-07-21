@@ -4,8 +4,8 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
   CONFIGURABLE_STRATEGIES,

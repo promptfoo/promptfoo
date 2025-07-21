@@ -6,10 +6,10 @@ import { runPython } from '../python/pythonUtils';
 import type {
   ApiProvider,
   CallApiContextParams,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-  ProviderEmbeddingResponse,
-  ProviderClassificationResponse,
 } from '../types';
 import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';

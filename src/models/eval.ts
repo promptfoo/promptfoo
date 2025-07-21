@@ -5,13 +5,13 @@ import { getDb } from '../database';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
+  evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
+  evalsToTagsTable,
   promptsTable,
   tagsTable,
-  evalsToTagsTable,
-  evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
@@ -19,17 +19,17 @@ import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import {
   type CompletedPrompt,
+  type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
-  type EvaluateSummaryV3,
   type EvaluateSummaryV2,
+  type EvaluateSummaryV3,
   type EvaluateTable,
-  ResultFailureReason,
+  type EvaluateTableRow,
   type Prompt,
+  ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-  type EvalSummary,
-  type EvaluateTableRow,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';

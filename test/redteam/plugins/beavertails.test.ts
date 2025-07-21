@@ -1,8 +1,8 @@
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
-  fetchAllDatasets,
   BeavertailsGrader,
   BeavertailsPlugin,
+  fetchAllDatasets,
 } from '../../../src/redteam/plugins/beavertails';
 import type { TestCase } from '../../../src/types';
 

@@ -3,7 +3,7 @@ import dedent from 'dedent';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import { getDefaultProviders } from '../providers/defaults';
-import type { TestCase, TestSuite, VarMapping, ApiProvider } from '../types';
+import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types';
 import { retryWithDeduplication, sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';

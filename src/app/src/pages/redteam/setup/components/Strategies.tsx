@@ -1,4 +1,3 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -7,9 +6,9 @@ import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
+import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import {
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
@@ -20,6 +19,7 @@ import {
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';

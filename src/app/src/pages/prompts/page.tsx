@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
+import { useEffect, useState } from 'react';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 

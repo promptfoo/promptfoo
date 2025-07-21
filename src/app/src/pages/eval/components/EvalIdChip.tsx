@@ -1,10 +1,10 @@
-import React from 'react';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import React from 'react';
 
 interface EvalIdChipProps {
   evalId: string;

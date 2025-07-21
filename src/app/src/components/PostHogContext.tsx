@@ -1,5 +1,5 @@
-import { createContext, useContext } from 'react';
 import type posthog from 'posthog-js';
+import { createContext, useContext } from 'react';
 
 export interface PostHogContextType {
   posthog: typeof posthog | null;

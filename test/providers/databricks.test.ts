@@ -1,6 +1,6 @@
 import { clearCache } from '../../src/cache';
-import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
 import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
+import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 jest.mock('../../src/logger');

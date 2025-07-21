@@ -1,9 +1,9 @@
+import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
-import { ToastProvider } from '@app/contexts/ToastContext';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 
 // Mock data

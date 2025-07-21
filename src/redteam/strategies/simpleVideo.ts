@@ -1,4 +1,4 @@
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';

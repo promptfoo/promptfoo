@@ -1,16 +1,13 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
-import { ThemeProvider, createTheme, useTheme } from '@mui/material/styles';
-import { CssBaseline, Box, Button } from '@mui/material';
-import { useMediaQuery } from '@mui/material';
 import { callApi } from '@app/utils/api';
-import ModelAudit from './ModelAudit';
-import { useModelAuditStore } from './store';
-import type { ScanResult, ScanPath } from './ModelAudit.types';
+import { Button, CssBaseline } from '@mui/material';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import CircularProgress from '@mui/material/CircularProgress';
-import Typography from '@mui/material/Typography';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import ModelAudit from './ModelAudit';
+import type { ScanResult } from './ModelAudit.types';
+import { useModelAuditStore } from './store';
 
 vi.mock('@app/utils/api');
 vi.mock('./store');

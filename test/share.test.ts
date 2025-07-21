@@ -4,11 +4,11 @@ import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import type Eval from '../src/models/eval';
 import {
-  stripAuthFromUrl,
   createShareableUrl,
   determineShareDomain,
-  isSharingEnabled,
   hasEvalBeenShared,
+  isSharingEnabled,
+  stripAuthFromUrl,
 } from '../src/share';
 import { makeRequest } from '../src/util/cloud';
 

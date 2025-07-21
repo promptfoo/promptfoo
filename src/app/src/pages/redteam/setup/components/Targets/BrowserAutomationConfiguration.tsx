@@ -1,4 +1,3 @@
-import React from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -11,6 +10,7 @@ import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import React from 'react';
 import type { ProviderOptions } from '../../types';
 
 interface BrowserAutomationConfigurationProps {

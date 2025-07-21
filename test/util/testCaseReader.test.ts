@@ -12,8 +12,8 @@ import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
-  readTests,
   readTestFiles,
+  readTests,
 } from '../../src/util/testCaseReader';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
@@ -1094,7 +1094,7 @@ describe('readTests', () => {
     jest.mocked(globSync).mockReturnValue(['test.yaml']);
     jest
       .mocked(getEnvBool)
-      .mockImplementation((key) => (key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING' ? true : false));
+      .mockImplementation((key) => key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING');
 
     await readTests('test.yaml');
 

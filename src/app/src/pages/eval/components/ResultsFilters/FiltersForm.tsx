@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useMemo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import {
-  Popover,
   Box,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  IconButton,
   Button,
-  Stack,
   Divider,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Popover,
+  Select,
+  Stack,
 } from '@mui/material';
-import { useTableStore, type ResultsFilter } from '../store';
+import { useCallback, useEffect, useMemo } from 'react';
+import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',

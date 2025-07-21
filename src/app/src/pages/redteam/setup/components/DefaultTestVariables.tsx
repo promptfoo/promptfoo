@@ -1,4 +1,3 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -8,6 +7,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface Variable {

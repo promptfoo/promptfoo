@@ -4,7 +4,7 @@ import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { normalizeFinishReason, FINISH_REASON_MAP } from '../../util/finishReason';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';

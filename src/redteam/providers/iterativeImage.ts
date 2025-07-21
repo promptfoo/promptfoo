@@ -6,10 +6,10 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  Prompt,
   NunjucksFilterMap,
-  RedteamFileConfig,
+  Prompt,
   ProviderResponse,
+  RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';

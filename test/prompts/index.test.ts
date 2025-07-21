@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
-import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
+import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts';
 import { maybeFilePath } from '../../src/prompts/utils';
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
 
