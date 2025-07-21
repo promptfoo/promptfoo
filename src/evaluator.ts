@@ -341,6 +341,9 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
+        // Ensure sessionId is available in metadata from either response or current vars
+        ...(response.sessionId && { sessionId: response.sessionId }),
+        ...(vars.sessionId && !response.sessionId && { sessionId: vars.sessionId as string }),
       },
       promptIdx,
       testIdx,

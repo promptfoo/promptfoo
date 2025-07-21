@@ -123,6 +123,33 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 | beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
 | afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
 
+#### Session Management in Hooks
+
+For multi-turn conversations or stateful interactions, the `sessionId` is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionId;
+```
+
+This sessionId comes from either:
+
+1. The provider's response (`response.sessionId`)
+2. The test variables (`vars.sessionId`) - useful for client-generated session IDs
+
+Example usage in an extension:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    const sessionId = context.result.metadata.sessionId;
+    if (sessionId) {
+      console.log(`Test completed with session: ${sessionId}`);
+      // You can use this sessionId for tracking, logging, or cleanup
+    }
+  }
+}
+```
+
 ### Implementing Hooks
 
 To implement these hooks, create a JavaScript or Python file with a function that handles the hooks you want to use. Then, specify the path to this file and the function name in the `extensions` array in your configuration.
@@ -546,6 +573,7 @@ interface EvaluateResult {
   score: number;
   latencyMs: number;
   gradingResult?: GradingResult;
+  metadata?: Record<string, any>;
 }
 ```
 
