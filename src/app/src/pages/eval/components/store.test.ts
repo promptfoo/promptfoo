@@ -36,9 +36,7 @@ describe('useTableStore', () => {
         filters: {
           values: {},
           appliedCount: 0,
-          options: {
-            metric: [],
-          },
+          fields: [],
         },
       });
     });
@@ -275,7 +273,11 @@ describe('useTableStore', () => {
         useTableStore.getState().setTable(mockTable);
       });
 
-      const availableMetrics = useTableStore.getState().filters.options.metric;
+      const metricField = useTableStore
+        .getState()
+        .filters.fields.find((field) => field.id === 'metric');
+      const availableMetrics =
+        metricField?.type === 'select' ? metricField.options.map((option) => option.id) : [];
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
 
@@ -311,7 +313,11 @@ describe('useTableStore', () => {
         useTableStore.getState().setTable(mockTable);
       });
 
-      const availableMetrics = useTableStore.getState().filters.options.metric;
+      const metricField = useTableStore
+        .getState()
+        .filters.fields.find((field) => field.id === 'metric');
+      const availableMetrics =
+        metricField?.type === 'select' ? metricField.options.map((option) => option.id) : [];
       expect(availableMetrics).toEqual([]);
     });
 
@@ -361,7 +367,11 @@ describe('useTableStore', () => {
         useTableStore.getState().setTable(mockTable);
       });
 
-      const availableMetrics = useTableStore.getState().filters.options.metric;
+      const metricField = useTableStore
+        .getState()
+        .filters.fields.find((field) => field.id === 'metric');
+      const availableMetrics =
+        metricField?.type === 'select' ? metricField.options.map((option) => option.id) : [];
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
 
@@ -393,7 +403,11 @@ describe('useTableStore', () => {
         useTableStore.getState().setTable(mockTable);
       });
 
-      const availableMetrics = useTableStore.getState().filters.options.metric;
+      const metricField = useTableStore
+        .getState()
+        .filters.fields.find((field) => field.id === 'metric');
+      const availableMetrics =
+        metricField?.type === 'select' ? metricField.options.map((option) => option.id) : [];
       expect(availableMetrics).toEqual([longMetricName, 'metric-with-dashes', 'metric.with.dots']);
     });
 
@@ -420,7 +434,11 @@ describe('useTableStore', () => {
         useTableStore.getState().setTable(mockTable);
       });
 
-      const availableMetrics = useTableStore.getState().filters.options.metric;
+      const metricField = useTableStore
+        .getState()
+        .filters.fields.find((field) => field.id === 'metric');
+      const availableMetrics =
+        metricField?.type === 'select' ? metricField.options.map((option) => option.id) : [];
       expect(availableMetrics).toEqual([]);
     });
   });

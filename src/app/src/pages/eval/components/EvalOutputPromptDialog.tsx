@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -19,25 +20,14 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ellipsize } from '../../../../../util/text';
 import TraceView from '../../../components/traces/TraceView';
+import { useTableStore } from './store';
 import ChatMessages, { type Message } from './ChatMessages';
 import Citations from './Citations';
 import type { GradingResult } from './types';
-
-// Common style object for copy buttons
-const copyButtonSx = {
-  position: 'absolute',
-  right: '8px',
-  top: '8px',
-  bgcolor: 'background.paper',
-  boxShadow: 1,
-  '&:hover': {
-    bgcolor: 'action.hover',
-    boxShadow: 2,
-  },
-};
 
 // Common typography styles
 const subtitleTypographySx = {
@@ -337,6 +327,8 @@ export default function EvalOutputPromptDialog({
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
 
+  const { addFilter, resetFilters } = useTableStore();
+
   useEffect(() => {
     setCopied(false);
     setCopiedFields({});
@@ -369,6 +361,22 @@ export default function EvalOutputPromptDialog({
         lastClickTime: now,
       },
     }));
+  };
+
+  const handleApplyMetadataFilter = (key: string, value: string) => {
+    // Reset any existing filters
+    resetFilters();
+
+    // Apply the metadata filter
+    addFilter({
+      type: 'metadata',
+      operator: 'equals',
+      value: value,
+      field: key,
+    });
+
+    // Close the dialog
+    onClose();
   };
 
   let parsedMessages: Message[] = [];
@@ -438,12 +446,9 @@ export default function EvalOutputPromptDialog({
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>
-                      <strong>Key</strong>
-                    </TableCell>
-                    <TableCell>
-                      <strong>Value</strong>
-                    </TableCell>
+                    <TableCell>Key</TableCell>
+                    <TableCell>Value</TableCell>
+                    <TableCell width={100} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -479,23 +484,50 @@ export default function EvalOutputPromptDialog({
                           ) : (
                             truncatedValue
                           )}
-                          {(hoveredElement === `metadata-${key}` || copiedFields[key]) && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyFieldToClipboard(key, stringValue);
-                              }}
-                              sx={copyButtonSx}
-                              aria-label={`Copy metadata value for ${key}`}
-                            >
-                              {copiedFields[key] ? (
-                                <CheckIcon fontSize="small" />
-                              ) : (
-                                <ContentCopyIcon fontSize="small" />
-                              )}
-                            </IconButton>
-                          )}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                            <Tooltip title="Copy value">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyFieldToClipboard(key, stringValue);
+                                }}
+                              >
+                                {copiedFields[key] ? (
+                                  <CheckIcon
+                                    fontSize="small"
+                                    sx={{ color: '#ccc', '&:hover': { color: 'inherit' } }}
+                                  />
+                                ) : (
+                                  <ContentCopyIcon
+                                    fontSize="small"
+                                    sx={{ color: '#ccc', '&:hover': { color: 'inherit' } }}
+                                  />
+                                )}
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Filter results by value">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApplyMetadataFilter(key, stringValue);
+                                }}
+                                sx={{
+                                  '&:hover': {
+                                    bgcolor: 'action.hover',
+                                  },
+                                }}
+                              >
+                                <FilterAltIcon
+                                  fontSize="small"
+                                  sx={{ color: '#ccc', '&:hover': { color: 'inherit' } }}
+                                />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );
