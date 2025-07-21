@@ -20,7 +20,7 @@ const SimbaCommandSchema = z.object({
   email: z.string().email().optional(),
   additionalInstructions: z.string().optional(),
   sessionId: z.string().optional(),
-  concurrency: z.number().min(1).max(50).optional(),
+  concurrency: z.coerce.number().min(1).max(50).optional(),
 });
 
 type SimbaCommandOptions = z.infer<typeof SimbaCommandSchema>;
@@ -246,7 +246,7 @@ export function simbaCommand(
           ...opts,
           maxRounds: opts.maxRounds ? parseInt(String(opts.maxRounds)) : undefined,
           maxVectors: opts.maxVectors ? parseInt(String(opts.maxVectors)) : undefined,
-          batchSize: opts.batchSize ? parseInt(String(opts.batchSize)) : undefined,
+          concurrency: opts.concurrency ? parseInt(String(opts.concurrency)) : undefined,
         });
 
         // Load config like eval command does
