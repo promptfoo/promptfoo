@@ -176,11 +176,6 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
-vi.mock('@app/hooks/useFeatureFlag', () => ({
-  useFeatureFlag: vi.fn(() => true),
-}));
-
-import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
 
 declare global {
   interface Window {
@@ -327,8 +322,7 @@ describe('ResultsView', () => {
     expect(screen.queryByTestId('metric-filter-selector')).toBeNull();
   });
 
-  it('handles the case where the multi-metric filtering feature flag is enabled but there are no available metrics', () => {
-    vi.mocked(useFeatureFlag).mockReturnValue(true);
+  it('handles the case where there are no available metrics', () => {
 
     mockTableStoreData = {
       ...mockTableStoreData,
@@ -345,8 +339,8 @@ describe('ResultsView', () => {
       <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
     );
 
-    expect(screen.queryByText('Filters')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Metric' })).toBeNull();
+    // FiltersButton should still be visible even with no metrics
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument();
   });
 
   it('should not update charts visibility state on window resize after mount', () => {
