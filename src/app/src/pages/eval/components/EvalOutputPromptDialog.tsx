@@ -29,6 +29,19 @@ import ChatMessages, { type Message } from './ChatMessages';
 import Citations from './Citations';
 import type { GradingResult } from './types';
 
+// Common style object for copy buttons
+const copyButtonSx = {
+  position: 'absolute',
+  right: '8px',
+  top: '8px',
+  bgcolor: 'background.paper',
+  boxShadow: 1,
+  '&:hover': {
+    bgcolor: 'action.hover',
+    boxShadow: 2,
+  },
+};
+
 // Common typography styles
 const subtitleTypographySx = {
   mb: 1,
