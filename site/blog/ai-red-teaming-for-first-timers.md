@@ -70,7 +70,7 @@ As previously mentioned, a strong red teaming will net the best results. Typical
 - **Incentives**: Teams need space and motivation to test
 - **Regulatory support**: Red teaming shows maturity to auditors and regulators
 
-On that last point - many members of any audience interested in security testing will look for red teaming results - starting from [system cards](https://www.promptfoo.dev/blog/system-cards-go-hard/) all the way down the pipeline to post-production reports.
+On that last point - many members of any audience interested in security testing will look for red teaming results - starting from [system cards](/blog/system-cards-go-hard/) all the way down the pipeline to post-production reports.
 
 The team at Promptfoo is invested in making red teaming a repeatable, sharable, and collaborative process.
 ## Feedback loops: operational AI red teaming
@@ -94,7 +94,7 @@ Moving from reactive to resilient is the best thing you can do for the security 
 
 ## See Also
 
-- [Red Team GPT](https://www.promptfoo.dev/blog/red-team-gpt/)
-- [Red Team Claude](https://www.promptfoo.dev/blog/red-team-claude/)
-- [Getting Started with Red Teaming](https://www.promptfoo.dev/docs/red-team/)
-- [OWASP Top 10 for LLMs](https://www.promptfoo.dev/blog/owasp-top-10-llms-tldr/) 
+- [Red Team GPT](/blog/red-team-gpt/)
+- [Red Team Claude](/blog/red-team-claude/)
+- [Getting Started with Red Teaming](/docs/red-team/)
+- [OWASP Top 10 for LLMs](/blog/owasp-top-10-llms-tldr/) 
