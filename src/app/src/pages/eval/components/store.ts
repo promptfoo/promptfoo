@@ -60,7 +60,9 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric';
+export type ResultsFilterType = 'metric' | 'metadata';
+
+export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
 export type ResultsFilter = {
   /**
@@ -69,8 +71,12 @@ export type ResultsFilter = {
   id: string;
   type: ResultsFilterType;
   value: string;
-  operator: 'equals';
+  operator: ResultsFilterOperator;
   logicOperator: 'and' | 'or';
+  /**
+   * For metadata filters, this is the field name in the metadata object
+   */
+  field?: string;
 };
 
 interface TableState {
@@ -110,6 +116,7 @@ interface TableState {
     operator: ResultsFilter['operator'];
     value: string;
     logicOperator?: ResultsFilter['logicOperator'];
+    field?: string;
   }) => void;
 
   /**
@@ -133,6 +140,12 @@ interface TableState {
    * @param filter - The filter to update.
    */
   updateFilter: (filter: ResultsFilter) => void;
+
+  /**
+   * Updates the logic operator for all filters
+   * @param logicOperator - The logic operator to set for all filters
+   */
+  updateAllFilterLogicOperators: (logicOperator: ResultsFilter['logicOperator']) => void;
 
   filters: {
     /**
@@ -249,6 +262,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         ...prevState.filters,
         options: {
           metric: computeAvailableMetrics(table),
+          metadata: [],
         },
       },
     })),
@@ -263,6 +277,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           ...prevState.filters,
           options: {
             metric: computeAvailableMetrics(table),
+            metadata: [],
           },
         },
       }));
@@ -276,6 +291,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           ...prevState.filters,
           options: {
             metric: computeAvailableMetrics(results.table),
+            metadata: [],
           },
         },
       }));
@@ -336,6 +352,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             type: filter.type,
             operator: filter.operator,
             value: filter.value,
+            field: filter.field,
           }),
         );
       });
@@ -364,6 +381,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(data.table),
+              metadata: [],
             },
           },
         }));
@@ -385,6 +403,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     appliedCount: 0,
     options: {
       metric: [],
+      metadata: [],
     },
   },
 
@@ -392,7 +411,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const filterId = uuidv4();
 
     set((prevState) => {
-      const appliedCount = prevState.filters.appliedCount + (filter.value ? 1 : 0);
+      // For metadata filters, only count as applied if both field and value are present
+      const isApplied =
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
+      const appliedCount = prevState.filters.appliedCount + (isApplied ? 1 : 0);
 
       return {
         filters: {
@@ -404,6 +426,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
               id: filterId,
               // Default to 'and' logic operator if not provided.
               logicOperator: filter.logicOperator ?? 'and',
+              // Include field for metadata filters
+              field: filter.field,
             },
           },
           appliedCount,
@@ -415,7 +439,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
   removeFilter: (id: ResultsFilter['id']) => {
     set((prevState) => {
       const target = prevState.filters.values[id];
-      const appliedCount = prevState.filters.appliedCount - (target.value ? 1 : 0);
+      // For metadata filters, only count as applied if both field and value were present
+      const wasApplied =
+        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
+      const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
       const values = { ...prevState.filters.values };
       delete values[id];
 
@@ -452,8 +479,13 @@ export const useTableStore = create<TableState>()((set, get) => ({
   updateFilter: (filter: ResultsFilter) => {
     set((prevState) => {
       const target = prevState.filters.values[filter.id];
+      // For metadata filters, only count as applied if both field and value are present
+      const targetWasApplied =
+        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
+      const filterIsApplied =
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
       const appliedCount =
-        prevState.filters.appliedCount - (target.value ? 1 : 0) + (filter.value ? 1 : 0);
+        prevState.filters.appliedCount - (targetWasApplied ? 1 : 0) + (filterIsApplied ? 1 : 0);
 
       return {
         filters: {
@@ -463,6 +495,21 @@ export const useTableStore = create<TableState>()((set, get) => ({
             [filter.id]: filter,
           },
           appliedCount,
+        },
+      };
+    });
+  },
+
+  updateAllFilterLogicOperators: (logicOperator: ResultsFilter['logicOperator']) => {
+    set((prevState) => {
+      const updatedValues: Record<string, ResultsFilter> = {};
+      Object.entries(prevState.filters.values).forEach(([id, filter]) => {
+        updatedValues[id] = { ...filter, logicOperator };
+      });
+      return {
+        filters: {
+          ...prevState.filters,
+          values: updatedValues,
         },
       };
     });
