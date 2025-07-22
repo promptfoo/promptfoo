@@ -47,7 +47,7 @@ function computeAvailableMetadataFields(table: EvaluateTable | null): string[] {
   }
 
   const metadataFields = new Set<string>();
-  
+
   // Scan through all rows and outputs to find unique metadata fields
   table.body.forEach((row) => {
     row.outputs.forEach((output) => {
@@ -440,9 +440,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
     set((prevState) => {
       // For metadata filters, only count as applied if both field and value are present
-      const isApplied = filter.type === 'metadata' 
-        ? Boolean(filter.value && filter.field)
-        : Boolean(filter.value);
+      const isApplied =
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
       const appliedCount = prevState.filters.appliedCount + (isApplied ? 1 : 0);
 
       return {
@@ -469,9 +468,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set((prevState) => {
       const target = prevState.filters.values[id];
       // For metadata filters, only count as applied if both field and value were present
-      const wasApplied = target.type === 'metadata' 
-        ? Boolean(target.value && target.field)
-        : Boolean(target.value);
+      const wasApplied =
+        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
       const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
       const values = { ...prevState.filters.values };
       delete values[id];
@@ -510,12 +508,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set((prevState) => {
       const target = prevState.filters.values[filter.id];
       // For metadata filters, only count as applied if both field and value are present
-      const targetWasApplied = target.type === 'metadata' 
-        ? Boolean(target.value && target.field)
-        : Boolean(target.value);
-      const filterIsApplied = filter.type === 'metadata' 
-        ? Boolean(filter.value && filter.field)
-        : Boolean(filter.value);
+      const targetWasApplied =
+        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
+      const filterIsApplied =
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
       const appliedCount =
         prevState.filters.appliedCount - (targetWasApplied ? 1 : 0) + (filterIsApplied ? 1 : 0);
 

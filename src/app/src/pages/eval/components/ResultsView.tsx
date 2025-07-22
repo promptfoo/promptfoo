@@ -667,7 +667,9 @@ export default function ResultsView({
                   {filters.appliedCount > 0 &&
                     Object.values(filters.values).map((filter) => {
                       // For metadata filters, both field and value must be present
-                      if (filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value) {
+                      if (
+                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
+                      ) {
                         return null;
                       }
                       const truncatedValue =

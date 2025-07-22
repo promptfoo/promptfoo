@@ -178,7 +178,6 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
-
 declare global {
   interface Window {
     resizeHandler: any;
@@ -338,7 +337,6 @@ describe('ResultsView', () => {
   });
 
   it('handles the case where there are no available filters', () => {
-
     mockTableStoreData = {
       ...mockTableStoreData,
       filters: {

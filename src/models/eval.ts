@@ -461,7 +461,7 @@ export default class Eval {
         } else if (type === 'metadata' && field) {
           const sanitizedValue = value.replace(/'/g, "''");
           const sanitizedField = field.replace(/'/g, "''");
-          
+
           if (operator === 'equals') {
             condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
           } else if (operator === 'contains') {
