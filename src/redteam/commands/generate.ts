@@ -1,13 +1,12 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
 import { createHash } from 'crypto';
-import dedent from 'dedent';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import chalk from 'chalk';
+import dedent from 'dedent';
+import yaml from 'js-yaml';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
@@ -17,7 +16,6 @@ import logger from '../../logger';
 import { getProviderIds } from '../../providers';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
@@ -28,17 +26,21 @@ import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
+import { synthesize } from '../';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   type Plugin,
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import type { Command } from 'commander';
+
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,

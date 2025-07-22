@@ -1,11 +1,12 @@
 import * as fs from 'fs';
-import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 import path from 'path';
+
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Mock database
 jest.mock('better-sqlite3', () => {

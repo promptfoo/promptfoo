@@ -14,12 +14,24 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
+import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
+import type { Environment } from 'nunjucks';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -32,19 +44,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 

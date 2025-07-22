@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -26,8 +25,9 @@ import {
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
-import type { TargetResponse } from './shared';
 import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
+
+import type { TargetResponse } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 

@@ -1,15 +1,15 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
+
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage } from './util';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
@@ -39,8 +39,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o4-mini-2025-04-16',
     'o3-mini',
     'o3-mini-2025-01-31',
-    'gpt-4.5-preview',
-    'gpt-4.5-preview-2025-02-27',
+    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     'codex-mini-latest',
   ];
 

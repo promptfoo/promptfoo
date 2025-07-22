@@ -162,6 +162,9 @@
                             "GOOGLE_API_KEY": {
                               "type": "string"
                             },
+                            "GEMINI_API_KEY": {
+                              "type": "string"
+                            },
                             "GROQ_API_KEY": {
                               "type": "string"
                             },
@@ -1158,6 +1161,7 @@
                           "indirect-prompt-injection",
                           "intent",
                           "mcp",
+                          "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
@@ -1343,6 +1347,7 @@
                               "indirect-prompt-injection",
                               "intent",
                               "mcp",
+                              "medical",
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",

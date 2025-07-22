@@ -1,10 +1,15 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { sleep } from '../../util/time';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
+
 import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
 import type {
   ApiProvider,
@@ -13,13 +18,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { sleep } from '../../util/time';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.

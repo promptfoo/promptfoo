@@ -1,12 +1,14 @@
-import { SingleBar, Presets } from 'cli-progress';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
+import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { neverGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types';
 
 let ffmpegCache: any = null;
 

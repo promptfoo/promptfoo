@@ -35,6 +35,7 @@ export const ProviderEnvOverridesSchema = z.object({
   GOOGLE_API_HOST: z.string().optional(),
   GOOGLE_API_BASE_URL: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   HELICONE_API_KEY: z.string().optional(),
   HF_API_TOKEN: z.string().optional(),

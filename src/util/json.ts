@@ -2,8 +2,9 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
-import type { EvaluateResult, ResultFailureReason } from '../types';
 import invariant from '../util/invariant';
+
+import type { EvaluateResult, ResultFailureReason } from '../types';
 
 let ajvInstance: Ajv | null = null;
 

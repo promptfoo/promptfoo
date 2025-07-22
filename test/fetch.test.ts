@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';

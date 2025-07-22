@@ -7,7 +7,16 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.mjs", "**/*.cjs"]
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "**/*.mjs",
+      "**/*.cjs",
+      "!src/app/public/scripts/**/*"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -16,6 +25,59 @@
     "indentWidth": 2,
     "lineWidth": 100,
     "lineEnding": "lf"
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              {
+                "type": false,
+                "source": ["react", "react-dom", "react/**", "react-dom/**"]
+              },
+              ["react", "react-dom", "react/**", "react-dom/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": [":NODE:", ":BUN:"]
+              },
+              [":NODE:", ":BUN:"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["**"]
+              },
+              [
+                "**",
+                "!./**",
+                "!../**",
+                "!src/**",
+                "!test/**",
+                "!examples/**",
+                "!react",
+                "!react-dom",
+                "!react/**",
+                "!react-dom/**"
+              ],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["src/**", "test/**", "examples/**"]
+              },
+              ["src/**", "test/**", "examples/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["./**", "../**"]
+              },
+              ["./**", "../**"]
+            ]
+          }
+        }
+      }
+    }
   },
   "linter": {
     "enabled": true,
@@ -30,7 +92,7 @@
       },
       "correctness": {
         "noUnusedVariables": "error",
-        "noUnusedImports": "off",
+        "noUnusedImports": "error",
         "useExhaustiveDependencies": "off",
         "noUnusedFunctionParameters": "off"
       },
