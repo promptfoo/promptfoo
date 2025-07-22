@@ -47,6 +47,7 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
     body: JSON.stringify({
       message: '{{prompt}}',
     }),
+    stateful: true,
   },
 };
 
