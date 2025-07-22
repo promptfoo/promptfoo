@@ -1,24 +1,24 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
   type GridRenderCellParams,
-  GridToolbarContainer,
   GridToolbarColumnsButton,
-  GridToolbarFilterButton,
+  GridToolbarContainer,
   GridToolbarDensitySelector,
   GridToolbarExport,
+  GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
-import type { ServerPromptWithMetadata } from '@promptfoo/types';
+import { Link, useSearchParams } from 'react-router-dom';
 import PromptDialog from './PromptDialog';
+import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 // augment the props for the toolbar slot
 declare module '@mui/x-data-grid' {

@@ -1,9 +1,10 @@
-import { parse as csvParse } from 'csv-parse/sync';
 import * as fs from 'fs';
+import * as path from 'path';
+
+import { parse as csvParse } from 'csv-parse/sync';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
-import * as path from 'path';
 import cliState from '../cliState';
 
 /**

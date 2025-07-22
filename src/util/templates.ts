@@ -1,6 +1,7 @@
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
+
 import type { NunjucksFilterMap } from '../types';
 
 /**

@@ -1,8 +1,9 @@
 import {
-  ShellInjectionPlugin,
-  ShellInjectionGrader,
   DEFAULT_EXAMPLES,
+  ShellInjectionGrader,
+  ShellInjectionPlugin,
 } from '../../../src/redteam/plugins/shellInjection';
+
 import type { RedteamObjectConfig } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
@@ -23,15 +23,13 @@ import InputAdornment from '@mui/material/InputAdornment';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
 import Stack from '@mui/material/Stack';
+import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/material/styles';
 import invariant from '@promptfoo/util/invariant';
-import type { VisibilityState } from '@tanstack/table-core';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -42,17 +40,20 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useTableStore, useResultsViewSettingsStore } from './store';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import type { StackProps } from '@mui/material/Stack';
+import type { VisibilityState } from '@tanstack/table-core';
+
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
-import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
+
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -165,7 +166,6 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -180,6 +180,7 @@ export default function ResultsView({
     totalResultsCount,
     highlightedResultsCount,
     filters,
+    removeFilter,
   } = useTableStore();
 
   const {
@@ -204,7 +205,7 @@ export default function ResultsView({
       setSearchParams((prev) => ({ ...prev, search: text }));
       setSearchText(text);
     },
-    [searchParams],
+    [setSearchParams],
   );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
@@ -470,7 +471,27 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
+  // Handle metric parameter from URL
+  React.useEffect(() => {
+    const metricParam = searchParams.get('metric');
+    if (metricParam) {
+      const { addFilter, resetFilters } = useTableStore.getState();
+
+      resetFilters();
+
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value: metricParam,
+      });
+
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        newParams.delete('metric');
+        return newParams;
+      });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
@@ -596,22 +617,16 @@ export default function ResultsView({
               />
             </Box>
 
-            {isMultiFilteringEnabled ? (
-              <>
-                <FiltersButton
-                  appliedFiltersCount={filters.appliedCount}
-                  onClick={() => setFiltersFormOpen(true)}
-                  ref={filtersButtonRef}
-                />
-                <FiltersForm
-                  open={filtersFormOpen}
-                  onClose={() => setFiltersFormOpen(false)}
-                  anchorEl={filtersButtonRef.current}
-                />
-              </>
-            ) : filters.options.metric.length > 0 ? (
-              <MetricFilterSelector />
-            ) : null}
+            <FiltersButton
+              appliedFiltersCount={filters.appliedCount}
+              onClick={() => setFiltersFormOpen(true)}
+              ref={filtersButtonRef}
+            />
+            <FiltersForm
+              open={filtersFormOpen}
+              onClose={() => setFiltersFormOpen(false)}
+              anchorEl={filtersButtonRef.current}
+            />
 
             <Box
               sx={{
@@ -645,6 +660,31 @@ export default function ResultsView({
                       sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                     />
                   )}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      // For metadata filters, both field and value must be present
+                      if (
+                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
+                      ) {
+                        return null;
+                      }
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+                      const label =
+                        filter.type === 'metric'
+                          ? `Metric: ${truncatedValue}`
+                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      return (
+                        <Chip
+                          key={filter.id}
+                          size="small"
+                          label={label}
+                          title={filter.value} // Show full value on hover
+                          onDelete={() => removeFilter(filter.id)}
+                          sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                        />
+                      );
+                    })}
                 </>
               ) : (
                 <>{filteredResultsCount} results</>

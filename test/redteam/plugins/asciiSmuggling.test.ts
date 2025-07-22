@@ -1,4 +1,5 @@
 import { AsciiSmugglingGrader } from '../../../src/redteam/plugins/asciiSmuggling';
+
 import type { AtomicTestCase } from '../../../src/types';
 
 describe('AsciiSmugglingGrader', () => {

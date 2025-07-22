@@ -1,8 +1,9 @@
 import { Command } from 'commander';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
-import type { UnifiedConfig } from '../../src/types';
 import { resolveConfigs } from '../../src/util/config/load';
+
+import type { UnifiedConfig } from '../../src/types';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/util/config/load');
