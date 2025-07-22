@@ -10,6 +10,10 @@ using a cosine similarity threshold.
 
 By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
 
+:::tip Alternative: BERTScore
+For semantic similarity evaluation, you might also consider using the [`bertscore`](/docs/configuration/expected-outputs/deterministic#bertscore) assertion, which uses BERT-based contextual embeddings and can provide more nuanced semantic understanding. BERTScore is particularly effective for evaluating paraphrases and translations.
+:::
+
 Example:
 
 ```yaml

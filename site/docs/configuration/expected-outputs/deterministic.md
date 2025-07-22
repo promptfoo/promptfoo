@@ -39,6 +39,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
 | [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [bertscore](#bertscore)                                         | BERTScore is above a given threshold                               |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
@@ -1066,6 +1067,137 @@ tests:
 ```
 
 Note: Actual scores may vary based on the specific METEOR implementation and parameters used.
+
+### BERTScore
+
+BERTScore evaluates generated text against reference text using contextual embeddings from BERT-based models. Unlike traditional metrics that rely on exact token matching, BERTScore compares the semantic similarity of tokens using their contextual representations.
+
+**What makes BERTScore special:**
+
+- **Contextual understanding**: Uses BERT embeddings to understand word meaning in context
+- **Semantic matching**: Recognizes that "car" and "vehicle" are semantically similar
+- **Robust to paraphrasing**: Handles different ways of expressing the same idea
+- **Language-aware**: Works across different languages and domains
+
+**When to use BERTScore:**
+
+- **Semantic similarity**: When you care more about meaning than exact wording
+- **Translation evaluation**: Assessing quality of translations with flexible word choice
+- **Paraphrase detection**: Checking if outputs convey the same information differently
+- **Content generation**: Evaluating if generated content matches reference semantically
+
+For additional context, read the original paper: [BERTScore: Evaluating Text Generation with BERT](https://arxiv.org/abs/1904.09675).
+
+> **Note:** BERTScore requires Python dependencies (`sentence-transformers` and `scikit-learn`). If these aren't available, it falls back to token overlap similarity.
+
+#### How BERTScore Works
+
+BERTScore evaluates text by:
+
+1. **Encoding**: Using sentence-transformers to create contextual embeddings for both texts
+2. **Similarity**: Computing cosine similarity between the embeddings
+3. **Scoring**: Returning a similarity score between 0.0 (no similarity) and 1.0 (identical meaning)
+
+The default model is `all-MiniLM-L6-v2`, but you can specify different models for domain-specific evaluation.
+
+#### Basic Usage
+
+```yaml
+assert:
+  - type: bertscore
+    value: hello world # Reference text to compare against
+```
+
+By default, BERTScore uses a threshold of 0.7. Scores range from 0.0 (no similarity) to 1.0 (perfect semantic match).
+
+#### Custom Threshold
+
+Set your own threshold based on your similarity requirements:
+
+```yaml
+assert:
+  - type: bertscore
+    value: hello world
+    threshold: 0.8 # Test fails if similarity < 0.8
+```
+
+#### Custom Model
+
+Specify a different sentence-transformers model for domain-specific evaluation:
+
+```yaml
+assert:
+  - type: bertscore
+    value: hello world
+    config:
+      model: paraphrase-multilingual-MiniLM-L12-v2
+    threshold: 0.75
+```
+
+#### Using Variables
+
+Useful when your reference text comes from test data or external sources:
+
+```yaml
+tests:
+  - vars:
+      expected_response: 'The weather is beautiful today'
+    assert:
+      - type: bertscore
+        value: '{{expected_response}}'
+        threshold: 0.7
+```
+
+#### Multiple References
+
+BERTScore can evaluate against multiple reference texts, using the best-matching reference for scoring:
+
+```yaml
+assert:
+  - type: bertscore
+    value:
+      - 'Hello world'
+      - 'Hi there, world'
+      - 'Greetings, world'
+    threshold: 0.7
+```
+
+This is particularly useful when:
+
+- Multiple valid responses exist for the same input
+- You want to account for different phrasings or styles
+- Testing against various acceptable outputs
+
+#### Practical Example
+
+Here's how BERTScore evaluates different outputs against the reference "The weather is beautiful today":
+
+```yaml
+tests:
+  - vars:
+      reference: 'The weather is beautiful today'
+    assert:
+      - type: bertscore
+        value: '{{reference}}'
+        threshold: 0.7
+  - description: 'Test semantic similarity'
+    vars:
+      outputs:
+        - 'The weather is beautiful today' # Exact match → ~1.0
+        - "Today's weather is gorgeous" # Semantic similarity → ~0.85
+        - 'The climate is nice today' # Similar meaning → ~0.75
+        - 'It is raining heavily' # Different meaning → ~0.45
+```
+
+#### Fallback Behavior
+
+If Python dependencies are unavailable, BERTScore automatically falls back to token overlap similarity (Jaccard index):
+
+- Splits text into tokens
+- Calculates intersection over union of token sets
+- Provides basic similarity when BERT-based evaluation isn't possible
+
+This ensures your evaluations continue working even in environments without Python ML dependencies.
 
 ### F-Score
 

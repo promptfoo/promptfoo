@@ -34,6 +34,7 @@ import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
+import { handleBertScore } from './bertscore';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -256,6 +257,7 @@ export async function runAssertion({
     (params: AssertionParams) => GradingResult | Promise<GradingResult>
   > = {
     'answer-relevance': handleAnswerRelevance,
+    bertscore: handleBertScore,
     bleu: handleBleuScore,
     classifier: handleClassifier,
     contains: handleContains,
