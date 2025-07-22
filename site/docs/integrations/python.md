@@ -2,13 +2,16 @@
 sidebar_label: Python Notebook
 ---
 
-# Python
+# Python Notebooks
 
-For an example of using promptfoo in a Google Colab/Jupyter Notebook, **[see this notebook](https://colab.research.google.com/gist/typpo/734a5f53eb1922f90198538dbe17aa27/promptfoo-example-1.ipynb)**.
+For using Promptfoo in Jupyter notebooks and Google Colab, see our **[interactive example notebook](https://colab.research.google.com/gist/typpo/734a5f53eb1922f90198538dbe17aa27/promptfoo-example-1.ipynb)**.
 
-This notebook shows how to
+For comprehensive Python integration guidance, including:
 
-1.  Set up & configure Promptfoo
-2.  Set up secrets (such as an OpenAI or Anthropic API key)
-3.  Run an eval of LLM models, prompts and outputs
-4.  Run another eval that includes Python code
+- Custom Python providers
+- Python assertions and validation
+- LangChain, CrewAI, and PydanticAI integration
+- Dynamic test generation
+- Best practices and examples
+
+See our **[complete Python usage guide](/docs/usage/python)**.
