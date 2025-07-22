@@ -66,6 +66,7 @@ describe('constants', () => {
       'harmful',
       'pii',
       'bias',
+      'medical',
       'guardrails-eval',
     ]);
   });
