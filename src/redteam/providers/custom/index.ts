@@ -1,15 +1,34 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../../types';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import {
+  EVAL_SYSTEM_PROMPT,
+  GOAL_RUBRIC_TEMPLATE,
+  REFUSAL_SYSTEM_PROMPT,
+} from '../crescendo/prompts';
+import type { Message } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
@@ -18,20 +37,6 @@ import {
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
-
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../../types';
-import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -95,6 +100,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
     response: string;
   }>;
   totalSuccessfulAttacks?: number;
+  storedGraderResult?: GradingResult;
 }
 
 /**
@@ -309,6 +315,15 @@ export class CustomProvider implements ApiProvider {
 
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
+    let storedGraderResult: GradingResult | undefined;
+
+    // Template for goal-specific evaluation
+    let additionalRubric = '';
+    if (this.userGoal) {
+      additionalRubric = this.nunjucks.renderString(GOAL_RUBRIC_TEMPLATE, {
+        goal: this.userGoal,
+      });
+    }
 
     while (roundNum < this.maxTurns) {
       try {
@@ -490,8 +505,10 @@ export class CustomProvider implements ApiProvider {
               test,
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              additionalRubric,
             );
             graderPassed = grade.pass;
+            storedGraderResult = grade;
             if (grade.tokensUsed) {
               totalTokenUsage.total += grade.tokensUsed.total || 0;
               totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
@@ -523,6 +540,12 @@ export class CustomProvider implements ApiProvider {
 
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
+
+          storedGraderResult = {
+            pass: false,
+            score: 0,
+            reason: objectiveScore?.rationale || 'Jailbreak goal achieved',
+          };
 
           // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
@@ -598,6 +621,7 @@ export class CustomProvider implements ApiProvider {
         redteamHistory: messagesToRedteamHistory(messages),
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
+        storedGraderResult: storedGraderResult,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
