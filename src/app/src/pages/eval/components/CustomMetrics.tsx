@@ -1,6 +1,5 @@
 import React from 'react';
 
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import './CustomMetrics.css';
 
 import Box from '@mui/material/Box';
@@ -94,7 +93,6 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
                   />
                 </span>
               </div>
-              {onMetricFilter && <FilterAltIcon className="filter-icon" sx={{ opacity: 0.35 }} />}
             </div>
           ) : null,
         )}
