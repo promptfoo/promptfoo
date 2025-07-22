@@ -3,7 +3,8 @@ title: 'AI Red Teaming for complete first-timers'
 description: 'A comprehensive guide to AI red teaming for beginners, covering the basics, culture building, and operational feedback loops'
 authors: [tabs]
 tags: [red-teaming, security, best-practices, getting-started]
-keywords: [AI red teaming, LLM security, prompt injection, AI vulnerabilities, red team culture, AI testing]
+keywords:
+  [AI red teaming, LLM security, prompt injection, AI vulnerabilities, red team culture, AI testing]
 date: 2025-07-22
 image: /img/blog/ai-red-teaming-hero.png
 imageAlt: 'Red panda mascot in a cybersecurity setting for AI red teaming'
@@ -18,6 +19,7 @@ Is this your first foray into AI red teaming? And probably red teaming in genera
 Red teaming is the process of simulating real-world attacks to identify vulnerabilities.
 
 AI red teaming the process of simulating real-world attacks to identify vulnerabilities of artificial intelligence systems. There are two scopes people often use to refer to AI red teaming:
+
 - Prompt injection of LLMs
 - A wider scope of testing pipelines, plugins, agents, and broader system dynamics
 
@@ -36,6 +38,7 @@ The icing on the cake: companies are (rightly) being required to avoid specific 
 ## AI red teaming vs traditional red teaming
 
 As the name would suggest, the focus of AI red teaming is going to revolve around AI (duh). The implications of this are:
+
 - A shift from deterministic to non-deterministic results; multiple attempts may be required for the same attack in order to determine the probability spread of results
 - There's a significant portion of efforts focused around testing models and their data
 - Metrics around toxicity, hallucination, and leaks rise in importance; techniques around eliciting these rise in important similarly
@@ -73,6 +76,7 @@ As previously mentioned, a strong red teaming will net the best results. Typical
 On that last point - many members of any audience interested in security testing will look for red teaming results - starting from [system cards](/blog/system-cards-go-hard/) all the way down the pipeline to post-production reports.
 
 The team at Promptfoo is invested in making red teaming a repeatable, sharable, and collaborative process.
+
 ## Feedback loops: operational AI red teaming
 
 The following stages describe - practically - an example of AI red teaming operations that can be used to establish a loop. Loops will differ between use cases, particularly at an organizational level.
@@ -97,4 +101,4 @@ Moving from reactive to resilient is the best thing you can do for the security 
 - [Red Team GPT](/blog/red-team-gpt/)
 - [Red Team Claude](/blog/red-team-claude/)
 - [Getting Started with Red Teaming](/docs/red-team/)
-- [OWASP Top 10 for LLMs](/blog/owasp-top-10-llms-tldr/) 
+- [OWASP Top 10 for LLMs](/blog/owasp-top-10-llms-tldr/)
