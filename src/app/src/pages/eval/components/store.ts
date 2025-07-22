@@ -433,7 +433,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const filterId = uuidv4();
 
     set((prevState) => {
-      const appliedCount = prevState.filters.appliedCount + (filter.value ? 1 : 0);
+      // For metadata filters, only count as applied if both field and value are present
+      const isApplied = filter.type === 'metadata' 
+        ? Boolean(filter.value && filter.field)
+        : Boolean(filter.value);
+      const appliedCount = prevState.filters.appliedCount + (isApplied ? 1 : 0);
 
       return {
         filters: {
@@ -458,7 +462,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
   removeFilter: (id: ResultsFilter['id']) => {
     set((prevState) => {
       const target = prevState.filters.values[id];
-      const appliedCount = prevState.filters.appliedCount - (target.value ? 1 : 0);
+      // For metadata filters, only count as applied if both field and value were present
+      const wasApplied = target.type === 'metadata' 
+        ? Boolean(target.value && target.field)
+        : Boolean(target.value);
+      const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
       const values = { ...prevState.filters.values };
       delete values[id];
 
@@ -495,8 +503,15 @@ export const useTableStore = create<TableState>()((set, get) => ({
   updateFilter: (filter: ResultsFilter) => {
     set((prevState) => {
       const target = prevState.filters.values[filter.id];
+      // For metadata filters, only count as applied if both field and value are present
+      const targetWasApplied = target.type === 'metadata' 
+        ? Boolean(target.value && target.field)
+        : Boolean(target.value);
+      const filterIsApplied = filter.type === 'metadata' 
+        ? Boolean(filter.value && filter.field)
+        : Boolean(filter.value);
       const appliedCount =
-        prevState.filters.appliedCount - (target.value ? 1 : 0) + (filter.value ? 1 : 0);
+        prevState.filters.appliedCount - (targetWasApplied ? 1 : 0) + (filterIsApplied ? 1 : 0);
 
       return {
         filters: {

@@ -396,7 +396,12 @@ function ResultsTable({
       filterMode,
       searchText: debouncedSearchText,
       // Only pass the filters that have been applied (have a value).
-      filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
+      // For metadata filters, both field and value must be present.
+      filters: Object.values(filters.values).filter((filter) => 
+        filter.type === 'metadata' 
+          ? Boolean(filter.value && filter.field)
+          : Boolean(filter.value)
+      ),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [

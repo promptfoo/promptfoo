@@ -239,16 +239,15 @@ function Filter({
         />
 
         {value.type === 'metadata' && (
-          <Dropdown
-            id={`${index}-field-select`}
+          <DebouncedTextField
+            id={`${index}-field-input`}
             label="Key"
-            values={filters.metadataFields.map((field) => ({
-              label: field,
-              value: field,
-            }))}
+            variant="outlined"
+            size="small"
             value={value.field || ''}
-            onChange={(e) => handleFieldChange(e)}
-            width={180}
+            onChange={handleFieldChange}
+            placeholder="Enter metadata key"
+            sx={{ width: 180 }}
           />
         )}
 
