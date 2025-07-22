@@ -1257,7 +1257,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   });
 
   it('should accept anthropicVersion parameter', async () => {
-    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
         anthropicVersion: 'vertex-2023-10-16',
         maxOutputTokens: 500,
@@ -1269,7 +1269,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         id: 'test-id',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-sonnet@20240229',
+        model: 'claude-3-5-sonnet-v2@20241022',
         content: [{ type: 'text', text: 'Response from Claude' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
@@ -1304,7 +1304,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   });
 
   it('should accept anthropic_version parameter (alternative format)', async () => {
-    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
         anthropic_version: 'vertex-2023-10-16-alt',
         max_tokens: 600,
@@ -1316,7 +1316,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         id: 'test-id',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-sonnet@20240229',
+        model: 'claude-3-5-sonnet-v2@20241022',
         content: [{ type: 'text', text: 'Response from Claude' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
@@ -1351,7 +1351,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   });
 
   it('should accept both max_tokens and maxOutputTokens parameters', async () => {
-    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
         // When both are provided, max_tokens should take precedence
         max_tokens: 700,
@@ -1366,7 +1366,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         id: 'test-id',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-sonnet@20240229',
+        model: 'claude-3-5-sonnet-v2@20241022',
         content: [{ type: 'text', text: 'Response from Claude' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
