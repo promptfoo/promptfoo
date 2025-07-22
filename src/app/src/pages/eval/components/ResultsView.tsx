@@ -633,7 +633,7 @@ export default function ResultsView({
                   anchorEl={filtersButtonRef.current}
                 />
               </>
-            ) : filters.options.metric.length > 0 ? (
+            ) : filters.options.metric.length > 1 ? (
               <MetricFilterSelector />
             ) : null}
 
