@@ -160,6 +160,12 @@ interface TableState {
    */
   updateFilter: (filter: ResultsFilter) => void;
 
+  /**
+   * Updates the logic operator for all filters
+   * @param logicOperator - The logic operator to set for all filters
+   */
+  updateAllFilterLogicOperators: (logicOperator: ResultsFilter['logicOperator']) => void;
+
   filters: {
     /**
      * The filters that are currently defined. Note that a filter is only applied once it has
@@ -521,6 +527,21 @@ export const useTableStore = create<TableState>()((set, get) => ({
             [filter.id]: filter,
           },
           appliedCount,
+        },
+      };
+    });
+  },
+
+  updateAllFilterLogicOperators: (logicOperator: ResultsFilter['logicOperator']) => {
+    set((prevState) => {
+      const updatedValues: Record<string, ResultsFilter> = {};
+      Object.entries(prevState.filters.values).forEach(([id, filter]) => {
+        updatedValues[id] = { ...filter, logicOperator };
+      });
+      return {
+        filters: {
+          ...prevState.filters,
+          values: updatedValues,
         },
       };
     });

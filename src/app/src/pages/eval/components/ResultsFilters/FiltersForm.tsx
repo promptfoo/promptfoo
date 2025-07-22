@@ -37,6 +37,7 @@ function Dropdown({
   value,
   onChange,
   width = 200,
+  disabled = false,
 }: {
   id: string;
   label?: string;
@@ -44,6 +45,7 @@ function Dropdown({
   value: string;
   onChange: (value: string) => void;
   width?: number | string;
+  disabled?: boolean;
 }) {
   return (
     <FormControl variant="outlined" size="small" sx={{ minWidth: width }}>
@@ -54,6 +56,7 @@ function Dropdown({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         label={label}
+        disabled={disabled}
         sx={{
           backgroundColor: 'background.paper',
           '& .MuiSelect-select': {
@@ -114,13 +117,15 @@ function DebouncedTextField({
 function Filter({
   value,
   index,
+  totalFilters,
   onClose,
 }: {
   value: ResultsFilter;
   index: number;
+  totalFilters: number;
   onClose: () => void;
 }) {
-  const { filters, updateFilter, removeFilter } = useTableStore();
+  const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
 
   /**
    * Updates the metadata field.
@@ -176,14 +181,23 @@ function Filter({
   );
 
   /**
-   * Updates the filter logic operator.
+   * Updates the filter logic operator. Filter logic operators are defined by the second filter
+   * and applied to all filters; in other words, filters are either joined by 'and' or 'or', but
+   * not both. This is designed to avoid more complex logic combinations which would require the user
+   * to define parenthetical logic.
    * @param logicOperator - The new filter logic operator.
    */
   const handleLogicOperatorChange = useCallback(
     (filterLogicOperator: ResultsFilter['logicOperator']) => {
-      updateFilter({ ...value, logicOperator: filterLogicOperator });
+      if (index === 1) {
+        // If this is the second filter, update all filters to have the same logic operator
+        updateAllFilterLogicOperators(filterLogicOperator);
+      } else {
+        // Otherwise just update this filter
+        updateFilter({ ...value, logicOperator: filterLogicOperator });
+      }
     },
-    [value, updateFilter],
+    [value, updateFilter, updateAllFilterLogicOperators, index],
   );
 
   const handleRemove = useCallback(() => {
@@ -222,18 +236,33 @@ function Filter({
       </IconButton>
 
       <Box sx={{ display: 'flex', gap: 1.5, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-        {index !== 0 && (
-          <Dropdown
-            id={`${index}-logic-operator-select`}
-            values={[
-              { label: 'And', value: 'and' },
-              { label: 'Or', value: 'or' },
-            ]}
-            value={value.logicOperator ?? 'and'}
-            onChange={(e) => handleLogicOperatorChange(e as ResultsFilter['logicOperator'])}
-            width={100}
-          />
-        )}
+        {index !== 0 &&
+          (() => {
+            // Get the second filter's logic operator to use for all filters when index > 1
+            const filtersList = Object.values(filters.values).sort((a, b) =>
+              a.id.localeCompare(b.id),
+            );
+            const secondFilterLogicOperator =
+              filtersList.length > 1 ? filtersList[1].logicOperator : null;
+            const displayValue =
+              index === 1
+                ? (value.logicOperator ?? 'and')
+                : (secondFilterLogicOperator ?? value.logicOperator ?? 'and');
+
+            return (
+              <Dropdown
+                id={`${index}-logic-operator-select`}
+                values={[
+                  { label: 'And', value: 'and' },
+                  { label: 'Or', value: 'or' },
+                ]}
+                value={displayValue}
+                onChange={(e) => handleLogicOperatorChange(e as ResultsFilter['logicOperator'])}
+                width={100}
+                disabled={index > 1}
+              />
+            );
+          })()}
 
         <Dropdown
           id={`${index}-filter-type-select`}
@@ -349,7 +378,10 @@ export default function FiltersForm({
     }
   }, [filters.values, open, handleAddFilter]);
 
-  const filterValuesList = useMemo(() => Object.values(filters.values), [filters.values]);
+  const filterValuesList = useMemo(() => {
+    // Sort by ID to ensure consistent ordering
+    return Object.values(filters.values).sort((a, b) => a.id.localeCompare(b.id));
+  }, [filters.values]);
 
   return (
     <Popover
@@ -379,7 +411,13 @@ export default function FiltersForm({
       <Box sx={{ px: 2, pt: 2, pb: 1, flex: 1, overflowY: 'auto' }}>
         <Stack direction="column" spacing={0.5}>
           {filterValuesList.map((filter, index) => (
-            <Filter key={filter.id} value={filter} index={index} onClose={onClose} />
+            <Filter
+              key={filter.id}
+              value={filter}
+              index={index}
+              totalFilters={filterValuesList.length}
+              onClose={onClose}
+            />
           ))}
         </Stack>
       </Box>
