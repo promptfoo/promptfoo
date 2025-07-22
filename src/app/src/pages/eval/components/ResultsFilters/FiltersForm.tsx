@@ -111,7 +111,15 @@ function DebouncedTextField({
   );
 }
 
-function Filter({ value, index, onClose }: { value: ResultsFilter; index: number; onClose: () => void }) {
+function Filter({
+  value,
+  index,
+  onClose,
+}: {
+  value: ResultsFilter;
+  index: number;
+  onClose: () => void;
+}) {
   const { filters, updateFilter, removeFilter } = useTableStore();
 
   /**
@@ -220,7 +228,7 @@ function Filter({ value, index, onClose }: { value: ResultsFilter; index: number
 
         <Dropdown
           id={`${index}-filter-type-select`}
-          label="Filter Type"
+          label="Field"
           values={[
             { label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' },
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
@@ -233,7 +241,7 @@ function Filter({ value, index, onClose }: { value: ResultsFilter; index: number
         {value.type === 'metadata' && (
           <Dropdown
             id={`${index}-field-select`}
-            label="Field"
+            label="Key"
             values={filters.metadataFields.map((field) => ({
               label: field,
               value: field,
