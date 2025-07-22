@@ -26,12 +26,7 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import {
-  PRESET_IDS,
-  type PresetId,
-  STRATEGY_PRESETS,
-  type StrategyPreset,
-} from './strategies/types';
+import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import { getEstimatedProbes, getStrategyId } from './strategies/utils';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 
@@ -370,7 +365,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const selectedPresetHasAgenticStrategies =
     selectedPreset &&
     selectedPreset !== 'Custom' &&
-    Object.values(STRATEGY_PRESETS[selectedPreset as PresetId]?.strategies ?? {}).some((s) =>
+    (STRATEGY_PRESETS[selectedPreset as PresetId]?.strategies ?? []).some((s) =>
       AGENTIC_STRATEGIES.includes(s as any),
     );
 
