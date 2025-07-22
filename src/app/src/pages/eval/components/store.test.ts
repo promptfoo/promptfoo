@@ -39,6 +39,7 @@ describe('useTableStore', () => {
           appliedCount: 0,
           options: {
             metric: [],
+            metadata: [],
           },
         },
       });
