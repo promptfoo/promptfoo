@@ -139,7 +139,16 @@ function Filter({
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      updateFilter({ ...value, type: filterType });
+      // Clear field when switching away from metadata type
+      const updatedFilter = { ...value, type: filterType };
+      if (filterType !== 'metadata') {
+        updatedFilter.field = undefined;
+      }
+      // Reset operator to 'equals' when changing types since metric only supports 'equals'
+      if (filterType === 'metric' && value.operator !== 'equals') {
+        updatedFilter.operator = 'equals';
+      }
+      updateFilter(updatedFilter);
     },
     [value, updateFilter],
   );
