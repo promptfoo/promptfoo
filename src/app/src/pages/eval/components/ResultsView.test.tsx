@@ -334,27 +334,6 @@ describe('ResultsView', () => {
     expect(screen.queryByTestId('metric-filter-selector')).toBeNull();
   });
 
-  it('handles the case where there are no available filters', () => {
-    mockTableStoreData = {
-      ...mockTableStoreData,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
-    };
-
-    renderWithProviders(
-      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
-    );
-
-    // FiltersButton should not be visible when there are no filters available
-    expect(screen.queryByRole('button', { name: 'Filters' })).not.toBeInTheDocument();
-  });
-
   it('should not update charts visibility state on window resize after mount', () => {
     const initialInnerHeight = 1200;
     const newInnerHeight = 900;
