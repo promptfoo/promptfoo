@@ -117,7 +117,6 @@ let mockTableStoreData = {
       metric: [] as string[],
       metadata: [] as string[],
     },
-    metadataFields: [] as string[],
   },
 };
 
@@ -222,7 +221,6 @@ describe('ResultsView', () => {
           metric: [] as string[],
           metadata: [] as string[],
         },
-        metadataFields: [] as string[],
       },
     };
 
@@ -346,7 +344,6 @@ describe('ResultsView', () => {
           metric: [],
           metadata: [],
         },
-        metadataFields: [],
       },
     };
 

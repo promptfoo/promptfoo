@@ -268,7 +268,9 @@ function Filter({
           id={`${index}-filter-type-select`}
           label="Field"
           values={[
-            { label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' },
+            ...(filters.options.metric.length > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]
+              : []),
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
           ]}
           value={value.type}
@@ -352,13 +354,13 @@ export default function FiltersForm({
    */
   const handleAddFilter = useCallback(() => {
     addFilter({
-      type: 'metric',
+      type: filters.options.metric.length > 0 ? 'metric' : 'metadata',
       operator: 'equals',
       // By default, the value is empty, which means the filter is not applied.
       // In other words, the filter is not applied until the user selects a value.
       value: '',
     });
-  }, [addFilter]);
+  }, [addFilter, filters.options.metric.length]);
 
   /**
    * Removes all filters and closes the popover.

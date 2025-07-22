@@ -41,7 +41,6 @@ describe('useTableStore', () => {
             metric: [],
             metadata: [],
           },
-          metadataFields: [],
         },
       });
     });

@@ -617,20 +617,16 @@ export default function ResultsView({
               />
             </Box>
 
-            {(filters.options.metric.length > 0 || filters.metadataFields.length > 0) && (
-              <>
-                <FiltersButton
-                  appliedFiltersCount={filters.appliedCount}
-                  onClick={() => setFiltersFormOpen(true)}
-                  ref={filtersButtonRef}
-                />
-                <FiltersForm
-                  open={filtersFormOpen}
-                  onClose={() => setFiltersFormOpen(false)}
-                  anchorEl={filtersButtonRef.current}
-                />
-              </>
-            )}
+            <FiltersButton
+              appliedFiltersCount={filters.appliedCount}
+              onClick={() => setFiltersFormOpen(true)}
+              ref={filtersButtonRef}
+            />
+            <FiltersForm
+              open={filtersFormOpen}
+              onClose={() => setFiltersFormOpen(false)}
+              anchorEl={filtersButtonRef.current}
+            />
 
             <Box
               sx={{

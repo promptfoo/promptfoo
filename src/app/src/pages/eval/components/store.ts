@@ -41,25 +41,6 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
-function computeAvailableMetadataFields(table: EvaluateTable | null): string[] {
-  if (!table || !table.body) {
-    return [];
-  }
-
-  const metadataFields = new Set<string>();
-
-  // Scan through all rows and outputs to find unique metadata fields
-  table.body.forEach((row) => {
-    row.outputs.forEach((output) => {
-      if (output?.metadata && typeof output.metadata === 'object') {
-        Object.keys(output.metadata).forEach((field) => metadataFields.add(field));
-      }
-    });
-  });
-
-  return Array.from(metadataFields).sort();
-}
-
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
@@ -182,10 +163,6 @@ interface TableState {
     options: {
       [key in ResultsFilterType]: string[];
     };
-    /**
-     * Available metadata fields extracted from eval results
-     */
-    metadataFields: string[];
   };
 }
 
@@ -287,7 +264,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
           metric: computeAvailableMetrics(table),
           metadata: [],
         },
-        metadataFields: computeAvailableMetadataFields(table),
       },
     })),
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
@@ -303,7 +279,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(table),
             metadata: [],
           },
-          metadataFields: computeAvailableMetadataFields(table),
         },
       }));
     } else {
@@ -318,7 +293,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(results.table),
             metadata: [],
           },
-          metadataFields: computeAvailableMetadataFields(results.table),
         },
       }));
     }
@@ -409,7 +383,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
               metric: computeAvailableMetrics(data.table),
               metadata: [],
             },
-            metadataFields: computeAvailableMetadataFields(data.table),
           },
         }));
 
@@ -432,7 +405,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
       metric: [],
       metadata: [],
     },
-    metadataFields: [],
   },
 
   addFilter: (filter) => {
