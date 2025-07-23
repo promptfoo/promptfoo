@@ -1,0 +1,49 @@
+# Example: Using ProviderTypeMap for different provider types
+# This configuration allows you to specify different providers for text and embedding operations
+
+prompts:
+  - "The Eiffel Tower is a famous landmark in {{location}}"
+
+providers:
+  - echo  # Main provider for generating outputs
+
+# Use defaultTest to configure providers for different assertion types
+defaultTest:
+  options:
+    provider:
+      # Text provider for model-graded assertions (answer-relevance, llm-rubric, etc.)
+      text:
+        id: azure:chat:gpt-4o-deployment
+        config:
+          apiHost: 'https://your-text.openai.azure.com'
+          # Add any other Azure-specific config here
+          
+      # Embedding provider for similarity assertions  
+      embedding:
+        id: azure:embedding:text-embedding-3-large
+        config:
+          apiHost: 'https://your-embedding.openai.azure.com'
+          # Add any other Azure-specific config here
+
+tests:
+  # This test uses the embedding provider for similarity checking
+  - vars:
+      location: "Paris"
+    assert:
+      - type: similar
+        value: "The Eiffel Tower is located in Paris, France"
+        threshold: 0.90
+        
+  # This test uses the text provider for answer relevance
+  - vars:
+      location: "London"  
+    assert:
+      - type: answer-relevance
+        value: "Should mention that the Eiffel Tower is NOT in London"
+        
+  # This test uses the text provider for LLM rubric
+  - vars:
+      location: "France"
+    assert:
+      - type: llm-rubric
+        value: "The output correctly identifies Paris as the location in France" 
