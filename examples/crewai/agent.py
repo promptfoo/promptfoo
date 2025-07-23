@@ -1,3 +1,7 @@
+# Note: This code has been consolidated into provider.py to avoid import issues
+# when running with promptfoo. The provider.py file contains both the agent
+# setup and the provider interface.
+
 import os
 
 from crewai import Agent, Crew, Task
@@ -9,7 +13,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 def get_recruitment_agent(model: str = "openai:gpt-4o") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
-    This agent’s goal: find the best Ruby on Rails + React candidates.
+    This agent's goal: find the best Ruby on Rails + React candidates.
     """
     agent = Agent(
         role="Recruiter",

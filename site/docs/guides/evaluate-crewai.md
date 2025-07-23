@@ -107,47 +107,42 @@ Now it’s time to set up the key Python packages and the Promptfoo CLI.
 In your project folder, run:
 
 ```
-pip install crewai openai python-dotenv
+pip install crewai
 npm install -g promptfoo
 ```
 
 Here’s what’s happening:
 
-- **`pip install crewai openai python-dotenv`** →
-  This installs the core Python libraries:
-  - `crewai`: for creating and managing multi-agent workflows.
-  - `openai`: for connecting to the OpenAI API.
-  - `python-dotenv`: for safely loading API keys from a `.env` file.
+- **`pip install crewai`** →
+  This installs CrewAI for creating and managing multi-agent workflows.
+  Note: The `openai` package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
 - **`npm install -g promptfoo`** →
   Installs Promptfoo globally using Node.js, so you can run its CLI commands anywhere.
+
+Optional: If you want to use `.env` files for API keys, also install:
+
+```
+pip install python-dotenv
+```
 
 **Verify the installation worked**
 
 Run these two quick checks:
 
 ```
-python3 -c "import crewai, openai, dotenv ; print('✅ Python libs ready')"
+python3 -c "import crewai ; print('✅ CrewAI ready')"
+promptfoo --version
 ```
 
 If everything’s installed correctly, you should see:
 
 ```
-Python libs ready
+✅ CrewAI ready
 ```
 
-Then check Promptfoo:
+And a version number from the promptfoo command (e.g., `0.97.0` or similar).
 
-```
-promptfoo --version
-```
-
-This should return something like:
-
-```
-0.116.7
-```
-
-With this, you’ve got a working Python + Node.js environment ready to run CrewAI agents and evaluate them with Promptfoo.
+With this, you've got a working Python + Node.js environment ready to run CrewAI agents and evaluate them with Promptfoo.
 
 ## Step 4: Initialize the Promptfoo Project
 
