@@ -144,12 +144,37 @@ export async function getGradingProvider(
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
   } else if (typeof provider === 'object') {
+    // First check if there's a type-specific override
     const typeValue = (provider as ProviderTypeMap)[type];
     if (typeValue) {
       // Defined as embedding, classification, or text record
       finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
     } else if ((provider as ProviderOptions).id) {
-      // Defined as ProviderOptions
+      // Check if this is a hybrid configuration (has id AND type-specific overrides)
+      const hasTypeOverrides = Object.keys(provider).some((key) =>
+        ['embedding', 'classification', 'text', 'moderation'].includes(key),
+      );
+
+      if (hasTypeOverrides && type !== 'text') {
+        // This is a hybrid config but we're asking for a non-text type that isn't overridden
+        // User configured a default provider with some type overrides, but not for the required type
+        const availableTypes = ['text']; // Default provider handles text
+        Object.keys(provider).forEach((key) => {
+          if (['embedding', 'classification', 'moderation'].includes(key)) {
+            availableTypes.push(key);
+          }
+        });
+
+        const helpMessage = getProviderTypeMismatchHelp(
+          type,
+          'text', // The main provider is for text
+          (provider as ProviderOptions).id,
+        );
+
+        throw new Error(helpMessage);
+      }
+
+      // Defined as ProviderOptions (use this as the default/text provider)
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
     } else if (Array.isArray(provider)) {
       throw new Error(
