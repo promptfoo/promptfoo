@@ -1,18 +1,19 @@
-import { render, screen, within, waitFor, waitForElementToBeRemoved } from '@testing-library/react';
 import React from 'react';
-import { useStore, DEFAULT_CONFIG } from '@app/stores/evalConfig';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+
+import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 import type {
   DerivedMetric,
-  ProviderOptions,
-  TestCase,
-  EvaluateOptions,
   EnvOverrides,
+  EvaluateOptions,
+  ProviderOptions,
   Scenario,
+  TestCase,
 } from '@promptfoo/types';
-import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 
 // Mock child components
 vi.mock('./ConfigureEnvButton', () => ({

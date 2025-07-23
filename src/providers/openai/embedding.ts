@@ -1,9 +1,10 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import type { ProviderEmbeddingResponse } from '../../types';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
 import { getTokenUsage } from './util';
+
+import type { ProviderEmbeddingResponse } from '../../types';
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {

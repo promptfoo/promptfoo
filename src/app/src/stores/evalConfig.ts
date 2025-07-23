@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types';
 
 export interface EvalConfigState {

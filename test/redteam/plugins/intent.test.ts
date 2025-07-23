@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
+
 import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({

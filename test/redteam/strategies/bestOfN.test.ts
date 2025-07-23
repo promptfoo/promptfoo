@@ -1,4 +1,5 @@
 import { addBestOfNTestCases } from '../../../src/redteam/strategies/bestOfN';
+
 import type { TestCaseWithPlugin } from '../../../src/types';
 
 describe('addBestOfNTestCases', () => {

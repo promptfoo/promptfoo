@@ -1,5 +1,5 @@
 import React from 'react';
-import Editor from 'react-simple-code-editor';
+
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -24,17 +24,20 @@ import RadioGroup from '@mui/material/RadioGroup';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import type { ProviderOptions } from '@promptfoo/types';
 import dedent from 'dedent';
+import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/components/prism-clike';
+
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
-import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 import 'prismjs/themes/prism.css';
+
+import Editor from 'react-simple-code-editor';
+import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 
 interface HttpAdvancedConfigurationProps {
   selectedTarget: ProviderOptions;

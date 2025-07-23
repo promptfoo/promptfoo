@@ -1,14 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import {
-  processFileReference,
-  getFinalTest,
   coerceString,
+  getFinalTest,
   loadFromJavaScriptFile,
+  processFileReference,
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import type { TestCase, Assertion, ApiProvider } from '../../src/types';
+
+import type { ApiProvider, Assertion, TestCase } from '../../src/types';
 
 jest.mock('fs');
 jest.mock('path');

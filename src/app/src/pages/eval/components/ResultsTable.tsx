@@ -1,12 +1,5 @@
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
 import React, { useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { Link, useNavigate } from 'react-router-dom';
+
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
 import {
@@ -16,6 +9,8 @@ import {
   type FilterMode,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
@@ -27,22 +22,30 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
 import yaml from 'js-yaml';
+import ReactMarkdown from 'react-markdown';
+import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import type { TruncatedTextProps } from './TruncatedText';
-import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import TruncatedText from './TruncatedText';
+import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+
+import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
+
 import ButtonGroup from '@mui/material/ButtonGroup';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
@@ -393,7 +396,10 @@ function ResultsTable({
       filterMode,
       searchText: debouncedSearchText,
       // Only pass the filters that have been applied (have a value).
-      filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
+      // For metadata filters, both field and value must be present.
+      filters: Object.values(filters.values).filter((filter) =>
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+      ),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [

@@ -1,17 +1,17 @@
 import compression from 'compression';
 import cors from 'cors';
 import 'dotenv/config';
-import type { Request, Response } from 'express';
-import express from 'express';
+
 import http from 'node:http';
 import path from 'node:path';
+
+import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
-import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
@@ -19,7 +19,6 @@ import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
-import type { EvalSummary } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
   getPrompts,
@@ -37,6 +36,10 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
+import type { Request, Response } from 'express';
+
+import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
+import type { EvalSummary } from '../types';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
