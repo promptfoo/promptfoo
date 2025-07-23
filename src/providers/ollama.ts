@@ -211,8 +211,11 @@ export class OllamaCompletionProvider implements ApiProvider {
       // Extract token usage from the final chunk (where done: true)
       const finalChunk = lines.find((chunk: OllamaCompletionJsonL) => chunk.done);
       let tokenUsage: Partial<TokenUsage> | undefined;
-      
-      if (finalChunk && (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)) {
+
+      if (
+        finalChunk &&
+        (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)
+      ) {
         const promptTokens = finalChunk.prompt_eval_count || 0;
         const completionTokens = finalChunk.eval_count || 0;
         tokenUsage = {
@@ -328,8 +331,11 @@ export class OllamaChatProvider implements ApiProvider {
       // Extract token usage from the final chunk (where done: true)
       const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
       let tokenUsage: Partial<TokenUsage> | undefined;
-      
-      if (finalChunk && (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)) {
+
+      if (
+        finalChunk &&
+        (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)
+      ) {
         const promptTokens = finalChunk.prompt_eval_count || 0;
         const completionTokens = finalChunk.eval_count || 0;
         tokenUsage = {

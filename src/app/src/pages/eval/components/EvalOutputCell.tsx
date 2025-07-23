@@ -328,9 +328,7 @@ function EvalOutputCell({
   if (tokenUsage?.cached) {
     tokenUsageDisplay = (
       <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-          tokenUsage.cached ?? 0,
-        )}{' '}
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
         (cached)
       </span>
     );
