@@ -38,6 +38,7 @@ function Dropdown({
   onChange,
   width = 200,
   disabled = false,
+  disabledValues = [],
 }: {
   id: string;
   label?: string;
@@ -46,6 +47,7 @@ function Dropdown({
   onChange: (value: string) => void;
   width?: number | string;
   disabled?: boolean;
+  disabledValues?: string[];
 }) {
   return (
     <FormControl variant="outlined" size="small" sx={{ minWidth: width }}>
@@ -64,9 +66,13 @@ function Dropdown({
           },
         }}
       >
-        {values.map((value) => (
-          <MenuItem key={value.value} value={value.value}>
-            {value.label}
+        {values.map((item) => (
+          <MenuItem 
+            key={item.value} 
+            value={item.value}
+            disabled={disabledValues.includes(item.value)}
+          >
+            {item.label}
           </MenuItem>
         ))}
       </Select>
@@ -126,6 +132,13 @@ function Filter({
   onClose: () => void;
 }) {
   const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
+
+  // Get list of already selected metric values (excluding current filter)
+  const selectedMetricValues = useMemo(() => {
+    return Object.values(filters.values)
+      .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
+      .map((filter) => filter.value);
+  }, [filters.values, value.id]);
 
   /**
    * Updates the metadata field.
@@ -320,6 +333,7 @@ function Filter({
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
+              disabledValues={selectedMetricValues}
             />
           ) : (
             <DebouncedTextField
