@@ -457,17 +457,15 @@ export const useTableStore = create<TableState>()((set, get) => ({
       const values = { ...prevState.filters.values };
       delete values[id];
 
-      // If we removed the filter with sortIndex === 1, reassign sortIndex values
-      // to ensure the next filter becomes the new controller
-      if (target.sortIndex === 1) {
-        const remainingFilters = Object.values(values).sort((a, b) => a.sortIndex - b.sortIndex);
-        remainingFilters.forEach((filter, index) => {
-          values[filter.id] = {
-            ...filter,
-            sortIndex: index + 1,
-          };
-        });
-      }
+      // Always reassign sortIndex values to ensure consecutive ordering (0, 1, 2, ...)
+      // This ensures that when any filter is removed, the remaining filters maintain proper ordering
+      const remainingFilters = Object.values(values).sort((a, b) => a.sortIndex - b.sortIndex);
+      remainingFilters.forEach((filter, index) => {
+        values[filter.id] = {
+          ...filter,
+          sortIndex: index,
+        };
+      });
 
       return {
         filters: {
