@@ -311,8 +311,11 @@ function EvalOutputCell({
     );
   }
 
-  if (output.tokenUsage?.completion) {
-    const tokPerSec = output.tokenUsage.completion / (output.latencyMs / 1000);
+  // Check for token usage in both output.tokenUsage and output.response?.tokenUsage
+  const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
+
+  if (tokenUsage?.completion) {
+    const tokPerSec = tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
       <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
     );
@@ -322,29 +325,29 @@ function EvalOutputCell({
     costDisplay = <span>${output.cost.toPrecision(2)}</span>;
   }
 
-  if (output.response?.tokenUsage?.cached) {
+  if (tokenUsage?.cached) {
     tokenUsageDisplay = (
       <span>
         {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-          output.response?.tokenUsage?.cached ?? 0,
+          tokenUsage.cached ?? 0,
         )}{' '}
         (cached)
       </span>
     );
-  } else if (output.response?.tokenUsage?.total) {
+  } else if (tokenUsage?.total) {
     const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.prompt ?? 0,
+      tokenUsage.prompt ?? 0,
     );
     const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.completion ?? 0,
+      tokenUsage.completion ?? 0,
     );
     const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.total ?? 0,
+      tokenUsage.total ?? 0,
     );
 
-    if (output.response?.tokenUsage?.completionDetails?.reasoning) {
+    if (tokenUsage.completionDetails?.reasoning) {
       const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-        output.response.tokenUsage.completionDetails.reasoning ?? 0,
+        tokenUsage.completionDetails.reasoning ?? 0,
       );
 
       tokenUsageDisplay = (
