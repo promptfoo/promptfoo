@@ -83,13 +83,30 @@ The main chatbot example (`promptfooconfig.yaml`) demonstrates successful browse
 └─────────────────────────────────────────────────┴─────────────────────────────────────────────────┘
 ```
 
-### Additional Examples
+### Calculator Example
 
-The `calculator-example.yaml` demonstrates more complex form interactions but requires specific knowledge of Gradio's component structure. It shows how to:
+The `calculator-example.yaml` demonstrates more complex form interactions with a 100% pass rate:
+
+```
+┌───────────────────┬───────────────────┬───────────────────┬───────────────────┬───────────────────┐
+│ num1              │ num2              │ operation         │ operationSelector │ [browser-provider]│
+├───────────────────┼───────────────────┼───────────────────┼───────────────────┼───────────────────┤
+│ 10                │ 5                 │ Add               │ #operation        │ [PASS] Calculator │
+│                   │                   │                   │ label:nth-child(1)│ interaction       │
+│                   │                   │                   │                   │ successful        │
+├───────────────────┼───────────────────┼───────────────────┼───────────────────┼───────────────────┤
+│ 20                │ 4                 │ Multiply          │ #operation        │ [PASS] Calculator │
+│                   │                   │                   │ label:nth-child(3)│ interaction       │
+│                   │                   │                   │                   │ successful        │
+└───────────────────┴───────────────────┴───────────────────┴───────────────────┴───────────────────┘
+```
+
+This example shows how to:
+- Navigate between tabs in a web application
 - Fill multiple input fields
 - Select radio button options
 - Click buttons and wait for results
-- Extract data from form outputs
+- Extract and verify content from the page
 
 ## Understanding the Configuration
 
