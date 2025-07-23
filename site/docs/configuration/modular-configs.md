@@ -51,7 +51,7 @@ defaultTest: file://configs/default-test.yaml
   config:
     temperature: 0.7
     max_tokens: 1000
-- id: claude-sonnet
+- id: claude-3-5-sonnet
   provider: anthropic:claude-3-5-sonnet-20241022
   config:
     temperature: 0.7
@@ -123,7 +123,7 @@ env: file://configs/env-prod.yaml
     temperature: 0.1
     max_tokens: 500
     requestsPerMinute: 100
-- id: claude-sonnet-prod
+- id: claude-3-5-sonnet-prod
   provider: # ...
   config:
     temperature: 0.1
