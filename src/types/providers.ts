@@ -228,10 +228,10 @@ export interface ProviderMetadata {
   // Basic provider information
   id: string;
   name: string;
-  
+
   // Supported operations
   supportedOperations: ProviderType[];
-  
+
   // Authentication requirements
   authentication: {
     required: boolean;
@@ -239,12 +239,12 @@ export interface ProviderMetadata {
     alternativeAuth?: string[]; // e.g., ["Azure CLI", "Client credentials"]
     helpText?: string;
   };
-  
+
   // Example configurations
   exampleConfigs?: {
     [key in ProviderType]?: string;
   };
-  
+
   // Additional help information
   documentation?: {
     url?: string;

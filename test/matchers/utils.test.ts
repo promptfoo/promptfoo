@@ -4,8 +4,6 @@ import {
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
 
-import type { ApiProvider, ProviderTypeMap } from '../../src/types';
-
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(

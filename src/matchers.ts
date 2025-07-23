@@ -31,7 +31,6 @@ import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
-import { providerMetadataRegistry, registerBuiltInProviders } from './providers/providerMetadataRegistry';
 
 import type {
   ApiClassificationProvider,
@@ -40,21 +39,13 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   Assertion,
-  CallApiContextParams,
   GradingConfig,
   GradingResult,
-  ProviderClassificationResponse,
-  ProviderEmbeddingResponse,
-  ProviderModerationResponse,
   ProviderOptions,
-  ProviderResponse,
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
 } from './types';
-
-// Initialize the provider metadata registry
-registerBuiltInProviders();
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -78,11 +69,12 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
 function getProviderTypeMismatchHelp(
   requiredType: ProviderType,
   configuredType: string,
-  configuredProvider: any
+  configuredProvider: any,
 ): string {
   const requiredTypeDisplay = requiredType === 'text' ? 'text generation (LLM)' : requiredType;
-  const configuredTypeDisplay = configuredType === 'text' ? 'text generation (LLM)' : configuredType;
-  
+  const configuredTypeDisplay =
+    configuredType === 'text' ? 'text generation (LLM)' : configuredType;
+
   // Get provider ID for better error message
   let providerId = 'unknown';
   if (typeof configuredProvider === 'string') {
@@ -96,11 +88,11 @@ function getProviderTypeMismatchHelp(
     text: ['answer-relevance', 'llm-rubric', 'model-graded-*', 'factuality'],
     embedding: ['similar', 'semantic similarity checks'],
     classification: ['classification-based assertions'],
-    moderation: ['moderation', 'harmful content detection']
+    moderation: ['moderation', 'harmful content detection'],
   };
 
   const examples = assertionTypeMap[requiredType] || [requiredType];
-  
+
   return dedent`
     Provider type mismatch: This assertion requires a ${requiredTypeDisplay} provider, but you configured a ${configuredTypeDisplay} provider.
     
@@ -170,15 +162,19 @@ export async function getGradingProvider(
     } else {
       // Check if user configured a different provider type
       const providerMap = provider as ProviderTypeMap;
-      const availableTypes = Object.keys(providerMap).filter(key => 
-        ['embedding', 'classification', 'text', 'moderation'].includes(key)
+      const availableTypes = Object.keys(providerMap).filter((key) =>
+        ['embedding', 'classification', 'text', 'moderation'].includes(key),
       );
-      
+
       if (availableTypes.length > 0 && !availableTypes.includes(type)) {
         // User configured a provider, but not for the required type
         const configuredType = availableTypes[0];
-        const helpMessage = getProviderTypeMismatchHelp(type, configuredType, providerMap[configuredType as ProviderType]);
-        
+        const helpMessage = getProviderTypeMismatchHelp(
+          type,
+          configuredType,
+          providerMap[configuredType as ProviderType],
+        );
+
         throw new Error(helpMessage);
       } else {
         // Generic error for truly invalid configurations
@@ -198,19 +194,39 @@ export async function getGradingProvider(
 }
 
 function getProviderConfigHelp(type: ProviderType, defaultProvider?: ApiProvider | null): string {
-  const supportedProviders = providerMetadataRegistry.findByOperation(type);
-  const examples: string[] = [];
-  
-  for (const id of supportedProviders.slice(0, 8)) { // Show first 8 examples
-    const metadata = providerMetadataRegistry.get(id);
-    if (metadata?.exampleConfigs?.[type]) {
-      examples.push(metadata.exampleConfigs[type]);
-    }
-  }
+  const examples: Record<ProviderType, string[]> = {
+    text: [
+      'openai:gpt-4o-mini',
+      'azure:chat:<your-deployment>',
+      'anthropic:claude-3-haiku-20240307',
+      'google:gemini-pro',
+      'replicate:llama-2-7b-chat',
+      'localai:chat:model-name',
+      'ollama:llama2',
+      'huggingface:text:gpt2',
+    ],
+    embedding: [
+      'openai:embedding:text-embedding-3-small',
+      'azure:embedding:<your-deployment>',
+      'voyage:voyage-3',
+      'cohere:embed-english-v3.0',
+      'localai:embedding:model-name',
+      'ollama:embedding:nomic-embed-text',
+      'huggingface:embedding:all-MiniLM-L6-v2',
+    ],
+    classification: [
+      'openai:gpt-4o-mini',
+      'azure:chat:<your-deployment>',
+      'anthropic:claude-3-haiku-20240307',
+    ],
+    moderation: ['openai:moderation:omni-moderation-latest', 'llama-guard'],
+  };
+
+  const providerExamples = examples[type] || ['<provider-id>'];
 
   return dedent`
     Valid ${type} providers include:
-      ${examples.join('\n      ')}
+      ${providerExamples.join('\n      ')}
     
     For more information on ${type} providers, see: https://promptfoo.dev/docs/providers/
   `;
@@ -238,16 +254,30 @@ async function getAndCheckProvider<T extends ProviderType>(
   if (!resolvedProvider) {
     if (isExplicitlyConfigured) {
       // Provider was explicitly configured but failed to load
-      const providerId = typeof provider === 'object' && provider.id ? provider.id : String(provider);
-      
+      const providerId =
+        typeof provider === 'object' && provider.id ? provider.id : String(provider);
+
       logger.error(dedent`
         Failed to load the configured ${providerType} provider: ${providerId}
       `);
-      
-      const metadata = providerMetadataRegistry.get(providerId);
+
+      // Simple provider-specific help
+      const providerBase = providerId.split(':')[0];
+      const commonProviderHelp: Record<string, string> = {
+        openai: 'Ensure OPENAI_API_KEY is set in your environment',
+        azure: 'Ensure AZURE_API_KEY and AZURE_API_BASE are set in your environment',
+        anthropic: 'Ensure ANTHROPIC_API_KEY is set in your environment',
+        voyage: 'Ensure VOYAGE_API_KEY is set in your environment',
+        cohere: 'Ensure COHERE_API_KEY is set in your environment',
+      };
+
+      const helpText =
+        commonProviderHelp[providerBase] ||
+        'Please check your provider configuration and API credentials';
+
       logger.info(dedent`
-        The provider "${providerId}" ${metadata ? 'requires authentication' : 'may be invalid or the provider may not be installed'}.
-        ${metadata?.authentication.helpText || ''}
+        The provider "${providerId}" may require authentication or may not be installed.
+        ${helpText}
       `);
 
       if (defaultProvider) {
@@ -283,7 +313,9 @@ async function getAndCheckProvider<T extends ProviderType>(
     if (isExplicitlyConfigured) {
       // Provider was explicitly configured with wrong type
       logger.error(errorMsg);
-      logger.info(`The configured provider "${resolvedProvider.id()}" cannot perform ${providerType} operations.`);
+      logger.info(
+        `The configured provider "${resolvedProvider.id()}" cannot perform ${providerType} operations.`,
+      );
 
       if (defaultProvider) {
         logger.info(`Falling back to default ${providerType} provider: ${defaultProvider.id()}`);
@@ -496,71 +528,81 @@ export function getApiKeyErrorHelp(
   originalError: string,
   isExplicitlyConfigured: boolean = false,
 ): string {
-  const metadata = providerMetadataRegistry.get(providerId);
-  
+  // Extract provider base (e.g., 'azure' from 'azure:embedding:deployment')
+  const providerBase = providerId.split(':')[0];
+
+  // Common provider-specific help messages
+  const providerHelp: Record<string, string> = {
+    openai: dedent`
+      To use OpenAI models, set your API key:
+        export OPENAI_API_KEY=your-api-key`,
+    azure: dedent`
+      For Azure OpenAI, you need to set:
+        export AZURE_API_KEY=your-api-key
+        export AZURE_API_BASE=https://your-resource.openai.azure.com`,
+    anthropic: dedent`
+      To use Anthropic models, set your API key:
+        export ANTHROPIC_API_KEY=your-api-key`,
+    voyage: dedent`
+      To use Voyage AI embeddings, set your API key:
+        export VOYAGE_API_KEY=your-api-key`,
+    cohere: dedent`
+      To use Cohere models, set your API key:
+        export COHERE_API_KEY=your-api-key`,
+  };
+
   if (isExplicitlyConfigured) {
-    if (metadata) {
-      // Provider was explicitly configured and has metadata
-      return dedent`
-        ${originalError}
-        
-        Your configured ${providerType} provider "${providerId}" requires authentication.
-        
-        ${metadata.authentication.helpText || `To authenticate with ${metadata.name}, check the documentation.`}
-        
-        ${metadata.documentation?.notes ? `\n${metadata.documentation.notes}` : ''}
-        
-        ${metadata.documentation?.url ? `For more information, see: ${metadata.documentation.url}` : ''}
-      `;
-    } else {
-      // Provider was explicitly configured but no metadata found
-      return dedent`
-        ${originalError}
-        
-        Your configured ${providerType} provider "${providerId}" requires authentication.
-        
-        Please check your provider configuration and ensure the necessary API keys or credentials are set.
-        
-        For more information on providers, see: https://promptfoo.dev/docs/providers/
-      `;
-    }
-  }
-
-  // Using default provider or no metadata available
-  const availableAlternatives = providerMetadataRegistry.getAvailableAlternatives(
-    providerId.split(':')[0],
-    providerType
-  );
-
-  if (availableAlternatives.size > 0) {
-    const alternativeNames: string[] = [];
-    const alternativeExamples: string[] = [];
-    
-    for (const [id, _envVars] of availableAlternatives) {
-      const altMetadata = providerMetadataRegistry.get(id);
-      if (altMetadata) {
-        alternativeNames.push(altMetadata.name);
-        const example = altMetadata.exampleConfigs?.[providerType];
-        if (example) {
-          alternativeExamples.push(`  ${example}`);
-        }
-      }
-    }
-
+    const specificHelp = providerHelp[providerBase] || '';
     return dedent`
       ${originalError}
       
-      It looks like you have credentials for: ${alternativeNames.join(', ')}
+      Your configured ${providerType} provider "${providerId}" requires authentication.
+      
+      ${specificHelp || 'Please check your provider configuration and ensure the necessary API keys or credentials are set.'}
+      
+      For more information on providers, see: https://promptfoo.dev/docs/providers/
+    `;
+  }
+
+  // For default providers, check what credentials are available
+  const availableProviders: string[] = [];
+  const alternativeExamples: string[] = [];
+
+  // Check common environment variables
+  if (getEnvString('AZURE_API_KEY')) {
+    availableProviders.push('Azure OpenAI');
+    if (providerType === 'embedding') {
+      alternativeExamples.push('azure:embedding:<your-deployment-name>');
+    } else if (providerType === 'text') {
+      alternativeExamples.push('azure:chat:<your-deployment-name>');
+    }
+  }
+
+  if (getEnvString('VOYAGE_API_KEY') && providerType === 'embedding') {
+    availableProviders.push('Voyage AI');
+    alternativeExamples.push('voyage:voyage-3');
+  }
+
+  if (getEnvString('COHERE_API_KEY') && providerType === 'embedding') {
+    availableProviders.push('Cohere');
+    alternativeExamples.push('cohere:embed-english-v3.0');
+  }
+
+  if (availableProviders.length > 0) {
+    return dedent`
+      ${originalError}
+      
+      It looks like you have credentials for: ${availableProviders.join(', ')}
       
       You can use one of these providers instead:
-      ${alternativeExamples.join('\n')}
+        ${alternativeExamples.join('\n        ')}
       
       Example configuration:
       \`\`\`yaml
       defaultTest:
         options:
           provider:
-            ${providerType}: ${alternativeExamples[0]?.trim() || 'provider-id-here'}
+            ${providerType}: ${alternativeExamples[0]}
       \`\`\`
       
       Or set the required credentials for the default provider.
@@ -568,28 +610,36 @@ export function getApiKeyErrorHelp(
   }
 
   // No alternatives available, provide generic help
-  const supportedProviders = providerMetadataRegistry.findByOperation(providerType);
-  const examples: string[] = [];
-  
-  for (const id of supportedProviders.slice(0, 5)) { // Show first 5 examples
-    const metadata = providerMetadataRegistry.get(id);
-    if (metadata?.exampleConfigs?.[providerType]) {
-      examples.push(`  ${metadata.exampleConfigs[providerType]}`);
-    }
-  }
+  const exampleProviders: Record<ProviderType, string[]> = {
+    text: [
+      'openai:gpt-4o-mini',
+      'azure:chat:<your-deployment>',
+      'anthropic:claude-3-haiku-20240307',
+    ],
+    embedding: [
+      'openai:embedding:text-embedding-3-small',
+      'azure:embedding:<your-deployment>',
+      'voyage:voyage-3',
+      'cohere:embed-english-v3.0',
+    ],
+    classification: ['openai:gpt-4o-mini', 'azure:chat:<your-deployment>'],
+    moderation: ['openai:moderation:omni-moderation-latest'],
+  };
+
+  const examples = exampleProviders[providerType] || [];
 
   return dedent`
     ${originalError}
     
     Available ${providerType} providers:
-    ${examples.join('\n')}
+      ${examples.join('\n      ')}
     
     To use a specific provider, configure it in your test:
     \`\`\`yaml
     defaultTest:
       options:
         provider:
-          ${providerType}: provider-id-here
+          ${providerType}: ${examples[0] || 'provider-id-here'}
     \`\`\`
     
     For more information on providers, see: https://promptfoo.dev/docs/providers/
