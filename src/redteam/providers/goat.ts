@@ -1,10 +1,17 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { getGoalRubric } from './prompts';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
+
 import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types';
 import type {
   ApiProvider,
@@ -13,15 +20,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
-import { getGoalRubric } from './prompts';
 import type { Message } from './shared';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -230,6 +230,7 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
+            modifiers: context?.test?.metadata?.modifiers,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
           response = await fetch(getRemoteGenerationUrl(), {
@@ -263,6 +264,7 @@ export default class GoatProvider implements ApiProvider {
             this.config.excludeTargetOutputFromAgenticAttackGeneration,
           failureReason,
           purpose: context?.test?.metadata?.purpose,
+          modifiers: context?.test?.metadata?.modifiers,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
