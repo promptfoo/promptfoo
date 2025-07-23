@@ -252,9 +252,7 @@ function Filter({
         {index !== 0 &&
           (() => {
             // Get the second filter's logic operator to use for all filters when index > 1
-            const filtersList = Object.values(filters.values).sort((a, b) =>
-              a.id.localeCompare(b.id),
-            );
+            const filtersList = Object.values(filters.values);
             const secondFilterLogicOperator =
               filtersList.length > 1 ? filtersList[1].logicOperator : null;
             const displayValue =
@@ -395,8 +393,8 @@ export default function FiltersForm({
   }, [filters.values, open, handleAddFilter]);
 
   const filterValuesList = useMemo(() => {
-    // Sort by ID to ensure consistent ordering
-    return Object.values(filters.values).sort((a, b) => a.id.localeCompare(b.id));
+    // Maintain insertion order - Object.values preserves insertion order in modern JS
+    return Object.values(filters.values);
   }, [filters.values]);
 
   return (
