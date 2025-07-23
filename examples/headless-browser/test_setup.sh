@@ -21,8 +21,7 @@ echo "✅ npm is installed"
 # Check if required Python packages are installed
 echo
 echo "Checking Python dependencies..."
-pip show gradio > /dev/null 2>&1
-if [ $? -ne 0 ]; then
+if ! pip show gradio > /dev/null 2>&1; then
     echo "📦 Installing Python dependencies..."
     pip install -r requirements.txt
 else

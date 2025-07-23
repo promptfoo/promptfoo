@@ -48,7 +48,7 @@ pip install -r requirements.txt
 python gradio_demo.py
 ```
 
-This will start a local server at http://localhost:7860
+This will start a local server at <http://localhost:7860>
 
 2. **In another terminal, run the browser tests**:
 
@@ -66,7 +66,7 @@ npx promptfoo@latest view
 
 The main chatbot example (`promptfooconfig.yaml`) demonstrates successful browser automation with a 100% pass rate:
 
-```
+```text
 ┌─────────────────────────────────────────────────┬─────────────────────────────────────────────────┐
 │ topic                                           │ [browser-provider] Tell me about {{topic}}      │
 ├─────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
@@ -87,7 +87,7 @@ The main chatbot example (`promptfooconfig.yaml`) demonstrates successful browse
 
 The `calculator-example.yaml` demonstrates more complex form interactions with a 100% pass rate:
 
-```
+```text
 ┌───────────────────┬───────────────────┬───────────────────┬───────────────────┬───────────────────┐
 │ num1              │ num2              │ operation         │ operationSelector │ [browser-provider]│
 ├───────────────────┼───────────────────┼───────────────────┼───────────────────┼───────────────────┤
@@ -102,6 +102,7 @@ The `calculator-example.yaml` demonstrates more complex form interactions with a
 ```
 
 This example shows how to:
+
 - Navigate between tabs in a web application
 - Fill multiple input fields
 - Select radio button options
