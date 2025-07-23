@@ -94,7 +94,8 @@
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
         "useExhaustiveDependencies": "off",
-        "noUnusedFunctionParameters": "off"
+        "noUnusedFunctionParameters": "off",
+        "useJsxKeyInIterable": "error"
       },
       "style": {
         "noNegationElse": "error",
