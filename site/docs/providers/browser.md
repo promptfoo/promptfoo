@@ -350,7 +350,7 @@ providers:
 Get detailed information about each action:
 
 ```bash
-LOG_LEVEL=debug npx promptfoo@latest eval
+npx promptfoo@latest eval --verbose
 ```
 
 #### 3. Take Screenshots
@@ -523,13 +523,13 @@ tests:
 
 ### Common Issues and Solutions
 
-| Issue                          | Cause                                      | Solution                                                                                     |
-| ------------------------------ | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| "Element not found"            | Selector incorrect or element not loaded   | • Verify selector in DevTools<br>• Add wait before action<br>• Check if element is in iframe |
-| "Timeout waiting for selector" | Page loads slowly or element never appears | • Increase timeout<br>• Add explicit wait actions<br>• Check for failed network requests     |
-| "Access denied" or 403 errors  | Anti-bot detection triggered               | • Use headless: false<br>• Add more delays<br>• Check if automation is allowed               |
-| "Click intercepted"            | Element covered by overlay                 | • Wait for overlays to disappear<br>• Scroll element into view<br>• Use force click option   |
-| Inconsistent results           | Timing or detection issues                 | • Add consistent delays<br>• Use stealth plugin<br>• Test during off-peak hours              |
+| Issue                          | Cause                                      | Solution                                                                                         |
+| ------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| "Element not found"            | Selector incorrect or element not loaded   | • Verify selector in DevTools<br />• Add wait before action<br />• Check if element is in iframe |
+| "Timeout waiting for selector" | Page loads slowly or element never appears | • Increase timeout<br />• Add explicit wait actions<br />• Check for failed network requests     |
+| "Access denied" or 403 errors  | Anti-bot detection triggered               | • Use headless: false<br />• Add more delays<br />• Check if automation is allowed               |
+| "Click intercepted"            | Element covered by overlay                 | • Wait for overlays to disappear<br />• Scroll element into view<br />• Use force click option   |
+| Inconsistent results           | Timing or detection issues                 | • Add consistent delays<br />• Use stealth plugin<br />• Test during off-peak hours              |
 
 ### Debugging Anti-Bot Detection
 
