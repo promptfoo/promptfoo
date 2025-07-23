@@ -86,9 +86,10 @@ export default function Review() {
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
-  
+
   // Auto-expand advanced config if there are existing test variables
-  const hasTestVariables = config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
+  const hasTestVariables =
+    config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
   const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -677,13 +678,13 @@ export default function Review() {
 
       <Divider sx={{ my: 4 }} />
 
-      <Accordion 
+      <Accordion
         expanded={isAdvancedConfigExpanded}
         onChange={(e, expanded) => setIsAdvancedConfigExpanded(expanded)}
-        sx={{ 
+        sx={{
           mb: 4,
           '&:before': { display: 'none' },
-          boxShadow: theme.shadows[1]
+          boxShadow: theme.shadows[1],
         }}
       >
         <AccordionSummary
@@ -691,24 +692,20 @@ export default function Review() {
           sx={{
             '& .MuiAccordionSummary-content': {
               alignItems: 'center',
-              gap: 2
-            }
+              gap: 2,
+            },
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TuneIcon fontSize="small" color="action" />
             <Typography variant="h6">Advanced Configuration</Typography>
-            <Chip 
-              label="Optional" 
-              size="small" 
-              variant="outlined"
-              sx={{ ml: 1 }}
-            />
+            <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
           </Box>
         </AccordionSummary>
         <AccordionDetails sx={{ pt: 0 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Configure advanced options that apply to all test cases. These settings are for power users who need fine-grained control over their red team evaluation.
+            Configure advanced options that apply to all test cases. These settings are for power
+            users who need fine-grained control over their red team evaluation.
           </Typography>
           <DefaultTestVariables />
         </AccordionDetails>

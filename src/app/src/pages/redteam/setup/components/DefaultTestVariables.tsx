@@ -131,11 +131,7 @@ export default function DefaultTestVariables() {
           <Typography variant="subtitle1" gutterBottom fontWeight="medium">
             Test Variables
           </Typography>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ lineHeight: 1.6 }}
-          >
+          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
             Set default variables that will be available across all test cases. Useful for
             parameterizing endpoints, API keys, language codes, etc.
           </Typography>

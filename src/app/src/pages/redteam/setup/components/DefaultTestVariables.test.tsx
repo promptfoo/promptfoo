@@ -54,9 +54,7 @@ describe('DefaultTestVariables Component', () => {
       ).toBeInTheDocument();
       expect(screen.getByText('Add Variable')).toBeInTheDocument();
       expect(screen.getByText('No test variables configured')).toBeInTheDocument();
-      expect(
-        screen.getByText('Click "Add Variable" to get started'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Click "Add Variable" to get started')).toBeInTheDocument();
     });
 
     it('renders with existing variables', () => {
