@@ -16,7 +16,7 @@ The Browser Provider should only be used when simpler alternatives are not possi
    - [HTTP Provider](/docs/providers/http) - For API calls and simple HTML responses
    - [WebSocket Provider](/docs/providers/websocket) - For real-time connections
    - [Custom Python Provider](/docs/providers/python) - For custom logic with existing libraries
-   - [Custom JavaScript Provider](/docs/providers/custom-function) - For Node.js-based solutions
+   - [Custom JavaScript Provider](/docs/providers/custom-api) - For Node.js-based solutions
 
 2. **Use Browser Provider only when:**
    - The application requires JavaScript execution to render content
