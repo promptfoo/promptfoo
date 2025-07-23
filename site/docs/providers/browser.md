@@ -4,46 +4,25 @@ sidebar_label: Web Browser
 
 # Browser Provider
 
-The Browser Provider enables automated web browser interactions for testing and data extraction.
+The Browser Provider enables automated web browser interactions for testing complex web applications and JavaScript-heavy websites where simpler providers are not sufficient.
 
-This provider uses [Playwright](https://playwright.dev/) to control a headless Chrome browser, allowing you to navigate pages, interact with elements, and extract data from JavaScript-heavy websites.
+This provider uses [Playwright](https://playwright.dev/) to control headless browsers, allowing you to navigate pages, interact with elements, and extract data from dynamic websites. Playwright supports Chromium (Chrome, Edge), Firefox, and WebKit (Safari engine) browsers.
 
-## ⚠️ Important Ethical Considerations
+## When to Use the Browser Provider
 
-Before using the Browser Provider, please consider these critical points:
+The Browser Provider should only be used when simpler alternatives are not possible:
 
-### When NOT to Use Browser Automation
+1. **Try these first:**
+   - [HTTP Provider](/docs/providers/http) - For API calls and simple HTML responses
+   - [WebSocket Provider](/docs/providers/websocket) - For real-time connections
+   - [Custom Python Provider](/docs/providers/python) - For custom logic with existing libraries
+   - [Custom JavaScript Provider](/docs/providers/custom-function) - For Node.js-based solutions
 
-1. **Try simpler methods first:**
-   - Use official APIs when available
-   - Try [HTTP Provider](/docs/providers/http) for simple requests
-   - Use [WebSocket Provider](/docs/providers/websocket) for real-time data
-   - Consider [custom providers](/docs/providers/python) in Python or JavaScript
-
-2. **Legal and ethical risks:**
-   - **You may get banned** - Websites can detect and block automated browsers
-   - **Respect robots.txt** - Check `https://example.com/robots.txt` before scraping
-   - **Follow Terms of Service** - Violating ToS can lead to legal action
-   - **Rate limiting is crucial** - Too many requests can overwhelm servers
-   - **Privacy matters** - Never scrape personal or sensitive data
-
-3. **Performance considerations:**
-   - Browser automation is 10-100x slower than direct API calls
-   - It consumes significant CPU and memory resources
-   - Network costs can be substantial for large-scale operations
-
-### Best Practices for Ethical Web Scraping
-
-If you must use browser automation:
-
-1. **Always check robots.txt first**
-2. **Implement rate limiting** (see examples below)
-3. **Use descriptive User-Agent headers**
-4. **Respect server resources** - Add delays between requests
-5. **Handle errors gracefully** - Don't retry failed requests aggressively
-6. **Be transparent** - Consider reaching out to website owners
-
-> **Note**: This tool is intended for legitimate testing, research, and automation purposes. Misuse can result in IP bans, legal consequences, and damage to your reputation.
+2. **Use Browser Provider only when:**
+   - The application requires JavaScript execution to render content
+   - You need to interact with complex UI elements (dropdowns, modals, etc.)
+   - Authentication requires browser-based workflows (OAuth, SSO)
+   - You need to test actual user interactions (clicks, typing, scrolling)
 
 ## Prerequisites
 
@@ -53,32 +32,7 @@ Playwright is a peer dependency of promptfoo, so you will need to install it sep
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
-### Helpful Tools
-
-#### Playwright Recorder Chrome Extension
-
-The easiest way to create browser automation scripts is to use the [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc). This tool allows you to:
-
-1. Record your browser interactions
-2. Generate Playwright code automatically
-3. Copy selectors for elements
-4. Export actions in multiple formats
-
-To use it:
-
-1. Install the extension from the Chrome Web Store
-2. Navigate to your target website
-3. Click the extension icon and start recording
-4. Perform your actions (click, type, etc.)
-5. Stop recording and copy the generated selectors/code
-6. Adapt the code for promptfoo's browser provider format
-
-#### Useful Resources
-
-- [Playwright Documentation](https://playwright.dev/docs/intro) - Official Playwright docs
-- [Playwright Selectors Guide](https://playwright.dev/docs/selectors) - Learn about CSS, text, and other selector strategies
-- [Playwright Best Practices](https://playwright.dev/docs/best-practices) - Tips for reliable automation
-- [Chrome DevTools Guide](https://developer.chrome.com/docs/devtools/) - For inspecting elements and finding selectors
+Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
 
 ## Configuration
 
@@ -272,6 +226,16 @@ Supported config options:
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
+### Browser Support
+
+While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), promptfoo's browser provider currently only implements Chromium support. This includes:
+
+- **Chrome** - Google's browser
+- **Edge** - Microsoft's Chromium-based browser  
+- **Chromium** - Open-source browser project
+
+The implementation uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities to avoid detection.
+
 ### Supported Browser Actions
 
 The `steps` array in the configuration can include the following actions:
@@ -308,264 +272,49 @@ Steps are executed sequentially, enabling complex web interactions.
 
 All string values in `args` support Nunjucks templating, allowing use of variables like `{{prompt}}`.
 
-## Ethical Usage Examples
+## Advanced Features
 
-### Example 1: Testing Your Own Application
+### Playwright Recorder
 
-The most ethical use case is testing your own applications:
+Playwright provides multiple ways to record browser interactions:
 
-```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Testing my own Gradio app locally
+#### Chrome Extension
+The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) can help you create browser automation scripts:
 
-providers:
-  - id: browser
-    config:
-      headless: false # Watch the test run
-      steps:
-        - action: navigate
-          args:
-            url: 'http://localhost:7860' # Your local app
-        - action: wait
-          args:
-            ms: 2000 # Reasonable delay
-        - action: type
-          args:
-            selector: 'textarea[data-testid="textbox"]'
-            text: '{{prompt}}'
-        - action: click
-          args:
-            selector: 'button:contains("Submit")'
-        - action: wait
-          args:
-            ms: 3000 # Wait for processing
-        - action: extract
-          args:
-            selector: '[data-testid="textbox"]:last-of-type'
-          name: response
-      transformResponse: 'extracted.response'
+1. Install the extension from the Chrome Web Store
+2. Navigate to your target website
+3. Click the extension icon and start recording
+4. Perform your actions (click, type, etc.)
+5. Stop recording and copy the generated selectors/code
+6. Adapt the code for promptfoo's browser provider format
 
-tests:
-  - vars:
-      prompt: 'Hello, how are you?'
-    assert:
-      - type: contains
-        value: 'response'
+#### Playwright Inspector (All Browsers)
+Alternatively, use Playwright's built-in recorder that works with all supported browsers:
+
+```bash
+npx playwright codegen https://example.com
 ```
 
-### Example 2: Responsible Web Scraping with Rate Limiting
+This opens an interactive browser window where you can perform actions and see generated code in real-time. You can choose between Chromium, Firefox, or WebKit.
 
-If you must scrape external sites, here's how to do it responsibly:
+### Selector Strategies
 
-```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Responsible scraping with rate limiting
+Playwright supports various selector strategies:
 
-providers:
-  - id: browser
-    config:
-      headless: true
-      steps:
-        # Always start with a delay to be respectful
-        - action: wait
-          args:
-            ms: 5000 # 5 second initial delay
+| Strategy | Example                          | Description                   |
+| -------- | -------------------------------- | ----------------------------- |
+| CSS      | `#submit-button`                 | Standard CSS selectors        |
+| Text     | `text=Submit`                    | Find elements by text content |
+| Role     | `role=button[name="Submit"]`     | ARIA role-based selectors     |
+| Test ID  | `data-testid=submit`             | Data attribute selectors      |
+| XPath    | `xpath=//button[@type="submit"]` | XPath expressions             |
 
-        - action: navigate
-          args:
-            url: '{{url}}'
+For the most reliable selectors:
+- Prefer stable attributes like IDs and data-testid
+- Use role-based selectors for accessibility
+- Avoid position-based selectors that can break with layout changes
 
-        # Wait for page to fully load
-        - action: wait
-          args:
-            ms: 3000
-
-        # Extract only necessary data
-        - action: extract
-          args:
-            selector: 'h1'
-          name: title
-
-        # Another delay before any additional requests
-        - action: wait
-          args:
-            ms: 5000
-
-      transformResponse: |
-        return {
-          output: extracted.title,
-          metadata: {
-            scraped_at: new Date().toISOString(),
-            user_agent: 'PromptfooBot/1.0 (Testing; Contact: your-email@example.com)'
-          }
-        };
-
-# Important: Test with very few requests
-tests:
-  - vars:
-      url: 'https://example.com'
-    # Add delays between test runs
-    delay: 10000 # 10 seconds between tests
-```
-
-## Testing Local Applications (Recommended)
-
-The best practice is to test against applications you control. Here's how to set up a simple test environment:
-
-```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Testing a local demo application
-
-providers:
-  - id: browser
-    config:
-      headless: false # See what's happening
-      steps:
-        - action: navigate
-          args:
-            url: 'http://localhost:3000/demo'
-
-        - action: type
-          args:
-            selector: '#user-input'
-            text: '{{input}}'
-
-        - action: click
-          args:
-            selector: '#submit-button'
-
-        - action: waitForNewChildren
-          args:
-            parentSelector: '#results-container'
-            timeout: 10000
-
-        - action: extract
-          args:
-            selector: '#results-container .result-item'
-          name: results
-
-      transformResponse: 'extracted.results'
-
-scenarios:
-  test-functionality:
-    tests:
-      - vars:
-          input: 'test query 1'
-        assert:
-          - type: not-empty
-
-      - vars:
-          input: 'test query 2'
-        assert:
-          - type: contains
-            value: 'expected result'
-```
-
-## Testing Streamlit applications
-
-Streamlit applications follow a common pattern where `data-testid` attributes are used to identify elements.
-
-Here's an example configuration:
-
-```yaml
-providers:
-  - id: browser
-    config:
-      headless: true # set to false to see the browser
-      steps:
-        # Load the page - make sure you get the full URL if it's in an iframe!
-        - action: navigate
-          args:
-            url: 'https://doc-chat-llm.streamlit.app/~/+/'
-        # Enter the message and press enter
-        - action: type
-          args:
-            selector: 'textarea'
-            text: '{{prompt}} <enter>'
-        # Wait for the response
-        - action: wait
-          args:
-            ms: 5000
-        # Read the response
-        - action: extract
-          args:
-            selector: 'div.stChatMessage:last-of-type'
-          name: response
-      transformResponse: 'extracted.response'
-```
-
-## Selector Strategies
-
-Choosing the right selectors is crucial for reliable automation. Here are common strategies:
-
-### 1. ID Selectors (Most Reliable)
-
-```yaml
-selector: '#submit-button' # <button id="submit-button">
-```
-
-### 2. Data Attributes
-
-```yaml
-selector: '[data-testid="user-input"]' # <input data-testid="user-input">
-```
-
-### 3. Class Selectors
-
-```yaml
-selector: '.btn-primary' # <button class="btn-primary">
-```
-
-### 4. Attribute Selectors
-
-```yaml
-selector: 'input[name="email"]'  # <input name="email">
-selector: 'button[type="submit"]'  # <button type="submit">
-```
-
-### 5. Text Content (Playwright-specific)
-
-```yaml
-selector: 'text=Submit'  # Finds element containing "Submit"
-selector: 'button:has-text("Submit")'  # Button containing "Submit"
-```
-
-### 6. CSS Combinators
-
-```yaml
-selector: '#form > input:first-child'  # Direct child
-selector: '.container .result-item'     # Descendant
-selector: 'h2 + p'                      # Adjacent sibling
-```
-
-### 7. Pseudo-selectors
-
-```yaml
-selector: 'button:visible'              # Only visible buttons
-selector: '.item:nth-child(3)'          # Third item
-selector: 'input:not([disabled])'       # Enabled inputs only
-```
-
-### Tips for Reliable Selectors
-
-1. **Prefer stable attributes**: IDs and data-testid are less likely to change
-2. **Avoid position-based selectors**: `:nth-child()` can break if layout changes
-3. **Use the Playwright Recorder**: It suggests optimal selectors
-4. **Test selectors in DevTools**: Press F12, use Console with `document.querySelector()`
-5. **Be specific but not overly so**: Balance uniqueness with flexibility
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-| Issue                               | Cause                                          | Solution                                                                                                             |
-| ----------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| "Element not found"                 | Selector is incorrect or element hasn't loaded | • Use DevTools to verify selector<br>• Add `wait` before the action<br>• Check if element is in an iframe            |
-| "Timeout waiting for selector"      | Page loads slowly or element never appears     | • Increase timeout in action<br>• Add explicit `wait` actions<br>• Check network tab for failed requests             |
-| Actions work locally but fail in CI | Different environment or timing                | • Set `headless: false` locally to match CI<br>• Add more explicit waits<br>• Check for environment-specific content |
-| "Click intercepted"                 | Another element is covering the target         | • Wait for overlays to disappear<br>• Scroll element into view first<br>• Use JavaScript click as last resort        |
-
-### Debugging Techniques
+### Debugging
 
 #### 1. Disable Headless Mode
 
@@ -588,7 +337,7 @@ LOG_LEVEL=debug npx promptfoo@latest eval
 
 #### 3. Take Screenshots
 
-Capture the page state when something goes wrong:
+Capture the page state during execution:
 
 ```yaml
 steps:
@@ -597,297 +346,82 @@ steps:
       url: 'https://example.com'
   - action: screenshot
     args:
-      path: 'debug-1.png' # See what loaded
-  - action: click
-    args:
-      selector: '#button'
-  - action: screenshot
-    args:
-      path: 'debug-2.png' # See result of click
+      path: 'debug-{{_attempt}}.png'
 ```
 
-#### 4. Test Selectors in Browser Console
+### Performance Optimization
 
-Before using a selector in your config, test it:
+1. **Use headless mode in production**: It's faster and uses fewer resources
+2. **Minimize wait times**: Only wait as long as necessary
+3. **Batch operations**: Group related actions together
+4. **Reuse browser contexts**: For multiple tests against the same site
 
-```javascript
-// In browser DevTools console (F12)
-document.querySelector('your-selector'); // Should return the element
-document.querySelectorAll('your-selector').length; // Check how many match
-```
+## Example: Testing a Login Flow
 
-### Dealing with Dynamic Content
-
-#### Iframes
-
-If elements are inside an iframe, you may need to navigate directly to the iframe URL:
-
-```yaml
-# Instead of the parent page
-- action: navigate
-  args:
-    url: 'https://example.com' # Parent page
-
-# Navigate directly to iframe content
-- action: navigate
-  args:
-    url: 'https://example.com/embedded-content' # Iframe URL
-```
-
-#### AJAX/Dynamic Loading
-
-For content loaded after page load:
-
-```yaml
-# Option 1: Wait for specific element
-- action: waitForNewChildren
-  args:
-    parentSelector: '#results'
-    timeout: 10000
-
-# Option 2: Fixed wait
-- action: wait
-  args:
-    ms: 3000
-```
-
-#### Single Page Applications (SPAs)
-
-For React, Vue, Angular apps:
-
-```yaml
-# Wait for app to initialize
-- action: navigate
-  args:
-    url: 'https://spa-example.com'
-- action: wait
-  args:
-    ms: 2000 # Let JavaScript framework load
-# Now interact with the app
-```
-
-## Best Practices for Browser Automation
-
-### 1. Check robots.txt Before Scraping
-
-Always verify that your automation is allowed:
-
-```javascript
-// Example robots.txt checker
-async function checkRobotsTxt(url) {
-  const robotsUrl = new URL('/robots.txt', url).href;
-  const response = await fetch(robotsUrl);
-  const text = await response.text();
-
-  // Parse and respect the rules
-  console.log('Robots.txt:', text);
-}
-```
-
-### 2. Implement Proper Rate Limiting
-
-Space out your requests to avoid overwhelming servers:
-
-```yaml
-providers:
-  - id: browser
-    config:
-      steps:
-        # Initial delay
-        - action: wait
-          args:
-            ms: 3000
-
-        # Navigate
-        - action: navigate
-          args:
-            url: '{{url}}'
-
-        # Always wait between actions
-        - action: wait
-          args:
-            ms: 2000
-
-        # Perform action
-        - action: click
-          args:
-            selector: '#button'
-
-        # Final delay before next request
-        - action: wait
-          args:
-            ms: 5000
-```
-
-### 3. Use Descriptive User Agents
-
-Identify your automation clearly:
-
-```yaml
-providers:
-  - id: browser
-    config:
-      userAgent: 'PromptfooBot/1.0 (Testing; Contact: your-email@example.com)'
-```
-
-### 4. Handle Errors Gracefully
-
-Implement proper error handling in your transformResponse:
-
-```yaml
-transformResponse: |
-  try {
-    if (!extracted.content) {
-      return {
-        output: 'No content found',
-        error: 'Content extraction failed'
-      };
-    }
-    return {
-      output: extracted.content,
-      metadata: {
-        extractedAt: new Date().toISOString(),
-        success: true
-      }
-    };
-  } catch (error) {
-    return {
-      output: '',
-      error: error.message,
-      metadata: {
-        failed: true,
-        reason: 'Transform error'
-      }
-    };
-  }
-```
-
-### 5. Test Incrementally
-
-Start with simple tests and gradually increase complexity:
-
-```yaml
-# Start simple
-tests:
-  - vars:
-      url: 'http://localhost:3000'
-    assert:
-      - type: not-empty
-
-# Then add more complex scenarios
-scenarios:
-  navigation-test:
-    tests:
-      - vars:
-          action: 'click-button'
-        assert:
-          - type: contains
-            value: 'Success'
-```
-
-### 6. Monitor Resource Usage
-
-Browser automation can be resource-intensive. Monitor and limit:
-
-```yaml
-providers:
-  - id: browser
-    config:
-      timeoutMs: 30000 # Set reasonable timeouts
-      maxConcurrency: 1 # Limit concurrent browsers
-```
-
-### 7. Alternative Approaches
-
-Before using browser automation, consider these alternatives:
-
-| Method          | When to Use              | Pros                     | Cons                       |
-| --------------- | ------------------------ | ------------------------ | -------------------------- |
-| HTTP API        | When an API is available | Fast, reliable, official | May require authentication |
-| HTTP Provider   | For simple requests      | Lightweight, fast        | Can't handle JavaScript    |
-| WebSocket       | For real-time data       | Efficient for streams    | Complex setup              |
-| Custom Provider | For specific needs       | Full control             | Requires coding            |
-
-### 8. Legal and Ethical Checklist
-
-Before running browser automation:
-
-- [ ] Check if the website has an API
-- [ ] Read the website's Terms of Service
-- [ ] Review robots.txt
-- [ ] Implement rate limiting
-- [ ] Use descriptive User-Agent
-- [ ] Only collect necessary data
-- [ ] Secure any collected data
-- [ ] Consider reaching out to website owner
-- [ ] Document your practices
-- [ ] Be prepared to stop if requested
-
-Remember: Just because you _can_ automate something doesn't mean you _should_. Always prioritize ethical practices and respect for website owners and users.
-
-## Quick Reference
-
-### Essential Setup
-
-```bash
-# Install dependencies
-npm install playwright @playwright/browser-chromium
-
-# Run with debugging
-LOG_LEVEL=debug npx promptfoo@latest eval
-```
-
-### Basic Configuration Template
+Here's a complete example testing a login workflow:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Browser automation test
+description: Test login functionality
 
 prompts:
-  - 'Search for: {{query}}'
+  - 'Login with username {{username}} and password {{password}}'
 
 providers:
   - id: browser
     config:
       headless: true
       steps:
-        - action: wait
-          args: { ms: 2000 } # Initial delay
         - action: navigate
-          args: { url: 'https://example.com' }
+          args:
+            url: 'https://example.com/login'
+        
         - action: type
           args:
-            selector: '#search'
-            text: '{{query}}'
+            selector: '#username'
+            text: '{{username}}'
+        
+        - action: type
+          args:
+            selector: '#password'
+            text: '{{password}}'
+        
         - action: click
-          args: { selector: '#submit' }
+          args:
+            selector: 'button[type="submit"]'
+        
         - action: wait
-          args: { ms: 3000 } # Wait for results
+          args:
+            ms: 2000
+        
         - action: extract
           args:
-            selector: '.result'
-          name: results
-      transformResponse: 'extracted.results'
+            selector: '.welcome-message'
+          name: welcomeText
+      
+      transformResponse: |
+        return {
+          output: extracted.welcomeText,
+          success: extracted.welcomeText.includes('Welcome')
+        };
 
 tests:
   - vars:
-      query: 'test search'
+      username: 'testuser'
+      password: 'testpass123'
     assert:
       - type: javascript
-        value: output.length > 0
+        value: output.success === true
 ```
 
-### Playwright Resources
+## Useful Resources
 
-- 📖 [Official Documentation](https://playwright.dev/docs/intro)
-- 🎥 [Video Tutorials](https://playwright.dev/docs/videos)
-- 🔧 [Playwright Recorder Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc)
-- 💬 [Community Discord](https://aka.ms/playwright-discord)
-
-### Remember
-
-✅ **Do**: Test your own applications, use APIs when available, implement rate limiting  
-❌ **Don't**: Ignore robots.txt, scrape personal data, overwhelm servers
+- [Playwright Documentation](https://playwright.dev/docs/intro) - Official Playwright docs
+- [Playwright Browsers Guide](https://playwright.dev/docs/browsers) - Detailed information about supported browsers
+- [Playwright Selectors Guide](https://playwright.dev/docs/selectors) - Learn about CSS, text, and other selector strategies
+- [Playwright Best Practices](https://playwright.dev/docs/best-practices) - Tips for reliable automation
+- [Playwright Inspector](https://playwright.dev/docs/inspector) - Interactive tool for authoring and debugging tests
+- [Chrome DevTools Guide](https://developer.chrome.com/docs/devtools/) - For inspecting elements and finding selectors
 
 ---
 
