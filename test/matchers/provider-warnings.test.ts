@@ -11,7 +11,7 @@ describe('Provider Warning System - getApiKeyErrorHelp', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetEnvString = getEnvString as jest.MockedFunction<typeof getEnvString>;
-    mockGetEnvString.mockReturnValue(undefined);
+    mockGetEnvString.mockReturnValue('');  // Return empty string instead of undefined
     
     // Save original env
     originalEnv = process.env;
@@ -224,7 +224,7 @@ describe('Provider Warning System - getApiKeyErrorHelp', () => {
     it('should not suggest alternatives when none are available', () => {
       // Clear all env vars for this test
       process.env = {};
-      mockGetEnvString.mockReturnValue(undefined);
+      mockGetEnvString.mockReturnValue('');  // Return empty string instead of undefined
 
       const help = getApiKeyErrorHelp(
         'openai:embedding:text-embedding-3-large',

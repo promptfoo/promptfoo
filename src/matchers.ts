@@ -75,6 +75,56 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   return dotProduct / (vecAMagnitude * vecBMagnitude);
 }
 
+function getProviderTypeMismatchHelp(
+  requiredType: ProviderType,
+  configuredType: string,
+  configuredProvider: any
+): string {
+  const requiredTypeDisplay = requiredType === 'text' ? 'text generation (LLM)' : requiredType;
+  const configuredTypeDisplay = configuredType === 'text' ? 'text generation (LLM)' : configuredType;
+  
+  // Get provider ID for better error message
+  let providerId = 'unknown';
+  if (typeof configuredProvider === 'string') {
+    providerId = configuredProvider;
+  } else if (configuredProvider?.id) {
+    providerId = configuredProvider.id;
+  }
+
+  // Map of what each assertion type needs
+  const assertionTypeMap: Record<ProviderType, string[]> = {
+    text: ['answer-relevance', 'llm-rubric', 'model-graded-*', 'factuality'],
+    embedding: ['similar', 'semantic similarity checks'],
+    classification: ['classification-based assertions'],
+    moderation: ['moderation', 'harmful content detection']
+  };
+
+  const examples = assertionTypeMap[requiredType] || [requiredType];
+  
+  return dedent`
+    Provider type mismatch: This assertion requires a ${requiredTypeDisplay} provider, but you configured a ${configuredTypeDisplay} provider.
+    
+    You configured:
+      ${configuredType}: ${providerId}
+    
+    But this assertion (${examples.join(', ')}) needs a ${requiredType} provider.
+    
+    To fix this, add a ${requiredType} provider to your configuration:
+    
+    \`\`\`yaml
+    defaultTest:
+      options:
+        provider:
+          ${configuredType}: ${providerId}  # Your current configuration
+          ${requiredType}: ${requiredType === 'text' ? 'azure:chat:<your-gpt-deployment>' : `azure:${requiredType}:<your-deployment>`}  # Add this
+    \`\`\`
+    
+    Or use a different assertion type that works with ${configuredTypeDisplay} providers.
+    
+    For more information on provider types, see: https://promptfoo.dev/docs/providers/
+  `;
+}
+
 async function loadFromProviderOptions(provider: ProviderOptions) {
   invariant(
     typeof provider === 'object',
@@ -118,13 +168,28 @@ export async function getGradingProvider(
         )} is not nested in an array.`,
       );
     } else {
-      throw new Error(
-        `Invalid provider definition for output type '${type}': ${JSON.stringify(
-          provider,
-          null,
-          2,
-        )}`,
+      // Check if user configured a different provider type
+      const providerMap = provider as ProviderTypeMap;
+      const availableTypes = Object.keys(providerMap).filter(key => 
+        ['embedding', 'classification', 'text', 'moderation'].includes(key)
       );
+      
+      if (availableTypes.length > 0 && !availableTypes.includes(type)) {
+        // User configured a provider, but not for the required type
+        const configuredType = availableTypes[0];
+        const helpMessage = getProviderTypeMismatchHelp(type, configuredType, providerMap[configuredType as ProviderType]);
+        
+        throw new Error(helpMessage);
+      } else {
+        // Generic error for truly invalid configurations
+        throw new Error(
+          `Invalid provider definition for output type '${type}': ${JSON.stringify(
+            provider,
+            null,
+            2,
+          )}`,
+        );
+      }
     }
   } else {
     finalProvider = defaultProvider;
