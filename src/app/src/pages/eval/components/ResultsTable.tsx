@@ -20,6 +20,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import { alpha } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -1089,8 +1090,7 @@ function ResultsTable({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: (theme) =>
-              theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.8)',
+            backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
             zIndex: 1000,
             opacity: isFetching ? 1 : 0,
             pointerEvents: isFetching ? 'auto' : 'none',

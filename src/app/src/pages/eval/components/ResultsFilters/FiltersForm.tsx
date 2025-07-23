@@ -66,15 +66,13 @@ function Dropdown({
           },
         }}
       >
-        {values.map((item) => (
-          <MenuItem
-            key={item.value}
-            value={item.value}
-            disabled={disabledValues.includes(item.value)}
-          >
-            {item.label}
-          </MenuItem>
-        ))}
+        {values
+          .filter((item) => !disabledValues.includes(item.value))
+          .map((item) => (
+            <MenuItem key={item.value} value={item.value}>
+              {item.label}
+            </MenuItem>
+          ))}
       </Select>
     </FormControl>
   );
@@ -134,11 +132,9 @@ function Filter({
   const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
-  const selectedMetricValues = useMemo(() => {
-    return Object.values(filters.values)
-      .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
-      .map((filter) => filter.value);
-  }, [filters.values, value.id]);
+  const selectedMetricValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
+    .map((filter) => filter.value);
 
   /**
    * Updates the metadata field.
@@ -206,8 +202,7 @@ function Filter({
         // If this is the second filter (by sortIndex), update all filters to have the same logic operator
         updateAllFilterLogicOperators(filterLogicOperator);
       } else {
-        // Otherwise just update this filter
-        updateFilter({ ...value, logicOperator: filterLogicOperator });
+        // noop:  this state should never be reached because the caller is disabled when index > 1.
       }
     },
     [value, updateFilter, updateAllFilterLogicOperators],
