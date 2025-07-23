@@ -14,6 +14,7 @@ async def call_agent(client, agent_name, input_text, model):
     )
     return run.output[0].parts[0].content
 
+
 # Main orchestrator function to run full book creation pipeline
 async def main(title="The Quantum Cat's Journey", model="gpt-4o", progress_callback=None):
     async with Client(base_url="http://localhost:8000") as client:
@@ -48,17 +49,22 @@ async def main(title="The Quantum Cat's Journey", model="gpt-4o", progress_callb
             progress_callback(0.85)
 
         # Step 5: Export final book to PDF format
+        # Best practice: wrap long lines and paginate if needed.
+        # This snippet keeps it simple with truncation for readability.
+        # For production, consider adding proper line wrapping and pagination to handle longer content cleanly.
+
+
         pdf = canvas.Canvas("final_book.pdf")
         pdf.setFont("Helvetica", 12)
-        y = 800  # Set initial vertical position on PDF page
+        y = 800  # Initial vertical position
         for line in full_book.split("\n"):
-            pdf.drawString(50, y, line[:100])  # Draw text line, truncate if too long
-            y -= 15  # Move down by 15 pixels
-            if y < 50:  # If near bottom, start new page
+            pdf.drawString(50, y, line[:100])  # Truncate long lines to 100 chars
+            y -= 15
+            if y < 50:  # Start a new page when reaching bottom
                 pdf.showPage()
                 pdf.setFont("Helvetica", 12)
                 y = 800
-        pdf.save()  # Save the PDF file
+        pdf.save()
 
         if progress_callback:
-            progress_callback(1.0)  # Mark as complete in UI if applicable
+            progress_callback(1.0)  # Mark as complete

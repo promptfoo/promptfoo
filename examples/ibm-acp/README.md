@@ -1,6 +1,12 @@
-# acp-booksmith
+# acp-booksmith-example
 
 This example demonstrates how to use ACP (Agent Communication Protocol) with Promptfoo providers to build a multi-agent book-writing system. It implements Python agents that collaborate to outline, draft, edit, and compile a book — making real OpenAI API calls — and offers multiple ways to interact: through the terminal, Gradio app, or automated Promptfoo evaluation.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example acp-booksmith
+```
 
 ## What is ACP?
 

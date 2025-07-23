@@ -1,6 +1,5 @@
 import requests  # Import HTTP requests library
 
-
 def call_api(prompt, config=None, context=None):
     agent_name = config.get("agent_name", "outline")  # Get agent name from config, default to 'outline'
     url = "http://localhost:8000/runs"  # ACP server endpoint

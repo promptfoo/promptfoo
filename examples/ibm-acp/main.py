@@ -5,7 +5,6 @@ from orchestrator import (
     main as orchestrator_main,  # Import the orchestrator main function
 )
 
-
 # Function to display a simple text menu in the terminal
 def print_menu():
     print("\nWelcome to acp-booksmith!")
