@@ -1285,6 +1285,7 @@ function ResultsTable({
             <TextField
               size="small"
               type="number"
+              value={pagination.pageIndex + 1}
               onChange={(e) => {
                 const page = e.target.value ? Number(e.target.value) - 1 : null;
                 if (page !== null && page >= 0 && page < pageCount) {
