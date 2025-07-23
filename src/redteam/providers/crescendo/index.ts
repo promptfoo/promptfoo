@@ -1,9 +1,25 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { shouldGenerateRemote } from '../../remoteGeneration';
+import { isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -16,24 +32,8 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import { isBasicRefusal } from '../../util';
-import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  tryUnblocking,
-  type TargetResponse,
-} from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -261,11 +261,17 @@ export class CrescendoProvider implements ApiProvider {
       cached: 0,
     };
 
+    logger.debug(`[Crescendo] Test metadata: ${JSON.stringify(context?.test, null, 2)}`);
+    logger.debug(`[Crescendo] Config: ${JSON.stringify(this.config, null, 2)}`);
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
       currentRound: roundNum + 1,
       maxTurns: this.maxTurns,
       purpose: context?.test?.metadata?.purpose,
+      modifierSection:
+        Object.entries(context?.test?.metadata?.modifiers || {})
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n') || undefined,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
