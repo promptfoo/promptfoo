@@ -9,6 +9,7 @@ import type {
   CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  TokenUsage,
 } from '../types';
 
 interface OllamaCompletionOptions {
