@@ -494,7 +494,7 @@ table.results-table,
   cursor: pointer;
   z-index: 101;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: 100%;
   background: #eee;
 }
 
@@ -542,14 +542,6 @@ thead.sticky {
 
 [data-theme='dark'] .header-dismiss {
   background: #333;
-}
-
-.header-dismiss:hover {
-  background: #ddd;
-}
-
-[data-theme='dark'] .header-dismiss:hover {
-  background: #444;
 }
 
 thead .header-dismiss {
