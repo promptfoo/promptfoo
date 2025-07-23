@@ -520,8 +520,6 @@ thead.sticky {
 
     --collapsed--mui-form-label-margin-top: 0px;
 
-    --collapsed--th-padding-y: 16px;
-
     --collapsed--font-small-font-size: 15px;
   }
   to {
@@ -533,8 +531,6 @@ thead.sticky {
     --collapse--collapse-hidden-max-height: 0px;
 
     --collapsed--mui-form-label-margin-top: -8px;
-
-    --collapsed--th-padding-y: 4px;
 
     --collapsed--font-small-font-size: 12px;
   }
@@ -579,8 +575,8 @@ thead .header-dismiss {
 }
 
 .results-table thead th {
-  padding-top: var(--collapsed--th-padding-y);
-  padding-bottom: var(--collapsed--th-padding-y);
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 /* Ensure content below header doesn't jump when header collapses */
