@@ -19,7 +19,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
-import { GOAL_RUBRIC_TEMPLATE } from './crescendo/prompts';
+import { getGoalRubric } from './prompts';
 import type { Message } from './shared';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
@@ -151,14 +151,9 @@ export default class GoatProvider implements ApiProvider {
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
 
-    // Template for goal-specific evaluation
-    let additionalRubric = '';
+    // Generate goal-specific evaluation rubric
     const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
-    if (userGoal) {
-      additionalRubric = this.nunjucks.renderString(GOAL_RUBRIC_TEMPLATE, {
-        goal: userGoal,
-      });
-    }
+    const additionalRubric = getGoalRubric(userGoal);
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
