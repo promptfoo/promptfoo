@@ -1,179 +1,216 @@
 # Improved Provider Warning System
 
-This document shows the improved warning and error messages for all provider types in promptfoo.
+This document describes the enhanced provider warning and error handling system that provides better user guidance when authentication fails or providers are misconfigured.
 
-## Key Improvements
+## Overview
 
-1. **Silent when defaults work** - No warnings when using default providers successfully
-2. **Generalized for all provider types** - Works for embedding, classification, moderation, and text providers
-3. **Uses `dedent` for cleaner multi-line strings** - More maintainable code
-4. **Smart credential detection** - Suggests alternatives based on available API keys
-5. **Provider-specific guidance** - Tailored help for OpenAI, Azure, Anthropic, Vertex, etc.
-6. **Context-aware errors** - Different messages for configured vs unconfigured providers
+The improved system provides:
+1. **Context-aware error messages** - Different messages for configured vs default providers
+2. **Smart credential detection** - Suggests alternative providers based on available API keys
+3. **Silent defaults** - No warnings when default providers work correctly
+4. **Provider-specific help** - Tailored authentication instructions for each provider
+5. **Scalable architecture** - Provider metadata registry for easy extensibility
+
+## Architecture
+
+### Provider Metadata Registry
+
+The system uses a centralized registry (`providerMetadataRegistry`) where providers register their metadata:
+
+```typescript
+interface ProviderMetadata {
+  id: string;
+  name: string;
+  supportedOperations: ProviderType[];
+  authentication: {
+    required: boolean;
+    envVars?: string[];
+    alternativeAuth?: string[];
+    helpText?: string;
+  };
+  exampleConfigs?: {
+    [key in ProviderType]?: string;
+  };
+  documentation?: {
+    url?: string;
+    notes?: string;
+  };
+}
+```
+
+### Adding New Providers
+
+To add a new provider, simply register it in `src/providers/providerMetadataRegistry.ts`:
+
+```typescript
+providerMetadataRegistry.register('my-provider', {
+  id: 'my-provider',
+  name: 'My Provider',
+  supportedOperations: ['text', 'embedding'],
+  authentication: {
+    required: true,
+    envVars: ['MY_PROVIDER_API_KEY'],
+    helpText: 'To use My Provider, set your API key:\n  export MY_PROVIDER_API_KEY=your-api-key',
+  },
+  exampleConfigs: {
+    text: 'my-provider:chat-model',
+    embedding: 'my-provider:embedding-model',
+  },
+  documentation: {
+    url: 'https://example.com/docs',
+  },
+});
+```
+
+No changes to the matchers code are needed - the system automatically uses the registered metadata.
+
+## Error Message Examples
+
+### 1. No Provider Configured (Using Default)
+
+When the default OpenAI provider fails due to missing credentials:
+
+**Before:**
+```
+OpenAI API key must be set for similarity comparison
+```
+
+**After (with alternatives available):**
+```
+OpenAI API key must be set for similarity comparison
+
+It looks like you have credentials for: Azure OpenAI, Voyage AI
+
+You can use one of these providers instead:
+  azure:embedding:<your-deployment-name>
+  voyage:voyage-3
+
+Example configuration:
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding: azure:embedding:<your-deployment-name>
+```
+
+Or set the required credentials for the default provider.
+```
+
+**After (no alternatives):**
+```
+OpenAI API key must be set for similarity comparison
+
+Available embedding providers:
+  openai:embedding:text-embedding-3-large
+  azure:embedding:<your-deployment-name>
+  voyage:voyage-3
+  cohere:embed-english-v3.0
+  vertex:embedding:text-embedding-005
+
+To use a specific provider, configure it in your test:
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding: provider-id-here
+```
+
+For more information on providers, see: https://promptfoo.dev/docs/providers/
+```
+
+### 2. Wrong Provider Type
+
+When a text provider is used for embedding operations:
+
+**Before:**
+```
+Provider openai:gpt-4o is not a valid embedding provider for 'is similar assertion'
+```
+
+**After:**
+```
+Provider "openai:gpt-4o" does not support embedding operations.
+Valid embedding providers include:
+  openai:embedding:text-embedding-3-large
+  azure:embedding:<your-deployment-name>
+  voyage:voyage-3
+  cohere:embed-english-v3.0
+  vertex:embedding:text-embedding-005
+  huggingface:sentence-similarity:all-MiniLM-L6-v2
+  bedrock:embedding:amazon.titan-embed-text-v2:0
+  mistral:embedding:mistral-embed
+
+For more information on embedding providers, see: https://promptfoo.dev/docs/providers/
+```
+
+### 3. Missing API Key (Explicitly Configured)
+
+When a provider is explicitly configured but authentication fails:
+
+**Before:**
+```
+Azure API key must be set for embedding
+```
+
+**After:**
+```
+Azure API key must be set for embedding
+
+Your configured embedding provider "azure:embedding:text-embedding-ada-002" requires authentication.
+
+To use Azure OpenAI:
+
+Option 1: Set API Key
+  export AZURE_API_KEY=your-api-key
+  export AZURE_API_HOST=https://your-resource.openai.azure.com
+
+Option 2: Use client credentials
+  export AZURE_CLIENT_ID=your-client-id
+  export AZURE_CLIENT_SECRET=your-client-secret
+  export AZURE_TENANT_ID=your-tenant-id
+
+Option 3: Use Azure CLI
+  az login
+
+Also ensure your deployment name and apiHost are correct in the provider config.
+
+For more information, see: https://promptfoo.dev/docs/providers/azure/
+```
+
+### 4. Failed Provider Load (Explicitly Configured)
+
+When a configured provider cannot be loaded:
+
+**Before:**
+```
+No provider found for 'is similar assertion'
+```
+
+**After:**
+```
+Failed to load the configured embedding provider: invalid:provider
+
+The provider "invalid:provider" may be invalid or the provider may not be installed.
+
+Falling back to default embedding provider: openai:text-embedding-3-large
+```
 
 ## Design Principles
 
-### When to Stay Silent
-- Using default provider and it works ✅
-- No configuration provided and defaults are available ✅
+1. **Silent when defaults work** - No warnings when using default providers successfully
+2. **Context-aware messages** - Different guidance for configured vs unconfigured providers  
+3. **Smart credential detection** - Suggests alternatives based on available API keys
+4. **Provider-specific help** - Tailored instructions for each provider's authentication
+5. **Graceful fallbacks** - Falls back to defaults when configured providers fail (with warnings)
+6. **Scalable architecture** - Easy to add new providers without changing core logic
 
-### When to Warn/Error
-- Explicitly configured provider fails to load ❌
-- Explicitly configured provider is wrong type ❌
-- Default provider fails (e.g., missing API key) ❌
-- No provider available at all ❌
+## Implementation Details
 
-## Scenario 1: Default Provider Works (No Warning)
+The system uses several key functions:
 
-When you use an assertion without configuring a provider and the default works:
+- `getAndCheckProvider()` - Validates providers and provides appropriate warnings
+- `getApiKeyErrorHelp()` - Generates context-aware authentication help
+- `getProviderConfigHelp()` - Lists valid providers for a given operation type
+- `providerMetadataRegistry` - Centralized registry for provider information
 
-```yaml
-# No provider configuration
-tests:
-  - assert:
-      - type: similar
-        value: "Expected output"
-```
-
-**Result:** Test runs successfully with default provider - no warnings or messages.
-
-## Scenario 2: Explicitly Configured Provider Fails to Load
-
-When you've configured a provider but it can't be loaded:
-
-**Example:**
-```yaml
-defaultTest:
-  options:
-    provider:
-      embedding:
-        id: azure:embedding:my-deployment
-```
-
-**Error:**
-```
-Failed to load the configured embedding provider for 'similarity check'. 
-Please check your provider configuration.
-
-The provider configuration may be invalid or the provider may not be installed.
-Falling back to default provider: openai:text-embedding-3-large.
-```
-
-## Scenario 3: Configured Wrong Provider Type
-
-When you've configured a provider that doesn't support the required operations:
-
-**Example:**
-```yaml
-defaultTest:
-  options:
-    provider:
-      embedding:
-        id: openai:gpt-4o  # This is a chat model, not an embedding model
-```
-
-**Error:**
-```
-The configured provider openai:gpt-4o does not support embedding operations for 'similarity check'.
-Embedding providers compute vector representations for semantic similarity
-
-You configured: openai:gpt-4o
-But embedding providers need specific capabilities.
-Valid embedding providers include: openai:embedding:text-embedding-3-large, azure:embedding:<deployment-name>, voyage:voyage-3
-
-Falling back to default: openai:text-embedding-3-large.
-```
-
-## Scenario 4: Configured Provider Missing API Key
-
-When you've explicitly configured a provider but haven't set up authentication:
-
-**Example:**
-```yaml
-defaultTest:
-  options:
-    provider:
-      embedding:
-        id: azure:embedding:text-embedding-3-large-2
-        config:
-          apiHost: 'promptfoo.openai.azure.com'
-```
-
-**Error:**
-```
-Error: Azure API key must be set for embedding
-
-Your configured embedding provider (azure:embedding:text-embedding-3-large-2) requires authentication.
-
-To use Azure OpenAI, you need to:
-
-Option 1: Set API Key
-  export AZURE_API_KEY="your-api-key"
-
-Option 2: Use client credentials
-  export AZURE_CLIENT_ID="your-client-id"
-  export AZURE_CLIENT_SECRET="your-client-secret"
-  export AZURE_TENANT_ID="your-tenant-id"
-
-Also ensure your deployment name and apiHost are correct in your config.
-```
-
-## Scenario 5: Default Provider Missing API Key
-
-When no provider is configured and the default fails:
-
-**Example with Azure credentials detected:**
-```
-Error: OpenAI API key must be set for similarity comparison
-
-To fix this, you can:
-1. Set the OPENAI_API_KEY environment variable
-2. Configure a different embedding provider that you have credentials for
-
-It looks like you have credentials for: Azure OpenAI, Voyage
-
-Example configurations:
-
-# Azure OpenAI
-defaultTest:
-  options:
-    provider:
-      embedding:
-        id: azure:embedding:<your-deployment-name>
-        config:
-          apiHost: 'your-resource.openai.azure.com'
-
-# Voyage
-defaultTest:
-  options:
-    provider:
-      embedding:
-        id: voyage:voyage-3
-
-Available embedding providers:
-  - openai:embedding:text-embedding-3-large
-  - azure:embedding:<deployment-name>
-  - voyage:<model-name>
-  - cohere:embedding:<model-name>
-  - vertex:embedding:text-multilingual-embedding-002
-```
-
-## Benefits of the New System
-
-1. **Reduced noise** - Only shows warnings/errors when action is needed
-2. **Context-aware messages** - Different guidance for configured vs unconfigured providers
-3. **Clear error hierarchy** - Uses `logger.error` for configuration issues
-4. **Specific authentication help** - Tailored instructions for each provider's authentication method
-5. **Smart fallbacks** - Silently uses defaults when they work
-6. **Helpful recovery** - Suggests alternatives when defaults fail
-
-## Code Structure
-
-The implementation uses:
-- `PROVIDER_CONFIG_EXAMPLES` - Central configuration for provider type information
-- `getProviderConfigHelp()` - Generates help messages (only shown when needed)
-- `getApiKeyErrorHelp()` - Provides error recovery suggestions
-- `isExplicitlyConfigured` - Tracks whether the user configured a provider
-- Silent fallbacks when defaults work properly
-
-This approach ensures users only see messages when they need to take action, reducing unnecessary warnings while still providing helpful guidance when things go wrong. 
+The registry approach makes the system highly maintainable - adding a new provider only requires registering its metadata, without touching the error handling logic. 

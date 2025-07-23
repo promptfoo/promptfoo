@@ -31,6 +31,7 @@ import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
+import { providerMetadataRegistry, registerBuiltInProviders } from './providers/providerMetadataRegistry';
 
 import type {
   ApiClassificationProvider,
@@ -39,13 +40,21 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   Assertion,
+  CallApiContextParams,
   GradingConfig,
   GradingResult,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
+  ProviderModerationResponse,
   ProviderOptions,
+  ProviderResponse,
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
 } from './types';
+
+// Initialize the provider metadata registry
+registerBuiltInProviders();
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -123,155 +132,111 @@ export async function getGradingProvider(
   return finalProvider;
 }
 
-// Provider configuration examples for different types
-const PROVIDER_CONFIG_EXAMPLES: Record<ProviderType, { description: string; examples: string[] }> =
-  {
-    embedding: {
-      description: 'Embedding providers compute vector representations for semantic similarity',
-      examples: [
-        'openai:embedding:text-embedding-3-large',
-        'azure:embedding:<deployment-name>',
-        'voyage:voyage-3',
-        'cohere:embedding:embed-english-v3.0',
-        'vertex:embedding:text-multilingual-embedding-002',
-      ],
-    },
-    classification: {
-      description: 'Classification providers categorize text into predefined categories',
-      examples: [
-        'openai:gpt-4o-mini (with classification function)',
-        'huggingface:text-classification:<model-name>',
-      ],
-    },
-    moderation: {
-      description: 'Moderation providers detect harmful or inappropriate content',
-      examples: ['openai:moderation-latest', 'azure:moderation', 'replicate:meta/llama-guard-3-8b'],
-    },
-    text: {
-      description: 'Text generation providers produce completions and chat responses',
-      examples: [
-        'openai:gpt-4o',
-        'openai:o3-mini',
-        'anthropic:claude-3-7-sonnet-20250219',
-        'azure:chat:<deployment-name>',
-      ],
-    },
-  };
-
 function getProviderConfigHelp(type: ProviderType, defaultProvider?: ApiProvider | null): string {
-  const config = PROVIDER_CONFIG_EXAMPLES[type];
-  const examples = config?.examples || [];
+  const supportedProviders = providerMetadataRegistry.findByOperation(type);
+  const examples: string[] = [];
+  
+  for (const id of supportedProviders.slice(0, 8)) { // Show first 8 examples
+    const metadata = providerMetadataRegistry.get(id);
+    if (metadata?.exampleConfigs?.[type]) {
+      examples.push(metadata.exampleConfigs[type]);
+    }
+  }
 
   return dedent`
-    To use a different ${type} provider, configure one in your test options:
-      defaultTest:
-        options:
-          provider:
-            ${type === 'text' ? '' : `${type}:`}
-            ${type === 'text' ? 'id: <your-provider-id>' : `  id: <your-${type}-provider>`}
+    Valid ${type} providers include:
+      ${examples.join('\n      ')}
     
-    ${examples.length > 0 ? `Examples of ${type} providers: ${examples.join(', ')}` : ''}
-    
-    Or set it per-assertion with the 'provider' property.
+    For more information on ${type} providers, see: https://promptfoo.dev/docs/providers/
   `;
 }
 
-export async function getAndCheckProvider(
-  type: ProviderType,
+async function getAndCheckProvider<T extends ProviderType>(
+  providerType: T,
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
-  checkName: string,
+  checkDescription: string,
 ): Promise<ApiProvider> {
-  const matchedProvider = await getGradingProvider(type, provider, defaultProvider);
+  // Check if provider was explicitly configured
+  const isExplicitlyConfigured = provider !== undefined;
 
-  // Check if the user explicitly configured a provider
-  const isExplicitlyConfigured = provider !== undefined && provider !== null;
+  let resolvedProvider: ApiProvider | null = null;
 
-  if (!matchedProvider) {
-    if (defaultProvider) {
-      if (isExplicitlyConfigured) {
-        // User configured a provider but it couldn't be loaded - this is a problem
-        logger.error(
-          dedent`
-            Failed to load the configured ${type} provider for '${checkName}'. 
-            Please check your provider configuration.
-          `,
-        );
-        logger.info(
-          dedent`
-            The provider configuration may be invalid or the provider may not be installed.
-            Falling back to default provider: ${defaultProvider.id()}.
-          `,
-        );
+  if (provider) {
+    // Use the configured provider
+    resolvedProvider = await getGradingProvider(providerType, provider, defaultProvider);
+  } else {
+    // Use the default provider (implicitly configured)
+    resolvedProvider = defaultProvider;
+  }
+
+  if (!resolvedProvider) {
+    if (isExplicitlyConfigured) {
+      // Provider was explicitly configured but failed to load
+      const providerId = typeof provider === 'object' && provider.id ? provider.id : String(provider);
+      
+      logger.error(dedent`
+        Failed to load the configured ${providerType} provider: ${providerId}
+      `);
+      
+      const metadata = providerMetadataRegistry.get(providerId);
+      logger.info(dedent`
+        The provider "${providerId}" ${metadata ? 'requires authentication' : 'may be invalid or the provider may not be installed'}.
+        ${metadata?.authentication.helpText || ''}
+      `);
+
+      if (defaultProvider) {
+        logger.info(`Falling back to default ${providerType} provider: ${defaultProvider.id()}`);
+        return defaultProvider;
       }
-      // If no provider was configured and we're using default, that's fine - no warning needed
-      return defaultProvider;
-    } else {
-      if (isExplicitlyConfigured) {
-        throw new Error(
-          dedent`
-            Failed to load the configured ${type} provider for '${checkName}'.
-            Please check your provider configuration and ensure it's properly formatted.
-          `,
-        );
+    }
+    throw new Error(`No provider of type ${providerType} found for '${checkDescription}'`);
+  }
+
+  // Check if the provider supports the required operation
+  const checkProviderSupport = (provider: ApiProvider): boolean => {
+    switch (providerType) {
+      case 'embedding':
+        return 'callEmbeddingApi' in provider;
+      case 'classification':
+        return 'callClassificationApi' in provider;
+      case 'moderation':
+        return 'callModerationApi' in provider;
+      case 'text':
+        return 'callApi' in provider;
+      default:
+        return false;
+    }
+  };
+
+  if (!checkProviderSupport(resolvedProvider)) {
+    const errorMsg = dedent`
+      Provider "${resolvedProvider.id()}" does not support ${providerType} operations.
+      ${getProviderConfigHelp(providerType)}
+    `;
+
+    if (isExplicitlyConfigured) {
+      // Provider was explicitly configured with wrong type
+      logger.error(errorMsg);
+      logger.info(`The configured provider "${resolvedProvider.id()}" cannot perform ${providerType} operations.`);
+
+      if (defaultProvider) {
+        logger.info(`Falling back to default ${providerType} provider: ${defaultProvider.id()}`);
+        return defaultProvider;
       } else {
-        throw new Error(`No provider of type ${type} found for '${checkName}'`);
+        throw new Error(errorMsg);
+      }
+    } else {
+      // Silently fallback for implicit default provider
+      if (defaultProvider) {
+        return defaultProvider;
+      } else {
+        throw new Error(`No provider of type ${providerType} found for '${checkDescription}'`);
       }
     }
   }
 
-  let isValidProviderType = true;
-  if (type === 'embedding') {
-    isValidProviderType =
-      'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
-  } else if (type === 'classification') {
-    isValidProviderType = 'callClassificationApi' in matchedProvider;
-  } else if (type === 'moderation') {
-    isValidProviderType = 'callModerationApi' in matchedProvider;
-  }
-
-  if (!isValidProviderType) {
-    if (defaultProvider) {
-      const providerTypeInfo = PROVIDER_CONFIG_EXAMPLES[type];
-      if (isExplicitlyConfigured) {
-        // User configured a provider but it's the wrong type - this is a problem
-        logger.error(
-          dedent`
-            The configured provider ${matchedProvider.id()} does not support ${type} operations for '${checkName}'.
-            ${providerTypeInfo?.description || `A ${type} provider is required.`}
-          `,
-        );
-        logger.info(
-          dedent`
-            You configured: ${matchedProvider.id()}
-            But ${type} providers need specific capabilities.
-            ${providerTypeInfo?.examples?.length ? `Valid ${type} providers include: ${providerTypeInfo.examples.slice(0, 3).join(', ')}` : ''}
-            
-            Falling back to default: ${defaultProvider.id()}.
-          `,
-        );
-      }
-      // If using default due to wrong provider type but not explicitly configured, stay silent
-      return defaultProvider;
-    } else {
-      if (isExplicitlyConfigured) {
-        const providerTypeInfo = PROVIDER_CONFIG_EXAMPLES[type];
-        throw new Error(
-          dedent`
-            The configured provider ${matchedProvider.id()} does not support ${type} operations for '${checkName}'.
-            ${providerTypeInfo?.description || `A ${type} provider is required.`}
-            ${providerTypeInfo?.examples?.length ? `\nValid ${type} providers include: ${providerTypeInfo.examples.slice(0, 3).join(', ')}` : ''}
-          `,
-        );
-      } else {
-        throw new Error(
-          `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
-        );
-      }
-    }
-  }
-
-  return matchedProvider;
+  return resolvedProvider;
 }
 
 function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
@@ -466,182 +431,104 @@ export function getApiKeyErrorHelp(
   originalError: string,
   isExplicitlyConfigured: boolean = false,
 ): string {
-  // If the user explicitly configured this provider, give them specific help for that provider
+  const metadata = providerMetadataRegistry.get(providerId);
+  
   if (isExplicitlyConfigured) {
-    let helpMessage = dedent`
+    if (metadata) {
+      // Provider was explicitly configured and has metadata
+      return dedent`
+        ${originalError}
+        
+        Your configured ${providerType} provider "${providerId}" requires authentication.
+        
+        ${metadata.authentication.helpText || `To authenticate with ${metadata.name}, check the documentation.`}
+        
+        ${metadata.documentation?.notes ? `\n${metadata.documentation.notes}` : ''}
+        
+        ${metadata.documentation?.url ? `For more information, see: ${metadata.documentation.url}` : ''}
+      `;
+    } else {
+      // Provider was explicitly configured but no metadata found
+      return dedent`
+        ${originalError}
+        
+        Your configured ${providerType} provider "${providerId}" requires authentication.
+        
+        Please check your provider configuration and ensure the necessary API keys or credentials are set.
+        
+        For more information on providers, see: https://promptfoo.dev/docs/providers/
+      `;
+    }
+  }
+
+  // Using default provider or no metadata available
+  const availableAlternatives = providerMetadataRegistry.getAvailableAlternatives(
+    providerId.split(':')[0],
+    providerType
+  );
+
+  if (availableAlternatives.size > 0) {
+    const alternativeNames: string[] = [];
+    const alternativeExamples: string[] = [];
+    
+    for (const [id, _envVars] of availableAlternatives) {
+      const altMetadata = providerMetadataRegistry.get(id);
+      if (altMetadata) {
+        alternativeNames.push(altMetadata.name);
+        const example = altMetadata.exampleConfigs?.[providerType];
+        if (example) {
+          alternativeExamples.push(`  ${example}`);
+        }
+      }
+    }
+
+    return dedent`
       ${originalError}
       
-      Your configured ${providerType} provider (${providerId}) requires authentication.
+      It looks like you have credentials for: ${alternativeNames.join(', ')}
+      
+      You can use one of these providers instead:
+      ${alternativeExamples.join('\n')}
+      
+      Example configuration:
+      \`\`\`yaml
+      defaultTest:
+        options:
+          provider:
+            ${providerType}: ${alternativeExamples[0]?.trim() || 'provider-id-here'}
+      \`\`\`
+      
+      Or set the required credentials for the default provider.
     `;
-
-    // Detect which provider is being used and provide specific instructions
-    const isOpenAi = providerId.includes('openai') && !providerId.includes('azure');
-    const isAzure = providerId.includes('azure');
-    const isAnthropic = providerId.includes('anthropic') || providerId.includes('claude');
-    const isVertex = providerId.includes('vertex') || providerId.includes('gemini');
-    const isVoyage = providerId.includes('voyage');
-    const isCohere = providerId.includes('cohere');
-
-    if (isOpenAi) {
-      helpMessage += dedent`
-        
-        To use OpenAI embeddings, set the OPENAI_API_KEY environment variable:
-          export OPENAI_API_KEY="your-api-key"
-        
-        Or add it to your provider config:
-          defaultTest:
-            options:
-              provider:
-                embedding:
-                  id: ${providerId}
-                  config:
-                    apiKey: 'your-api-key'
-      `;
-    } else if (isAzure) {
-      helpMessage += dedent`
-        
-        To use Azure OpenAI, you need to:
-        
-        Option 1: Set API Key
-          export AZURE_API_KEY="your-api-key"
-        
-        Option 2: Use client credentials
-          export AZURE_CLIENT_ID="your-client-id"
-          export AZURE_CLIENT_SECRET="your-client-secret"
-          export AZURE_TENANT_ID="your-tenant-id"
-        
-        Also ensure your deployment name and apiHost are correct in your config.
-      `;
-    } else if (isVoyage) {
-      helpMessage += dedent`
-        
-        To use Voyage embeddings, set the VOYAGE_API_KEY environment variable:
-          export VOYAGE_API_KEY="your-api-key"
-      `;
-    } else if (isCohere) {
-      helpMessage += dedent`
-        
-        To use Cohere embeddings, set the COHERE_API_KEY environment variable:
-          export COHERE_API_KEY="your-api-key"
-      `;
-    } else if (isAnthropic) {
-      helpMessage += dedent`
-        
-        To use Anthropic, set the ANTHROPIC_API_KEY environment variable:
-          export ANTHROPIC_API_KEY="your-api-key"
-      `;
-    } else if (isVertex) {
-      helpMessage += dedent`
-        
-        To use Vertex AI, ensure you have:
-        1. Google Cloud authentication set up (gcloud auth login)
-        2. VERTEX_PROJECT_ID environment variable set
-          export VERTEX_PROJECT_ID="your-project-id"
-      `;
-    }
-
-    return helpMessage.trim();
   }
 
-  // When using default provider that fails, provide helpful alternatives
-  let helpMessage = dedent`
+  // No alternatives available, provide generic help
+  const supportedProviders = providerMetadataRegistry.findByOperation(providerType);
+  const examples: string[] = [];
+  
+  for (const id of supportedProviders.slice(0, 5)) { // Show first 5 examples
+    const metadata = providerMetadataRegistry.get(id);
+    if (metadata?.exampleConfigs?.[providerType]) {
+      examples.push(`  ${metadata.exampleConfigs[providerType]}`);
+    }
+  }
+
+  return dedent`
     ${originalError}
     
-    To fix this, you can:
+    Available ${providerType} providers:
+    ${examples.join('\n')}
+    
+    To use a specific provider, configure it in your test:
+    \`\`\`yaml
+    defaultTest:
+      options:
+        provider:
+          ${providerType}: provider-id-here
+    \`\`\`
+    
+    For more information on providers, see: https://promptfoo.dev/docs/providers/
   `;
-
-  // Detect which provider is being used
-  const isOpenAi = providerId.includes('openai') && !providerId.includes('azure');
-  const isAzure = providerId.includes('azure');
-  const isAnthropic = providerId.includes('anthropic') || providerId.includes('claude');
-  const isVertex = providerId.includes('vertex') || providerId.includes('gemini');
-
-  // Build helpful suggestions based on the provider
-  if (isOpenAi) {
-    helpMessage += dedent`
-      1. Set the OPENAI_API_KEY environment variable
-      2. Configure a different ${providerType} provider that you have credentials for
-    `;
-
-    // Check for alternative credentials
-    const alternatives = [];
-    if (getEnvString('AZURE_API_KEY') || getEnvString('AZURE_OPENAI_API_KEY')) {
-      alternatives.push('Azure OpenAI');
-    }
-    if (getEnvString('ANTHROPIC_API_KEY')) {
-      alternatives.push('Anthropic');
-    }
-    if (getEnvString('VOYAGE_API_KEY')) {
-      alternatives.push('Voyage');
-    }
-    if (getEnvString('COHERE_API_KEY')) {
-      alternatives.push('Cohere');
-    }
-
-    if (alternatives.length > 0) {
-      helpMessage += dedent`
-        
-        It looks like you have credentials for: ${alternatives.join(', ')}
-        
-        Example configurations:
-      `;
-
-      if (alternatives.includes('Azure OpenAI')) {
-        helpMessage += dedent`
-          
-          # Azure OpenAI
-          defaultTest:
-            options:
-              provider:
-                embedding:
-                  id: azure:embedding:<your-deployment-name>
-                  config:
-                    apiHost: 'your-resource.openai.azure.com'
-        `;
-      }
-
-      if (alternatives.includes('Voyage') && providerType === 'embedding') {
-        helpMessage += dedent`
-          
-          # Voyage
-          defaultTest:
-            options:
-              provider:
-                embedding:
-                  id: voyage:voyage-3
-        `;
-      }
-    }
-  } else if (isAzure) {
-    helpMessage += dedent`
-      1. Set the AZURE_API_KEY or AZURE_OPENAI_API_KEY environment variable
-      2. Configure Azure client credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)
-      3. Use a different ${providerType} provider
-    `;
-  } else if (isAnthropic) {
-    helpMessage += dedent`
-      1. Set the ANTHROPIC_API_KEY environment variable
-      2. Configure a different ${providerType} provider
-    `;
-  } else if (isVertex) {
-    helpMessage += dedent`
-      1. Set up Google Cloud authentication (gcloud auth login)
-      2. Set the VERTEX_PROJECT_ID environment variable
-      3. Configure a different ${providerType} provider
-    `;
-  }
-
-  // Add general provider examples
-  const providerInfo = PROVIDER_CONFIG_EXAMPLES[providerType];
-  if (providerInfo && providerInfo.examples.length > 0) {
-    helpMessage += dedent`
-      
-      Available ${providerType} providers:
-      ${providerInfo.examples.map((ex) => `  - ${ex}`).join('\n')}
-    `;
-  }
-
-  return helpMessage.trim();
 }
 
 /**

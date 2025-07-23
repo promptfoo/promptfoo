@@ -223,3 +223,35 @@ export interface DefaultProviders {
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
 }
+
+export interface ProviderMetadata {
+  // Basic provider information
+  id: string;
+  name: string;
+  
+  // Supported operations
+  supportedOperations: ProviderType[];
+  
+  // Authentication requirements
+  authentication: {
+    required: boolean;
+    envVars?: string[];
+    alternativeAuth?: string[]; // e.g., ["Azure CLI", "Client credentials"]
+    helpText?: string;
+  };
+  
+  // Example configurations
+  exampleConfigs?: {
+    [key in ProviderType]?: string;
+  };
+  
+  // Additional help information
+  documentation?: {
+    url?: string;
+    notes?: string;
+  };
+}
+
+export interface ProviderWithMetadata extends ApiProvider {
+  getMetadata?(): ProviderMetadata;
+}
