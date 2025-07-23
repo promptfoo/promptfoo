@@ -360,9 +360,11 @@ function ResultsTable({
 
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
-    const appliedFilters = Object.values(filters.values).filter((filter) =>
-      filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-    );
+    const appliedFilters = Object.values(filters.values)
+      .filter((filter) =>
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+      )
+      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
       appliedFilters.map((f) => ({
@@ -371,6 +373,7 @@ function ResultsTable({
         value: f.value,
         field: f.field,
         logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex, // Include sortIndex for complete representation
       })),
     );
   }, [filters.values]);

@@ -202,15 +202,15 @@ function Filter({
    */
   const handleLogicOperatorChange = useCallback(
     (filterLogicOperator: ResultsFilter['logicOperator']) => {
-      if (index === 1) {
-        // If this is the second filter, update all filters to have the same logic operator
+      if (value.sortIndex === 1) {
+        // If this is the second filter (by sortIndex), update all filters to have the same logic operator
         updateAllFilterLogicOperators(filterLogicOperator);
       } else {
         // Otherwise just update this filter
         updateFilter({ ...value, logicOperator: filterLogicOperator });
       }
     },
-    [value, updateFilter, updateAllFilterLogicOperators, index],
+    [value, updateFilter, updateAllFilterLogicOperators],
   );
 
   const handleRemove = useCallback(() => {
@@ -251,12 +251,13 @@ function Filter({
       <Box sx={{ display: 'flex', gap: 1.5, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
         {index !== 0 &&
           (() => {
-            // Get the second filter's logic operator to use for all filters when index > 1
-            const filtersList = Object.values(filters.values);
-            const secondFilterLogicOperator =
-              filtersList.length > 1 ? filtersList[1].logicOperator : null;
+            // Get the filter with sortIndex === 1 to determine the logic operator for all filters
+            const filterWithSortIndex1 = Object.values(filters.values).find(
+              (f) => f.sortIndex === 1,
+            );
+            const secondFilterLogicOperator = filterWithSortIndex1?.logicOperator || null;
             const displayValue =
-              index === 1
+              value.sortIndex === 1
                 ? (value.logicOperator ?? 'and')
                 : (secondFilterLogicOperator ?? value.logicOperator ?? 'and');
 
@@ -270,7 +271,7 @@ function Filter({
                 value={displayValue}
                 onChange={(e) => handleLogicOperatorChange(e as ResultsFilter['logicOperator'])}
                 width={100}
-                disabled={index > 1}
+                disabled={value.sortIndex > 1}
               />
             );
           })()}
@@ -393,8 +394,8 @@ export default function FiltersForm({
   }, [filters.values, open, handleAddFilter]);
 
   const filterValuesList = useMemo(() => {
-    // Maintain insertion order - Object.values preserves insertion order in modern JS
-    return Object.values(filters.values);
+    // Sort by sortIndex to ensure consistent ordering
+    return Object.values(filters.values).sort((a, b) => a.sortIndex - b.sortIndex);
   }, [filters.values]);
 
   return (
