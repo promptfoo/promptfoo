@@ -421,7 +421,7 @@ const config: Config = {
           {
             from: '/vegas-contact',
             to: 'https://triangular-manchego-867.notion.site/2395ae153a138028a8bef35f6889f6e6?pvs=105',
-          }
+          },
         ],
       },
     ],
