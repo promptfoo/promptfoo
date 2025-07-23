@@ -38,6 +38,7 @@ function Dropdown({
   onChange,
   width = 200,
   disabled = false,
+  disabledValues = [],
 }: {
   id: string;
   label?: string;
@@ -46,6 +47,7 @@ function Dropdown({
   onChange: (value: string) => void;
   width?: number | string;
   disabled?: boolean;
+  disabledValues?: string[];
 }) {
   return (
     <FormControl variant="outlined" size="small" sx={{ minWidth: width }}>
@@ -64,11 +66,13 @@ function Dropdown({
           },
         }}
       >
-        {values.map((value) => (
-          <MenuItem key={value.value} value={value.value}>
-            {value.label}
-          </MenuItem>
-        ))}
+        {values
+          .filter((item) => !disabledValues.includes(item.value))
+          .map((item) => (
+            <MenuItem key={item.value} value={item.value}>
+              {item.label}
+            </MenuItem>
+          ))}
       </Select>
     </FormControl>
   );
@@ -126,6 +130,11 @@ function Filter({
   onClose: () => void;
 }) {
   const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
+
+  // Get list of already selected metric values (excluding current filter)
+  const selectedMetricValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
+    .map((filter) => filter.value);
 
   /**
    * Updates the metadata field.
@@ -189,15 +198,14 @@ function Filter({
    */
   const handleLogicOperatorChange = useCallback(
     (filterLogicOperator: ResultsFilter['logicOperator']) => {
-      if (index === 1) {
-        // If this is the second filter, update all filters to have the same logic operator
+      if (value.sortIndex === 1) {
+        // If this is the second filter (by sortIndex), update all filters to have the same logic operator
         updateAllFilterLogicOperators(filterLogicOperator);
       } else {
-        // Otherwise just update this filter
-        updateFilter({ ...value, logicOperator: filterLogicOperator });
+        // noop:  this state should never be reached because the caller is disabled when index > 1.
       }
     },
-    [value, updateFilter, updateAllFilterLogicOperators, index],
+    [value, updateFilter, updateAllFilterLogicOperators],
   );
 
   const handleRemove = useCallback(() => {
@@ -238,14 +246,13 @@ function Filter({
       <Box sx={{ display: 'flex', gap: 1.5, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
         {index !== 0 &&
           (() => {
-            // Get the second filter's logic operator to use for all filters when index > 1
-            const filtersList = Object.values(filters.values).sort((a, b) =>
-              a.id.localeCompare(b.id),
+            // Get the filter with sortIndex === 1 to determine the logic operator for all filters
+            const filterWithSortIndex1 = Object.values(filters.values).find(
+              (f) => f.sortIndex === 1,
             );
-            const secondFilterLogicOperator =
-              filtersList.length > 1 ? filtersList[1].logicOperator : null;
+            const secondFilterLogicOperator = filterWithSortIndex1?.logicOperator || null;
             const displayValue =
-              index === 1
+              value.sortIndex === 1
                 ? (value.logicOperator ?? 'and')
                 : (secondFilterLogicOperator ?? value.logicOperator ?? 'and');
 
@@ -259,7 +266,7 @@ function Filter({
                 value={displayValue}
                 onChange={(e) => handleLogicOperatorChange(e as ResultsFilter['logicOperator'])}
                 width={100}
-                disabled={index > 1}
+                disabled={value.sortIndex > 1}
               />
             );
           })()}
@@ -320,6 +327,7 @@ function Filter({
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
+              disabledValues={selectedMetricValues}
             />
           ) : (
             <DebouncedTextField
@@ -381,8 +389,8 @@ export default function FiltersForm({
   }, [filters.values, open, handleAddFilter]);
 
   const filterValuesList = useMemo(() => {
-    // Sort by ID to ensure consistent ordering
-    return Object.values(filters.values).sort((a, b) => a.id.localeCompare(b.id));
+    // Sort by sortIndex to ensure consistent ordering
+    return Object.values(filters.values).sort((a, b) => a.sortIndex - b.sortIndex);
   }, [filters.values]);
 
   return (
