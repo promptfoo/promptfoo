@@ -23,8 +23,8 @@ import {
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
-import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import { getMetricNameFromPlugin } from '../utils/metricMapping';
+import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
 interface TestSuitesProps {

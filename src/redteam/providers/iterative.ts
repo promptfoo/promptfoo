@@ -4,11 +4,11 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
-  GradingResult,
   type ApiProvider,
   type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  GradingResult,
   type GuardrailResponse,
   type NunjucksFilterMap,
   type Prompt,
