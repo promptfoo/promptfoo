@@ -15,6 +15,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
@@ -357,9 +358,26 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Create a stable reference for applied filters to avoid unnecessary re-renders
+  const appliedFiltersString = React.useMemo(() => {
+    const appliedFilters = Object.values(filters.values).filter((filter) =>
+      filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+    );
+    // Create a stable string representation of applied filters
+    return JSON.stringify(
+      appliedFilters.map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+      })),
+    );
+  }, [filters.values]);
+
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
+  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -410,9 +428,8 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
-    filters.values,
-    // Ensure this re-triggers for filter CxUD operations.
-    filters.appliedCount,
+    appliedFiltersString, // Use the stable string representation instead of filters.values
+    // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
@@ -1056,8 +1073,30 @@ function ResultsTable({
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
+          position: 'relative',
         }}
       >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: (theme) =>
+              theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.8)',
+            zIndex: 1000,
+            opacity: isFetching ? 1 : 0,
+            pointerEvents: isFetching ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease-in-out',
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <CircularProgress size={60} />
+        </Box>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
