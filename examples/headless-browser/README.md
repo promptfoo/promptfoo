@@ -1,6 +1,6 @@
-# headless-browser (Browser Automation Example)
+# headless-browser
 
-Browser automation example demonstrating ethical web scraping and testing practices.
+A browser automation example demonstrating how to test web applications using Playwright.
 
 You can run this example with:
 
@@ -8,33 +8,24 @@ You can run this example with:
 npx promptfoo@latest init --example headless-browser
 ```
 
-## ⚠️ Important: Ethical Considerations
+## Overview
 
-Before using browser automation, please read these critical points:
-
-1. **Always try simpler methods first**: Use APIs, HTTP requests, or WebSocket connections when possible
-2. **Respect robots.txt and Terms of Service**: Check before scraping any website
-3. **Implement rate limiting**: Too many requests can get you banned or cause server issues
-4. **Test on your own applications**: The best practice is testing apps you control
-
-## What This Example Demonstrates
-
-This example shows how to:
+This example demonstrates how to:
 
 - Test a local Gradio application using browser automation
-- Implement proper rate limiting and delays
-- Extract data responsibly from web interfaces
-- Handle dynamic content that requires JavaScript
+- Handle dynamic JavaScript-rendered content
+- Extract data from web interfaces
+- Work with complex UI interactions (forms, tabs, buttons)
 
 ## Prerequisites
 
-1. **Install browser automation dependencies**:
+1. **Install Node.js dependencies**:
 
 ```bash
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
-2. **Install Python dependencies** (for the Gradio demo):
+2. **Install Python dependencies** (for the demo application):
 
 ```bash
 pip install -r requirements.txt
@@ -42,15 +33,15 @@ pip install -r requirements.txt
 
 ## Running the Example
 
-1. **Start the local Gradio demo**:
+1. **Start the Gradio demo application**:
 
 ```bash
 python gradio_demo.py
 ```
 
-This will start a local server at <http://localhost:7860>
+This starts a local server at http://localhost:7860
 
-2. **In another terminal, run the browser tests**:
+2. **Run the browser automation tests**:
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml
@@ -62,9 +53,11 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 npx promptfoo@latest view
 ```
 
-## Example Results
+## Test Results
 
-The main chatbot example (`promptfooconfig.yaml`) demonstrates successful browser automation with a 100% pass rate:
+### Chatbot Example
+
+The main configuration (`promptfooconfig.yaml`) tests a chatbot interface with a 100% pass rate:
 
 ```text
 ┌─────────────────────────────────────────────────┬─────────────────────────────────────────────────┐
@@ -85,7 +78,7 @@ The main chatbot example (`promptfooconfig.yaml`) demonstrates successful browse
 
 ### Calculator Example
 
-The `calculator-example.yaml` demonstrates more complex form interactions with a 100% pass rate:
+The `calculator-example.yaml` demonstrates form interactions with a 100% pass rate:
 
 ```text
 ┌───────────────────┬───────────────────┬───────────────────┬───────────────────┬───────────────────┐
@@ -101,7 +94,7 @@ The `calculator-example.yaml` demonstrates more complex form interactions with a
 └───────────────────┴───────────────────┴───────────────────┴───────────────────┴───────────────────┘
 ```
 
-This example shows how to:
+This example demonstrates:
 
 - Navigate between tabs in a web application
 - Fill multiple input fields
@@ -109,47 +102,76 @@ This example shows how to:
 - Click buttons and wait for results
 - Extract and verify content from the page
 
-## Understanding the Configuration
+## Configuration Details
 
-The `promptfooconfig.yaml` demonstrates best practices:
+The example configurations demonstrate key concepts:
 
-- Uses reasonable delays between actions (2-3 seconds)
-- Tests against a local application (not external sites)
-- Includes proper error handling with transformResponse
-- Implements clear assertions for test validation
+- **Appropriate delays**: 2-3 seconds between actions for reliability
+- **Local testing**: Tests run against localhost:7860
+- **Error handling**: Uses `transformResponse` for data extraction
+- **Clear assertions**: Validates expected outputs
 
-## Example Selectors
+## Selectors Used
 
-The Gradio demo uses clear element IDs for easy automation:
+The Gradio application provides consistent selectors:
 
-- `#user-input textarea` - The message input field
-- `#submit-button` - The submit button
-- `.message.bot-message:last-of-type` - The latest bot response
+- `textarea[data-testid="textbox"]` - Message input field
+- `button#submit-button` - Submit button  
+- `div[data-testid="bot"]:last-of-type .prose` - Latest bot response
+- `button[value="calculator"]` - Calculator tab button
+- `input[type="radio"]` - Operation selection
 
-## Customizing for Your Use Case
+## Adapting This Example
 
-To adapt this example for your needs:
+### Testing Your Own Application
 
-1. **For testing your own web app**:
-   - Update the URL to your application
-   - Modify selectors to match your UI elements
-   - Adjust wait times based on your app's performance
+1. Update the `url` in the navigation step
+2. Modify selectors to match your UI elements
+3. Adjust wait times based on your application's response time
+4. Add appropriate assertions for your use case
 
-2. **For responsible web scraping**:
-   - Always check robots.txt first
-   - Add delays of at least 3-5 seconds between requests
-   - Use descriptive User-Agent headers
-   - Limit the number of concurrent requests
+### Handling Dynamic Content
 
-3. **For complex interactions**:
-   - Chain multiple browser actions
-   - Use `waitForNewChildren` for dynamic content
-   - Implement proper error handling
+For single-page applications or AJAX content:
 
-## Troubleshooting
+```yaml
+- action: waitForNewChildren
+  args:
+    parentSelector: '#results-container'
+    timeout: 10000
+```
 
-- **Browser not visible?** Set `headless: false` in the config
-- **Selectors not working?** Use browser DevTools to inspect elements
-- **Getting blocked?** Increase delays and reduce request frequency
+### Complex Interactions
 
-Remember: With great power comes great responsibility. Use browser automation ethically!
+Chain multiple actions for sophisticated workflows:
+
+```yaml
+steps:
+  - action: navigate
+    args:
+      url: 'http://localhost:3000'
+  - action: click
+    args:
+      selector: '#menu-button'
+  - action: wait
+    args:
+      ms: 1000
+  - action: click
+    args:
+      selector: '#dropdown-option-2'
+```
+
+## Debugging Tips
+
+| Issue                   | Solution                                        |
+| ----------------------- | ----------------------------------------------- |
+| Elements not found      | Use browser DevTools to verify selectors        |
+| Timing issues           | Increase wait times or use `waitForNewChildren` |
+| Want to see the browser | Set `headless: false` in the configuration      |
+| Need detailed logs      | Run with `npx promptfoo@latest eval --verbose`  |
+
+## Additional Resources
+
+- [Browser Provider Documentation](/docs/providers/browser)
+- [Playwright Selectors Guide](https://playwright.dev/docs/selectors)
+- [Gradio Documentation](https://www.gradio.app/docs)
