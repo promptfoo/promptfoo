@@ -10,13 +10,17 @@ async def call_agent(client, agent_name, input_text, model):
     # Sends request to ACP agent and returns the content of the response
     run = await client.run_sync(
         agent=agent_name,
-        input=[Message(parts=[MessagePart(content=input_text, content_type="text/plain")])]
+        input=[
+            Message(parts=[MessagePart(content=input_text, content_type="text/plain")])
+        ],
     )
     return run.output[0].parts[0].content
 
 
 # Main orchestrator function to run full book creation pipeline
-async def main(title="The Quantum Cat's Journey", model="gpt-4o", progress_callback=None):
+async def main(
+    title="The Quantum Cat's Journey", model="gpt-4o", progress_callback=None
+):
     async with Client(base_url="http://localhost:8000") as client:
         if progress_callback:
             progress_callback(0.05)  # Update progress bar if using UI (like Gradio)
@@ -37,7 +41,15 @@ async def main(title="The Quantum Cat's Journey", model="gpt-4o", progress_callb
             # Step 3: Edit chapter using editor agent
             edited_chapter = await client.run_sync(
                 agent="editor",
-                input=[Message(parts=[MessagePart(content=chapter_content, content_type="text/plain")])]
+                input=[
+                    Message(
+                        parts=[
+                            MessagePart(
+                                content=chapter_content, content_type="text/plain"
+                            )
+                        ]
+                    )
+                ],
             )
             chapters.append(edited_chapter.output[0].parts[0].content)
 
@@ -52,7 +64,6 @@ async def main(title="The Quantum Cat's Journey", model="gpt-4o", progress_callb
         # Best practice: wrap long lines and paginate if needed.
         # This snippet keeps it simple with truncation for readability.
         # For production, consider adding proper line wrapping and pagination to handle longer content cleanly.
-
 
         pdf = canvas.Canvas("final_book.pdf")
         pdf.setFont("Helvetica", 12)
