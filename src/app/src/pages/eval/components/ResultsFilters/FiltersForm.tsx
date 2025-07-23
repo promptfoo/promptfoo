@@ -67,8 +67,8 @@ function Dropdown({
         }}
       >
         {values.map((item) => (
-          <MenuItem 
-            key={item.value} 
+          <MenuItem
+            key={item.value}
             value={item.value}
             disabled={disabledValues.includes(item.value)}
           >
