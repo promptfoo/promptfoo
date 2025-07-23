@@ -1,13 +1,12 @@
 import React from 'react';
 import { PageMetadata, HtmlClassNameProvider, ThemeClassNames } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import BlogPostGrid from '@site/src/components/Blog/BlogPostGrid';
-import FeaturedBlogPost from '@site/src/components/Blog/FeaturedBlogPost';
 import BlogLayout from '@theme/BlogLayout';
 import type { Props } from '@theme/BlogListPage';
 import BlogListPageStructuredData from '@theme/BlogListPage/StructuredData';
 import BlogListPaginator from '@theme/BlogListPaginator';
 import SearchMetadata from '@theme/SearchMetadata';
+import Link from '@docusaurus/Link';
 import clsx from 'clsx';
 import styles from './styles.module.css';
 
@@ -31,38 +30,100 @@ function BlogListPageMetadata(props: Props): JSX.Element {
 
 function BlogListPageContent(props: Props): JSX.Element {
   const { metadata, items, sidebar } = props;
-
-  // Determine appropriate title based on pagination
   const isFirstPage = metadata.page === 1;
-  const gridTitle = isFirstPage ? 'Latest Posts' : `Archive • Page ${metadata.page}`;
 
-  // Handle posts differently based on page
-  let featuredPost = null;
+  // Format tag label helper
+  const formatTagLabel = (label: string) => {
+    return label
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
 
-  // Determine which posts to display in the grid
-  const displayPosts = React.useMemo(() => {
-    if (isFirstPage && items.length > 0) {
-      // For the grid, take all remaining posts but ensure an even number for balanced layout
-      const remainingPosts = items.slice(1);
-      const evenCount =
-        remainingPosts.length % 2 === 0 ? remainingPosts.length : remainingPosts.length - 1;
-
-      return remainingPosts.slice(0, evenCount);
-    }
-    // For other pages, or if no items, just use all items
-    return items;
-  }, [isFirstPage, items]);
-
-  // Set featured post if on first page
-  if (isFirstPage && items.length > 0) {
-    featuredPost = items[0];
-  }
+  // Hero post (first post on first page)
+  const heroPost = isFirstPage && items.length > 0 ? items[0] : null;
+  const remainingPosts = isFirstPage ? items.slice(1) : items;
 
   return (
     <BlogLayout sidebar={sidebar}>
-      <div className={styles.blogListPage}>
-        {featuredPost && <FeaturedBlogPost post={featuredPost.content} />}
-        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title={gridTitle} />
+      <div className={styles.blogContainer}>
+        {/* Hero Section - First Page Only */}
+        {heroPost && (
+          <Link to={heroPost.content.metadata.permalink} className={styles.heroLink}>
+            <article className={styles.heroPost}>
+              {heroPost.content.metadata.frontMatter.image && (
+                <div className={styles.heroImage}>
+                  <img 
+                    src={heroPost.content.metadata.frontMatter.image} 
+                    alt={heroPost.content.metadata.title}
+                  />
+                </div>
+              )}
+              <div className={styles.heroContent}>
+                {heroPost.content.metadata.tags?.[0] && (
+                  <span className={styles.heroTag}>
+                    {formatTagLabel(heroPost.content.metadata.tags[0].label)}
+                  </span>
+                )}
+                <h1 className={styles.heroTitle}>
+                  {heroPost.content.metadata.title}
+                </h1>
+                <p className={styles.heroDescription}>
+                  {heroPost.content.metadata.description}
+                </p>
+                <div className={styles.heroMeta}>
+                  {heroPost.content.metadata.authors?.[0]?.name} · {' '}
+                  {new Date(heroPost.content.metadata.date).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                  {heroPost.content.metadata.readingTime && (
+                    <> · {Math.ceil(heroPost.content.metadata.readingTime)} min read</>
+                  )}
+                </div>
+              </div>
+            </article>
+          </Link>
+        )}
+
+        {/* Regular Posts Grid */}
+        {remainingPosts.length > 0 && (
+          <div className={styles.postsSection}>
+            <h2 className={styles.sectionTitle}>
+              {isFirstPage ? 'Recent Posts' : `Archive · Page ${metadata.page}`}
+            </h2>
+            <div className={styles.postsGrid}>
+              {remainingPosts.map((item, idx) => {
+                const post = item.content;
+                return (
+                  <Link key={idx} to={post.metadata.permalink} className={styles.postCard}>
+                    {post.metadata.frontMatter.image && (
+                      <div className={styles.postImage}>
+                        <img src={post.metadata.frontMatter.image} alt={post.metadata.title} />
+                      </div>
+                    )}
+                    <div className={styles.postContent}>
+                      {post.metadata.tags?.[0] && (
+                        <span className={styles.postTag}>
+                          {formatTagLabel(post.metadata.tags[0].label)}
+                        </span>
+                      )}
+                      <h3 className={styles.postTitle}>{post.metadata.title}</h3>
+                      <p className={styles.postDescription}>
+                        {post.metadata.description}
+                      </p>
+                      <div className={styles.postMeta}>
+                        {post.metadata.authors?.[0]?.name} · {' '}
+                        {new Date(post.metadata.date).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
       <BlogListPaginator metadata={metadata} />
     </BlogLayout>

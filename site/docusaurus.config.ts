@@ -81,12 +81,17 @@ const config: Config = {
           showLastUpdateTime: true,
         },
         blog: {
-          showReadingTime: false,
+          showReadingTime: true,
           blogSidebarCount: 0,
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
-          //editUrl:
-          //  'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+          postsPerPage: 21,
+          feedOptions: {
+            type: 'all',
+            title: 'Promptfoo Blog',
+            description: 'Stay updated with the latest insights on AI security, LLM testing, and prompt engineering',
+            copyright: `© ${new Date().getFullYear()} Promptfoo, Inc.`,
+            language: 'en',
+          },
+          editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
         },
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
