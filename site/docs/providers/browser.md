@@ -24,6 +24,15 @@ The Browser Provider should only be used when simpler alternatives are not possi
    - Authentication requires browser-based workflows (OAuth, SSO)
    - You need to test actual user interactions (clicks, typing, scrolling)
 
+### Important Considerations
+
+When using browser automation:
+
+1. **Rate Limiting**: Always implement delays between requests to avoid overwhelming servers
+2. **Anti-Bot Detection**: Many websites employ anti-bot measures that can detect and block automated browsers
+3. **Resource Usage**: Browser automation is 10-100x slower than direct API calls and consumes significant CPU/memory
+4. **Legal Compliance**: Always check the website's Terms of Service and robots.txt before automating
+
 ## Prerequisites
 
 Playwright is a peer dependency of promptfoo, so you will need to install it separately:
@@ -274,12 +283,12 @@ All string values in `args` support Nunjucks templating, allowing use of variabl
 
 ## Advanced Features
 
-### Playwright Recorder
+### Playwright Recorder Tools
 
-Playwright provides multiple ways to record browser interactions:
+The easiest way to create browser automation scripts is to record your interactions:
 
-#### Chrome Extension
-The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) can help you create browser automation scripts:
+#### Chrome Extension (Recommended)
+The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) is particularly helpful for quickly generating selectors:
 
 1. Install the extension from the Chrome Web Store
 2. Navigate to your target website
@@ -288,8 +297,13 @@ The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/de
 5. Stop recording and copy the generated selectors/code
 6. Adapt the code for promptfoo's browser provider format
 
+This extension is especially useful because it:
+- Shows selectors in real-time as you hover over elements
+- Generates multiple selector options (CSS, text, XPath)
+- Allows you to copy individual selectors without recording full actions
+
 #### Playwright Inspector (All Browsers)
-Alternatively, use Playwright's built-in recorder that works with all supported browsers:
+For cross-browser recording, use Playwright's built-in recorder:
 
 ```bash
 npx playwright codegen https://example.com
@@ -356,6 +370,92 @@ steps:
 3. **Batch operations**: Group related actions together
 4. **Reuse browser contexts**: For multiple tests against the same site
 
+### Best Practices for Rate Limiting
+
+Implementing proper rate limiting is crucial to avoid detection and server overload:
+
+```yaml
+providers:
+  - id: browser
+    config:
+      steps:
+        # Always start with a respectful delay
+        - action: wait
+          args:
+            ms: 2000
+        
+        - action: navigate
+          args:
+            url: 'https://example.com'
+        
+        # Wait between actions
+        - action: wait
+          args:
+            ms: 1000
+        
+        - action: click
+          args:
+            selector: '#button'
+        
+        # Final delay before next request
+        - action: wait
+          args:
+            ms: 3000
+```
+
+**Tips for avoiding detection:**
+- Randomize delays between actions (1-3 seconds)
+- Use the stealth plugin (included with playwright-extra)
+- Avoid patterns that look automated
+- Consider using different user agents
+- Respect robots.txt and rate limits
+
+### Dealing with Anti-Bot Measures
+
+Many websites implement anti-bot detection systems (like Cloudflare, reCAPTCHA, etc.). Here's how to handle common scenarios:
+
+#### Common Anti-Bot Challenges
+
+| Challenge              | Detection Method                 | Mitigation Strategy                             |
+| ---------------------- | -------------------------------- | ----------------------------------------------- |
+| Browser fingerprinting | JavaScript checks for automation | Stealth plugin helps mask automation            |
+| Behavioral analysis    | Mouse movements, typing patterns | Add realistic delays and interactions           |
+| IP rate limiting       | Too many requests from one IP    | Implement proper delays, use proxies cautiously |
+| CAPTCHA challenges     | Human verification tests         | Consider if the site allows automation          |
+| User-Agent detection   | Checking for headless browsers   | Use realistic user agent strings                |
+
+#### Example with Anti-Bot Considerations
+
+```yaml
+providers:
+  - id: browser
+    config:
+      headless: false  # Some sites detect headless mode
+      steps:
+        # Human-like delay before starting
+        - action: wait
+          args:
+            ms: 3000
+        
+        - action: navigate
+          args:
+            url: '{{url}}'
+        
+        # Wait for any anti-bot checks to complete
+        - action: wait
+          args:
+            ms: 5000
+        
+        # Type slowly like a human would
+        - action: type
+          args:
+            selector: '#search'
+            text: '{{query}}'
+            delay: 100  # Delay between keystrokes
+```
+
+**Note**: If a website has strong anti-bot measures, it's often a sign that automation is not welcome. Always respect the website owner's wishes and consider reaching out for API access instead.
+
 ## Example: Testing a Login Flow
 
 Here's a complete example testing a login workflow:
@@ -412,6 +512,45 @@ tests:
     assert:
       - type: javascript
         value: output.success === true
+```
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+| Issue                          | Cause                                      | Solution                                                                                     |
+| ------------------------------ | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| "Element not found"            | Selector incorrect or element not loaded   | • Verify selector in DevTools<br>• Add wait before action<br>• Check if element is in iframe |
+| "Timeout waiting for selector" | Page loads slowly or element never appears | • Increase timeout<br>• Add explicit wait actions<br>• Check for failed network requests     |
+| "Access denied" or 403 errors  | Anti-bot detection triggered               | • Use headless: false<br>• Add more delays<br>• Check if automation is allowed               |
+| "Click intercepted"            | Element covered by overlay                 | • Wait for overlays to disappear<br>• Scroll element into view<br>• Use force click option   |
+| Inconsistent results           | Timing or detection issues                 | • Add consistent delays<br>• Use stealth plugin<br>• Test during off-peak hours              |
+
+### Debugging Anti-Bot Detection
+
+If you suspect anti-bot measures are blocking your automation:
+
+```yaml
+providers:
+  - id: browser
+    config:
+      headless: false  # Always start with headed mode for debugging
+      steps:
+        - action: navigate
+          args:
+            url: '{{url}}'
+        
+        - action: screenshot
+          args:
+            path: 'debug-landing.png'  # Check if you hit a challenge page
+        
+        - action: wait
+          args:
+            ms: 10000  # Longer wait to see what happens
+        
+        - action: screenshot
+          args:
+            path: 'debug-after-wait.png'
 ```
 
 ## Useful Resources
