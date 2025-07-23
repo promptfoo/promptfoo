@@ -82,4 +82,4 @@ tests:
       operationSelector: '#operation label:nth-child(3)'
     assert:
       - type: contains
-        value: 'successful' 
+        value: 'successful'

@@ -240,7 +240,7 @@ Note: All string values in the config support Nunjucks templating. This means yo
 While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), promptfoo's browser provider currently only implements Chromium support. This includes:
 
 - **Chrome** - Google's browser
-- **Edge** - Microsoft's Chromium-based browser  
+- **Edge** - Microsoft's Chromium-based browser
 - **Chromium** - Open-source browser project
 
 The implementation uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities to avoid detection.
@@ -288,6 +288,7 @@ All string values in `args` support Nunjucks templating, allowing use of variabl
 The easiest way to create browser automation scripts is to record your interactions:
 
 #### Chrome Extension (Recommended)
+
 The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) is particularly helpful for quickly generating selectors:
 
 1. Install the extension from the Chrome Web Store
@@ -298,11 +299,13 @@ The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/de
 6. Adapt the code for promptfoo's browser provider format
 
 This extension is especially useful because it:
+
 - Shows selectors in real-time as you hover over elements
 - Generates multiple selector options (CSS, text, XPath)
 - Allows you to copy individual selectors without recording full actions
 
 #### Playwright Inspector (All Browsers)
+
 For cross-browser recording, use Playwright's built-in recorder:
 
 ```bash
@@ -324,6 +327,7 @@ Playwright supports various selector strategies:
 | XPath    | `xpath=//button[@type="submit"]` | XPath expressions             |
 
 For the most reliable selectors:
+
 - Prefer stable attributes like IDs and data-testid
 - Use role-based selectors for accessibility
 - Avoid position-based selectors that can break with layout changes
@@ -383,20 +387,20 @@ providers:
         - action: wait
           args:
             ms: 2000
-        
+
         - action: navigate
           args:
             url: 'https://example.com'
-        
+
         # Wait between actions
         - action: wait
           args:
             ms: 1000
-        
+
         - action: click
           args:
             selector: '#button'
-        
+
         # Final delay before next request
         - action: wait
           args:
@@ -404,6 +408,7 @@ providers:
 ```
 
 **Tips for avoiding detection:**
+
 - Randomize delays between actions (1-3 seconds)
 - Use the stealth plugin (included with playwright-extra)
 - Avoid patterns that look automated
@@ -430,28 +435,28 @@ Many websites implement anti-bot detection systems (like Cloudflare, reCAPTCHA, 
 providers:
   - id: browser
     config:
-      headless: false  # Some sites detect headless mode
+      headless: false # Some sites detect headless mode
       steps:
         # Human-like delay before starting
         - action: wait
           args:
             ms: 3000
-        
+
         - action: navigate
           args:
             url: '{{url}}'
-        
+
         # Wait for any anti-bot checks to complete
         - action: wait
           args:
             ms: 5000
-        
+
         # Type slowly like a human would
         - action: type
           args:
             selector: '#search'
             text: '{{query}}'
-            delay: 100  # Delay between keystrokes
+            delay: 100 # Delay between keystrokes
 ```
 
 **Note**: If a website has strong anti-bot measures, it's often a sign that automation is not welcome. Always respect the website owner's wishes and consider reaching out for API access instead.
@@ -475,30 +480,30 @@ providers:
         - action: navigate
           args:
             url: 'https://example.com/login'
-        
+
         - action: type
           args:
             selector: '#username'
             text: '{{username}}'
-        
+
         - action: type
           args:
             selector: '#password'
             text: '{{password}}'
-        
+
         - action: click
           args:
             selector: 'button[type="submit"]'
-        
+
         - action: wait
           args:
             ms: 2000
-        
+
         - action: extract
           args:
             selector: '.welcome-message'
           name: welcomeText
-      
+
       transformResponse: |
         return {
           output: extracted.welcomeText,
@@ -534,20 +539,20 @@ If you suspect anti-bot measures are blocking your automation:
 providers:
   - id: browser
     config:
-      headless: false  # Always start with headed mode for debugging
+      headless: false # Always start with headed mode for debugging
       steps:
         - action: navigate
           args:
             url: '{{url}}'
-        
+
         - action: screenshot
           args:
-            path: 'debug-landing.png'  # Check if you hit a challenge page
-        
+            path: 'debug-landing.png' # Check if you hit a challenge page
+
         - action: wait
           args:
-            ms: 10000  # Longer wait to see what happens
-        
+            ms: 10000 # Longer wait to see what happens
+
         - action: screenshot
           args:
             path: 'debug-after-wait.png'
