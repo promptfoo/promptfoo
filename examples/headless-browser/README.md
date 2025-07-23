@@ -19,6 +19,8 @@ This example demonstrates how to:
 
 ## Prerequisites
 
+Ensure you have Python 3 and Node.js installed on your system.
+
 1. **Install Node.js dependencies**:
 
 ```bash
@@ -30,6 +32,8 @@ npm install playwright @playwright/browser-chromium playwright-extra puppeteer-e
 ```bash
 pip install -r requirements.txt
 ```
+
+That's it! No additional setup scripts or configuration needed.
 
 ## Running the Example
 
@@ -116,7 +120,7 @@ The example configurations demonstrate key concepts:
 The Gradio application provides consistent selectors:
 
 - `textarea[data-testid="textbox"]` - Message input field
-- `button#submit-button` - Submit button  
+- `button#submit-button` - Submit button
 - `div[data-testid="bot"]:last-of-type .prose` - Latest bot response
 - `button[value="calculator"]` - Calculator tab button
 - `input[type="radio"]` - Operation selection
