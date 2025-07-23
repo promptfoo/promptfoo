@@ -1,40 +1,68 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Headless eval'
+description: 'Testing browser automation with local Gradio app'
 
 prompts:
-  - 'Write a tweet about {{topic}}'
+  - 'Tell me about {{topic}}'
 
 providers:
   - id: browser
     config:
-      headless: true # set to false to see the browser
+      headless: false # set to false to see the browser in action
       steps:
-        # Load the page
-        - action: navigate
-          args:
-            url: 'https://doc-chat-llm.streamlit.app/~/+/'
-        # Enter the message
-        - action: type
-          args:
-            selector: 'textarea'
-            text: '{{prompt}}'
-        # Send the message
-        - action: click
-          args:
-            selector: 'button[data-testid="stChatInputSubmitButton"]'
-        # Wait for the response
+        # Always start with a respectful delay
         - action: wait
           args:
-            ms: 5000
-        # Read the response
+            ms: 2000
+
+        # Navigate to local Gradio app
+        - action: navigate
+          args:
+            url: 'http://localhost:7860'
+
+        # Wait for the page to load
+        - action: wait
+          args:
+            ms: 2000
+
+        # Type the message in the Gradio textbox
+        - action: type
+          args:
+            selector: 'textarea[data-testid="textbox"]'
+            text: '{{prompt}}'
+
+        # Submit the message
+        - action: click
+          args:
+            selector: 'button#submit-button'
+
+        # Wait for the response with reasonable timeout
+        - action: wait
+          args:
+            ms: 3000
+
+        # Extract the bot's response from the chatbot - get the last message
         - action: extract
           args:
-            selector: 'div.stChatMessage:last-of-type'
+            selector: 'div[data-testid="bot"]:last-of-type .prose'
           name: response
+
       transformResponse: 'extracted.response'
 
 tests:
   - vars:
-      topic: bananas
+      topic: testing browser automation
+    assert:
+      - type: contains
+        value: 'Test successful'
+
   - vars:
-      topic: avocado toast
+      topic: how the system works
+    assert:
+      - type: contains
+        value: 'simple demo response'
+
+  - vars:
+      topic: a simple greeting
+    assert:
+      - type: javascript
+        value: output.length > 0

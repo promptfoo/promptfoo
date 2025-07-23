@@ -1,9 +1,10 @@
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
-import { randomUUID } from 'crypto';
 import dedent from 'dedent';
-import * as fs from 'fs';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
@@ -13,11 +14,12 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { loadApiProvider, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 
 // ========================================================
 // Schemas
@@ -28,7 +30,7 @@ const TargetPurposeDiscoveryStateSchema = z.object({
   answers: z.array(z.string()),
 });
 
-const TargetPurposeDiscoveryRequestSchema = z.object({
+export const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
   version: z.string(),
@@ -56,7 +58,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
   ),
 });
 
-const TargetPurposeDiscoveryTaskResponseSchema = z.object({
+export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   done: z.boolean(),
   question: z.string().optional(),
   purpose: TargetPurposeDiscoveryResultSchema.optional(),

@@ -205,24 +205,6 @@ Reasoning models "think before they answer," generating internal reasoning token
 
 Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
-### GPT-4.5 Models (Preview)
-
-GPT-4.5 is OpenAI's largest GPT model designed specifically for creative tasks and agentic planning, currently available in a research preview. It features a 128k token context length.
-
-Models in this series include:
-
-- `gpt-4.5-preview`
-- `gpt-4.5-preview-2025-02-27`
-
-You can specify the model name in the `providers` section:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:gpt-4.5-preview
-    config:
-      temperature: 0.7
-```
-
 ## Images
 
 ### Sending images in prompts
@@ -707,39 +689,40 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   providers: [
     {
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
-      config:
-        /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
-          model: 'gpt-4.1',
-          instructions: 'You can add two numbers together using the `addNumbers` tool',
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'addNumbers',
-                description: 'Add two numbers together',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    a: { type: 'number' },
-                    b: { type: 'number' },
-                  },
-                  required: ['a', 'b'],
+      config: {
+        model: 'gpt-4.1',
+        instructions: 'You can add two numbers together using the `addNumbers` tool',
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'addNumbers',
+              description: 'Add two numbers together',
+              parameters: {
+                type: 'object',
+                properties: {
+                  a: { type: 'number' },
+                  b: { type: 'number' },
                 },
+                required: ['a', 'b'],
+                additionalProperties: false,
               },
-            },
-          ],
-          /**
-           * Map of function tool names to function callback.
-           */
-          functionToolCallbacks: {
-            // this function should accept a string, and return a string
-            // or a `Promise<string>`.
-            addNumbers: (parametersJsonString) => {
-              const { a, b } = JSON.parse(parametersJsonString);
-              return JSON.stringify(a + b);
+              strict: true,
             },
           },
-        }),
+        ],
+        /**
+         * Map of function tool names to function callback.
+         */
+        functionToolCallbacks: {
+          // this function should accept a JSON-parsed value, and return a string
+          // or a `Promise<string>`.
+          addNumbers: (parameters) => {
+            const { a, b } = parameters;
+            return JSON.stringify(a + b);
+          },
+        },
+      },
     },
   ],
   tests: [

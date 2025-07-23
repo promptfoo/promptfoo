@@ -4,9 +4,7 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
-import type { HarmPlugin } from '../constants';
 import {
   BIAS_PLUGINS,
   PII_PLUGINS,
@@ -49,6 +47,9 @@ import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
+
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;

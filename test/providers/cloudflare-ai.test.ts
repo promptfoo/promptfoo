@@ -2,11 +2,12 @@ import { clearCache, enableCache } from '../../src/cache';
 import {
   CloudflareAiChatCompletionProvider,
   CloudflareAiCompletionProvider,
+  type CloudflareAiConfig,
   CloudflareAiEmbeddingProvider,
   createCloudflareAiProvider,
-  type CloudflareAiConfig,
 } from '../../src/providers/cloudflare-ai';
 import { loadApiProviders } from '../../src/providers/index';
+
 import type { ProviderOptionsMap } from '../../src/types';
 
 jest.mock('fs');

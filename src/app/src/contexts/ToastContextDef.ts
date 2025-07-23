@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 import type { PropsWithChildren } from 'react';
+
 import type { AlertColor } from '@mui/material/Alert';
 
 interface ToastContextType {

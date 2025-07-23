@@ -16,7 +16,7 @@ keywords:
   ]
 date: 2025-06-27
 authors: [ian]
-tags: [comparison, security, red-teaming, tools]
+tags: [tool-comparison, red-teaming, pyrit]
 ---
 
 # Promptfoo vs PyRIT: A Practical Comparison of LLM Red Teaming Tools

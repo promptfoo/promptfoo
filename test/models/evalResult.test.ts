@@ -2,12 +2,12 @@ import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import {
-  ResultFailureReason,
+  type ApiProvider,
   type AtomicTestCase,
   type EvaluateResult,
   type Prompt,
   type ProviderOptions,
-  type ApiProvider,
+  ResultFailureReason,
 } from '../../src/types';
 
 describe('EvalResult', () => {

@@ -2,13 +2,13 @@ import { z } from 'zod';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   Severity,
 } from '../../src/redteam/constants';
 import {

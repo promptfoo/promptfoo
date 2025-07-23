@@ -4,10 +4,12 @@
  */
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as path from 'path';
-import type { GlobalConfig } from '../configTypes';
+
+import yaml from 'js-yaml';
 import { getConfigDirectoryPath } from '../util/config/manage';
+
+import type { GlobalConfig } from '../configTypes';
 
 export function writeGlobalConfig(config: GlobalConfig): void {
   fs.writeFileSync(

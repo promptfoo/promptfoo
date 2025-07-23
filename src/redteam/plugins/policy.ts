@@ -1,4 +1,7 @@
 import dedent from 'dedent';
+import invariant from '../../util/invariant';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+
 import type {
   ApiProvider,
   Assertion,
@@ -7,8 +10,6 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types';
-import invariant from '../../util/invariant';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 

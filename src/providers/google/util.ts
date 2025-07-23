@@ -1,5 +1,3 @@
-import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
@@ -9,6 +7,9 @@ import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
 import { VALID_SCHEMA_TYPES } from './types';
+import type { AnySchema } from 'ajv';
+import type { GoogleAuth } from 'google-auth-library';
+
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
@@ -53,6 +54,7 @@ interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 export interface GeminiErrorResponse {
@@ -79,6 +81,7 @@ interface GeminiPromptFeedback {
 interface GeminiUsageMetadata {
   promptTokenCount: number;
   totalTokenCount: number;
+  thoughtsTokenCount?: number;
 }
 
 interface GeminiBlockedResponse {

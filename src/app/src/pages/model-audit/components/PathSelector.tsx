@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
+
 import { callApi } from '@app/utils/api';
 import {
   Clear as ClearIcon,
+  Cloud as CloudIcon,
+  CloudUpload as CloudUploadIcon,
+  Computer as ComputerIcon,
   Delete as DeleteIcon,
   InsertDriveFile as FileIcon,
   Folder as FolderIcon,
-  CloudUpload as CloudUploadIcon,
-  Storage as StorageIcon,
   GitHub as GitHubIcon,
   Lock as LockIcon,
-  Cloud as CloudIcon,
-  Computer as ComputerIcon,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import Alert from '@mui/material/Alert';
 import Badge from '@mui/material/Badge';
@@ -31,8 +32,9 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import type { ScanPath } from '../ModelAudit.types';
 import { useModelAuditStore } from '../store';
+
+import type { ScanPath } from '../ModelAudit.types';
 
 interface PathSelectorProps {
   paths: ScanPath[];
