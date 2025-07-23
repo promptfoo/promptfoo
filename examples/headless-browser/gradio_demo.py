@@ -1,6 +1,7 @@
-import gradio as gr
-import time
 import random
+import time
+
+import gradio as gr
 
 
 # Simple chatbot function
