@@ -264,13 +264,13 @@ Notice:
 
 Open the generated `promptfooconfig.yaml` and update it like this:
 
-```yaml
+```python
 # Description of this evaluation job
-description: 'LangGraph Research Agent Evaluation'
+description: "LangGraph Research Agent Evaluation"
 
 # List of input prompts to test the provider with
 prompts:
-  - 'example research question prompt'
+  - "{{example research question prompt}}"
 
 # Provider configuration
 providers:
