@@ -12,8 +12,6 @@ import { useTableStore } from './store';
 /**
  * Returns the number of passing tests for each prompt.
  *
- * TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
- *
  * @returns An array of numbers, one for each prompt.
  */
 export function usePassingTestCounts(): number[] {
