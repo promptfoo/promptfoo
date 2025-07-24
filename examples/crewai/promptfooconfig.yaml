@@ -5,7 +5,7 @@ prompts:
   - 'Find top candidates for the following role: {{role}}'
 
 providers:
-  - id: 'file://./provider.py'
+  - id: 'file://./agent.py'
     label: 'CrewAI Recruitment Agent'
     config:
       model: 'openai:gpt-4.1'

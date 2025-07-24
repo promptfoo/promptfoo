@@ -60,15 +60,12 @@ npm install -g promptfoo
 
 ## Files
 
-- `provider.py`: Contains both the CrewAI agent setup and the promptfoo provider interface (consolidated to avoid import issues)
+- `agent.py`: Contains the CrewAI agent setup and promptfoo provider interface
 - `promptfooconfig.yaml`: Configures prompts, providers, and tests for evaluation
-- `agent.py`: (Optional) Standalone agent code if you want to run the agent separately
 
 ### Note on Reliability
 
 When using a real LLM, you may notice that the agent's output is not always reliable, especially for more complex queries. For example, the agent may fail to return valid JSON or may not return a response at all. This is a common challenge when working with LLMs.
-
-To ensure that this example is stable and that the tests pass consistently, the provider has been configured to return mock data by default. If you want to use a real LLM, you can modify the `run_recruitment_agent` function in `provider.py` to call the `crew.kickoff()` method and process the real output.
 
 ## Running the Evaluation
 
