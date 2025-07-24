@@ -6,18 +6,20 @@
 
 import { useMemo } from 'react';
 
-import invariant from '@promptfoo/util/invariant';
 import { useTableStore } from './store';
 
 /**
  * Returns the number of passing tests for each prompt.
  *
- * @returns An array of numbers, one for each prompt.
+ * @returns An array of numbers, one for each prompt. Returns an empty array if the table is not defined.
  */
 export function usePassingTestCounts(): number[] {
   const { table } = useTableStore();
 
-  invariant(table, 'Table should be defined');
+  if (!table) {
+    return [];
+  }
+
   const { head, body } = table;
 
   const value = useMemo(
@@ -31,12 +33,15 @@ export function usePassingTestCounts(): number[] {
 /**
  * Returns the number of tests for each prompt.
  *
- * @returns An array of numbers, one for each prompt.
+ * @returns An array of numbers, one for each prompt. Returns an empty array if the table is not defined.
  */
 export function useTestCounts(): number[] {
   const { table } = useTableStore();
 
-  invariant(table, 'Table should be defined');
+  if (!table) {
+    return [];
+  }
+
   const { head, body } = table;
 
   const value = useMemo(
@@ -53,7 +58,7 @@ export function useTestCounts(): number[] {
 /**
  * Returns the pass rate for each prompt.
  *
- * @returns An array of numbers, one for each prompt.
+ * @returns An array of numbers, one for each prompt. Returns an empty array if the table is not defined.
  */
 export function usePassRates(): number[] {
   const numTests = useTestCounts();
