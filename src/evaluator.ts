@@ -517,6 +517,7 @@ export function formatVarsForDisplay(
   }
 
   try {
+    // Simple approach: limit individual values, then truncate the whole result
     const formatted = Object.entries(vars)
       .map(([key, value]) => {
         // Prevent memory issues by limiting individual values first
