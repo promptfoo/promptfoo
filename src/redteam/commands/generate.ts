@@ -291,7 +291,9 @@ export async function doGenerateRedteam(
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
-    testGenerationInstructions: redteamConfig?.testGenerationInstructions,
+    ...(redteamConfig?.testGenerationInstructions
+      ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
+      : {}),
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
@@ -306,7 +308,7 @@ export async function doGenerateRedteam(
 
   // Extract MCP tools information and add to purpose
   let enhancedPurpose = parsedConfig.data.purpose || '';
-  let augmentedTestGenerationInstructions = config.testGenerationInstructions || '';
+  let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
   try {
     const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
     if (mcpToolsInfo) {
