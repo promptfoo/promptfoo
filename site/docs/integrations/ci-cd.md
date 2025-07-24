@@ -61,8 +61,7 @@ Promptfoo supports two main CI/CD workflows:
 promptfoo eval -c promptfooconfig.yaml
 ```
 
-**Red Teaming** - Security vulnerability scanning [[memory:3455373]]:
-
+**Red Teaming** - Security vulnerability scanning:
 ```bash
 promptfoo redteam run
 ```
