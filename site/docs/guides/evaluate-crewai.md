@@ -121,7 +121,7 @@ Here’s what’s happening:
 
 Optional: If you want to use `.env` files for API keys, also install:
 
-```
+```bash
 pip install python-dotenv
 ```
 
@@ -129,14 +129,14 @@ pip install python-dotenv
 
 Run these two quick checks:
 
-```
+```bash
 python3 -c "import crewai ; print('✅ CrewAI ready')"
 promptfoo --version
 ```
 
 If everything’s installed correctly, you should see:
 
-```
+```text
 ✅ CrewAI ready
 ```
 

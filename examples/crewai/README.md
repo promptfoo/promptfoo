@@ -6,6 +6,14 @@ This example shows how to use **CrewAI agents** with promptfoo to evaluate AI ag
 
 CrewAI is a framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.
 
+## Quick Start
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example crewai
+```
+
 ## Prerequisites
 
 This example requires the following:
@@ -28,7 +36,7 @@ export OPENAI_API_KEY=your-api-key-here
 
 Create a `.env` file in this directory:
 
-```
+```dotenv
 OPENAI_API_KEY=your-api-key-here
 ```
 

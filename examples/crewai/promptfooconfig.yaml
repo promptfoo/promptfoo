@@ -34,7 +34,7 @@ tests:
           # Check that all candidates have relevant skills
           required_skills = ['python', 'django', 'react']
           all_have_skills = all(
-              any(skill.lower() in required_skills for skill in candidate.get('skills', []))
+              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
               for candidate in output.get('candidates', [])
           )
           return all_have_skills
