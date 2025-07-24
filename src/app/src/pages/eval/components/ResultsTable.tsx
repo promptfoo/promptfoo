@@ -789,6 +789,7 @@ function ResultsTable({
                           metricTotals={metricTotals}
                           onSearchTextChange={onSearchTextChange}
                           onMetricFilter={handleMetricFilterClick}
+                          truncationCount={3}
                         />
                       </Box>
                     ) : null}
