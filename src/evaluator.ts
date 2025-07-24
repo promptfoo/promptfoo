@@ -53,6 +53,232 @@ import type winston from 'winston';
 import type Eval from './models/eval';
 import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 
+/**
+ * Manages progress bars for different execution phases of the evaluation
+ */
+class ProgressBarManager {
+  private multibar: MultiBar | undefined;
+  private serialBar: SingleBar | undefined;
+  private concurrentBars: SingleBar[] = [];
+  private comparisonBar: SingleBar | undefined;
+  private isWebUI: boolean;
+
+  // Track work distribution
+  private serialCount: number = 0;
+  private concurrentCount: number = 0;
+  private comparisonCount: number = 0;
+
+  // Track completion
+  private serialCompleted: number = 0;
+  private concurrentCompleted: number = 0;
+  private comparisonCompleted: number = 0;
+
+  // Map original indices to execution context
+  private indexToContext: Map<
+    number,
+    { phase: 'serial' | 'concurrent' | 'comparison'; barIndex: number }
+  > = new Map();
+
+  constructor(isWebUI: boolean) {
+    this.isWebUI = isWebUI;
+  }
+
+  /**
+   * Initialize progress bars based on work distribution
+   */
+  async initialize(
+    runEvalOptions: RunEvalOptions[],
+    concurrency: number,
+    compareRowsCount: number,
+  ): Promise<void> {
+    if (this.isWebUI) {
+      return;
+    }
+
+    // Calculate work distribution
+    for (let i = 0; i < runEvalOptions.length; i++) {
+      const evalOption = runEvalOptions[i];
+      if (evalOption.test.options?.runSerially) {
+        this.serialCount++;
+        this.indexToContext.set(i, { phase: 'serial', barIndex: 0 });
+      } else {
+        this.indexToContext.set(i, {
+          phase: 'concurrent',
+          barIndex: this.concurrentCount % Math.min(concurrency, 20),
+        });
+        this.concurrentCount++;
+      }
+    }
+    this.comparisonCount = compareRowsCount;
+
+    // Create multibar
+    this.multibar = new cliProgress.MultiBar(
+      {
+        format:
+          '{phase} [{bar}] {percentage}% | {value}/{total} | {status} | {provider} "{prompt}" {vars}',
+        hideCursor: true,
+        gracefulExit: true,
+      },
+      cliProgress.Presets.shades_classic,
+    );
+
+    // Create serial progress bar if needed
+    if (this.serialCount > 0) {
+      this.serialBar = this.multibar.create(this.serialCount, 0, {
+        phase: 'Serial (1 thread)',
+        status: 'Running',
+        provider: '',
+        prompt: '',
+        vars: '',
+      });
+    }
+
+    // Create concurrent progress bars
+    const numConcurrentBars = Math.min(concurrency, 20, this.concurrentCount);
+    const concurrentPerBar = Math.floor(this.concurrentCount / numConcurrentBars);
+    const concurrentRemainder = this.concurrentCount % numConcurrentBars;
+
+    for (let i = 0; i < numConcurrentBars; i++) {
+      const totalSteps = i < concurrentRemainder ? concurrentPerBar + 1 : concurrentPerBar;
+      if (totalSteps > 0) {
+        const bar = this.multibar.create(totalSteps, 0, {
+          phase: `Group ${i + 1}/${numConcurrentBars}`,
+          status: `${calculateThreadsPerBar(concurrency, numConcurrentBars, i)} threads`,
+          provider: '',
+          prompt: '',
+          vars: '',
+        });
+        this.concurrentBars.push(bar);
+      }
+    }
+
+    // Create comparison progress bar if needed
+    if (this.comparisonCount > 0) {
+      this.comparisonBar = this.multibar.create(this.comparisonCount, 0, {
+        phase: 'select-best',
+        status: 'Pending',
+        provider: 'Grading',
+        prompt: '',
+        vars: '',
+      });
+    }
+  }
+
+  /**
+   * Update progress for a specific evaluation
+   */
+  updateProgress(
+    index: number,
+    evalStep: RunEvalOptions | undefined,
+    phase: 'serial' | 'concurrent' | 'comparison' = 'concurrent',
+  ): void {
+    if (this.isWebUI || !evalStep) {
+      return;
+    }
+
+    const context =
+      phase === 'comparison' ? { phase, barIndex: 0 } : this.indexToContext.get(index);
+    if (!context) {
+      logger.warn(`No context found for index ${index}`);
+      return;
+    }
+
+    const provider = evalStep.provider.label || evalStep.provider.id();
+    const prompt = evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ');
+    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+
+    switch (context.phase) {
+      case 'serial':
+        this.serialCompleted++;
+        this.serialBar?.increment({
+          status: `Running (${this.serialCompleted}/${this.serialCount})`,
+          provider,
+          prompt,
+          vars,
+        });
+        break;
+
+      case 'concurrent':
+        this.concurrentCompleted++;
+        const bar = this.concurrentBars[context.barIndex];
+        if (bar) {
+          bar.increment({
+            status: 'Running',
+            provider,
+            prompt,
+            vars,
+          });
+        }
+        break;
+
+      case 'comparison':
+        this.comparisonCompleted++;
+        this.comparisonBar?.increment({
+          phase: 'select-best',
+          status: `Running (${this.comparisonCompleted}/${this.comparisonCount})`,
+          provider: 'Grading',
+          prompt,
+          vars: '',
+        });
+        break;
+    }
+  }
+
+  /**
+   * Update comparison progress
+   */
+  updateComparisonProgress(prompt: string): void {
+    if (this.isWebUI || !this.comparisonBar) {
+      return;
+    }
+
+    this.comparisonCompleted++;
+    this.comparisonBar.increment({
+      phase: 'select-best',
+      status: `Running (${this.comparisonCompleted}/${this.comparisonCount})`,
+      provider: 'Grading',
+      prompt: prompt.slice(0, 10).replace(/\n/g, ''),
+      vars: '',
+    });
+  }
+
+  /**
+   * Mark a phase as complete
+   */
+  completePhase(phase: 'serial' | 'concurrent' | 'comparison'): void {
+    if (this.isWebUI) {
+      return;
+    }
+
+    switch (phase) {
+      case 'serial':
+        if (this.serialBar) {
+          this.serialBar.update(this.serialCount, { status: 'Complete' });
+        }
+        break;
+      case 'concurrent':
+        this.concurrentBars.forEach((bar) => {
+          bar.update(bar.getTotal(), { status: 'Complete' });
+        });
+        break;
+      case 'comparison':
+        if (this.comparisonBar) {
+          this.comparisonBar.update(this.comparisonCount, { status: 'Complete' });
+        }
+        break;
+    }
+  }
+
+  /**
+   * Stop all progress bars
+   */
+  stop(): void {
+    if (this.multibar) {
+      this.multibar.stop();
+    }
+  }
+}
+
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**
@@ -1282,11 +1508,20 @@ class Evaluator {
       }
     };
 
-    // Set up main progress bars
-    let multibar: MultiBar | undefined;
-    let multiProgressBars: SingleBar[] = [];
+    // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
+    const progressBarManager = new ProgressBarManager(isWebUI);
+
+    // Count rows that will need comparisons
+    const rowsRequiringComparisons = tests.filter((test) =>
+      test.assert?.some((a) => a.type === 'select-best'),
+    ).length;
+
+    // Initialize progress bar manager if needed
+    if (this.options.showProgressBar) {
+      await progressBarManager.initialize(runEvalOptions, concurrency, rowsRequiringComparisons);
+    }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1297,84 +1532,14 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (multibar && evalStep) {
-        const numProgressBars = Math.min(concurrency, 20);
-
-        // Calculate which progress bar to use
-        const progressBarIndex = index % numProgressBars;
-        const progressbar = multiProgressBars[progressBarIndex];
-
-        // Calculate how many threads are assigned to this progress bar
-        const threadsForThisBar = calculateThreadsPerBar(
-          concurrency,
-          numProgressBars,
-          progressBarIndex,
-        );
-
-        const vars = formatVarsForDisplay(evalStep.test.vars, 10);
-        progressbar.increment({
-          provider: evalStep.provider.label || evalStep.provider.id(),
-          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-          vars,
-          activeThreads: threadsForThisBar,
-        });
+      } else if (this.options.showProgressBar) {
+        // Progress bar update is handled by the manager
+        const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
+        progressBarManager.updateProgress(index, evalStep, phase);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
     };
-
-    const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
-      // Only create progress bars if not in web UI mode
-      if (isWebUI) {
-        return;
-      }
-
-      const numProgressBars = Math.min(concurrency, 20);
-
-      const showThreadCounts = concurrency > numProgressBars;
-
-      multibar = new cliProgress.MultiBar(
-        {
-          format: showThreadCounts
-            ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
-            : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
-          hideCursor: true,
-          gracefulExit: true,
-        },
-        cliProgress.Presets.shades_classic,
-      );
-
-      if (!multibar) {
-        return;
-      }
-
-      const stepsPerProgressBar = Math.floor(evalOptions.length / numProgressBars);
-      const remainingSteps = evalOptions.length % numProgressBars;
-      multiProgressBars = [];
-
-      for (let i = 0; i < numProgressBars; i++) {
-        const totalSteps = i < remainingSteps ? stepsPerProgressBar + 1 : stepsPerProgressBar;
-        if (totalSteps > 0) {
-          // Calculate how many threads are assigned to this progress bar
-          const threadsForThisBar = calculateThreadsPerBar(concurrency, numProgressBars, i);
-
-          const progressbar = multibar.create(totalSteps, 0, {
-            groupId: `${i + 1}/${numProgressBars}`,
-            provider: '',
-            prompt: '',
-            vars: '',
-            activeThreads: 0,
-            maxThreads: threadsForThisBar,
-          });
-          multiProgressBars.push(progressbar);
-        }
-      }
-    };
-
-    // Run the evals
-    if (this.options.showProgressBar) {
-      await createMultiBars(runEvalOptions);
-    }
 
     // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
@@ -1404,6 +1569,11 @@ class Evaluator {
           await processEvalStepWithTimeout(evalStep, idx);
           processedIndices.add(idx);
         }
+
+        // Mark serial phase as complete
+        if (this.options.showProgressBar) {
+          progressBarManager.completePhase('serial');
+        }
       }
 
       // Then run concurrent evaluations
@@ -1429,14 +1599,11 @@ class Evaluator {
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
 
-    let progressBar;
-    if (compareRowsCount > 0 && multibar && !isWebUI) {
-      progressBar = multibar.create(compareRowsCount, 0, {
-        provider: 'Running model-graded comparisons',
-        prompt: '',
-        vars: '',
-      });
+    // Mark concurrent phase as complete
+    if (this.options.showProgressBar) {
+      progressBarManager.completePhase('concurrent');
     }
+
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
@@ -1521,10 +1688,8 @@ class Evaluator {
             await result.save();
           }
         }
-        if (progressBar) {
-          progressBar.increment({
-            prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
-          });
+        if (this.options.showProgressBar) {
+          progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
@@ -1534,11 +1699,9 @@ class Evaluator {
     await this.evalRecord.addPrompts(prompts);
 
     // Finish up
-    if (multibar) {
-      multibar.stop();
-    }
-    if (progressBar) {
-      progressBar.stop();
+    if (this.options.showProgressBar) {
+      progressBarManager.completePhase('comparison');
+      progressBarManager.stop();
     }
 
     if (globalTimeout) {
