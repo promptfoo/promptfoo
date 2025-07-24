@@ -28,16 +28,6 @@ The strategy performs the following operations:
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.
 
-## Session Management
-
-When using `transformVars` with `context.uuid`, each iteration automatically gets a new UUID.
-
-```yaml title="promptfooconfig.yaml"
-defaultTest:
-  options:
-    transformVars: '{ ...vars, sessionId: context.uuid }'
-```
-
 ## Text-to-Image Conversion Example
 
 Below is an example of converting a text prompt into an image from our `harmful:hate` plugin.
