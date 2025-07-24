@@ -1,7 +1,8 @@
 import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import type { RedteamFileConfig } from '@promptfoo/types';
 import yaml from 'js-yaml';
+import type { RedteamFileConfig } from '@promptfoo/types';
+
 import type { Config } from '../types';
 
 const orderRedTeam = (redteam: any): any => {

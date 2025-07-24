@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
@@ -23,14 +23,13 @@ import InputAdornment from '@mui/material/InputAdornment';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/material/styles';
 import invariant from '@promptfoo/util/invariant';
-import type { VisibilityState } from '@tanstack/table-core';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -41,18 +40,23 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useTableStore, useResultsViewSettingsStore } from './store';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import type { StackProps } from '@mui/material/Stack';
+import type { VisibilityState } from '@tanstack/table-core';
+
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
-import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
+
 import BarChartIcon from '@mui/icons-material/BarChart';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -162,8 +166,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-
   const [searchParams, setSearchParams] = useSearchParams();
+
   const {
     author,
     table,
@@ -176,6 +180,7 @@ export default function ResultsView({
     totalResultsCount,
     highlightedResultsCount,
     filters,
+    removeFilter,
   } = useTableStore();
 
   const {
@@ -200,7 +205,7 @@ export default function ResultsView({
       setSearchParams((prev) => ({ ...prev, search: text }));
       setSearchText(text);
     },
-    [searchParams],
+    [setSearchParams],
   );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
@@ -466,32 +471,65 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
+  // Handle metric parameter from URL
+  React.useEffect(() => {
+    const metricParam = searchParams.get('metric');
+    if (metricParam) {
+      const { addFilter, resetFilters } = useTableStore.getState();
+
+      resetFilters();
+
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value: metricParam,
+      });
+
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        newParams.delete('metric');
+        return newParams;
+      });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
+  const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
+
+  /**
+   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
+   * (and the rendering of duplicative, useless scrollbars).
+   */
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
+
   return (
     <>
       <Box
+        id="results-view-container"
         px={2}
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-          // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-          height: `calc(100vh - 81px)`,
+        }}
+        ref={(el: HTMLDivElement | null) => {
+          const top = el?.getBoundingClientRect().top;
+          if (top) {
+            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
+            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
+            el.style.height = `calc(100vh - ${top}px)`;
+          }
         }}
       >
         <Box>
-          <ResponsiveStack
-            direction="row"
-            mb={3}
-            spacing={1}
-            alignItems="center"
-            className="eval-header"
-          >
+          <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
                 variant="outlined"
@@ -546,6 +584,29 @@ export default function ResultsView({
           </ResponsiveStack>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
             <Box>
+              <FormControl>
+                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
+                <Select
+                  labelId="results-table-zoom-label"
+                  size="small"
+                  label="Zoom"
+                  value={resultsTableZoom}
+                  onChange={(e: SelectChangeEvent<number>) =>
+                    setResultsTableZoom(e.target.value as number)
+                  }
+                  sx={{ minWidth: 100 }}
+                >
+                  <MenuItem value={0.5}>50%</MenuItem>
+                  <MenuItem value={0.75}>75%</MenuItem>
+                  <MenuItem value={0.9}>90%</MenuItem>
+                  <MenuItem value={1}>100%</MenuItem>
+                  <MenuItem value={1.25}>125%</MenuItem>
+                  <MenuItem value={1.5}>150%</MenuItem>
+                  <MenuItem value={2}>200%</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Box>
               <FilterModeSelector
                 filterMode={filterMode}
                 onChange={handleFilterModeChange}
@@ -561,22 +622,16 @@ export default function ResultsView({
               />
             </Box>
 
-            {isMultiFilteringEnabled ? (
-              <>
-                <FiltersButton
-                  appliedFiltersCount={filters.appliedCount}
-                  onClick={() => setFiltersFormOpen(true)}
-                  ref={filtersButtonRef}
-                />
-                <FiltersForm
-                  open={filtersFormOpen}
-                  onClose={() => setFiltersFormOpen(false)}
-                  anchorEl={filtersButtonRef.current}
-                />
-              </>
-            ) : filters.options.metric.length > 0 ? (
-              <MetricFilterSelector />
-            ) : null}
+            <FiltersButton
+              appliedFiltersCount={filters.appliedCount}
+              onClick={() => setFiltersFormOpen(true)}
+              ref={filtersButtonRef}
+            />
+            <FiltersForm
+              open={filtersFormOpen}
+              onClose={() => setFiltersFormOpen(false)}
+              anchorEl={filtersButtonRef.current}
+            />
 
             <Box
               sx={{
@@ -610,6 +665,31 @@ export default function ResultsView({
                       sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                     />
                   )}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      // For metadata filters, both field and value must be present
+                      if (
+                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
+                      ) {
+                        return null;
+                      }
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+                      const label =
+                        filter.type === 'metric'
+                          ? `Metric: ${truncatedValue}`
+                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      return (
+                        <Chip
+                          key={filter.id}
+                          size="small"
+                          label={label}
+                          title={filter.value} // Show full value on hover
+                          onDelete={() => removeFilter(filter.id)}
+                          sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                        />
+                      );
+                    })}
                 </>
               ) : (
                 <>{filteredResultsCount} results</>
@@ -761,6 +841,7 @@ export default function ResultsView({
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}
           setFilterMode={setFilterMode}
+          zoom={resultsTableZoom}
         />
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />

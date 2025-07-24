@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useStore, DEFAULT_CONFIG } from './evalConfig';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { DEFAULT_CONFIG, useStore } from './evalConfig';
 
 describe('evalConfig store', () => {
   beforeEach(() => {

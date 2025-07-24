@@ -1,17 +1,18 @@
 import { randomUUID } from 'crypto';
+
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
+  evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
+  evalsToTagsTable,
   promptsTable,
   tagsTable,
-  evalsToTagsTable,
-  evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
@@ -19,17 +20,17 @@ import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import {
   type CompletedPrompt,
+  type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
-  type EvaluateSummaryV3,
   type EvaluateSummaryV2,
+  type EvaluateSummaryV3,
   type EvaluateTable,
-  ResultFailureReason,
+  type EvaluateTableRow,
   type Prompt,
+  ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-  type EvalSummary,
-  type EvaluateTableRow,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -449,12 +450,25 @@ export default class Eval {
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
       opts.filters.forEach((filter) => {
-        const { logicOperator, type, operator, value } = JSON.parse(filter);
+        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
-          condition = `json_extract(named_scores, '$.${sanitizedValue}') IS NOT NULL`;
+          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
+          // in double quotes.
+          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+        } else if (type === 'metadata' && field) {
+          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedField = field.replace(/'/g, "''");
+
+          if (operator === 'equals') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
+          } else if (operator === 'contains') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
+          } else if (operator === 'not_contains') {
+            condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          }
         }
 
         if (condition) {

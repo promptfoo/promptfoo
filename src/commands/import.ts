@@ -1,11 +1,12 @@
-import { Command } from 'commander';
-import * as fs from 'fs';
+import fs from 'fs';
+
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
+import type { Command } from 'commander';
 import type { EvaluateResult } from '../types';
 
 function transformV3ResultsToEvaluateResults(results: any[]): EvaluateResult[] {

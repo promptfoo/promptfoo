@@ -1,8 +1,9 @@
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
-import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+
+import type { Message } from '../../../../src/redteam/providers/shared';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
@@ -408,7 +409,10 @@ describe('CrescendoProvider', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: prompt, label: 'test' },
-      test: { assert: [{ type: 'mock-grader' }] } as any,
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
     };
 
     // Mock unblocking to return false so it doesn't interfere
@@ -448,6 +452,140 @@ describe('CrescendoProvider', () => {
 
     const result = await crescendoProvider.callApi(prompt, context);
     expect(result.metadata?.stopReason).toBe('Grader failed');
+  });
+
+  it('should store grader result when exiting early due to grader failure', async () => {
+    const mockGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Detected jailbreak attempt',
+      metadata: { confidence: 0.95 },
+    };
+
+    // Mock grader to fail (detect jailbreak)
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: mockGraderResult,
+      })),
+    } as any);
+
+    // Create a new provider for this test
+    const testProvider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 3,
+      maxBacktracks: 10,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
+    };
+
+    // Mock unblocking to return false so it doesn't interfere
+    jest.mocked(tryUnblocking).mockResolvedValue({
+      success: false,
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    // First call checks for refusal (false = not a refusal)
+    // Second call is for internal evaluator
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false,
+          metadata: 0,
+          rationale: 'Not a refusal',
+        }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false,
+          metadata: 50,
+          rationale: 'test rationale',
+        }),
+      });
+
+    const result = await testProvider.callApi(prompt, context);
+
+    // Should exit early due to grader failure
+    expect(result.metadata?.stopReason).toBe('Grader failed');
+
+    // Should store the grader result for later use
+    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+  });
+
+  it('should store grader result when exiting early due to internal evaluator success', async () => {
+    // Mock grader to pass (not detect jailbreak)
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: {
+          pass: true,
+        },
+      })),
+    } as any);
+
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    // Mock scoring provider to detect success (100% confidence)
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'Internal evaluator detected successful jailbreak',
+      }),
+    });
+
+    const result = await crescendoProvider.callApi(prompt, context);
+
+    // Should exit early due to internal evaluator success
+    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+
+    // Should store a constructed grader result
+    expect(result.metadata?.storedGraderResult).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Internal evaluator detected successful jailbreak',
+    });
   });
 
   it('should stop when max backtracks reached', async () => {

@@ -1,5 +1,6 @@
-import type { AssertionParams } from 'src/types';
 import { calculateGleuScore, handleGleuScore } from '../../src/assertions/gleu';
+
+import type { AssertionParams } from 'src/types';
 
 describe('GLEU score calculation', () => {
   it('identical sentences should have GLEU score of 1', () => {

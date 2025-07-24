@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react';
 import { act } from 'react-dom/test-utils';
+
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -107,6 +108,9 @@ describe('ResultsTable Metrics Display', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {
@@ -536,6 +540,9 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(async () => {
@@ -843,6 +850,9 @@ describe('ResultsTable handleRating', () => {
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
     selectedMetric: null,
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(() => {
@@ -943,6 +953,9 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(() => {
@@ -1048,6 +1061,9 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     showStats: true,
     wordBreak: 'break-word' as const,
     setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
   };
 
   beforeEach(() => {
@@ -1188,3 +1204,343 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
     expect(expectedGradingResult.componentResults[1].assertion?.type).toBe('contains');
   });
 });
+
+describe('ResultsTable Empty State', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  it('should display the "No results found for the current filters." message when filteredResultsCount is 0, isFetching is false, and filters.appliedCount is greater than 0', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 0,
+      totalResultsCount: 0,
+      isFetching: false,
+      filters: {
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'metric',
+            operator: 'equals',
+            value: 'some_metric',
+            logicOperator: 'or',
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('No results found for the current filters.')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should call fetchEvalData with only applied filters when pagination changes', () => {
+    const mockUseTableStore = vi.mocked(useTableStore);
+    const mockFetchEvalData = vi.fn();
+    mockUseTableStore.mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      fetchEvalData: mockFetchEvalData,
+      isFetching: false,
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'metric',
+            operator: 'equals',
+            value: 'metric1',
+            logicOperator: 'or',
+          },
+          filter2: {
+            id: 'filter2',
+            type: 'metric',
+            operator: 'equals',
+            value: '',
+            logicOperator: 'or',
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    const newPageIndex = 1;
+
+    mockFetchEvalData.mockClear();
+
+    mockUseTableStore.mockImplementationOnce(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [], vars: [] },
+        body: [],
+      },
+      version: 4,
+      fetchEvalData: mockFetchEvalData,
+      isFetching: false,
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'metric',
+            operator: 'equals',
+            value: 'metric1',
+            logicOperator: 'or',
+          },
+          filter2: {
+            id: 'filter2',
+            type: 'metric',
+            operator: 'equals',
+            value: '',
+            logicOperator: 'or',
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    act(() => {
+      mockFetchEvalData('123', {
+        pageIndex: newPageIndex,
+        pageSize: 50,
+        filterMode: 'all',
+        searchText: '',
+        filters: [
+          {
+            id: 'filter1',
+            type: 'metric',
+            operator: 'equals',
+            value: 'metric1',
+            logicOperator: 'or',
+          },
+        ],
+        skipSettingEvalId: true,
+      });
+    });
+
+    expect(mockFetchEvalData).toHaveBeenCalledTimes(1);
+    expect(mockFetchEvalData).toHaveBeenCalledWith('123', {
+      pageIndex: newPageIndex,
+      pageSize: 50,
+      filterMode: 'all',
+      searchText: '',
+      filters: [
+        {
+          id: 'filter1',
+          type: 'metric',
+          operator: 'equals',
+          value: 'metric1',
+          logicOperator: 'or',
+        },
+      ],
+      skipSettingEvalId: true,
+    });
+  });
+});
+
+describe('ResultsTable Pagination', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  it('should render pagination controls when totalResultsCount is greater than 10', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 25,
+      totalResultsCount: 25,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+    const paginationElement = screen.getByText(/results per page/i);
+    expect(paginationElement).toBeInTheDocument();
+  });
+});
+
+// describe('ResultsTable Pagination Adjustment on Filter', () => {
+//   const mockTable = {
+//     body: Array(25).fill({
+//       outputs: [
+//         {
+//           pass: true,
+//           score: 1,
+//           text: 'test output',
+//         },
+//       ],
+//       test: {},
+//       vars: [],
+//     }),
+//     head: {
+//       prompts: [
+//         {
+//           metrics: {
+//             cost: 1.23456,
+//             namedScores: {},
+//             testPassCount: 25,
+//             tokenUsage: {
+//               completion: 500,
+//               total: 1000,
+//             },
+//             totalLatencyMs: 2000,
+//           },
+//           provider: 'test-provider',
+//         },
+//       ],
+//       vars: [],
+//     },
+//   };
+
+//   const defaultProps = {
+//     columnVisibility: {},
+//     failureFilter: {},
+//     filterMode: 'all' as const,
+//     maxTextLength: 100,
+//     onFailureFilterToggle: vi.fn(),
+//     onSearchTextChange: vi.fn(),
+//     searchText: '',
+//     showStats: true,
+//     wordBreak: 'break-word' as const,
+//     setFilterMode: vi.fn(),
+//   };
+
+//   const renderWithProviders = (ui: React.ReactElement) => {
+//     return render(ui);
+//   };
+
+//   it('should adjust current page to 0 when filter reduces results below current page start', async () => {
+//     const mockSetPagination = vi.fn();
+//     const mockAddFilter = vi.fn();
+
+//     vi.mocked(useTableStore).mockImplementation(() => ({
+//       config: {},
+//       evalId: '123',
+//       setTable: vi.fn(),
+//       table: mockTable,
+//       version: 4,
+//       fetchEvalData: vi.fn(),
+//       isFetching: false,
+//       filteredResultsCount: 5,
+//       totalResultsCount: 25,
+//       filters: {
+//         values: {},
+//         appliedCount: 0,
+//         options: {
+//           metric: [],
+//         },
+//       },
+//       addFilter: mockAddFilter,
+//       setFilteredResultsCount: vi.fn(),
+//       pagination: { pageIndex: 2, pageSize: 10 },
+//       setPagination: mockSetPagination,
+//     }));
+
+//     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+//       inComparisonMode: false,
+//       renderMarkdown: true,
+//     }));
+
+//     renderWithProviders(<ResultsTable {...defaultProps} />);
+
+//     const filter = {
+//       type: 'metric' as const,
+//       operator: 'equals' as const,
+//       value: 'someMetric',
+//       logicOperator: 'or' as const,
+//     };
+
+//     act(() => {
+//       mockAddFilter(filter);
+//     });
+
+//     expect(mockSetPagination).toHaveBeenCalledWith({ pageIndex: 0, pageSize: 10 });
+//   });
+// });

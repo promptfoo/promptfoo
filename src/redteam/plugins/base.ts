@@ -2,6 +2,14 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
+import { maybeLoadToolsFromExternalFile } from '../../util';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import invariant from '../../util/invariant';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { redteamProviderManager } from '../providers/shared';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
+
 import type {
   ApiProvider,
   Assertion,
@@ -12,13 +20,6 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types';
-import { maybeLoadToolsFromExternalFile } from '../../util';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
@@ -323,6 +324,7 @@ export abstract class RedteamGraderBase {
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
     renderedValue: AssertionValue | undefined,
+    additionalRubric?: string,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
@@ -347,7 +349,10 @@ export abstract class RedteamGraderBase {
         '\n\n' +
         graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
     }
-    const finalRubric = this.renderRubric(vars) + graderExamplesString;
+    const finalRubric =
+      this.renderRubric(vars) +
+      (additionalRubric ? '\n\n' + additionalRubric : '') +
+      graderExamplesString;
 
     if (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput)) {
       return {

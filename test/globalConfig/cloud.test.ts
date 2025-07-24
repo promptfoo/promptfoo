@@ -1,5 +1,5 @@
 import { fetchWithProxy } from '../../src/fetch';
-import { CloudConfig, cloudConfig, API_HOST } from '../../src/globalConfig/cloud';
+import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 
