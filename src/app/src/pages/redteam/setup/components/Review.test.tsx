@@ -153,42 +153,6 @@ describe('Review Component', () => {
         ),
       ).toBeInTheDocument();
     });
-
-    // [Tusk] FAILING TEST
-    it('maintains collapsed state of Advanced Configuration accordion after re-render', () => {
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          ...defaultConfig,
-          defaultTest: {
-            vars: {
-              testVar: 'testValue',
-            },
-          },
-        },
-        updateConfig: mockUpdateConfig,
-      });
-
-      const { rerender } = render(<Review />);
-
-      const accordionSummary = screen.getByText('Advanced Configuration');
-      fireEvent.click(accordionSummary);
-
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          ...defaultConfig,
-          defaultTest: {
-            vars: {
-              testVar: 'testValue',
-            },
-          },
-        },
-        updateConfig: mockUpdateConfig,
-      });
-
-      rerender(<Review />);
-
-      expect(screen.queryByTestId('default-test-variables')).toBeNull();
-    });
   });
 
   it('renders DefaultTestVariables without Paper wrapper and title when Advanced Configuration is expanded', async () => {

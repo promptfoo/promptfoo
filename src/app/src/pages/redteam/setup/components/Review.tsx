@@ -680,7 +680,9 @@ export default function Review() {
 
       <Accordion
         expanded={isAdvancedConfigExpanded}
-        onChange={(e, expanded) => setIsAdvancedConfigExpanded(expanded)}
+        onChange={(e, expanded) => {
+          setIsAdvancedConfigExpanded(expanded);
+        }}
         sx={{
           mb: 4,
           '&:before': { display: 'none' },
