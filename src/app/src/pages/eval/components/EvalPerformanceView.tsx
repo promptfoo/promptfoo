@@ -1,6 +1,8 @@
 import React from 'react';
 
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { DataGrid } from '@mui/x-data-grid';
@@ -19,12 +21,49 @@ interface MetricRow {
   [key: string]: any; // For dynamic prompt columns
 }
 
-const MetricsTable: React.FC = () => {
-  const { table } = useTableStore();
+const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
+  handleSwitchToResultsTab,
+}) => {
+  const { table, filters, addFilter } = useTableStore();
 
   if (!table || !table.head || !table.head.prompts) {
     return null;
   }
+
+  /**
+   * Applies the metric as a filter and switches to the results tab.
+   */
+  const handleMetricFilterClick = React.useCallback(
+    (metric: string | null) => {
+      if (!metric) {
+        return;
+      }
+
+      const filter = {
+        type: 'metric' as const,
+        operator: 'equals' as const,
+        value: metric,
+        logicOperator: 'or' as const,
+      };
+
+      // If this filter is already applied, do not re-apply it.
+      if (
+        Object.values(filters.values).find(
+          (f) =>
+            f.type === filter.type &&
+            f.value === filter.value &&
+            f.operator === filter.operator &&
+            f.logicOperator === filter.logicOperator,
+        )
+      ) {
+        return;
+      }
+
+      addFilter(filter);
+      handleSwitchToResultsTab();
+    },
+    [addFilter, filters.values],
+  );
 
   // Extract aggregated metric names from prompts
   const promptMetricNames = React.useMemo(() => {
@@ -47,6 +86,50 @@ const MetricsTable: React.FC = () => {
         headerAlign: 'left',
         type: 'singleSelect',
         valueOptions: promptMetricNames,
+        renderCell: (params) => {
+          const metricName = params.row.metric;
+          return (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                justifyContent: 'space-between',
+                width: '100%',
+                position: 'relative',
+                '& .filter-icon': {
+                  opacity: 0,
+                },
+                '.MuiDataGrid-row:hover &': {
+                  '& .filter-icon': {
+                    opacity: 1,
+                  },
+                },
+              }}
+            >
+              <Typography variant="body2" component="span" sx={{ lineHeight: 1.5 }}>
+                {metricName}
+              </Typography>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                <IconButton
+                  className="filter-icon"
+                  size="small"
+                  sx={{
+                    color: 'text.disabled',
+                    '&:hover': {
+                      color: 'primary.main',
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
+                  aria-label={`Filter by ${metricName}`}
+                  onClick={() => handleMetricFilterClick(metricName)}
+                >
+                  <FilterAltIcon />
+                </IconButton>
+              </span>
+            </Box>
+          );
+        },
       },
     ];
 
@@ -119,29 +202,26 @@ const MetricsTable: React.FC = () => {
         rows={rows}
         columns={columns}
         density="compact"
-        //disableColumnMenu
         disableRowSelectionOnClick
-        // hideFooter={rows.length <= 10}
         initialState={{
           sorting: {
             sortModel: [{ field: 'metric', sort: 'asc' }],
           },
+          pagination: { paginationModel: { pageSize: 50 } },
         }}
-        // pageSizeOptions={[10, 25, 50, 100]}
-        // sx={{
-        //   '& .MuiDataGrid-columnHeaders': {
-        //     backgroundColor: 'rgba(0, 0, 0, 0.04)',
-        //   },
-        //   '& .MuiDataGrid-cell': {
-        //     borderBottom: '1px solid rgba(224, 224, 224, 1)',
-        //   },
-        // }}
+        sx={{
+          '& .MuiDataGrid-row:hover': {
+            backgroundColor: 'action.hover',
+          },
+        }}
       />
     </Paper>
   );
 };
 
-const EvalPerformanceView: React.FC = () => {
+const EvalPerformanceView: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
+  handleSwitchToResultsTab,
+}) => {
   const { table } = useTableStore();
 
   if (!table || !table.body || table.body.length === 0) {
@@ -177,7 +257,7 @@ const EvalPerformanceView: React.FC = () => {
         Performance Metrics
       </Typography>
       <Box sx={{ flexGrow: 1, minHeight: 0 }}>
-        <MetricsTable />
+        <MetricsTable handleSwitchToResultsTab={handleSwitchToResultsTab} />
       </Box>
     </Box>
   );

@@ -879,7 +879,7 @@ export default function ResultsView({
             handleSwitchToPerformanceTab={() => setActiveTab(1)}
           />
         )}
-        {activeTab === 1 && <EvalMetricsTable />}
+        {activeTab === 1 && <EvalMetricsTable handleSwitchToResultsTab={() => setActiveTab(0)} />}
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
