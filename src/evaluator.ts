@@ -517,7 +517,6 @@ export function formatVarsForDisplay(
   }
 
   try {
-    // Simple approach: limit individual values, then truncate the whole result
     const formatted = Object.entries(vars)
       .map(([key, value]) => {
         // Prevent memory issues by limiting individual values first
@@ -1311,7 +1310,7 @@ class Evaluator {
           progressBarIndex,
         );
 
-        const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+        const vars = formatVarsForDisplay(evalStep.test.vars, 40);
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
