@@ -174,7 +174,7 @@ function PassRateChart({ table }: ChartProps) {
       const passCount = outputs.filter((output) => output.pass).length;
       const passRate = (passCount / outputs.length) * 100;
       return {
-        label: `Column ${promptIdx + 1}`,
+        label: prompt.provider,
         data: [passRate],
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
