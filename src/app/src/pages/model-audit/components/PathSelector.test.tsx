@@ -1,10 +1,9 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import PathSelector from './PathSelector';
 import { callApi } from '@app/utils/api';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditStore } from '../store';
+import PathSelector from './PathSelector';
 
 vi.mock('@app/utils/api');
 vi.mock('../store');

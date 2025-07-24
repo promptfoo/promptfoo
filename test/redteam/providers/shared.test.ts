@@ -7,11 +7,13 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
-  redteamProviderManager,
   getTargetResponse,
-  messagesToRedteamHistory,
   type Message,
+  messagesToRedteamHistory,
+  redteamProviderManager,
 } from '../../../src/redteam/providers/shared';
+import { sleep } from '../../../src/util/time';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -19,7 +21,6 @@ import type {
   Prompt,
   ProviderResponse,
 } from '../../../src/types';
-import { sleep } from '../../../src/util/time';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({

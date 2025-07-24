@@ -1,12 +1,13 @@
 ﻿import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { Options as PythonShellOptions } from 'python-shell';
+
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
+import type { Options as PythonShellOptions } from 'python-shell';
 
 export const state: {
   cachedPythonPath: string | null;

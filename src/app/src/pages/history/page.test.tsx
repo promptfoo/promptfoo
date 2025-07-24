@@ -1,7 +1,8 @@
-import { render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
+
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HistoryPage from './page';
 
 vi.mock('@app/utils/api', () => ({

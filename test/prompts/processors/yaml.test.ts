@@ -1,5 +1,6 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
+
+import dedent from 'dedent';
 import logger from '../../../src/logger';
 import { processYamlFile } from '../../../src/prompts/processors/yaml';
 

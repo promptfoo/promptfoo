@@ -1,17 +1,18 @@
 import { randomUUID } from 'crypto';
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import type {
   ApiProvider,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
-  Prompt,
   NunjucksFilterMap,
-  RedteamFileConfig,
+  Prompt,
   ProviderResponse,
-  AtomicTestCase,
+  RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';

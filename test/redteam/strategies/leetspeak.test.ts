@@ -1,4 +1,5 @@
 import { addLeetspeak } from '../../../src/redteam/strategies/leetspeak';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addLeetspeak', () => {

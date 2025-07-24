@@ -2,10 +2,10 @@ import OpenAI from 'openai';
 import {
   calculateOpenAICost,
   failApiCall,
-  getTokenUsage,
-  validateFunctionCall,
   formatOpenAiError,
+  getTokenUsage,
   OPENAI_CHAT_MODELS,
+  validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');

@@ -1,10 +1,11 @@
 import { getEnvInt } from '../../../envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
-import type { PluginActionParams, TestCase } from '../../../types';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
-import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
 import { createTestCase } from './common';
+
+import type { PluginActionParams, TestCase } from '../../../types';
+import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
 
 export async function getHarmfulTests(
   { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,

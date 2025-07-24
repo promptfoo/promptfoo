@@ -1,7 +1,8 @@
 import dedent from 'dedent';
-import type { ApiProvider, AtomicTestCase, GradingResult } from '../../../types';
 import { isBasicRefusal } from '../../util';
 import { RedteamGraderBase } from '../base';
+
+import type { ApiProvider, AtomicTestCase, GradingResult } from '../../../types';
 
 export class HarmfulGrader extends RedteamGraderBase {
   id = 'promptfoo:redteam:harmful';

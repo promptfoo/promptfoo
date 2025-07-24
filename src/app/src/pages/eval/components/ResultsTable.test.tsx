@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react';
 import { act } from 'react-dom/test-utils';
+
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import userEvent from '@testing-library/user-event';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({

@@ -1,8 +1,8 @@
-import type { Command } from 'commander';
 import { clearCache } from '../cache';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
+import type { Command } from 'commander';
 
 export function cacheCommand(program: Command) {
   program
