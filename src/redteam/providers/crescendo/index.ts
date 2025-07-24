@@ -1,9 +1,25 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { shouldGenerateRemote } from '../../remoteGeneration';
+import { isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -16,28 +32,8 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-import {
-  CRESCENDO_SYSTEM_PROMPT,
-  EVAL_SYSTEM_PROMPT,
-  GOAL_RUBRIC_TEMPLATE,
-  REFUSAL_SYSTEM_PROMPT,
-} from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -289,13 +285,8 @@ export class CrescendoProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
-    // Template for goal-specific evaluation
-    let additionalRubric = '';
-    if (this.userGoal) {
-      additionalRubric = this.nunjucks.renderString(GOAL_RUBRIC_TEMPLATE, {
-        goal: this.userGoal,
-      });
-    }
+    // Generate goal-specific evaluation rubric
+    const additionalRubric = getGoalRubric(this.userGoal);
 
     while (roundNum < this.maxTurns) {
       try {

@@ -1,10 +1,10 @@
+import * as fs from 'fs';
+
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
 import yaml from 'js-yaml';
-
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -12,7 +12,6 @@ import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../ty
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
@@ -33,8 +32,10 @@ import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
+
+import type { StrategyExemptPlugin } from './constants';
+import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -653,7 +654,7 @@ export async function synthesize({
         registeredPlugin.validate({
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),
@@ -750,7 +751,7 @@ export async function synthesize({
         config: {
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),

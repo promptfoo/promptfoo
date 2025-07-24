@@ -1,4 +1,5 @@
-type Flag = 'EVAL_RESULTS_MULTI_FILTERING';
+// No feature flags currently in use
+type Flag = never;
 
 export const useFeatureFlag = (flag: Flag) => {
   const flagId = `FEATURE_ENABLED__${flag}`;

@@ -1,4 +1,5 @@
 import { CompetitorsGrader } from '../../../src/redteam/plugins/competitors';
+
 import type { AssertionValue } from '../../../src/types';
 
 describe('CompetitorsGrader', () => {

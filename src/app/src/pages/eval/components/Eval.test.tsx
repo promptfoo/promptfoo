@@ -1,11 +1,11 @@
-import { render, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import * as usePageMetaHook from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { act, render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 vi.mock('@app/hooks/usePageMeta');
 vi.mock('@app/utils/api');

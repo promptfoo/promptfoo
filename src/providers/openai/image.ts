@@ -1,12 +1,13 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import type { OpenAiSharedOptions } from './types';
+import { OpenAiGenericProvider } from '.';
 import { formatOpenAiError } from './util';
+
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { OpenAiSharedOptions } from './types';
 
 type OpenAiImageModel = 'dall-e-2' | 'dall-e-3';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';

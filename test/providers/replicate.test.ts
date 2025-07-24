@@ -2,9 +2,9 @@ import Replicate from 'replicate';
 import { disableCache, enableCache, isCacheEnabled } from '../../src/cache';
 import {
   DefaultModerationProvider,
-  ReplicateProvider,
-  ReplicateModerationProvider,
   ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
 } from '../../src/providers/replicate';
 
 jest.mock('replicate');

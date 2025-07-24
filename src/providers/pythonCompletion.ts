@@ -1,20 +1,22 @@
 import fs from 'fs';
 import path from 'path';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-  ProviderEmbeddingResponse,
-  ProviderClassificationResponse,
-} from '../types';
 import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { safeJsonStringify } from '../util/json';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;

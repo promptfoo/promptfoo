@@ -1,8 +1,9 @@
 import { exec } from 'child_process';
-import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 import util from 'util';
+
+import dedent from 'dedent';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 

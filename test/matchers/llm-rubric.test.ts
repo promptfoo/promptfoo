@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -7,8 +8,9 @@ import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
 import { TestGrader } from '../util/utils';
+
+import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),

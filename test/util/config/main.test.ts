@@ -1,14 +1,16 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+
+import yaml from 'js-yaml';
 import logger from '../../../src/logger';
-import type { UnifiedConfig } from '../../../src/types';
 import {
   getConfigDirectoryPath,
   setConfigDirectoryPath,
   writePromptfooConfig,
 } from '../../../src/util/config/manage';
+
+import type { UnifiedConfig } from '../../../src/types';
 
 jest.mock('os');
 jest.mock('fs');
