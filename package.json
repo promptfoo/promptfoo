@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.116.7",
+  "version": "0.117.1",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -76,9 +76,11 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "4.0.3",
     "whatwg-url": "14.1.0",
+    "esbuild": "0.25.5",
     "*": {
       "whatwg-url": "14.1.0",
-      "chokidar": "4.0.3"
+      "chokidar": "4.0.3",
+      "esbuild": "0.25.5"
     }
   },
   "peerDependencies": {
@@ -138,12 +140,6 @@
     "@fal-ai/client": "^1.6.0",
     "@ibm-cloud/watsonx-ai": "^1.6.8",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@inquirer/checkbox": "^4.1.9",
-    "@inquirer/confirm": "^5.1.13",
-    "@inquirer/core": "^10.1.14",
-    "@inquirer/editor": "^4.2.14",
-    "@inquirer/input": "^4.2.0",
-    "@inquirer/select": "^4.2.4",
     "@jest/globals": "^30.0.4",
     "@libsql/client": "^0.15.9",
     "@swc/core": "^1.12.14",
@@ -161,6 +157,7 @@
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pdf-parse": "^1.1.5",
+    "@types/pem": "^1.14.4",
     "@types/proxy-from-env": "^1.0.4",
     "@types/semver": "^7.7.0",
     "@types/source-map-support": "^0.5.10",
@@ -209,9 +206,15 @@
     "@swc/core-win32-x64-msvc": "^1.12.14"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.56.0",
+    "@anthropic-ai/sdk": "^0.57.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^9.8.0",
+    "@inquirer/checkbox": "^4.1.9",
+    "@inquirer/confirm": "^5.1.13",
+    "@inquirer/core": "^10.1.14",
+    "@inquirer/editor": "^4.2.14",
+    "@inquirer/input": "^4.2.0",
+    "@inquirer/select": "^4.2.4",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@types/ws": "^8.18.1",
     "ajv": "^8.17.1",
@@ -239,6 +242,7 @@
     "fastest-levenshtein": "^1.0.16",
     "glob": "^11.0.3",
     "http-z": "^7.1.3",
+    "jks-js": "^1.1.4",
     "js-rouge": "^3.0.0",
     "js-yaml": "^4.1.0",
     "mathjs": "^14.5.3",
@@ -246,6 +250,7 @@
     "nunjucks": "^3.2.4",
     "openai": "^5.9.2",
     "opener": "^1.5.2",
+    "pem": "^1.14.8",
     "posthog-node": "^4.18.0",
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",

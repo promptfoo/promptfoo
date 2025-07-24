@@ -1,5 +1,7 @@
 import 'dotenv/config';
+
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
@@ -85,6 +87,11 @@ type EnvVars = {
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
+  PROMPTFOO_PFX_CERT_PATH?: string;
+  PROMPTFOO_PFX_PASSWORD?: string;
+  PROMPTFOO_JKS_CERT_PATH?: string;
+  PROMPTFOO_JKS_PASSWORD?: string;
+  PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
   // HTTP proxy settings
@@ -210,6 +217,9 @@ type EnvVars = {
 
   // FAL
   FAL_KEY?: string;
+
+  // GitHub
+  GITHUB_TOKEN?: string;
 
   // Groq
   GROQ_API_KEY?: string;

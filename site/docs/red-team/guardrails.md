@@ -9,6 +9,12 @@ Guardrails are an active mitigation solution to LLM security, implemented to con
 
 Common guardrails include prompt injection/jailbreak detection, content moderation, and PII (personally identifiable information) detection.
 
+:::info
+
+[Adaptive guardrails](https://www.promptfoo.dev/guardrails/), which learn from your red teaming findings and custom policies, are available in [Promptfoo Enterprise](/docs/enterprise/).
+
+:::
+
 ## Guardrails API
 
 The Guardrails API helps detect potential security risks in user inputs to LLMs, identify PII, and assess potential harm in content.

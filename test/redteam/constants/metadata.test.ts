@@ -1,21 +1,22 @@
 import {
-  Severity,
-  severityDisplayNames,
-  riskCategorySeverityMap,
-  riskCategories,
-  categoryDescriptions,
-  categoryMapReverse,
-  categoryLabels,
   categoryAliases,
   categoryAliasesReverse,
-  pluginDescriptions,
-  strategyDescriptions,
-  strategyDisplayNames,
-  PLUGIN_PRESET_DESCRIPTIONS,
+  categoryDescriptions,
+  categoryLabels,
+  categoryMapReverse,
   DEFAULT_OUTPUT_PATH,
   displayNameOverrides,
+  PLUGIN_PRESET_DESCRIPTIONS,
+  pluginDescriptions,
+  riskCategories,
+  riskCategorySeverityMap,
+  Severity,
+  severityDisplayNames,
+  strategyDescriptions,
+  strategyDisplayNames,
   subCategoryDescriptions,
 } from '../../../src/redteam/constants/metadata';
+
 import type { Plugin } from '../../../src/redteam/constants/plugins';
 import type { Strategy } from '../../../src/redteam/constants/strategies';
 

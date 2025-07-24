@@ -153,6 +153,9 @@
                             "FAL_KEY": {
                               "type": "string"
                             },
+                            "GITHUB_TOKEN": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
@@ -160,6 +163,9 @@
                               "type": "string"
                             },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GEMINI_API_KEY": {
                               "type": "string"
                             },
                             "GROQ_API_KEY": {
@@ -244,6 +250,21 @@
                               "type": "string"
                             },
                             "PROMPTFOO_CA_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_ALIAS": {
                               "type": "string"
                             },
                             "PROMPTFOO_INSECURE_SSL": {
@@ -1143,6 +1164,7 @@
                           "indirect-prompt-injection",
                           "intent",
                           "mcp",
+                          "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
@@ -1328,6 +1350,7 @@
                               "indirect-prompt-injection",
                               "intent",
                               "mcp",
+                              "medical",
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",

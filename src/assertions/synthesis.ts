@@ -1,12 +1,13 @@
-import type { SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import { getDefaultProviders } from '../providers/defaults';
-import type { TestCase, TestSuite, ApiProvider, Assertion } from '../types';
 import { sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
+import type { SingleBar } from 'cli-progress';
+
+import type { ApiProvider, Assertion, TestCase, TestSuite } from '../types';
 
 interface SynthesizeOptions {
   instructions?: string;

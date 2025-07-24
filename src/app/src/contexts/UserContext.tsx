@@ -1,4 +1,5 @@
-import React, { useState, useEffect, type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
+
 import { fetchUserEmail } from '@app/utils/api';
 import { UserContext } from './UserContextDef';
 

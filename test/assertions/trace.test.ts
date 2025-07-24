@@ -1,6 +1,7 @@
 import { runAssertion } from '../../src/assertions';
-import { getTraceStore, TraceStore } from '../../src/tracing/store';
-import type { Assertion, AtomicTestCase, ProviderResponse, GradingResult } from '../../src/types';
+import { getTraceStore } from '../../src/tracing/store';
+
+import type { Assertion, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
 import type { TraceData } from '../../src/types/tracing';
 
 // Mock the trace store
@@ -10,7 +11,7 @@ jest.mock('../../src/tracing/store');
 jest.mock('../../src/python/wrapper', () => ({
   runPythonCode: jest.fn((code: string, functionName: string, args: any[]) => {
     // Simple Python interpreter mock for our test cases
-    const [output, context] = args;
+    const [_output, context] = args;
 
     // Handle the specific test cases
     if (code.includes("len(context.trace['spans']) == 2")) {
@@ -19,7 +20,9 @@ jest.mock('../../src/python/wrapper', () => ({
 
     if (code.includes('root_spans') && code.includes('leaf_spans')) {
       const trace = context.trace;
-      if (!trace) return false;
+      if (!trace) {
+        return false;
+      }
       const rootSpans = trace.spans.filter((s: any) => !s.parentSpanId);
       const leafSpans = trace.spans.filter((s: any) => s.parentSpanId);
       return rootSpans.length === 1 && leafSpans.length === 1;
@@ -27,7 +30,9 @@ jest.mock('../../src/python/wrapper', () => ({
 
     if (code.includes('avg_duration')) {
       const trace = context.trace;
-      if (!trace) return false;
+      if (!trace) {
+        return false;
+      }
       const durations = trace.spans
         .filter((s: any) => s.endTime)
         .map((s: any) => s.endTime - s.startTime);

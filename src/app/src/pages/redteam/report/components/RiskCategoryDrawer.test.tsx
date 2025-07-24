@@ -1,8 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
-import type { EvaluateResult, AtomicTestCase, ResultFailureReason } from '@promptfoo/types';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
+import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
@@ -102,9 +102,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test normal click - should use navigate
     fireEvent.click(viewAllLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Atest-plugin',
-    );
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?metric=test-plugin');
     expect(window.open).not.toHaveBeenCalled();
   });
 
@@ -116,10 +114,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Ctrl+click - should open new tab
     fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
-    expect(window.open).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Atest-plugin',
-      '_blank',
-    );
+    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?metric=test-plugin', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
 
     // Reset mocks
@@ -128,10 +123,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Cmd+click (Mac) - should also open new tab
     fireEvent.click(viewAllLogsButton, { metaKey: true });
 
-    expect(window.open).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metadata%3DpluginId%3Atest-plugin',
-      '_blank',
-    );
+    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?metric=test-plugin', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
@@ -157,9 +149,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     const viewAllLogsButton = screen.getByText('View All Logs');
     fireEvent.click(viewAllLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/?evalId=test-eval-123&search=metric%3DTest%20Category',
-    );
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?metric=Test%20Category');
   });
 
   it('should close drawer when close button is clicked', () => {

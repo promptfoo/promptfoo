@@ -1,6 +1,7 @@
 import * as rouge from 'js-rouge';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export function handleRougeScore({
   baseType,
