@@ -39,7 +39,7 @@ import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
-import EvalMetricsTable from './EvalPerformanceView';
+import EvalPerformanceView from './EvalPerformanceView';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
@@ -498,7 +498,7 @@ export default function ResultsView({
   }, [searchParams, setSearchParams]);
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
-  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const canRenderResultsCharts = (table && config && table.head.prompts.length > 1) ?? false;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
@@ -518,6 +518,14 @@ export default function ResultsView({
       document.body.style.overflow = 'auto';
     };
   }, [activeTab]);
+
+  /**
+   * Determine whether the tab controller (switcher) should be rendered based on whether there is
+   * a performance tab to render.
+   */
+  const hasMetrics = table?.head.prompts.some((prompt) => prompt.metrics?.namedScores);
+  const hasPerformanceTab = canRenderResultsCharts || hasMetrics;
+  const renderTabController = hasPerformanceTab;
 
   return (
     <>
@@ -593,16 +601,18 @@ export default function ResultsView({
           </ResponsiveStack>
 
           {/* TABS */}
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-            <Tabs
-              value={activeTab}
-              onChange={(_, newValue) => setActiveTab(newValue)}
-              aria-label="evaluation results tabs"
-            >
-              <Tab label="Results" />
-              <Tab label="Performance" />
-            </Tabs>
-          </Box>
+          {renderTabController && (
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+              <Tabs
+                value={activeTab}
+                onChange={(_, newValue) => setActiveTab(newValue)}
+                aria-label="evaluation results tabs"
+              >
+                <Tab label="Results" />
+                <Tab label="Performance" />
+              </Tabs>
+            </Box>
+          )}
 
           {activeTab === 0 && (
             <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
@@ -854,11 +864,7 @@ export default function ResultsView({
           )}
 
           {canRenderResultsCharts && renderResultsCharts && (
-            <ResultsCharts
-              columnVisibility={currentColumnState.columnVisibility}
-              recentEvals={recentEvals}
-              handleHideCharts={() => setRenderResultsCharts(false)}
-            />
+            <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
           )}
         </Box>
 
@@ -879,7 +885,13 @@ export default function ResultsView({
             handleSwitchToPerformanceTab={() => setActiveTab(1)}
           />
         )}
-        {activeTab === 1 && <EvalMetricsTable handleSwitchToResultsTab={() => setActiveTab(0)} />}
+        {activeTab === 1 && (
+          <EvalPerformanceView
+            handleSwitchToResultsTab={() => setActiveTab(0)}
+            renderResultsCharts={canRenderResultsCharts}
+            renderMetricsTable={hasMetrics}
+          />
+        )}
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

@@ -4,10 +4,19 @@ import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
+import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { DataGrid } from '@mui/x-data-grid';
+import {
+  DataGrid,
+  type GridColDef,
+  type GridRenderCellParams,
+  GridToolbarColumnsButton,
+  GridToolbarContainer,
+  GridToolbarFilterButton,
+  GridToolbarQuickFilter,
+} from '@mui/x-data-grid';
+import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
-import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 
 type MetricScore = {
   score: number;
@@ -19,6 +28,27 @@ interface MetricRow {
   id: string;
   metric: string;
   [key: string]: any; // For dynamic prompt columns
+}
+
+function CustomToolbar() {
+  const theme = useTheme();
+  return (
+    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <GridToolbarColumnsButton />
+        <GridToolbarFilterButton />
+      </Box>
+      <Box sx={{ flexGrow: 1 }} />
+      <GridToolbarQuickFilter
+        sx={{
+          '& .MuiInputBase-root': {
+            borderRadius: 2,
+            backgroundColor: theme.palette.background.paper,
+          },
+        }}
+      />
+    </GridToolbarContainer>
+  );
 }
 
 const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
@@ -84,8 +114,6 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
         headerName: 'Metric',
         width: 400,
         headerAlign: 'left',
-        type: 'singleSelect',
-        valueOptions: promptMetricNames,
         renderCell: (params) => {
           const metricName = params.row.metric;
           return (
@@ -138,7 +166,7 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
       const columnId = `prompt_${idx}`;
       cols.push({
         field: columnId,
-        headerName: prompt.label || prompt.display || `Prompt ${idx + 1}`,
+        headerName: prompt.provider,
         flex: 1,
         width: 100,
         type: 'number',
@@ -214,51 +242,29 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
             backgroundColor: 'action.hover',
           },
         }}
+        slots={{ toolbar: CustomToolbar }}
       />
     </Paper>
   );
 };
 
-const EvalPerformanceView: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
-  handleSwitchToResultsTab,
-}) => {
-  const { table } = useTableStore();
-
-  if (!table || !table.body || table.body.length === 0) {
-    return (
-      <Box p={4} textAlign="center">
-        <Typography variant="h6" color="text.secondary">
-          No evaluation data available
-        </Typography>
-      </Box>
-    );
-  }
-
-  // Check if there are any metrics
-  const hasMetrics = React.useMemo(() => {
-    return table.head.prompts.some(
-      (prompt) => prompt.metrics?.namedScores && Object.keys(prompt.metrics.namedScores).length > 0,
-    );
-  }, [table.head.prompts]);
-
-  if (!hasMetrics) {
-    return (
-      <Box p={4} textAlign="center">
-        <Typography variant="h6" color="text.secondary">
-          No custom metrics found in evaluation results
-        </Typography>
-      </Box>
-    );
-  }
-
+const EvalPerformanceView: React.FC<{
+  handleSwitchToResultsTab: () => void;
+  renderResultsCharts: boolean;
+  renderMetricsTable: boolean;
+}> = ({ handleSwitchToResultsTab, renderResultsCharts, renderMetricsTable }) => {
   return (
-    <Box sx={{ p: 2, height: 'calc(100vh - 300px)', display: 'flex', flexDirection: 'column' }}>
-      <Typography variant="h6" gutterBottom>
-        Performance Metrics
-      </Typography>
-      <Box sx={{ flexGrow: 1, minHeight: 0 }}>
-        <MetricsTable handleSwitchToResultsTab={handleSwitchToResultsTab} />
-      </Box>
+    <Box sx={{ height: 'calc(100vh - 300px)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {renderResultsCharts && (
+        <Box>
+          <ResultsCharts />
+        </Box>
+      )}
+      {renderMetricsTable && (
+        <Box sx={{ flexGrow: 1, minHeight: 0 }}>
+          <MetricsTable handleSwitchToResultsTab={handleSwitchToResultsTab} />
+        </Box>
+      )}
     </Box>
   );
 };

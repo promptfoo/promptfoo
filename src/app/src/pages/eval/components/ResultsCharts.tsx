@@ -27,14 +27,14 @@ import {
 } from 'chart.js';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTableStore } from './store';
-import type { VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
-  columnVisibility: VisibilityState;
-  recentEvals: ResultLightweightWithLabel[];
-  handleHideCharts: () => void;
+  /**
+   * Optional callback to hide the charts.
+   */
+  handleHideCharts?: () => void;
 }
 
 interface ChartProps {
@@ -622,7 +622,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [
@@ -687,12 +687,14 @@ function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: Resu
   return (
     <ErrorBoundary fallback={null}>
       <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
-        <IconButton
-          style={{ position: 'absolute', right: 0, top: 0 }}
-          onClick={() => handleHideCharts()}
-        >
-          <CloseIcon />
-        </IconButton>
+        {handleHideCharts && (
+          <IconButton
+            style={{ position: 'absolute', right: 0, top: 0 }}
+            onClick={() => handleHideCharts()}
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />
