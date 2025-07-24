@@ -1,38 +1,15 @@
 import { Anthropic as GatewayAnthropic } from '@adaline/anthropic';
 import { Azure as GatewayAzure } from '@adaline/azure';
 import { Gateway } from '@adaline/gateway';
-import type { Cache as GatewayCache } from '@adaline/gateway';
-import type {
-  CompleteChatHandlerResponseType,
-  GetEmbeddingsHandlerResponseType,
-} from '@adaline/gateway';
 import { Google as GatewayGoogle } from '@adaline/google';
 import { Groq as GatewayGroq } from '@adaline/groq';
 import { OpenRouter as GatewayOpenRouter } from '@adaline/open-router';
 import { OpenAI as GatewayOpenAI } from '@adaline/openai';
-import type { ChatModelV1 as GatewayChatModel } from '@adaline/provider';
-import type { EmbeddingModelV1 as GatewayEmbeddingModel } from '@adaline/provider';
 import { TogetherAI as GatewayTogetherAi } from '@adaline/together-ai';
-import type {
-  MessageType as GatewayMessageType,
-  ToolType as GatewayToolType,
-  ResponseSchemaType as GatewayResponseSchemaType,
-  EmbeddingRequestsType as GatewayEmbeddingRequestsType,
-} from '@adaline/types';
 import { Vertex as GatewayVertex } from '@adaline/vertex';
-import { isCacheEnabled, getCache } from '../cache';
+import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';
@@ -46,10 +23,36 @@ import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import type { OpenAiCompletionOptions } from './openai/types';
 import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VoyageEmbeddingProvider } from './voyage';
+import type {
+  CompleteChatHandlerResponseType,
+  Cache as GatewayCache,
+  GetEmbeddingsHandlerResponseType,
+} from '@adaline/gateway';
+import type {
+  ChatModelV1 as GatewayChatModel,
+  EmbeddingModelV1 as GatewayEmbeddingModel,
+} from '@adaline/provider';
+import type {
+  EmbeddingRequestsType as GatewayEmbeddingRequestsType,
+  MessageType as GatewayMessageType,
+  ResponseSchemaType as GatewayResponseSchemaType,
+  ToolType as GatewayToolType,
+} from '@adaline/types';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types';
+import type { EnvOverrides } from '../types/env';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
 export class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {

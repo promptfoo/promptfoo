@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import React, { useEffect, useRef, useState } from 'react';
+
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
@@ -11,23 +11,25 @@ import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import { useTheme } from '@mui/material/styles';
-import type { VisibilityState } from '@tanstack/table-core';
 import {
-  Chart,
   BarController,
-  LineController,
-  ScatterController,
-  CategoryScale,
-  LinearScale,
   BarElement,
+  CategoryScale,
+  Chart,
+  Colors,
+  LinearScale,
+  LineController,
   LineElement,
   PointElement,
+  ScatterController,
   Tooltip,
-  Colors,
   type TooltipItem,
 } from 'chart.js';
+import { ErrorBoundary } from 'react-error-boundary';
 import { useTableStore } from './store';
-import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from './types';
+import type { VisibilityState } from '@tanstack/table-core';
+
+import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;

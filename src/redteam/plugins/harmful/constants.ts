@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+
 import type { REDTEAM_PROVIDER_HARM_PLUGINS } from '../../constants';
 
 export interface HarmfulCategory {

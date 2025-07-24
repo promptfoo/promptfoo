@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+
 import { useUserStore } from '@app/stores/userStore';
 import posthog from 'posthog-js';
 import { PostHogContext, type PostHogContextType } from './PostHogContext';

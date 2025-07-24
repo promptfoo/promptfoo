@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   CheckCircle as CheckCircleIcon,
   Code as CodeIcon,
@@ -16,9 +15,10 @@ import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
+
 import type { ScanResult } from '../ModelAudit.types';
 
 interface SecurityFindingsProps {

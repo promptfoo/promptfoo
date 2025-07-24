@@ -1,11 +1,13 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+
+import yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { UnifiedConfig } from '../../types';
 import { orderKeys } from '../json';
+
+import type { UnifiedConfig } from '../../types';
 
 let configDirectoryPath: string | undefined = getEnvString('PROMPTFOO_CONFIG_DIR');
 

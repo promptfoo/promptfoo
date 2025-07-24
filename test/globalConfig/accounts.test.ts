@@ -3,14 +3,14 @@ import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
 import { fetchWithTimeout } from '../../src/fetch';
 import {
-  getUserId,
-  getUserEmail,
-  setUserEmail,
-  getAuthor,
-  promptForEmailUnverified,
-  checkEmailStatusOrExit,
   checkEmailStatus,
+  checkEmailStatusOrExit,
+  getAuthor,
+  getUserEmail,
+  getUserId,
   isLoggedIntoCloud,
+  promptForEmailUnverified,
+  setUserEmail,
 } from '../../src/globalConfig/accounts';
 import {
   readGlobalConfig,
