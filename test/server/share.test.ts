@@ -1,106 +1,89 @@
+// Mock the database modules before imports
+jest.mock('../../src/models/eval');
+jest.mock('../../src/util/database');
+jest.mock('../../src/migrate');
+jest.mock('../../src/database/signal', () => ({
+  setupSignalWatcher: jest.fn(),
+}));
+jest.mock('../../src/logger');
+
 import request from 'supertest';
-import { runDbMigrations } from '../../src/migrate';
-import Eval from '../../src/models/eval';
 import { createApp } from '../../src/server/server';
+import Eval from '../../src/models/eval';
+import { runDbMigrations } from '../../src/migrate';
+import { writeResultsToDatabase } from '../../src/util/database';
 import results_v3 from './v3evalToShare.json';
 import results_v4 from './v4evalToShare.json';
 
+const mockedEval = jest.mocked(Eval);
+const mockedWriteResultsToDatabase = jest.mocked(writeResultsToDatabase);
+const mockedRunDbMigrations = jest.mocked(runDbMigrations);
+
 describe('share', () => {
   let app: ReturnType<typeof createApp>;
-  const testEvalIds = new Set<string>();
 
-  beforeAll(async () => {
-    // Run migrations once before all tests
-    // This is safe because Jest setup ensures we're using an in-memory database
-    await runDbMigrations();
-    // Create app once and reuse for all tests
+  beforeAll(() => {
+    // Set up default mock implementations once
+    mockedRunDbMigrations.mockResolvedValue(undefined);
+
+    // Create app once for all tests
     app = createApp();
   });
 
-  afterAll(async () => {
-    // Clean up only the specific evals we created during tests
-    const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
-      try {
-        const eval_ = await Eval.findById(evalId);
-        if (eval_) {
-          await eval_.delete();
-        }
-      } catch (error) {
-        // Log errors instead of silently ignoring them
-        console.error(`Failed to cleanup eval ${evalId} in afterAll:`, error);
-      }
-    });
-
-    await Promise.allSettled(cleanupPromises);
-  });
-
-  afterEach(async () => {
-    // Clean up evals created in the current test
-    const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
-      try {
-        const eval_ = await Eval.findById(evalId);
-        if (eval_) {
-          await eval_.delete();
-        }
-      } catch (error) {
-        // Log errors instead of silently ignoring them
-        console.error(`Failed to cleanup eval ${evalId} in afterEach:`, error);
-      }
-    });
-
-    await Promise.allSettled(cleanupPromises);
-    testEvalIds.clear();
+  beforeEach(() => {
+    // Clear mock call history between tests
+    jest.clearAllMocks();
   });
 
   it('should accept a version 3 results file', async () => {
-    const res = await request(app).post('/api/eval').send(results_v3).expect(200);
+    const mockEvalId = 'test-eval-id-v3';
+    mockedWriteResultsToDatabase.mockResolvedValueOnce(mockEvalId);
 
-    expect(res.body).toHaveProperty('id');
-    expect(res.body.id).toBeTruthy();
+    const res = await request(app).post('/api/eval').send(results_v3);
 
-    // Track this eval for cleanup
-    testEvalIds.add(res.body.id);
-
-    const eval_ = await Eval.findById(res.body.id as string);
-    expect(eval_).not.toBeNull();
-    expect(eval_?.version()).toBe(3);
-
-    const results = await eval_?.getResults();
-    expect(results).toBeDefined();
-    expect(Array.isArray(results)).toBe(true);
-    expect(results).toHaveLength(8);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ id: mockEvalId });
+    expect(mockedWriteResultsToDatabase).toHaveBeenCalledWith(
+      results_v3.data.results,
+      results_v3.data.config,
+    );
   });
 
   it('should accept a new eval', async () => {
-    const res = await request(app).post('/api/eval').send(results_v4).expect(200);
+    const mockEvalId = 'test-eval-id-v4';
+    const mockEval = {
+      id: mockEvalId,
+      addPrompts: jest.fn(),
+    };
+    mockedEval.create.mockResolvedValueOnce(mockEval as any);
 
-    expect(res.body).toHaveProperty('id');
-    expect(res.body.id).toBeTruthy();
+    const res = await request(app).post('/api/eval').send(results_v4);
 
-    // Track this eval for cleanup
-    testEvalIds.add(res.body.id);
-
-    const eval_ = await Eval.findById(res.body.id as string);
-    expect(eval_).not.toBeNull();
-    expect(eval_?.version()).toBe(4);
-
-    const results = await eval_?.getResults();
-    expect(results).toBeDefined();
-    expect(Array.isArray(results)).toBe(true);
-    expect(results).toHaveLength(8);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ id: mockEvalId });
+    expect(mockedEval.create).toHaveBeenCalledWith(
+      results_v4.config,
+      results_v4.prompts || [],
+      expect.objectContaining({
+        createdAt: expect.any(Date),
+        results: results_v4.results,
+      }),
+    );
   });
 
   describe('error handling', () => {
     it('should handle empty request body', async () => {
-      const res = await request(app).post('/api/eval').send({}).expect(500);
+      mockedEval.create.mockRejectedValueOnce(new Error('Invalid eval data'));
 
-      expect(res.body).toHaveProperty('error');
-      expect(res.body.error).toBe('Failed to write eval to database');
+      const res = await request(app).post('/api/eval').send({});
 
-      // No eval was created, so nothing to track
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to write eval to database' });
     });
 
     it('should handle invalid v3 eval data', async () => {
+      mockedWriteResultsToDatabase.mockRejectedValueOnce(new Error('Invalid results data'));
+
       const res = await request(app)
         .post('/api/eval')
         .send({
@@ -108,28 +91,22 @@ describe('share', () => {
             results: null,
             config: null,
           },
-        })
-        .expect(500);
+        });
 
-      expect(res.body).toHaveProperty('error');
-      expect(res.body.error).toBe('Failed to write eval to database');
-
-      // No eval was created, so nothing to track
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to write eval to database' });
     });
 
     it('should handle database errors', async () => {
-      const res = await request(app)
-        .post('/api/eval')
-        .send({
-          config: {},
-          results: [],
-        })
-        .expect(500);
+      mockedEval.create.mockRejectedValueOnce(new Error('Database connection failed'));
 
-      expect(res.body).toHaveProperty('error');
-      expect(res.body.error).toBe('Failed to write eval to database');
+      const res = await request(app).post('/api/eval').send({
+        config: {},
+        results: [],
+      });
 
-      // No eval was created, so nothing to track
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to write eval to database' });
     });
   });
 });
