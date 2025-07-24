@@ -26,6 +26,7 @@ import {
   type TooltipItem,
 } from 'chart.js';
 import { ErrorBoundary } from 'react-error-boundary';
+import { usePassRates } from './hooks';
 import { useTableStore } from './store';
 import type { VisibilityState } from '@tanstack/table-core';
 
@@ -155,6 +156,7 @@ function HistogramChart({ table }: ChartProps) {
 }
 
 function PassRateChart({ table }: ChartProps) {
+  const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
@@ -167,18 +169,11 @@ function PassRateChart({ table }: ChartProps) {
       passRateChartInstance.current.destroy();
     }
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const outputs = table.body
-        .map((row) => row.outputs[promptIdx])
-        .filter((output) => output != null);
-      const passCount = outputs.filter((output) => output.pass).length;
-      const passRate = (passCount / outputs.length) * 100;
-      return {
-        label: `Column ${promptIdx + 1}`,
-        data: [passRate],
-        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
-      };
-    });
+    const datasets = table.head.prompts.map((prompt, promptIdx) => ({
+      label: prompt.provider,
+      data: [passRates[promptIdx]],
+      backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+    }));
 
     passRateChartInstance.current = new Chart(passRateCanvasRef.current, {
       type: 'bar',
@@ -191,10 +186,17 @@ function PassRateChart({ table }: ChartProps) {
         plugins: {
           title: {
             display: true,
-            text: 'Pass rate',
+            text: 'Pass Rate',
           },
           legend: {
             display: true,
+          },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+              },
+            },
           },
         },
       },
