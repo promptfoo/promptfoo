@@ -22,7 +22,7 @@ providers:
   - id: google:gemini-2.5-pro
     config:
       generationConfig:
-        maxOutputTokens: 2000 # Increased even more
+        maxOutputTokens: 2000 # 2000 caused many stop reason failures
         temperature: 0
 
   # OpenAI's GPT-4.1

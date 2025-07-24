@@ -19,7 +19,7 @@ authors: [michael]
 
 When Grok 4 launched amid Hitler-praising controversies, critics expected Elon Musk's AI to be a right-wing propaganda machine. Our test of [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) found something nobody predicted: **Grok is harsher on Musk's own companies than any other AI we tested.** Even more surprising? While Grok is more right-leaning than GPT-4.1 or Gemini 2.5, it's still left of center. Claude Opus 4 turned out to be the most politically neutral of all.
 
-The real story isn't that Grok "goes red" - it's that it can't pick a side. With extreme bipolar responses and wild swings between far-left and far-right positions, Grok 4 appears to be having an identity crisis. We validated our findings by having each model score each models responses.
+The real story isn't that Grok "goes red" - it's that it can't pick a side: with extreme bipolar responses and wild swings between far-left and far-right positions, Grok 4 appears to be having an identity crisis. We validated our findings by having each model score each models responses.
 
 <!-- truncate -->
 
@@ -696,10 +696,6 @@ Together, we can build more transparent and accountable AI systems.
 - Business Insider – xAI explains MechaHitler bug ([Business Insider](https://www.businessinsider.com/grok-ai-xai-engineers-explain-hitler-bug-2025-7))
 - AP News – Grok sourcing Musk tweets in answers ([AP News](https://apnews.com/article/grok-ai-elon-musk-political-bias-2025))
 
----
+## Press and Media Inquiries
 
-## See Also
-
-- [Red Teaming Foundation Models](foundation-model-security.md)
-- [Preventing Bias in Generative AI](prevent-bias-in-generative-ai.md)
-- [Understanding LLM Security Risks](owasp-red-teaming.md)
+For press inquiries, interview requests, or additional information about this research, please contact michael@promptfoo.dev.
