@@ -101,7 +101,7 @@ describe('TruncatedText', () => {
   it('should correctly truncate and render an array of React nodes according to maxLength, preserving the structure of nodes that fit within the limit', () => {
     const nodes = [
       'This is the first part, ',
-      <span>and this is the second part</span>,
+      <span key="second-part">and this is the second part</span>,
       ', and this is the third part.',
     ];
     const maxLength = 40;

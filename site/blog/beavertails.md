@@ -129,7 +129,7 @@ providers:
 ```yaml
 providers:
   - anthropic:claude-3-opus
-  - anthropic:claude-3-sonnet
+  - anthropic:claude-3-5-sonnet-latest
     config:
       temperature: 0.1
 ```

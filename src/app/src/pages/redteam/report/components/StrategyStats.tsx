@@ -393,6 +393,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 .failures.slice(0, 5)
                 .map((failure, index) => (
                   <Paper
+                    key={`${failure.prompt}-${failure.result}`}
                     elevation={0}
                     sx={{
                       mb: 2,
@@ -502,6 +503,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 .passes.slice(0, 5)
                 .map((pass, index) => (
                   <Paper
+                    key={`${pass.prompt}-${pass.result}`}
                     elevation={0}
                     sx={{
                       mb: 2,

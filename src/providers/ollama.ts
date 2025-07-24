@@ -9,6 +9,7 @@ import type {
   CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  TokenUsage,
 } from '../types';
 
 interface OllamaCompletionOptions {
@@ -192,11 +193,13 @@ export class OllamaCompletionProvider implements ApiProvider {
     }
 
     try {
-      const output = response.data
+      const lines = response.data
         .split('\n')
         .filter((line: string) => line.trim() !== '')
-        .map((line: string) => {
-          const parsed = JSON.parse(line) as OllamaCompletionJsonL;
+        .map((line: string) => JSON.parse(line) as OllamaCompletionJsonL);
+
+      const output = lines
+        .map((parsed: OllamaCompletionJsonL) => {
           if (parsed.response) {
             return parsed.response;
           }
@@ -205,8 +208,26 @@ export class OllamaCompletionProvider implements ApiProvider {
         .filter((s: string | null) => s !== null)
         .join('');
 
+      // Extract token usage from the final chunk (where done: true)
+      const finalChunk = lines.find((chunk: OllamaCompletionJsonL) => chunk.done);
+      let tokenUsage: Partial<TokenUsage> | undefined;
+
+      if (
+        finalChunk &&
+        (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)
+      ) {
+        const promptTokens = finalChunk.prompt_eval_count || 0;
+        const completionTokens = finalChunk.eval_count || 0;
+        tokenUsage = {
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: promptTokens + completionTokens,
+        };
+      }
+
       return {
         output,
+        ...(tokenUsage && { tokenUsage }),
       };
     } catch (err) {
       return {
@@ -292,11 +313,13 @@ export class OllamaChatProvider implements ApiProvider {
     }
 
     try {
-      const output = response.data
+      const lines = response.data
         .split('\n')
         .filter((line: string) => line.trim() !== '')
-        .map((line: string) => {
-          const parsed = JSON.parse(line) as OllamaChatJsonL;
+        .map((line: string) => JSON.parse(line) as OllamaChatJsonL);
+
+      const output = lines
+        .map((parsed: OllamaChatJsonL) => {
           if (parsed.message?.content) {
             return parsed.message.content;
           }
@@ -305,8 +328,26 @@ export class OllamaChatProvider implements ApiProvider {
         .filter((s: string | null) => s !== null)
         .join('');
 
+      // Extract token usage from the final chunk (where done: true)
+      const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
+      let tokenUsage: Partial<TokenUsage> | undefined;
+
+      if (
+        finalChunk &&
+        (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)
+      ) {
+        const promptTokens = finalChunk.prompt_eval_count || 0;
+        const completionTokens = finalChunk.eval_count || 0;
+        tokenUsage = {
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: promptTokens + completionTokens,
+        };
+      }
+
       return {
         output,
+        ...(tokenUsage && { tokenUsage }),
       };
     } catch (err) {
       return {

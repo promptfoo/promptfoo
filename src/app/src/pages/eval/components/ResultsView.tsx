@@ -518,9 +518,14 @@ export default function ResultsView({
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-          // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-          height: `calc(100vh - 81px)`,
+        }}
+        ref={(el: HTMLDivElement | null) => {
+          const top = el?.getBoundingClientRect().top;
+          if (top) {
+            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
+            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
+            el.style.height = `calc(100vh - ${top}px)`;
+          }
         }}
       >
         <Box>

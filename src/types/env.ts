@@ -32,6 +32,7 @@ export const ProviderEnvOverridesSchema = z.object({
   DATABRICKS_TOKEN: z.string().optional(),
   DATABRICKS_WORKSPACE_URL: z.string().optional(),
   FAL_KEY: z.string().optional(),
+  GITHUB_TOKEN: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
   GOOGLE_API_BASE_URL: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),

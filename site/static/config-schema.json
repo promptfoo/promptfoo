@@ -153,6 +153,9 @@
                             "FAL_KEY": {
                               "type": "string"
                             },
+                            "GITHUB_TOKEN": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },

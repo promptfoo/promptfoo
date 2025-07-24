@@ -21,9 +21,9 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
+import { getMetricNameFromPlugin } from '../utils/metricMapping';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getMetricNameFromPlugin } from '../utils/metricMapping';
 import { getStrategyIdFromTest } from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import './RiskCategoryDrawer.css';

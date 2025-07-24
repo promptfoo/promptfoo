@@ -364,6 +364,7 @@ const config: Config = {
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
                   <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>
                   <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:80px; height: auto"/>
+                  <img loading="lazy" src="/img/badges/hipaa.png" alt="HIPAA Compliant" style="width:80px; height: auto"/>
                 </div>
                 `,
             },
@@ -417,6 +418,10 @@ const config: Config = {
           {
             from: '/docs',
             to: '/docs/intro',
+          },
+          {
+            from: '/vegas-contact',
+            to: 'https://triangular-manchego-867.notion.site/2395ae153a138028a8bef35f6889f6e6?pvs=105',
           },
         ],
       },

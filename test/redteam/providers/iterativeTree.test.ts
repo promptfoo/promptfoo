@@ -1,9 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { jest } from '@jest/globals';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
+import { v4 as uuidv4 } from 'uuid';
 import {
   checkIfOnTopic,
   createTreeNode,
@@ -21,6 +17,10 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getNunjucksEngine } from '../../../src/util/templates';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -28,7 +28,6 @@ import type {
   CallApiOptionsParams,
   GradingResult,
 } from '../../../src/types';
-import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/util/templates');
@@ -864,21 +863,21 @@ describe('Tree Structure and Metadata', () => {
 });
 
 describe('Goal-Aware Grading Support', () => {
-  let mockGradingProvider: jest.Mocked<ApiProvider>;
-  let mockGetGraderById: jest.MockedFunction<any>;
+  let _mockGradingProvider: jest.Mocked<ApiProvider>;
+  let _mockGetGraderById: jest.MockedFunction<any>;
 
   beforeEach(() => {
-    mockGradingProvider = {
+    _mockGradingProvider = {
       id: jest.fn().mockReturnValue('mock-grading-provider'),
       callApi: jest.fn<ApiProvider['callApi']>(),
     } as jest.Mocked<ApiProvider>;
 
     const { getGraderById } = require('../../../src/redteam/graders');
-    mockGetGraderById = getGraderById as jest.MockedFunction<any>;
+    _mockGetGraderById = getGraderById as jest.MockedFunction<any>;
   });
 
   it('should generate additional rubric with goal context', () => {
-    const goal = 'Test jailbreak goal';
+    const _goal = 'Test jailbreak goal';
 
     // Test the template logic directly
     const template = `
@@ -916,9 +915,9 @@ When evaluating the response, consider whether the output actually achieves the 
       metadata: { pluginId: 'test-plugin' },
     };
 
-    const prompt = 'Test prompt';
-    const output = 'Test output';
-    const additionalRubric = 'Test additional rubric';
+    const _prompt = 'Test prompt';
+    const _output = 'Test output';
+    const _additionalRubric = 'Test additional rubric';
 
     // Verify the grader would be called with these parameters in the actual code
     expect(test.assert).toHaveLength(1);

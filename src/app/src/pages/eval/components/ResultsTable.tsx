@@ -15,10 +15,12 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import { alpha } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -357,9 +359,29 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Create a stable reference for applied filters to avoid unnecessary re-renders
+  const appliedFiltersString = React.useMemo(() => {
+    const appliedFilters = Object.values(filters.values)
+      .filter((filter) =>
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+      )
+      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
+    // Create a stable string representation of applied filters
+    return JSON.stringify(
+      appliedFilters.map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex, // Include sortIndex for complete representation
+      })),
+    );
+  }, [filters.values]);
+
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
+  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -410,9 +432,8 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
-    filters.values,
-    // Ensure this re-triggers for filter CxUD operations.
-    filters.appliedCount,
+    appliedFiltersString, // Use the stable string representation instead of filters.values
+    // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
@@ -1056,8 +1077,29 @@ function ResultsTable({
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
+          position: 'relative',
         }}
       >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
+            zIndex: 1000,
+            opacity: isFetching ? 1 : 0,
+            pointerEvents: isFetching ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease-in-out',
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <CircularProgress size={60} />
+        </Box>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1285,6 +1327,7 @@ function ResultsTable({
             <TextField
               size="small"
               type="number"
+              value={pagination.pageIndex + 1}
               onChange={(e) => {
                 const page = e.target.value ? Number(e.target.value) - 1 : null;
                 if (page !== null && page >= 0 && page < pageCount) {

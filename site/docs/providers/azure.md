@@ -250,6 +250,27 @@ tests:
         value: Do not mention that you are an AI or chat assistant
 ```
 
+### Using Text and Embedding Providers for Different Assertion Types
+
+When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Azure deployments for each type using the **provider type map** pattern:
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    provider:
+      # Text provider for llm-rubric, answer-relevance, factuality, etc.
+      text:
+        id: azure:chat:o4-mini-deployment
+        config:
+          apiHost: 'text-models.openai.azure.com'
+
+      # Embedding provider for similarity assertions
+      embedding:
+        id: azure:embedding:text-embedding-3-large
+        config:
+          apiHost: 'embedding-models.openai.azure.com'
+```
+
 ### Similarity
 
 The `similar` assertion type requires an embedding model such as `text-embedding-3-large` or `text-embedding-3-small`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
