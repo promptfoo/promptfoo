@@ -10,6 +10,7 @@ import {
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  MEDICAL_PLUGINS,
   PII_PLUGINS,
   type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -275,6 +276,8 @@ export const RedteamConfigSchema = z
         expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
       } else if (id === 'pii') {
         expandCollection([...PII_PLUGINS], config, numTests, severity);
+      } else if (id === 'medical') {
+        expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {

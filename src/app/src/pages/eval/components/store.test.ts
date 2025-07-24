@@ -39,6 +39,7 @@ describe('useTableStore', () => {
           appliedCount: 0,
           options: {
             metric: [],
+            metadata: [],
           },
         },
       });
@@ -73,6 +74,7 @@ describe('useTableStore', () => {
         ...newFilter,
         id: mockFilterId,
         logicOperator: 'and',
+        sortIndex: 0,
       });
     });
 
@@ -133,6 +135,7 @@ describe('useTableStore', () => {
         operator: 'equals' as const,
         value: 'test-metric-value',
         logicOperator: 'and' as const,
+        sortIndex: 0,
       };
 
       act(() => {
@@ -150,6 +153,7 @@ describe('useTableStore', () => {
       const updatedFilter: ResultsFilter = {
         ...initialFilter,
         value: '',
+        sortIndex: 0,
       };
 
       act(() => {
@@ -172,6 +176,7 @@ describe('useTableStore', () => {
         operator: 'equals',
         value: filterValue,
         logicOperator: 'and',
+        sortIndex: 0,
       };
 
       const expectedEncodedFilterValue = JSON.stringify({

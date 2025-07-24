@@ -144,7 +144,7 @@ describe('redteamPluginSchema', () => {
   });
 
   it('should reject an invalid plugin name', () => {
-    expect(RedteamPluginSchema.safeParse('medical').success).toBe(false);
+    expect(RedteamPluginSchema.safeParse('invalid-plugin-name').success).toBe(false);
   });
 
   it('should reject a plugin object with negative numTests', () => {

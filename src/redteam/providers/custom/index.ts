@@ -10,6 +10,7 @@ import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import { getGoalRubric } from '../prompts';
 import {
   getLastMessageContent,
   getTargetResponse,
@@ -24,6 +25,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -95,6 +97,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
     response: string;
   }>;
   totalSuccessfulAttacks?: number;
+  storedGraderResult?: GradingResult;
 }
 
 /**
@@ -309,6 +312,10 @@ export class CustomProvider implements ApiProvider {
 
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
+    let storedGraderResult: GradingResult | undefined;
+
+    // Generate goal-specific evaluation rubric
+    const additionalRubric = getGoalRubric(this.userGoal);
 
     while (roundNum < this.maxTurns) {
       try {
@@ -490,8 +497,10 @@ export class CustomProvider implements ApiProvider {
               test,
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              additionalRubric,
             );
             graderPassed = grade.pass;
+            storedGraderResult = grade;
             if (grade.tokensUsed) {
               totalTokenUsage.total += grade.tokensUsed.total || 0;
               totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
@@ -523,6 +532,12 @@ export class CustomProvider implements ApiProvider {
 
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
+
+          storedGraderResult = {
+            pass: false,
+            score: 0,
+            reason: objectiveScore?.rationale || 'Jailbreak goal achieved',
+          };
 
           // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
@@ -598,6 +613,7 @@ export class CustomProvider implements ApiProvider {
         redteamHistory: messagesToRedteamHistory(messages),
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
+        storedGraderResult: storedGraderResult,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
