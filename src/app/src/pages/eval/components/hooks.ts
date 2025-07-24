@@ -60,7 +60,8 @@ export function usePassRates(): number[] {
   const numPassing = usePassingTestCounts();
 
   return useMemo(
-    () => numPassing.map((passing, idx) => (passing / numTests[idx]) * 100),
+    () =>
+      numPassing.map((passing, idx) => (numTests[idx] === 0 ? 0 : (passing / numTests[idx]) * 100)),
     [numPassing, numTests],
   );
 }
