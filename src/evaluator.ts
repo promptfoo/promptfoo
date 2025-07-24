@@ -1311,7 +1311,7 @@ class Evaluator {
           progressBarIndex,
         );
 
-        const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+        const vars = formatVarsForDisplay(evalStep.test.vars, 40);
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
