@@ -16,18 +16,12 @@ import { useTableStore } from './store';
 export function usePassingTestCounts(): number[] {
   const { table } = useTableStore();
 
-  if (!table) {
-    return [];
-  }
-
-  const { head, body } = table;
-
-  const value = useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
-    [head.prompts, body],
-  );
-
-  return value;
+  return table
+    ? useMemo(
+        () => table.head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
+        [table.head.prompts],
+      )
+    : [];
 }
 
 /**
@@ -38,21 +32,15 @@ export function usePassingTestCounts(): number[] {
 export function useTestCounts(): number[] {
   const { table } = useTableStore();
 
-  if (!table) {
-    return [];
-  }
-
-  const { head, body } = table;
-
-  const value = useMemo(
-    () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
-      ),
-    [head.prompts, body],
-  );
-
-  return value;
+  return table
+    ? useMemo(
+        () =>
+          table.head.prompts.map(
+            (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
+          ),
+        [table.head.prompts],
+      )
+    : [];
 }
 
 /**
