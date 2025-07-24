@@ -1,4 +1,3 @@
 export const SITE_CONSTANTS = {
-  USER_COUNT: 125000,
   USER_COUNT_DISPLAY: '125,000',
 };
