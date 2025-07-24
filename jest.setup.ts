@@ -1,12 +1,16 @@
 import { rm } from 'fs/promises';
 import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
+import { runDbMigrations } from './src/migrate';
 
 jest.mock('./src/logger');
 jest.mock('./src/globalConfig/globalConfig');
 
 // Configure nock
-beforeAll(() => {
+beforeAll(async () => {
+  // Run database migrations for in-memory test database
+  await runDbMigrations();
+  
   // Disable all real network requests
   nock.disableNetConnect();
   // Allow localhost connections for tests

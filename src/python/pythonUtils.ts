@@ -71,7 +71,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
   }
 
   // Start new validation and store the promise to prevent concurrent validations
-  state.validationPromise = (async () => {
+  const validationPromise = (async () => {
     try {
       const primaryPath = await tryPath(pythonPath);
       if (primaryPath) {
@@ -105,7 +105,8 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
     }
   })();
 
-  return state.validationPromise;
+  state.validationPromise = validationPromise;
+  return validationPromise;
 }
 
 /**

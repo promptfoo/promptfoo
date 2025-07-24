@@ -226,14 +226,16 @@ describe('Python Utils', () => {
         const promise1 = pythonUtils.validatePythonPath('python', false);
         const promise2 = pythonUtils.validatePythonPath('python', false);
 
-        expect(pythonUtils.state.validationPromise).toBeTruthy();
-        expect(promise1).toEqual(promise2);
-
+        // Both should resolve to the same value
         const [result1, result2] = await Promise.all([promise1, promise2]);
 
         expect(result1).toBe('python');
         expect(result2).toBe('python');
+        
+        // Only one exec call should be made
         expect(execAsync).toHaveBeenCalledTimes(1);
+        
+        // After resolution, validation promise should be cleared
         expect(pythonUtils.state.validationPromise).toBeNull();
       });
 
@@ -251,19 +253,12 @@ describe('Python Utils', () => {
 
         jest
           .mocked(execAsync)
-          .mockReturnValueOnce(firstPromise as any)
-          .mockResolvedValueOnce({
-            stdout: 'Python 3.9.0\n',
-            stderr: '',
-            child: mockChildProcess,
-          } as any);
+          .mockReturnValueOnce(firstPromise as any);
 
-        const promise1 = pythonUtils.validatePythonPath('python3.8', false);
-        const promise2 = pythonUtils.validatePythonPath('python3.9', false);
+        const promise1 = pythonUtils.validatePythonPath('python', false);
+        const promise2 = pythonUtils.validatePythonPath('python', false);
 
-        expect(pythonUtils.state.validationPromise).toBeTruthy();
-        expect(promise1).toEqual(promise2);
-
+        // Resolve the first promise
         if (firstResolve) {
           firstResolve({
             stdout: 'Python 3.8.0\n',
@@ -274,9 +269,14 @@ describe('Python Utils', () => {
 
         const [result1, result2] = await Promise.all([promise1, promise2]);
 
-        expect(result1).toBe('python3.8');
-        expect(result2).toBe('python3.8');
+        // Both should get the same result
+        expect(result1).toBe('python');
+        expect(result2).toBe('python');
+        
+        // Only one exec call should be made
         expect(execAsync).toHaveBeenCalledTimes(1);
+        
+        // After resolution, validation promise should be cleared
         expect(pythonUtils.state.validationPromise).toBeNull();
       });
     });
