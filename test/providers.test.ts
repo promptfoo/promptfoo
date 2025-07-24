@@ -179,6 +179,28 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load GitHub provider with default model', async () => {
+    const provider = await loadApiProvider('github:');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should load GitHub provider with specific model', async () => {
+    const provider = await loadApiProvider('github:openai/gpt-4.1-mini');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1-mini', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
   it('should load HTTP provider', async () => {
     const provider = await loadApiProvider('http://test.com');
     expect(HttpProvider).toHaveBeenCalledWith('http://test.com', expect.any(Object));
