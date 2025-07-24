@@ -42,6 +42,7 @@ import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
+import { getEstimatedProbes } from './strategies/utils';
 
 interface PolicyPlugin {
   id: 'policy';
@@ -61,6 +62,8 @@ export default function Review() {
   const { recordEvent } = useTelemetry();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+  const pluginCount = config.plugins?.length || 0;
+  const estimatedProbes = getEstimatedProbes(config);
 
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
@@ -79,8 +82,6 @@ export default function Review() {
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
-  const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
-  const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -377,8 +378,43 @@ export default function Review() {
         autoFocus
       />
 
+      {/* Test Summary */}
+      {pluginCount > 0 && (
+        <Alert 
+          severity="info"
+          icon={<AssessmentIcon />}
+          sx={{ 
+            mb: 4,
+            '& .MuiAlert-message': {
+              width: '100%'
+            }
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <Typography variant="body1">
+              Ready to run <strong>{estimatedProbes.toLocaleString()}</strong> security tests on{' '}
+              <strong>{config.target?.label || 'your target'}</strong>
+            </Typography>
+            {estimatedProbes > 100 && (
+              <Chip 
+                label="Large test suite" 
+                size="small" 
+                color="warning"
+                sx={{ ml: 2 }}
+              />
+            )}
+          </Box>
+        </Alert>
+      )}
+
+      {pluginCount === 0 && (
+        <Alert severity="warning" sx={{ mb: 4 }}>
+          No attack plugins configured. Add plugins to generate security tests.
+        </Alert>
+      )}
+
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-        Configuration Summary
+        Configuration Details
       </Typography>
 
       <Grid container spacing={3}>
@@ -578,92 +614,6 @@ export default function Review() {
           </Grid>
         )}
 
-        <Grid item xs={12}>
-          <Paper elevation={2} sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Additional Details
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={12}>
-                <Typography variant="subtitle2">Purpose</Typography>
-                <Typography
-                  variant="body2"
-                  onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                  sx={{
-                    whiteSpace: 'pre-wrap',
-                    padding: 1,
-                    borderRadius: 1,
-                    backgroundColor: 'background.paper',
-                    cursor: 'pointer',
-                    display: '-webkit-box',
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                  }}
-                >
-                  {config.purpose || 'Not specified'}
-                </Typography>
-                {config.purpose && config.purpose.split('\n').length > 6 && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: 'primary.main',
-                      cursor: 'pointer',
-                      mt: 0.5,
-                      display: 'block',
-                    }}
-                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                  >
-                    {isPurposeExpanded ? 'Show less' : 'Show more'}
-                  </Typography>
-                )}
-              </Grid>
-              {config.testGenerationInstructions && (
-                <Grid item xs={12} sm={12}>
-                  <Typography variant="subtitle2">Test Generation Instructions</Typography>
-                  <Typography
-                    variant="body2"
-                    onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                    sx={{
-                      whiteSpace: 'pre-wrap',
-                      padding: 1,
-                      borderRadius: 1,
-                      backgroundColor: 'background.paper',
-                      cursor: 'pointer',
-                      display: '-webkit-box',
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
-                      '&:hover': {
-                        backgroundColor: 'action.hover',
-                      },
-                    }}
-                  >
-                    {config.testGenerationInstructions}
-                  </Typography>
-                  {config.testGenerationInstructions &&
-                    config.testGenerationInstructions.split('\n').length > 6 && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: 'primary.main',
-                          cursor: 'pointer',
-                          mt: 0.5,
-                          display: 'block',
-                        }}
-                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                      >
-                        {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                      </Typography>
-                    )}
-                </Grid>
-              )}
-            </Grid>
-          </Paper>
-        </Grid>
       </Grid>
 
       <Divider sx={{ my: 4 }} />

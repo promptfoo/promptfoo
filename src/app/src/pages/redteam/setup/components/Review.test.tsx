@@ -81,7 +81,7 @@ describe('Review Component', () => {
       render(<Review />);
 
       expect(screen.getByText('Review Your Configuration')).toBeInTheDocument();
-      expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
+      expect(screen.getByText('Configuration Details')).toBeInTheDocument();
       expect(screen.getByTestId('default-test-variables')).toBeInTheDocument();
       expect(screen.getByText('Running Your Configuration')).toBeInTheDocument();
     });
