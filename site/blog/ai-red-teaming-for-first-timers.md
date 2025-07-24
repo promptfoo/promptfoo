@@ -6,7 +6,7 @@ tags: [red-teaming, security, best-practices, getting-started]
 keywords:
   [AI red teaming, LLM security, prompt injection, AI vulnerabilities, red team culture, AI testing]
 date: 2025-07-22
-image: /img/blog/ai-red-teaming-hero.png
+image: /img/blog/ai-red-teaming-hero.jpg
 imageAlt: 'Red panda mascot in a cybersecurity setting for AI red teaming'
 ---
 
