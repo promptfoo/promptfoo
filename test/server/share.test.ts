@@ -1,4 +1,4 @@
-// Mock the database modules before imports
+// Mock all dependencies before imports
 jest.mock('../../src/models/eval');
 jest.mock('../../src/util/database');
 jest.mock('../../src/migrate');
@@ -6,32 +6,37 @@ jest.mock('../../src/database/signal', () => ({
   setupSignalWatcher: jest.fn(),
 }));
 jest.mock('../../src/logger');
+jest.mock('../../src/telemetry', () => ({
+  record: jest.fn(),
+  default: { record: jest.fn() },
+}));
+jest.mock('../../src/globalConfig/accounts', () => ({
+  getUserEmail: jest.fn(),
+  setUserEmail: jest.fn(),
+}));
 
 import request from 'supertest';
-import { createApp } from '../../src/server/server';
+import express from 'express';
 import Eval from '../../src/models/eval';
-import { runDbMigrations } from '../../src/migrate';
 import { writeResultsToDatabase } from '../../src/util/database';
+import { evalRouter } from '../../src/server/routes/eval';
 import results_v3 from './v3evalToShare.json';
 import results_v4 from './v4evalToShare.json';
 
 const mockedEval = jest.mocked(Eval);
 const mockedWriteResultsToDatabase = jest.mocked(writeResultsToDatabase);
-const mockedRunDbMigrations = jest.mocked(runDbMigrations);
 
 describe('share', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: express.Application;
 
   beforeAll(() => {
-    // Set up default mock implementations once
-    mockedRunDbMigrations.mockResolvedValue(undefined);
-
-    // Create app once for all tests
-    app = createApp();
+    // Create a minimal Express app with just the eval router
+    app = express();
+    app.use(express.json());
+    app.use('/api/eval', evalRouter);
   });
 
   beforeEach(() => {
-    // Clear mock call history between tests
     jest.clearAllMocks();
   });
 
