@@ -876,6 +876,7 @@ export default function ResultsView({
             onSearchTextChange={handleSearchTextChange}
             setFilterMode={setFilterMode}
             zoom={resultsTableZoom}
+            handleSwitchToPerformanceTab={() => setActiveTab(1)}
           />
         )}
         {activeTab === 1 && <EvalMetricsTable />}

@@ -14,6 +14,11 @@ interface CustomMetricsProps {
    * How many metrics to display before truncating and rendering a "Show more" button.
    */
   truncationCount?: number;
+  /**
+   * Callback for the "Show more" button. If provided, overwrites the default behavior of toggling
+   * the showAll state.
+   */
+  onShowMore?: () => void;
 }
 
 interface MetricValueProps {
@@ -55,6 +60,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
   onSearchTextChange,
   onMetricFilter,
   truncationCount = 10,
+  onShowMore,
 }) => {
   const [showAll, setShowAll] = React.useState(false);
   if (!lookup || !Object.keys(lookup).length) {
@@ -104,7 +110,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
         <div
           className="show-more-toggle clickable"
           data-testid="toggle-show-more"
-          onClick={() => setShowAll(!showAll)}
+          onClick={onShowMore ? onShowMore : () => setShowAll(!showAll)}
         >
           {showAll ? 'Show less' : 'Show more...'}
         </div>

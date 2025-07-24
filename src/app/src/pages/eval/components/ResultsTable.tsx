@@ -134,6 +134,7 @@ interface ResultsTableProps {
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
   zoom: number;
+  handleSwitchToPerformanceTab: () => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -158,6 +159,7 @@ function ResultsTable({
   onSearchTextChange,
   setFilterMode,
   zoom,
+  handleSwitchToPerformanceTab,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -790,6 +792,7 @@ function ResultsTable({
                           onSearchTextChange={onSearchTextChange}
                           onMetricFilter={handleMetricFilterClick}
                           truncationCount={3}
+                          onShowMore={handleSwitchToPerformanceTab}
                         />
                       </Box>
                     ) : null}
