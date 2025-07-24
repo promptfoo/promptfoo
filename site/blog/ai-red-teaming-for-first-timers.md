@@ -18,7 +18,7 @@ Is this your first foray into AI red teaming? And probably red teaming in genera
 
 Red teaming is the process of simulating real-world attacks to identify vulnerabilities.
 
-AI red teaming the process of simulating real-world attacks to identify vulnerabilities of artificial intelligence systems. There are two scopes people often use to refer to AI red teaming:
+AI red teaming is the process of simulating real-world attacks to identify vulnerabilities in artificial-intelligence systems. There are two scopes people often use to refer to AI red teaming:
 
 - Prompt injection of LLMs
 - A wider scope of testing pipelines, plugins, agents, and broader system dynamics
@@ -39,22 +39,22 @@ The icing on the cake: companies are (rightly) being required to avoid specific 
 
 As the name would suggest, the focus of AI red teaming is going to revolve around AI (duh). The implications of this are:
 
-- A shift from deterministic to non-deterministic results; multiple attempts may be required for the same attack in order to determine the probability spread of results
+- A shift from deterministic to non-deterministic results; multiple attempts may be required for the same attack to determine the probability distribution of results
 - There's a significant portion of efforts focused around testing models and their data
-- Metrics around toxicity, hallucination, and leaks rise in importance; techniques around eliciting these rise in important similarly
+- Metrics around toxicity, hallucination, and leaks rise in importance; techniques for eliciting these rise in importance similarly
 - Teams may include ML and product folks as well as security engineers
 
 ## Evolving a red team practice
 
 Let's say you got an open-source tool like Promptfoo (😇) and want to evolve your red teaming activities. Here's how I'd level up from no testing at all to something robust:
 
-| Level                                  | Description                                                           | Characteristics                                                                                                                                                 | Promptfoo Fit                                                             |
-| -------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **0: No Testing**                      | No structured evaluation of prompts or outputs                        | - Risks mostly unobserved<br/>- Manual spot-checks                                                                                                               | Not in use                                                                |
-| **1: Ad-hoc testing**                  | Individual, uncoordinated efforts                                     | - Local/manual tests<br/>- No versioning or repeatability                                                                                                        | CLI, local YAML tests, irregular evals                                    |
-| **2: Test Suites**                     | Documented test cases; shared with team. Structure; excellent!        | - Prompts/scenarios versioned<br/>- Reusable YAML tests                                                                                                          | YAML + CLI + basic CI; sharing features                                   |
-| **3: CI/CD Integration**               | Testing integrated into workflows                                     | - Runs on PRs, model changes<br/>- Pass/fail gates, diffs                                                                                                        | GitHub Actions, thresholds, snapshot diffs                                |
-| **4: Feedback-driven risk management** | Testing drives decisions and accountability                           | - Links to risk registers, guardrails<br/>- Observability, regression tracking                                                                                   | Tags, severity scoring, test libraries, integrations                      |
+| Level                                  | Description                                                           | Characteristics                                                                                                                                                   | Promptfoo Fit                                                             |
+| -------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **0: No Testing**                      | No structured eval of prompts or outputs                              | - Risks mostly unobserved<br/>- Manual spot-checks                                                                                                                | Not in use                                                                |
+| **1: Ad-hoc testing**                  | Individual, uncoordinated efforts                                     | - Local/manual tests<br/>- No versioning or repeatability                                                                                                         | CLI, local YAML tests, irregular evals                                    |
+| **2: Test Suites**                     | Documented test cases; shared with team. Structure; excellent!        | - Prompts/scenarios versioned<br/>- Reusable YAML tests                                                                                                           | YAML + CLI + basic CI; sharing features                                   |
+| **3: CI/CD Integration**               | Testing integrated into workflows                                     | - Runs on PRs, model changes<br/>- Pass/fail gates, diffs                                                                                                         | GitHub Actions, thresholds, snapshot diffs                                |
+| **4: Feedback-driven risk management** | Testing drives decisions and accountability                           | - Links to risk registers, guardrails<br/>- Observability, regression tracking                                                                                    | Tags, severity scoring, test libraries, integrations                      |
 | **5: Comprehensive AI assurance**      | Red teaming integrated into full AI security and compliance pipelines | - Aligns with AI risk frameworks (e.g. OWASP)<br/>- Guardrails, model compliance, policy testing<br/>- Used by security, ML, and governance teams collaboratively | Promptfoo + guardrails + MCP + integrations with policy enforcement tools |
 
 Around Level 2 is when engineers start to weave in AI security testing into the fabric of the development pipeline; by the time we've hit Level 3 we've hopefully developed a culture of testing and collaborative security. This culture is core to catching vulnerabilities before they hit production; a healthy culture will lead to an excellent feedback loop.
@@ -81,20 +81,24 @@ The team at Promptfoo is invested in making red teaming a repeatable, sharable, 
 
 The following stages describe - practically - an example of AI red teaming operations that can be used to establish a loop. Loops will differ between use cases, particularly at an organizational level.
 
-| Stage             | Description                                                                                                      | Using Promptfoo                                                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Stage             | Description                                                                                                        | Using Promptfoo                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
 | **Inputs**        | - Declarative test cases <br/>- Team-submitted concerns, scenarios, or compliance requirements<br/>- User feedback | - Write and version test cases as YAML <br/> - Tag test cases by risk or compliance goal          |
-| **Execution**     | - Prompt test runs (manual or CI) <br/>- Adversarial probing                                                      | - Run tests manually/using CI<br/>- Explore variants                                              |
-| **Observability** | - Failure clustering, diffs, regressions <br/>- Model comparisons and severity ratings                            | - Visual diffs of outputs <br/>- Track regressions across models or time <br/>- Severity scoring   |
-| **Feedback**      | - Updated prompts, rules, or model strategies <br/>- Inputs to retraining or guardrail systems                    | - Close the loop by updating test YAMLs <br/>- Feed failure examples into retraining or hardening |
+| **Execution**     | - Prompt test runs (manual or CI) <br/>- Adversarial probing                                                       | - Run tests manually/using CI<br/>- Explore variants                                              |
+| **Observability** | - Failure clustering, diffs, regressions <br/>- Model comparisons and severity ratings                             | - Visual diffs of outputs <br/>- Track regressions across models or time <br/>- Severity scoring  |
+| **Feedback**      | - Updated prompts, rules, or model strategies <br/>- Inputs to retraining or guardrail systems                     | - Close the loop by updating test YAMLs <br/>- Feed failure examples into retraining or hardening |
 
-> Promptfoo works with enterprise clients to fit tooling into their workflows due to the nature of custom requirements for each project.
+:::tip
+
+Promptfoo works with enterprise clients to fit tooling into their workflows due to each project's custom requirements.
+
+:::
 
 ## In red teaming we trust
 
 Red teaming should not be optional for any system with LLM integration. Numerous are the rewards in making it a continuous, systemic process: software with a reputation of accountability and safety. That earns trust from users in both the product and the brand.
 
-Moving from reactive to resilient is the best thing you can do for the security of your product. If you're considering using a tool like Promptfoo in an effort to make your systems more robust, heck yes, go you 🥳!
+Moving from reactive to resilient is the best thing you can do for the security of your product. If you're considering using a tool like Promptfoo to make your systems more robust—heck yes, go you! 🥳
 
 ## See Also
 
