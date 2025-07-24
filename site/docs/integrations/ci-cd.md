@@ -62,6 +62,7 @@ promptfoo eval -c promptfooconfig.yaml
 ```
 
 **Red Teaming** - Security vulnerability scanning:
+
 ```bash
 promptfoo redteam run
 ```
