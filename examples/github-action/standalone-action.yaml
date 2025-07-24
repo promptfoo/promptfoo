@@ -40,25 +40,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-promptfoo-
 
-      - name: Checkout head ref (modified)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          path: head
-
-      - name: Cache promptfoo data
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/promptfoo
-          key: ${{ runner.os }}-promptfoo-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-promptfoo-
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Run promptfoo evaluation
         id: eval

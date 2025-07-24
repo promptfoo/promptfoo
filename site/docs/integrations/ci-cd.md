@@ -32,14 +32,11 @@ If you're using GitHub Actions, check out our [dedicated GitHub Actions guide](/
 For other platforms, here's a basic example:
 
 ```bash
-# Install promptfoo
-npm install -g promptfoo
-
-# Run eval
-promptfoo eval -c promptfooconfig.yaml -o results.json
+# Run eval (no global install required)
+npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 
 # Run security scan (red teaming)
-promptfoo redteam run
+npx promptfoo@latest redteam run
 ```
 
 ## Prerequisites
@@ -58,13 +55,13 @@ Promptfoo supports two main CI/CD workflows:
 **Eval** - Test prompt quality and performance:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml
+npx promptfoo@latest eval -c promptfooconfig.yaml
 ```
 
 **Red Teaming** - Security vulnerability scanning:
 
 ```bash
-promptfoo redteam run
+npx promptfoo@latest redteam run
 ```
 
 See our [red team quickstart](/docs/red-team/quickstart) for security testing details.
@@ -75,16 +72,16 @@ Promptfoo supports multiple output formats for different CI/CD needs:
 
 ```bash
 # JSON for programmatic processing
-promptfoo eval -o results.json
+npx promptfoo@latest eval -o results.json
 
 # HTML for human-readable reports
-promptfoo eval -o report.html
+npx promptfoo@latest eval -o report.html
 
 # XML for enterprise tools
-promptfoo eval -o results.xml
+npx promptfoo@latest eval -o results.xml
 
 # Multiple formats
-promptfoo eval -o results.json -o report.html
+npx promptfoo@latest eval -o results.json -o report.html
 ```
 
 Learn more about [output formats and processing](/docs/configuration/outputs).
@@ -101,10 +98,10 @@ Fail the build when quality thresholds aren't met:
 
 ```bash
 # Fail on any test failures
-promptfoo eval --fail-on-error
+npx promptfoo@latest eval --fail-on-error
 
 # Custom threshold checking
-promptfoo eval -o results.json
+npx promptfoo@latest eval -o results.json
 PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
 if (( $(echo "$PASS_RATE < 95" | bc -l) )); then
   echo "Quality gate failed: Pass rate ${PASS_RATE}% < 95%"
@@ -134,7 +131,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Cache promptfoo
@@ -145,15 +142,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-promptfoo-
 
-      - name: Install promptfoo
-        run: npm install -g promptfoo
-
       - name: Run eval
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PROMPTFOO_CACHE_PATH: ~/.cache/promptfoo
         run: |
-          promptfoo eval \
+          npx promptfoo@latest eval \
             -c promptfooconfig.yaml \
             --share \
             -o results.json \
@@ -213,9 +207,8 @@ image: node:20
 
 evaluate:
   script:
-    - npm install -g promptfoo
     - |
-      promptfoo eval \
+      npx promptfoo@latest eval \
         -c promptfooconfig.yaml \
         --share \
         -o output.json
@@ -250,9 +243,8 @@ pipeline {
     stages {
         stage('Evaluate') {
             steps {
-                sh 'npm install -g promptfoo'
                 sh '''
-                    promptfoo eval \
+                    npx promptfoo@latest eval \
                         -c promptfooconfig.yaml \
                         --share \
                         -o results.json
@@ -292,10 +284,9 @@ Create a custom Docker image with promptfoo pre-installed:
 
 ```dockerfile title="Dockerfile"
 FROM node:20-slim
-RUN npm install -g promptfoo
 WORKDIR /app
 COPY . .
-CMD ["promptfoo", "eval"]
+CMD ["npx", "promptfoo@latest", "eval"]
 ```
 
 ### 2. Parallel Testing
@@ -310,7 +301,7 @@ strategy:
 steps:
   - name: Test ${{ matrix.model }}
     run: |
-      promptfoo eval \
+      npx promptfoo@latest eval \
         --providers.0.config.model=${{ matrix.model }} \
         -o results-${{ matrix.model }}.json
 ```
@@ -331,10 +322,10 @@ jobs:
     steps:
       - name: Full red team scan
         run: |
-          promptfoo redteam generate \
+          npx promptfoo@latest redteam generate \
             --plugins harmful,pii,contracts \
             --strategies jailbreak,prompt-injection
-          promptfoo redteam run
+          npx promptfoo@latest redteam run
 ```
 
 ### 4. SonarQube Integration
@@ -351,7 +342,7 @@ For enterprise environments, integrate with SonarQube:
 # Export results for SonarQube processing
 - name: Run promptfoo security scan
   run: |
-    promptfoo eval \
+    npx promptfoo@latest eval \
       --config promptfooconfig.yaml \
       -o results.json
 
@@ -498,7 +489,7 @@ cache:
 Enable detailed logging:
 
 ```bash
-LOG_LEVEL=debug promptfoo eval -c config.yaml
+LOG_LEVEL=debug npx promptfoo@latest eval -c config.yaml
 ```
 
 ## Real-World Examples
