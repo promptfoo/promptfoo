@@ -39,7 +39,7 @@ import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
-import EvalMetricsTable from './EvalMetricsTable';
+import EvalMetricsTable from './EvalPerformanceView';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
