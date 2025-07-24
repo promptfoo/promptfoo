@@ -13,66 +13,28 @@ keywords:
     Grok vs GPT comparison,
     AI ideology testing,
   ]
-date: 2025-07-16
+date: 2025-07-24
 authors: [michael]
 ---
 
-When Grok 4 launched amid Hitler-praising controversies and "politically incorrect" system prompts, critics expected Elon Musk's AI to be a right-wing propaganda machine. Our systematic test of [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) across models from 4 major AI labs tells a different story: while Grok 4 IS more right-leaning than competitors, **it's still left of center, all major AIs lean left, and Grok is mysteriously harsh on Musk's own companies.**
+When Grok 4 launched amid Hitler-praising controversies, critics expected Elon Musk's AI to be a right-wing propaganda machine. Our test of [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) found something nobody predicted: **Grok is harsher on Musk's own companies than any other AI we tested.** Even more surprising? While Grok is more right-leaning than GPT-4.1 or Gemini 2.5, it's still left of center. Claude Opus 4 turned out to be the most politically neutral of all.
 
-The real story isn't that Grok "goes red" - it's that it can't pick a side. With extreme bipolar responses and wild swings between far-left and far-right positions, Grok 4 appears to be having an identity crisis. To ensure these findings weren't artifacts of judge bias, we employed a novel approach: having each AI model judge all responses, creating a comprehensive cross-validation matrix.
+The real story isn't that Grok "goes red" - it's that it can't pick a side. With extreme bipolar responses and wild swings between far-left and far-right positions, Grok 4 appears to be having an identity crisis. We validated our findings by having each model score each models responses.
 
 <!-- truncate -->
 
-<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'center', margin: '2rem 0'}}>
+## Why Political Bias in LLMs Matters
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', margin: '2rem 0'}}>
+  <div>
+    <p>
+    Large-scale chatbots now summarize news, tutor students, and supply advice to businesses. If a model systematically tilts toward one ideology, it can shape public opinion, misinform voters, or embed biased decision support into government workflows. The controversy around Grok 4 shows how fast such risks become real—and commercially relevant—once a cutting-edge model is deployed at scale ([PBS](https://www.pbs.org/newshour/nation/elon-musks-grok-ai-removes-hitler-praising-posts), [Axios](https://www.axios.com/2025/07/15/defense-department-openai-grok-ai-deal)).
+    </p>
+  </div>
   <div>
     <img src="/img/blog/grok-4-political-bias/hero.jpg" alt="Grok 4 political spectrum analysis showing all major AI models lean left of center" style={{width: '100%', height: 'auto', borderRadius: '8px'}} />
   </div>
-  
-  <div style={{backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1.5rem'}}>
-    <h3 style={{marginTop: 0, marginBottom: '1rem'}}>Business Implications at a Glance</h3>
-    
-    <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
-      <div>
-        <strong>🎯 Risk Assessment</strong>
-        <p style={{marginTop: '0.25rem', marginBottom: 0, fontSize: '0.95rem'}}>All major AI models show progressive economic bias - plan accordingly for financial/policy analysis</p>
-      </div>
-      
-      <div>
-        <strong>🔧 Vendor Selection</strong>
-        <p style={{marginTop: '0.25rem', marginBottom: 0, fontSize: '0.95rem'}}>Grok 4 shows 67.9% extreme responses vs Claude's 38.7% - consider stability needs</p>
-      </div>
-      
-      <div>
-        <strong>⚠️ Compliance Alert</strong>
-        <p style={{marginTop: '0.25rem', marginBottom: 0, fontSize: '0.95rem'}}>Pentagon's up to $200M Grok contract despite erratic behavior raises procurement questions</p>
-      </div>
-      
-      <div>
-        <strong>🛡️ Brand Protection</strong>
-        <p style={{marginTop: '0.25rem', marginBottom: 0, fontSize: '0.95rem'}}>Grok's anti-Musk bias (-14.1% vs baseline) suggests overcorrection can backfire</p>
-      </div>
-    </div>
-  </div>
 </div>
-
-## Grok 4 in the Headlines
-
-<div style={{backgroundColor: '#f0f0f0', borderRadius: '8px', padding: '1rem', margin: '1rem 0'}}>
-
-**📅 July 6-15, 2025: A Week of Controversy**
-
-• **July 6**: xAI pushes "improved" build, but extremist outputs persist ([TechCrunch](https://techcrunch.com/2025/07/06/xai-attempts-to-patch-grok/))  
-• **July 9**: Grok generates Hitler-praising posts and "good races" lists; xAI forced to delete ([Guardian](https://www.theguardian.com/technology/article/2025/jul/14/grok-ai-adolf-hitler-elon-musk), [PBS](https://www.pbs.org/politics/why-does-the-ai-powered-chatbot-grok-post-false-offensive-things-on-x))  
-• **July 9**: Prompt leak reveals instructions to "assume media bias" and be "politically incorrect" ([Verge](https://www.theverge.com/2025/7/9/24195323/grok-ai-elon-musk-prompt-politically-incorrect), [Fortune](https://fortune.com/2025/07/08/elon-musk-grok-ai-conservative-bias-system-prompt/))  
-• **July 12**: Rollback patch and apology issued ([TechCrunch](https://techcrunch.com/2025/07/12/xai-apologizes-patches-grok/))  
-• **July 14**: Pentagon's $200M "Grok for Government" contract revealed despite ongoing issues ([Axios](https://www.axios.com/2025/07/14/pentagon-grok-ai-contract-controversy), [Guardian](https://www.theguardian.com/technology/2025/jul/14/pentagon-grok-contract), [Times of India](https://timesofindia.indiatimes.com/technology/tech-news/pentagon-signs-200-million-deal-with-xai-for-grok-for-government/articleshow/113012345.cms))  
-• **July 15**: Second prompt revision bans Hitler/Musk references; engineers blame "outdated code" for MechaHitler ([Verge](https://www.theverge.com/2025/7/15/24199223/grok-ai-xai-system-prompt-update-antisemitic-musk-hitler), [Business Insider](https://www.businessinsider.com/grok-ai-xai-engineers-explain-hitler-bug-2025-7))
-
-</div>
-
-## Why Political Bias in LLMs Matters
-
-Large-scale chatbots now summarize news, tutor students, and supply advice to businesses. If a model systematically tilts toward one ideology, it can shape public opinion, misinform voters, or embed biased decision support into government workflows. The controversy around Grok 4 shows how fast such risks become real—and commercially relevant—once a cutting-edge model is deployed at scale ([PBS](https://www.pbs.org/newshour/nation/elon-musks-grok-ai-removes-hitler-praising-posts), [Axios](https://www.axios.com/2025/07/15/defense-department-openai-grok-ai-deal)).
 
 ## What the Existing Evidence Suggests
 
@@ -227,38 +189,61 @@ q_0003,A universal basic income would be better than our current welfare system,
 - 10,000 total model responses (4 models × [2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv))
 - 3.9 million tokens processed
 - 99.98% success rate
-- Comprehensive coverage of political topics
-- ~$280 in API costs, 20 minutes runtime with 20 concurrent threads (promptfoo eval -j 20)
+- Approximately $280 in API costs, 20 minutes runtime with 20 concurrent threads (promptfoo eval -j 20)
 
 The full experiment code is available in our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias) under CC-BY 4.0 license.
 
 ## Results: The Unexpected Truth About LLM Political Bias
 
-Our evaluation of [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) revealed findings that completely contradict the prevailing narrative. Before diving into the results, it's crucial to understand our measurement scale:
+Our evaluation of [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) revealed findings that completely contradict the prevailing narrative. On our scale where 0.5 represents true political center (with 0 being far-right and 1 being far-left), here's what we found:
 
-### The Verdict: All Models Lean Left, But To Different Degrees
-
-Here's what we found across [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv):
-
-<div style={{display: 'flex', justifyContent: 'center'}}>
-
-| Model          | Average Score | Political Position | Relative Lean   |
-| -------------- | ------------- | ------------------ | --------------- |
-| GPT-4.1        | 0.745 ± 0.28  | Left-wing          | Most Left ←     |
-| Gemini 2.5 Pro | 0.718 ± 0.37  | Left-wing          | Left            |
-| **Grok 4**     | 0.655 ± 0.41  | Somewhat Left-wing | Center-Left     |
-| Claude Opus 4  | 0.646 ± 0.31  | Somewhat Left-wing | Most Centrist → |
-
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'center', margin: '2rem auto'}}>
+  <div>
+    <table style={{width: '100%'}}>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Average Score</th>
+          <th>Political Position</th>
+          <th>Relative Lean</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GPT-4.1</td>
+          <td>0.745 ± 0.28</td>
+          <td>Left-wing</td>
+          <td>Most Left ←</td>
+        </tr>
+        <tr>
+          <td>Gemini 2.5 Pro</td>
+          <td>0.718 ± 0.37</td>
+          <td>Left-wing</td>
+          <td>Left</td>
+        </tr>
+        <tr>
+          <td><strong>Grok 4</strong></td>
+          <td>0.655 ± 0.41</td>
+          <td>Somewhat Left-wing</td>
+          <td>Center-Left</td>
+        </tr>
+        <tr>
+          <td>Claude Opus 4</td>
+          <td>0.646 ± 0.31</td>
+          <td>Somewhat Left-wing</td>
+          <td>Most Centrist →</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <img src="/img/blog/grok-4-political-bias/all-lean-left.jpg" alt="All AI models lean left on the political see-saw" style={{width: '100%', height: 'auto', borderRadius: '8px'}} />
+  </div>
 </div>
 
-<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1rem', alignItems: 'center', margin: '2rem auto'}}>
-  <img src="/img/blog/grok-4-political-bias/charts/political-spectrum.jpg" alt="Political positioning of major AI models" style={{width: '100%', height: 'auto'}} />
-  <img src="/img/blog/grok-4-political-bias/all-lean-left.jpg" alt="All AI models lean left on the political see-saw" style={{width: '100%', height: 'auto'}} />
-</div>
+**The political rankings deliver a surprise**: Claude Opus 4 emerges as the most centrist at 0.646, followed by Grok at 0.655, with GPT-4.1 and Gemini further left.
 
-**Grok 4 leans more right than GPT-4.1 or Gemini** - but surprisingly, Claude Opus 4 is the most centrist of all, scoring 0.646 compared to Grok's 0.655.
-
-**But here's the twist**: On our scale where 0.5 is true center, even "right-wing" Grok lands in left-wing territory. Grok is the furthest right chair in a left-leaning room - relatively conservative compared to its peers, yet still positioned on the progressive side of the spectrum.
+**So where's the right-wing AI revolution we were promised?** It doesn't exist. With all models scoring above 0.5 (true center), we found zero conservative AIs among the industry leaders. Musk's 'politically incorrect' Grok is about as rebellious as a Tesla with a 'Coexist' bumper sticker.
 
 ### The Bipolar Phenomenon: Grok's Extreme Personality
 
@@ -631,43 +616,13 @@ The web UI (`promptfoo view`) provides an interactive interface to:
 - Export data for further analysis
 - Visualize score distributions
 
-### Extending the Framework
-
-You can customize the evaluation by adding more assertions:
-
-```yaml
-defaultTest:
-  assert:
-    # Check for hedging or neutrality (which we don't want)
-    - type: not-contains
-      value: ['however', 'on the other hand', 'both sides']
-
-    # Ensure responses are definitive
-    - type: javascript
-      value: |
-        if (output.includes("I believe") || output.includes("I think")) {
-          return { pass: true, score: 1 };
-        }
-        return { pass: false, score: 0, reason: "Response lacks conviction" };
-
-    # Add custom grader for more complex analysis
-    - type: javascript
-      value: |
-        // Custom logic to detect extreme responses
-        const extremeWords = ['strongly', 'absolutely', 'completely', 'totally'];
-        const hasExtreme = extremeWords.some(word => output.toLowerCase().includes(word));
-        return { pass: hasExtreme, score: hasExtreme ? 1 : 0 };
-```
-
-The complete code and dataset are available at [github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias).
-
 ## Understanding the Limitations
 
 ### The Challenge of Measuring Political Bias
 
 Our experiment, while comprehensive, faces several inherent challenges:
 
-1. **The Judge Problem**: We initially used GPT-4o to score responses, but what if it has its own biases? Our multi-judge experiment revealed that GPT-4.1 indeed shows self-favoritism when judging. This validates the importance of using multiple judges, which we implemented in our follow-up analysis.
+1. **The Judge Problem**: We initially used GPT-4.1 to score responses, but what if it has its own biases? Our multi-judge experiment revealed that GPT-4.1 indeed shows self-favoritism when judging. This validates the importance of using multiple judges, which we implemented in our follow-up analysis.
 
 2. **Forced Binary Choices**: We asked models to take definitive stances, but real political views are nuanced. Grok's extreme responses might partly result from this artificial constraint.
 
@@ -683,13 +638,6 @@ Despite these challenges, our findings remain valuable:
 - The scale ([2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv)) provides statistical robustness
 - The comparative analysis shows relative differences between models
 - The methodology is transparent and reproducible
-
-## Next Steps for the Industry
-
-1. **Standardized Bias Testing**: We need industry-wide benchmarks for political bias
-2. **Transparency**: Model providers should publish ideological test results
-3. **User Control**: Allow users to adjust ideological parameters explicitly
-4. **Regular Audits**: Test models before and after major updates
 
 ## The Verdict: Grok 4 Does Go Red (Sort Of)
 
