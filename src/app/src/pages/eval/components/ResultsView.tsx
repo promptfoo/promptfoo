@@ -40,7 +40,6 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
@@ -55,7 +54,6 @@ import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
-import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -182,6 +180,7 @@ export default function ResultsView({
     totalResultsCount,
     highlightedResultsCount,
     filters,
+    removeFilter,
   } = useTableStore();
 
   const {
@@ -472,8 +471,6 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  const isMultiFilteringEnabled = useFeatureFlag('EVAL_RESULTS_MULTI_FILTERING');
-
   // Handle metric parameter from URL
   React.useEffect(() => {
     const metricParam = searchParams.get('metric');
@@ -521,9 +518,14 @@ export default function ResultsView({
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-          // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-          height: `calc(100vh - 81px)`,
+        }}
+        ref={(el: HTMLDivElement | null) => {
+          const top = el?.getBoundingClientRect().top;
+          if (top) {
+            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
+            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
+            el.style.height = `calc(100vh - ${top}px)`;
+          }
         }}
       >
         <Box>
@@ -620,22 +622,16 @@ export default function ResultsView({
               />
             </Box>
 
-            {isMultiFilteringEnabled ? (
-              <>
-                <FiltersButton
-                  appliedFiltersCount={filters.appliedCount}
-                  onClick={() => setFiltersFormOpen(true)}
-                  ref={filtersButtonRef}
-                />
-                <FiltersForm
-                  open={filtersFormOpen}
-                  onClose={() => setFiltersFormOpen(false)}
-                  anchorEl={filtersButtonRef.current}
-                />
-              </>
-            ) : filters.options.metric.length > 0 ? (
-              <MetricFilterSelector />
-            ) : null}
+            <FiltersButton
+              appliedFiltersCount={filters.appliedCount}
+              onClick={() => setFiltersFormOpen(true)}
+              ref={filtersButtonRef}
+            />
+            <FiltersForm
+              open={filtersFormOpen}
+              onClose={() => setFiltersFormOpen(false)}
+              anchorEl={filtersButtonRef.current}
+            />
 
             <Box
               sx={{
@@ -669,6 +665,31 @@ export default function ResultsView({
                       sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                     />
                   )}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      // For metadata filters, both field and value must be present
+                      if (
+                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
+                      ) {
+                        return null;
+                      }
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+                      const label =
+                        filter.type === 'metric'
+                          ? `Metric: ${truncatedValue}`
+                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      return (
+                        <Chip
+                          key={filter.id}
+                          size="small"
+                          label={label}
+                          title={filter.value} // Show full value on hover
+                          onDelete={() => removeFilter(filter.id)}
+                          sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                        />
+                      );
+                    })}
                 </>
               ) : (
                 <>{filteredResultsCount} results</>

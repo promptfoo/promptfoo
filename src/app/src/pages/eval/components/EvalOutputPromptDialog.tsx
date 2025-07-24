@@ -3,6 +3,7 @@ import type React from 'react';
 
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -19,12 +20,14 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ellipsize } from '../../../../../util/text';
 import TraceView from '../../../components/traces/TraceView';
 import ChatMessages, { type Message } from './ChatMessages';
 import Citations from './Citations';
+import { useTableStore } from './store';
 
 import type { GradingResult } from './types';
 
@@ -338,6 +341,7 @@ export default function EvalOutputPromptDialog({
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
+  const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
     setCopied(false);
@@ -371,6 +375,23 @@ export default function EvalOutputPromptDialog({
         lastClickTime: now,
       },
     }));
+  };
+
+  const handleApplyFilter = (
+    field: string,
+    value: string,
+    operator: 'equals' | 'contains' = 'equals',
+  ) => {
+    // Reset all filters first
+    resetFilters();
+    // Then apply only this filter
+    addFilter({
+      type: 'metadata',
+      operator,
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+      field,
+    });
+    onClose();
   };
 
   let parsedMessages: Message[] = [];
@@ -446,6 +467,7 @@ export default function EvalOutputPromptDialog({
                     <TableCell>
                       <strong>Value</strong>
                     </TableCell>
+                    <TableCell width={80} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -466,11 +488,8 @@ export default function EvalOutputPromptDialog({
                           style={{
                             whiteSpace: 'pre-wrap',
                             cursor: isUrl ? 'auto' : 'pointer',
-                            position: 'relative',
                           }}
                           onClick={() => !isUrl && handleMetadataClick(key)}
-                          onMouseEnter={() => setHoveredElement(`metadata-${key}`)}
-                          onMouseLeave={() => setHoveredElement(null)}
                         >
                           {isUrl ? (
                             <Link href={value} target="_blank" rel="noopener noreferrer">
@@ -481,23 +500,46 @@ export default function EvalOutputPromptDialog({
                           ) : (
                             truncatedValue
                           )}
-                          {(hoveredElement === `metadata-${key}` || copiedFields[key]) && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyFieldToClipboard(key, stringValue);
-                              }}
-                              sx={copyButtonSx}
-                              aria-label={`Copy metadata value for ${key}`}
-                            >
-                              {copiedFields[key] ? (
-                                <CheckIcon fontSize="small" />
-                              ) : (
-                                <ContentCopyIcon fontSize="small" />
-                              )}
-                            </IconButton>
-                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <Tooltip title="Copy value">
+                              <IconButton
+                                size="small"
+                                onClick={() => copyFieldToClipboard(key, stringValue)}
+                                sx={{
+                                  color: 'text.disabled',
+                                  transition: 'color 0.2s ease',
+                                  '&:hover': {
+                                    color: 'text.secondary',
+                                  },
+                                }}
+                                aria-label={`Copy metadata value for ${key}`}
+                              >
+                                {copiedFields[key] ? (
+                                  <CheckIcon fontSize="small" />
+                                ) : (
+                                  <ContentCopyIcon fontSize="small" />
+                                )}
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Filter by value (replaces existing filters)">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleApplyFilter(key, stringValue)}
+                                sx={{
+                                  color: 'text.disabled',
+                                  transition: 'color 0.2s ease',
+                                  '&:hover': {
+                                    color: 'text.secondary',
+                                  },
+                                }}
+                                aria-label={`Filter by ${key}`}
+                              >
+                                <FilterAltIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );

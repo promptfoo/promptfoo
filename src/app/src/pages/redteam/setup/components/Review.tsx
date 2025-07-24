@@ -374,6 +374,7 @@ export default function Review() {
         onChange={handleDescriptionChange}
         variant="outlined"
         sx={{ mb: 4 }}
+        autoFocus
       />
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>

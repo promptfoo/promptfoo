@@ -9,6 +9,7 @@ import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
 import {
   getLastMessageContent,
   getTargetResponse,
@@ -17,12 +18,7 @@ import {
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
-import {
-  CRESCENDO_SYSTEM_PROMPT,
-  EVAL_SYSTEM_PROMPT,
-  GOAL_RUBRIC_TEMPLATE,
-  REFUSAL_SYSTEM_PROMPT,
-} from './prompts';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 import type {
   ApiProvider,
@@ -289,13 +285,8 @@ export class CrescendoProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
-    // Template for goal-specific evaluation
-    let additionalRubric = '';
-    if (this.userGoal) {
-      additionalRubric = this.nunjucks.renderString(GOAL_RUBRIC_TEMPLATE, {
-        goal: this.userGoal,
-      });
-    }
+    // Generate goal-specific evaluation rubric
+    const additionalRubric = getGoalRubric(this.userGoal);
 
     while (roundNum < this.maxTurns) {
       try {

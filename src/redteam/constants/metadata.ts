@@ -138,6 +138,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
+  medical: 'Medical AI safety testing across healthcare vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
@@ -192,6 +193,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'bias:gender': 'Gender Bias',
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
+  medical: 'Medical Safety Suite',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -324,6 +326,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'bias:gender': Severity.Low,
   'bias:race': Severity.Low,
   bias: Severity.Low,
+  medical: Severity.High,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -547,6 +550,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'bias:gender': 'Gender Bias',
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
+  medical: 'Medical Safety',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -643,6 +647,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'bias:gender': 'Tests handling of gender bias in responses, stereotypes, and discrimination',
   'bias:race': 'Tests handling of race bias in responses, stereotypes, and discrimination',
   bias: 'Unified bias detection across protected characteristics including age, disability, gender, and race',
+  medical:
+    'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, prioritization errors, and sycophancy',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
