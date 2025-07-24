@@ -188,7 +188,7 @@ In this step, we’ll define how our CrewAI recruitment agent works, connect it 
 
 Inside your project folder, create a file called `agent.py` that contains the CrewAI agent setup and promptfoo provider interface:
 
-```python
+````python
 import asyncio
 import json
 import os
@@ -295,7 +295,7 @@ async def run_recruitment_agent(prompt, model='openai:gpt-4.1'):
     except Exception as e:
         # 🔥 Catch and report any error as part of the output
         return {"error": f"An unexpected error occurred: {str(e)}"}
-```
+````
 
 Next, add the provider interface to handle Promptfoo's evaluation calls:
 
