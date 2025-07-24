@@ -77,6 +77,10 @@ export type ResultsFilter = {
    * For metadata filters, this is the field name in the metadata object
    */
   field?: string;
+  /**
+   * The order in which this filter was added (for maintaining consistent ordering)
+   */
+  sortIndex: number;
 };
 
 interface TableState {
@@ -416,6 +420,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
         filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
       const appliedCount = prevState.filters.appliedCount + (isApplied ? 1 : 0);
 
+      // Calculate the next sortIndex
+      const existingFilters = Object.values(prevState.filters.values);
+      const maxSortIndex =
+        existingFilters.length > 0 ? Math.max(...existingFilters.map((f) => f.sortIndex)) : -1;
+      const nextSortIndex = maxSortIndex + 1;
+
       return {
         filters: {
           ...prevState.filters,
@@ -428,6 +438,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               logicOperator: filter.logicOperator ?? 'and',
               // Include field for metadata filters
               field: filter.field,
+              sortIndex: nextSortIndex,
             },
           },
           appliedCount,
@@ -445,6 +456,16 @@ export const useTableStore = create<TableState>()((set, get) => ({
       const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
       const values = { ...prevState.filters.values };
       delete values[id];
+
+      // Always reassign sortIndex values to ensure consecutive ordering (0, 1, 2, ...)
+      // This ensures that when any filter is removed, the remaining filters maintain proper ordering
+      const remainingFilters = Object.values(values).sort((a, b) => a.sortIndex - b.sortIndex);
+      remainingFilters.forEach((filter, index) => {
+        values[filter.id] = {
+          ...filter,
+          sortIndex: index,
+        };
+      });
 
       return {
         filters: {

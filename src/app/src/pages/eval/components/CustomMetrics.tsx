@@ -79,6 +79,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
               data-testid={`metric-${metric}`}
               onClick={() => handleMetricClick(metric)}
               className={`metric-chip ${onMetricFilter ? 'filterable' : ''}`}
+              key={`${metric}-${score}`}
             >
               <div className="metric-content">
                 <span data-testid={`metric-name-${metric}`} className="metric-name">

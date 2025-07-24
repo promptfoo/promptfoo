@@ -654,7 +654,7 @@ export async function synthesize({
         registeredPlugin.validate({
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),
@@ -751,7 +751,7 @@ export async function synthesize({
         config: {
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),
