@@ -19,10 +19,9 @@ jest.mock('../../src/util/config/manage');
 describe('database', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.resetModules();
     closeDb();
     
-    // Set up mocks before importing
+    // Set up mocks
     jest.mocked(getConfigDirectoryPath).mockReturnValue('/test/config/path');
     jest.mocked(getEnvBool).mockImplementation((key) => {
       if (key === 'IS_TESTING') {
