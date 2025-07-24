@@ -37,24 +37,6 @@ const MetricsTable: React.FC = () => {
     return Array.from(metrics).sort();
   }, [table.head.prompts]);
 
-  const getScoreColor = (score: number) => {
-    if (score >= 0.8) {
-      return '#4caf50'; // success
-    }
-    if (score >= 0.5) {
-      return '#ff9800'; // warning
-    }
-    return '#f44336'; // error
-  };
-
-  const formatAggregatedScore = (score: number, count?: number): string => {
-    if (count !== undefined && count > 0) {
-      const average = score / count;
-      return `${average.toFixed(2)} (${score.toFixed(2)}/${count})`;
-    }
-    return score.toFixed(2);
-  };
-
   // Create columns for DataGrid
   const columns: GridColDef[] = React.useMemo(() => {
     const cols: GridColDef[] = [
@@ -78,24 +60,29 @@ const MetricsTable: React.FC = () => {
         width: 100,
         type: 'number',
         renderHeader: (params) => <strong>{params.colDef.headerName}</strong>,
-        valueGetter: (params: MetricScore) => {
-          return params.hasScore ? params.score : 0;
+        valueGetter: (value: MetricScore) => {
+          return value.hasScore ? value.score : 0;
         },
         renderCell: (params: GridRenderCellParams) => {
           const { hasScore, score, count } = params.row[params.field] as MetricScore;
-          return hasScore ? (
-            <>
-              {((score / count) * 100).toFixed(2)}% ({score.toFixed(2)}/{count.toFixed(2)})
-            </>
-          ) : (
-            '0%'
+          const percentage = hasScore ? (score / count) * 100 : 0;
+          //const color = getPercentageColor(percentage);
+
+          return (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'end' }}>
+              {/* <span style={{ backgroundColor: color, width: 10, height: 10, borderRadius: 10 }} /> */}
+              <span>
+                {percentage.toFixed(2)}%{' '}
+                {hasScore ? `(${score.toFixed(2)}/${count.toFixed(2)})` : ''}
+              </span>
+            </span>
           );
         },
       });
     });
 
     return cols;
-  }, [table.head.prompts]);
+  }, [table.head.prompts, promptMetricNames]);
 
   // Create rows for DataGrid
   const rows: MetricRow[] = React.useMemo(() => {
