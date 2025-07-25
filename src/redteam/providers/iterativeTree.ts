@@ -14,24 +14,12 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
+import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
-import type { Environment } from 'nunjucks';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -44,7 +32,24 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -477,6 +482,9 @@ async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
 
+  // Store the original vars and transformVars config
+  const originalVars = { ...vars };
+  const transformVarsConfig = test?.options?.transformVars;
   // Generate goal-specific evaluation rubric
   const additionalRubric = getIterativeTreeGoalRubric(goal);
 
@@ -541,6 +549,15 @@ async function runRedteamConversation({
       );
 
       for (let i = 0; i < BRANCHING_FACTOR; i++) {
+        // Use the shared utility function to create iteration context
+        const { iterationVars, iterationContext } = await createIterationContext({
+          originalVars,
+          transformVarsConfig,
+          context,
+          iterationNumber: attempts + 1, // Using attempts + 1 as the iteration number
+          loggerTag: '[IterativeTree]',
+        });
+
         const {
           improvement,
           prompt: newInjectVar,
@@ -566,7 +583,7 @@ async function runRedteamConversation({
         const targetPrompt = await renderPrompt(
           prompt,
           {
-            ...vars,
+            ...iterationVars,
             [injectVar]: newInjectVar,
           },
           filters,
@@ -589,7 +606,7 @@ async function runRedteamConversation({
         const targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
-          context,
+          iterationContext,
           options,
         );
         if (targetResponse.error) {
@@ -655,10 +672,18 @@ async function runRedteamConversation({
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
+            // Create test object with iteration-specific vars
+            const iterationTest = test
+              ? {
+                  ...test,
+                  vars: iterationVars,
+                }
+              : { vars: iterationVars };
+
             const { grade } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
-              test,
+              iterationTest,
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
