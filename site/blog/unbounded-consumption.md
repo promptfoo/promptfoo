@@ -85,7 +85,7 @@ During an unbounded consumption attack, your systems work harder than ever, lead
 
 Unbounded consumption attacks on LLMs can shut down your AI services in minutes. But they don't just stop at service disruption. These attacks can drain your resources, damage your reputation, and leave your business vulnerable.
 
-Let's break down what you need to know about mitigations.
+Let's break it down what you need to know about mitigations.
 
 ### What Makes LLM DoS Attacks Different
 

@@ -181,7 +181,7 @@ Test multiple models simultaneously:
 ```yaml
 targets:
   - anthropic:messages:claude-sonnet-4-20250514
-  - anthropic:messages:claude-opus-4-20250514
+  - anthropic:messages:claude-opus-4-2025014
   - openai:gpt-4o # Compare with competitors
 ```
 

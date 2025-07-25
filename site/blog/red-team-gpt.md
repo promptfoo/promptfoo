@@ -245,7 +245,7 @@ plugins:
 
 ## Additional Resources
 
-- [GPT 4.1 Security Report](https://promptfoo.dev/models/reports/gpt-4.1)
+- [GPT 4.1 Security Report](https://www.promptfoo.dev/models/reports/gpt-4.1)
 - [Promptfoo Red Team Documentation](/docs/red-team/quickstart/)
 - [LLM Vulnerability Types](/docs/red-team/llm-vulnerability-types/)
 - [Red Team Configuration Guide](/docs/red-team/configuration/)
