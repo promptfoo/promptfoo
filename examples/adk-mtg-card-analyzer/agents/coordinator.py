@@ -12,6 +12,7 @@ from .segmenter import SegmenterAgent
 from .identifier import IdentifierAgent
 from .grader import QualityGraderAgent
 from .reporter import ReportGeneratorAgent
+from .gemini_base import GeminiAgent
 
 
 @dataclass
@@ -31,13 +32,18 @@ class CoordinatorAgent:
                  max_parallel_cards: int = 16,
                  enable_caching: bool = True,
                  progress_callback: Optional[Callable[[PipelineProgress], None]] = None,
+                 track_tokens: bool = True,
                  **kwargs):
         
+        # Reset token tracking for new session
+        if track_tokens:
+            GeminiAgent.reset_global_token_tracking()
+        
         # Initialize component agents
-        self.segmenter = SegmenterAgent()
-        self.identifier = IdentifierAgent()
-        self.grader = QualityGraderAgent()
-        self.reporter = ReportGeneratorAgent()
+        self.segmenter = SegmenterAgent(track_tokens=track_tokens)
+        self.identifier = IdentifierAgent(track_tokens=track_tokens)
+        self.grader = QualityGraderAgent(track_tokens=track_tokens)
+        self.reporter = ReportGeneratorAgent(track_tokens=track_tokens)
         
         # Configure pipeline
         self.max_parallel_cards = max_parallel_cards
@@ -171,13 +177,35 @@ class CoordinatorAgent:
         try:
             final_report = await self.reporter(card_reports, output_format=output_format)
             
-            # Add metadata
+            # Get token usage statistics
+            token_usage = GeminiAgent.get_global_token_usage()
+            
+            # Add per-agent breakdown
+            agent_breakdown = {
+                "segmenter": self.segmenter.get_token_usage(),
+                "identifier": self.identifier.get_token_usage(),
+                "grader": self.grader.get_token_usage(),
+                "reporter": self.reporter.get_token_usage()
+            }
+            token_usage["breakdown_by_agent"] = agent_breakdown
+            
+            # Add metadata including token usage
             final_report["metadata"] = {
                 "processing_time_seconds": time.time() - start_time,
                 "cards_detected": len(crops),
                 "cards_analyzed": len(card_reports),
-                "pipeline_version": "1.0.0"
+                "pipeline_version": "1.0.0",
+                "token_usage": token_usage,
+                "estimated_cost_usd": token_usage["total_cost_usd"]
             }
+            
+            # Log token usage summary
+            print(f"\n💰 Token Usage Summary:")
+            print(f"   - Total tokens: {token_usage['total_tokens']:,}")
+            print(f"   - Prompt tokens: {token_usage['total_prompt_tokens']:,}")
+            print(f"   - Completion tokens: {token_usage['total_completion_tokens']:,}")
+            print(f"   - Total cost: ${token_usage['total_cost_usd']:.4f}")
+            print(f"   - Requests: {token_usage['total_requests']}")
             
             self._report_progress("reporting", 1, 1, "Report complete!")
             

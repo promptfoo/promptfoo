@@ -46,6 +46,14 @@ async def analyze_image(image_path: str, output_format: str = "json"):
             print(f"   - Cards analyzed: {result['metadata']['cards_analyzed']}")
             print(f"   - Processing time: {result['metadata']['processing_time_seconds']:.2f}s")
             
+            # Display token usage if available
+            if 'token_usage' in result['metadata']:
+                token_usage = result['metadata']['token_usage']
+                print(f"\n📊 Token Usage:")
+                print(f"   - Total tokens: {token_usage['total_tokens']:,}")
+                print(f"   - Cost: ${token_usage['total_cost_usd']:.4f}")
+                print(f"   - Avg per card: {token_usage['average_tokens_per_request']:,} tokens")
+            
             if output_format == "pdf":
                 print(f"   - PDF saved to: {result.get('pdf_path', 'Unknown')}")
             

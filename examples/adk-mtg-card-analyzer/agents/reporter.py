@@ -273,11 +273,17 @@ class ReportGeneratorAgent(GeminiAgent):
         story.append(Paragraph("MTG Card Analysis Report", title_style))
         story.append(Spacer(1, 0.5*inch))
         
+        # Get token usage if available
+        from .gemini_base import GeminiAgent
+        token_usage = GeminiAgent.get_global_token_usage()
+        
         # Summary section
         summary_data = [
             ["Report Date:", datetime.now().strftime("%B %d, %Y")],
             ["Total Cards:", str(len(card_reports))],
-            ["Analysis Method:", "AI-Powered Visual Grading"]
+            ["Analysis Method:", "AI-Powered Visual Grading (Gemini 2.5 Pro)"],
+            ["Total Tokens Used:", f"{token_usage['total_tokens']:,}"],
+            ["Processing Cost:", f"${token_usage['total_cost_usd']:.4f}"]
         ]
         
         summary_table = Table(summary_data, colWidths=[2*inch, 4*inch])

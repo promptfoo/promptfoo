@@ -200,7 +200,7 @@ result = await coordinator.analyze_image(
 
 ## 📊 Output Format
 
-The analyzer returns detailed JSON with:
+The analyzer returns detailed JSON with token usage and cost tracking:
 
 ```json
 {
@@ -234,7 +234,25 @@ The analyzer returns detailed JSON with:
         "high": 120.00
       }
     }
-  ]
+  ],
+  "metadata": {
+    "processing_time_seconds": 12.5,
+    "cards_detected": 3,
+    "cards_analyzed": 3,
+    "token_usage": {
+      "total_tokens": 15420,
+      "total_prompt_tokens": 12300,
+      "total_completion_tokens": 3120,
+      "total_cost_usd": 0.0466,
+      "breakdown_by_agent": {
+        "segmenter": { "total_tokens": 2100, "total_cost_usd": 0.0078 },
+        "identifier": { "total_tokens": 5400, "total_cost_usd": 0.0195 },
+        "grader": { "total_tokens": 6200, "total_cost_usd": 0.0156 },
+        "reporter": { "total_tokens": 1720, "total_cost_usd": 0.0037 }
+      }
+    },
+    "estimated_cost_usd": 0.0466
+  }
 }
 ```
 
@@ -298,6 +316,7 @@ This example showcases key Google Agent Development Kit capabilities:
 - **Multi-Agent Architecture**: Coordinator agent manages specialized sub-agents for different tasks
 - **Agent Communication**: Seamless data flow between agents using ADK patterns
 - **Gemini 2.5 Pro Integration**: All agents leverage Gemini's multimodal capabilities
+- **Token Usage Tracking**: Comprehensive token counting and cost calculation per agent and globally
 - **Batch Vision Processing**: Efficient multi-image analysis in single API calls
 - **Async Agent Execution**: Parallel processing with multiple agent instances
 - **Progress Tracking**: Real-time agent status updates via WebSocket
@@ -311,6 +330,24 @@ This example showcases key Google Agent Development Kit capabilities:
 2. **Parallel Agents**: Multiple agents can run concurrently for different cards
 3. **Caching**: Enable caching for duplicate card detection
 4. **API Rate Limits**: Monitor your Gemini API usage for optimal performance
+5. **Token Optimization**: The system tracks token usage per agent to identify optimization opportunities
+
+## 💰 Cost Analysis
+
+### Gemini 2.5 Pro Pricing (2025)
+- **Standard Context (≤200K tokens)**:
+  - Input: $1.25 per million tokens
+  - Output: $10.00 per million tokens
+- **Long Context (>200K tokens)**:
+  - Input: $2.50 per million tokens  
+  - Output: $15.00 per million tokens
+
+### Typical Usage
+- **Per Card Analysis**: ~5,000-8,000 tokens
+- **Cost Per Card**: ~$0.015-0.025
+- **Batch of 10 Cards**: ~$0.15-0.25
+
+The analyzer tracks token usage for each agent and provides detailed cost breakdowns in the final report.
 
 ## 🚧 Limitations
 
