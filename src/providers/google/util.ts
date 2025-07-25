@@ -294,8 +294,13 @@ export async function hasGoogleDefaultCredentials() {
 }
 
 export function getCandidate(data: GeminiResponseData) {
-  if (!(data && data.candidates && data.candidates.length === 1)) {
-    throw new Error('Expected one candidate in API response.');
+  if (!data || !data.candidates || data.candidates.length < 1) {
+    throw new Error('Expected at least one candidate in AI Studio API response.');
+  }
+  if (data.candidates.length > 1) {
+    logger.debug(
+      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}.`,
+    );
   }
   const candidate = data.candidates[0];
   return candidate;
