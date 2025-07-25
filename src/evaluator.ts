@@ -1,12 +1,10 @@
+import { randomUUID } from 'crypto';
+import * as path from 'path';
+
 import async from 'async';
 import chalk from 'chalk';
-import type { MultiBar, SingleBar } from 'cli-progress';
 import cliProgress from 'cli-progress';
-import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
-import * as path from 'path';
-import type winston from 'winston';
-
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -15,7 +13,6 @@ import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
-import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -28,7 +25,6 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
   type AssertionType,
@@ -51,12 +47,17 @@ import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
-  createEmptyTokenUsage,
-  createEmptyAssertions,
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
+import type { MultiBar, SingleBar } from 'cli-progress';
+import type winston from 'winston';
+
+import type Eval from './models/eval';
+import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 
 /**
  * Manages progress bars for different execution phases of the evaluation
@@ -1220,6 +1221,19 @@ class Evaluator {
 
         numComplete++;
 
+        // Log test completion status for web UI
+        if (isWebUI) {
+          const status = row.success
+            ? 'PASS'
+            : row.failureReason === ResultFailureReason.ERROR
+              ? 'ERROR'
+              : 'FAIL';
+          const provider = evalStep.provider.label || evalStep.provider.id();
+          logger.info(
+            `[Test # ${evalStep.testIdx}][${numComplete}/${runEvalOptions.length}] Completed ${provider}: ${status}`,
+          );
+        }
+
         try {
           await this.evalRecord.addResult(row);
         } catch (error) {
@@ -1437,7 +1451,9 @@ class Evaluator {
       if (isWebUI) {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, Infinity);
-        logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
+        logger.info(
+          `[Test # ${evalStep.testIdx}][${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+        );
       } else if (this.options.showProgressBar) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';

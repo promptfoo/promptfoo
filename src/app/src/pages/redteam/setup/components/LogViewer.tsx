@@ -6,7 +6,6 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
-import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 import ShareIcon from '@mui/icons-material/Share';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Accordion from '@mui/material/Accordion';
@@ -22,7 +21,6 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
-import Fab from '@mui/material/Fab';
 import Grid from '@mui/material/Grid';
 import LinearProgress from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
@@ -44,6 +42,14 @@ interface LogViewerProps {
   config?: any; // Red team config containing plugins list
 }
 
+interface TestCase {
+  testIdx: number;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'error';
+  provider?: string;
+  vars?: string;
+  completedAt?: number;
+}
+
 interface LogSection {
   type:
     | 'phase'
@@ -60,6 +66,7 @@ interface LogSection {
   progress?: { current: number; total: number };
   metadata?: Record<string, any>;
   relatedContent?: string[]; // For storing related table content
+  testCases?: TestCase[]; // For tracking individual test cases
 }
 
 export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
@@ -153,13 +160,16 @@ export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
       else if (
         firstLine.includes('Running scan...') ||
         firstLine.includes('Starting evaluation') ||
-        chunkContent.match(/\[\d+\/\d+\]\s+Running/)
+        chunkContent.match(/\[\d+\/\d+\]\s+Running/) ||
+        chunkContent.match(/\[Test # \d+\]\[\d+\/\d+\]\s+(Running|Completed)/)
       ) {
         sectionType = 'test-execution';
         title = 'Test Execution';
 
         // Extract progress from the chunk
-        const progressMatch = chunkContent.match(/\[(\d+)\/(\d+)\]\s+Running/g);
+        const progressMatch =
+          chunkContent.match(/\[(\d+)\/(\d+)\]\s+Running/g) ||
+          chunkContent.match(/\[Test # \d+\]\[(\d+)\/(\d+)\]/g);
         if (progressMatch) {
           const lastProgress = progressMatch[progressMatch.length - 1];
           const match = lastProgress.match(/\[(\d+)\/(\d+)\]/);
@@ -205,7 +215,10 @@ export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
       });
     }
 
-    // Add consolidated test generation section if we found any test generation chunks
+    // Prepare consolidated sections
+    const consolidatedSections: LogSection[] = [];
+
+    // Add consolidated test generation section first if we found any test generation chunks
     if (testGenerationChunks.length > 0) {
       const consolidatedContent = testGenerationChunks.flat();
       // Check if any chunk contains table content
@@ -229,7 +242,7 @@ export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
         }
       }
 
-      sections.push({
+      consolidatedSections.push({
         type: 'test-generation',
         content: consolidatedContent,
         title: 'Test Generation',
@@ -237,17 +250,20 @@ export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
       });
     }
 
-    // Add consolidated summary section if we found any summary chunks
+    // Add all other sections in their original order
+    consolidatedSections.push(...sections);
+
+    // Add consolidated summary section at the end if we found any summary chunks
     if (summaryChunks.length > 0) {
       const consolidatedContent = summaryChunks.flat();
-      sections.push({
+      consolidatedSections.push({
         type: 'summary',
         content: consolidatedContent,
         title: 'Results Summary',
       });
     }
 
-    return sections;
+    return consolidatedSections;
   }, [logs]);
 
   // Determine which sections should be auto-expanded
@@ -455,6 +471,86 @@ export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
     }
 
     return data;
+  }, []);
+
+  // Parse test execution data and track individual test cases
+  const parseTestExecutionData = useCallback((content: string[]) => {
+    const testCases = new Map<number, TestCase>();
+    let totalTests = 0;
+    let completedTests = 0;
+
+    for (const line of content) {
+      const trimmed = line.trim();
+
+      // Parse running test: [Test # 1][5/100] Running provider with vars: {...}
+      const runningMatch = trimmed.match(
+        /\[Test # (\d+)\]\[(\d+)\/(\d+)\] Running (.+?) with vars: (.+)/,
+      );
+      if (runningMatch) {
+        const testIdx = parseInt(runningMatch[1]);
+        const total = parseInt(runningMatch[3]);
+        const provider = runningMatch[4];
+        const vars = runningMatch[5];
+
+        totalTests = Math.max(totalTests, total);
+
+        testCases.set(testIdx, {
+          testIdx,
+          status: 'running',
+          provider,
+          vars,
+        });
+      }
+
+      // Parse completed test: [Test # 1][5/100] Completed provider: PASS/FAIL/ERROR
+      const completedMatch = trimmed.match(
+        /\[Test # (\d+)\]\[(\d+)\/(\d+)\] Completed (.+?): (PASS|FAIL|ERROR)/,
+      );
+      if (completedMatch) {
+        const testIdx = parseInt(completedMatch[1]);
+        const current = parseInt(completedMatch[2]);
+        const total = parseInt(completedMatch[3]);
+        const provider = completedMatch[4];
+        const status = completedMatch[5];
+
+        totalTests = Math.max(totalTests, total);
+        completedTests = Math.max(completedTests, current);
+
+        const statusMap: Record<string, TestCase['status']> = {
+          PASS: 'passed',
+          FAIL: 'failed',
+          ERROR: 'error',
+        };
+
+        const existingTest = testCases.get(testIdx) || { testIdx, status: 'pending' };
+        testCases.set(testIdx, {
+          ...existingTest,
+          status: statusMap[status] || 'failed',
+          provider,
+          completedAt: Date.now(),
+        });
+      }
+    }
+
+    // Fill in pending tests
+    for (let i = 1; i <= totalTests; i++) {
+      if (!testCases.has(i)) {
+        testCases.set(i, {
+          testIdx: i,
+          status: 'pending',
+        });
+      }
+    }
+
+    return {
+      testCases: Array.from(testCases.values()).sort((a, b) => a.testIdx - b.testIdx),
+      totalTests,
+      completedTests,
+      runningTests: Array.from(testCases.values()).filter((tc) => tc.status === 'running').length,
+      passedTests: Array.from(testCases.values()).filter((tc) => tc.status === 'passed').length,
+      failedTests: Array.from(testCases.values()).filter((tc) => tc.status === 'failed').length,
+      errorTests: Array.from(testCases.values()).filter((tc) => tc.status === 'error').length,
+    };
   }, []);
 
   // Parse test generation data from logs and table
@@ -733,38 +829,278 @@ export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
       const renderSectionContent = () => {
         switch (section.type) {
           case 'test-execution':
-            const progress = section.progress;
-            const percentage = progress ? (progress.current / progress.total) * 100 : 0;
+            const testExecutionData = parseTestExecutionData(section.content);
 
             return (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {/* Execution Status Card */}
-                {progress && (
+                {/* Execution Status Cards */}
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Card variant="outlined">
+                      <CardContent sx={{ pb: '16px !important' }}>
+                        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
+                          Overall Progress
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                          <Box sx={{ flex: 1 }}>
+                            <LinearProgress
+                              variant="determinate"
+                              value={
+                                testExecutionData.totalTests > 0
+                                  ? (testExecutionData.completedTests /
+                                      testExecutionData.totalTests) *
+                                    100
+                                  : 0
+                              }
+                              sx={{ height: 8, borderRadius: 4 }}
+                            />
+                          </Box>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 'bold', minWidth: 'fit-content' }}
+                          >
+                            {testExecutionData.completedTests}/{testExecutionData.totalTests} (
+                            {Math.round(
+                              testExecutionData.totalTests > 0
+                                ? (testExecutionData.completedTests /
+                                    testExecutionData.totalTests) *
+                                    100
+                                : 0,
+                            )}
+                            %)
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" color="text.secondary">
+                          {testExecutionData.completedTests === testExecutionData.totalTests
+                            ? 'All tests completed'
+                            : `${testExecutionData.runningTests} running, ${testExecutionData.totalTests - testExecutionData.completedTests - testExecutionData.runningTests} pending`}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Card variant="outlined">
+                      <CardContent sx={{ pb: '16px !important' }}>
+                        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
+                          Test Results
+                        </Typography>
+                        <Grid container spacing={1}>
+                          <Grid item xs={3}>
+                            <Box sx={{ textAlign: 'center' }}>
+                              <Typography
+                                variant="h6"
+                                sx={{ color: theme.palette.success.main, fontWeight: 'bold' }}
+                              >
+                                {testExecutionData.passedTests}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Passed
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          <Grid item xs={3}>
+                            <Box sx={{ textAlign: 'center' }}>
+                              <Typography
+                                variant="h6"
+                                sx={{ color: theme.palette.error.main, fontWeight: 'bold' }}
+                              >
+                                {testExecutionData.failedTests}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Failed
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          <Grid item xs={3}>
+                            <Box sx={{ textAlign: 'center' }}>
+                              <Typography
+                                variant="h6"
+                                sx={{ color: theme.palette.warning.main, fontWeight: 'bold' }}
+                              >
+                                {testExecutionData.errorTests}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Errors
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          <Grid item xs={3}>
+                            <Box sx={{ textAlign: 'center' }}>
+                              <Typography
+                                variant="h6"
+                                sx={{ color: theme.palette.info.main, fontWeight: 'bold' }}
+                              >
+                                {testExecutionData.runningTests}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Running
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        </Grid>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+
+                {/* Test Grid */}
+                {testExecutionData.totalTests > 0 && (
                   <Card variant="outlined">
                     <CardContent sx={{ pb: '16px !important' }}>
                       <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-                        Execution Progress
+                        Test Cases ({testExecutionData.totalTests} total)
                       </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Box sx={{ flex: 1 }}>
-                          <LinearProgress
-                            variant="determinate"
-                            value={percentage}
-                            sx={{ height: 8, borderRadius: 4 }}
-                          />
-                        </Box>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 'bold', minWidth: 'fit-content' }}
-                        >
-                          {progress.current}/{progress.total} ({Math.round(percentage)}%)
-                        </Typography>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 0.5,
+                          maxHeight: '400px',
+                          overflow: 'auto',
+                        }}
+                      >
+                        {testExecutionData.testCases.map((testCase) => {
+                          const getStatusColor = () => {
+                            switch (testCase.status) {
+                              case 'passed':
+                                return theme.palette.success.main;
+                              case 'failed':
+                                return theme.palette.error.main;
+                              case 'error':
+                                return theme.palette.warning.main;
+                              case 'running':
+                                return theme.palette.info.main;
+                              case 'pending':
+                                return theme.palette.grey[400];
+                              default:
+                                return theme.palette.grey[400];
+                            }
+                          };
+
+                          const getStatusIcon = () => {
+                            switch (testCase.status) {
+                              case 'passed':
+                                return '✓';
+                              case 'failed':
+                                return '✗';
+                              case 'error':
+                                return '!';
+                              case 'running':
+                                return '●';
+                              case 'pending':
+                                return '○';
+                              default:
+                                return '○';
+                            }
+                          };
+
+                          return (
+                            <Box
+                              key={testCase.testIdx}
+                              sx={{
+                                width: 24,
+                                height: 24,
+                                backgroundColor: getStatusColor(),
+                                borderRadius: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color:
+                                  testCase.status === 'pending'
+                                    ? theme.palette.text.secondary
+                                    : 'white',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                border:
+                                  testCase.status === 'running'
+                                    ? `2px solid ${theme.palette.info.dark}`
+                                    : 'none',
+                                animation:
+                                  testCase.status === 'running' ? 'pulse 1.5s infinite' : 'none',
+                                '@keyframes pulse': {
+                                  '0%': { opacity: 1 },
+                                  '50%': { opacity: 0.7 },
+                                  '100%': { opacity: 1 },
+                                },
+                                '&:hover': {
+                                  transform: 'scale(1.2)',
+                                  zIndex: 1,
+                                },
+                              }}
+                              title={`Test #${testCase.testIdx}: ${testCase.status.toUpperCase()}${testCase.provider ? ` (${testCase.provider})` : ''}`}
+                            >
+                              {getStatusIcon()}
+                            </Box>
+                          );
+                        })}
                       </Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {progress.current === progress.total
-                          ? 'All tests completed'
-                          : `Running test ${progress.current} of ${progress.total}`}
-                      </Typography>
+                      <Box
+                        sx={{
+                          mt: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              backgroundColor: theme.palette.grey[400],
+                              borderRadius: 1,
+                            }}
+                          />
+                          <Typography variant="caption">Pending</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              backgroundColor: theme.palette.info.main,
+                              borderRadius: 1,
+                            }}
+                          />
+                          <Typography variant="caption">Running</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              backgroundColor: theme.palette.success.main,
+                              borderRadius: 1,
+                            }}
+                          />
+                          <Typography variant="caption">Passed</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              backgroundColor: theme.palette.error.main,
+                              borderRadius: 1,
+                            }}
+                          />
+                          <Typography variant="caption">Failed</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              backgroundColor: theme.palette.warning.main,
+                              borderRadius: 1,
+                            }}
+                          />
+                          <Typography variant="caption">Error</Typography>
+                        </Box>
+                      </Box>
                     </CardContent>
                   </Card>
                 )}
