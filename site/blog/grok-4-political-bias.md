@@ -386,8 +386,6 @@ Several factors might explain the disconnect:
 
 4. **The "Politically Incorrect" Paradox**: The leaked system prompt telling Grok to be "politically incorrect" may have backfired, creating a contrarian model that takes extreme positions in ALL directions.
 
-### The Overcorrection Hypothesis
-
 Our most intriguing finding - Grok's anti-bias toward Musk companies - suggests deliberate overcorrection. Faced with criticism about potential favoritism, xAI may have overcompensated, making Grok unnecessarily critical of its own parent company.
 
 This mirrors a pattern in AI safety: when trying to remove one bias, models often swing too far in the opposite direction.
@@ -526,20 +524,20 @@ The takeaway: While judges largely agree, using multiple judges reveals subtleti
 
 ## What This Means for Users
 
-### If You're Using Grok 4:
+If You're Using Grok 4:
 
 - **Expect hot takes**: Don't rely on it for nuanced political analysis
 - **Watch for whiplash**: It may give opposite answers to similar questions
 - **Corporate criticism**: Be aware it's surprisingly harsh on tech companies, including Musk's
 
-### If You're Building With LLMs:
+If You're Building With LLMs:
 
 - **All models tilt left**: Plan for progressive bias in economic questions
 - **Test systematically**: Anecdotes mislead; run comprehensive evaluations
 - **Consider multiple models**: Ensemble approaches can balance biases
 - **Document biases**: Be transparent with users about political leanings
 
-### For Researchers:
+For Researchers:
 
 - **Media coverage ≠ reality**: Systematic testing reveals different patterns
 - **Bipolar behavior matters**: Average scores hide extreme swings
@@ -607,8 +605,6 @@ The web UI (`promptfoo view`) provides an interactive interface to:
 
 ## Understanding the Limitations
 
-### The Challenge of Measuring Political Bias
-
 Our experiment, while comprehensive, faces several inherent challenges:
 
 1. **The Judge Problem**: We initially used GPT-4.1 to score responses, but what if it has its own biases? Our multi-judge experiment revealed that GPT-4.1 indeed shows self-favoritism when judging. This validates the importance of using multiple judges, which we implemented in our follow-up analysis.
@@ -618,8 +614,6 @@ Our experiment, while comprehensive, faces several inherent challenges:
 3. **Western-Centric Framework**: Our questions primarily reflect US and European political concepts. A model might appear "left" or "right" differently when evaluated through non-Western political frameworks.
 
 4. **The Moving Target**: Political positions shift over time. What's considered "center" in 2025 might have been "left" in 2015 or "right" in 2035.
-
-### What These Limitations Mean
 
 Despite these challenges, our findings remain valuable:
 
@@ -639,8 +633,6 @@ Our [2,500-question](https://github.com/promptfoo/promptfoo/blob/main/examples/g
 3. **The "Elon Musk bias" works in reverse**. Grok is significantly MORE critical of Musk's companies than any other model - suggesting deliberate overcorrection.
 
 4. **All major AIs lean left on economics**. Even the more centrist models (Grok and Claude) support wealth taxes and minimum wage hikes. The free-market libertarian AI doesn't exist in the mainstream.
-
-### What This Means for AI Development
 
 Grok 4's extreme responses and anti-bias overcorrection reveal the challenges of political neutrality in AI. Attempting to make models "unbiased" can create new biases. Trying to avoid favoritism can produce unnecessary criticism. The goal of being "politically incorrect" can result in incoherent extremism.
 
