@@ -611,7 +611,7 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('callApi error handling', () => {
-    let mockProvider: any;
+    let _mockProvider: any;
 
     beforeEach(() => {
       // Reset all mocks

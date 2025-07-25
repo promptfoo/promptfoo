@@ -866,7 +866,7 @@ describe('Tree Structure and Metadata', () => {
 
 describe('runRedteamConversation with transformVars', () => {
   it('should re-run transformVars for each attempt', async () => {
-    const mockRedteamProvider = {
+    const _mockRedteamProvider = {
       id: jest.fn().mockReturnValue('mock-redteam'),
       callApi: jest
         .fn<() => Promise<ProviderResponse>>()
@@ -921,12 +921,12 @@ describe('runRedteamConversation with transformVars', () => {
     });
 
     // Import the iterativeTree provider - removing the problematic import
-    const iterativeTreeModule = await import('../../../src/redteam/providers/iterativeTree');
+    const _iterativeTreeModule = await import('../../../src/redteam/providers/iterativeTree');
 
     // Since runRedteamConversation doesn't exist in iterativeTree, we'll test the core functionality
     // by simulating what the tree search would do with transformVars
-    const testVars = { test: 'goal', originalVar: 'value' };
-    const testContext = {
+    const _testVars = { test: 'goal', originalVar: 'value' };
+    const _testContext = {
       prompt: { raw: 'Session {{sessionId}} - {{test}}', label: 'test' },
       vars: { originalVar: 'value' },
     } as CallApiContextParams;
