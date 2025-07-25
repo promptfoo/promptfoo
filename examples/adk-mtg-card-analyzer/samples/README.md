@@ -4,9 +4,10 @@ To test the MTG Card Analyzer, you'll need to add sample images to this director
 
 ## Available Sample Images
 
-1. **mtg_cards_sample.jpg** - A 1000x1000 test image containing multiple MTG cards
+1. **sample_cards.jpg** - A 1000x1000 test image containing multiple MTG cards
    - Ready to use for testing the multi-card detection pipeline
    - Contains various card conditions for grading tests
+   - This is the default image used by `python main.py`
 
 ## Additional Images You Can Add
 
