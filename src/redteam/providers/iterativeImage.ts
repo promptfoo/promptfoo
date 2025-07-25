@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 
 import { getEnvInt } from '../../envars';
@@ -18,8 +17,12 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { transform, type TransformContext, TransformInputType } from '../../util/transform';
-import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
+import {
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 interface ImageGenerationOutput {
   prompt: string;
@@ -261,43 +264,14 @@ async function runRedteamConversation({
 
   for (let i = 0; i < numIterations; i++) {
     try {
-      // Re-run transformVars for each iteration to generate fresh values (e.g., new sessionId)
-      let iterationVars = { ...originalVars };
-      if (transformVarsConfig) {
-        logger.debug(`[IterativeImage] Re-running transformVars for iteration ${i + 1}`);
-        const transformContext: TransformContext = {
-          prompt: context?.prompt || {},
-          uuid: randomUUID(), // Fresh UUID for each iteration
-        };
-        try {
-          const transformedVars = await transform(
-            transformVarsConfig,
-            originalVars,
-            transformContext,
-            true,
-            TransformInputType.VARS,
-          );
-          invariant(
-            typeof transformedVars === 'object',
-            'Transform function did not return a valid object',
-          );
-          iterationVars = { ...originalVars, ...transformedVars };
-          logger.debug(
-            `[IterativeImage] Transformed vars for iteration ${i + 1}: ${JSON.stringify(transformedVars)}`,
-          );
-        } catch (error) {
-          logger.error(`[IterativeImage] Error transforming vars: ${error}`);
-          // Continue with original vars if transform fails
-        }
-      }
-
-      // Create iteration-specific context with updated vars
-      const iterationContext = context
-        ? {
-            ...context,
-            vars: iterationVars,
-          }
-        : undefined;
+      // Use the shared utility function to create iteration context
+      const { iterationVars, iterationContext } = await createIterationContext({
+        originalVars,
+        transformVarsConfig,
+        context,
+        iterationNumber: i + 1,
+        loggerTag: '[IterativeImage]',
+      });
 
       const redteamBody = JSON.stringify(redteamHistory);
 

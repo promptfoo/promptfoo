@@ -13,7 +13,6 @@
  *
  * @module RedteamIterative
  */
-import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
@@ -37,7 +36,6 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import {
@@ -46,7 +44,12 @@ import {
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
-import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -546,43 +549,14 @@ async function runRedteamConversation({
       );
 
       for (let i = 0; i < BRANCHING_FACTOR; i++) {
-        // Re-run transformVars for each attempt to generate fresh values (e.g., new sessionId)
-        let iterationVars = { ...originalVars };
-        if (transformVarsConfig) {
-          logger.debug(
-            `[IterativeTree] Re-running transformVars for depth ${depth}, branch ${i + 1}`,
-          );
-          const transformContext: TransformContext = {
-            prompt: context?.prompt || {},
-            uuid: randomUUID(), // Fresh UUID for each attempt
-          };
-          try {
-            const transformedVars = await transform(
-              transformVarsConfig,
-              originalVars,
-              transformContext,
-              true,
-              TransformInputType.VARS,
-            );
-            invariant(
-              typeof transformedVars === 'object',
-              'Transform function did not return a valid object',
-            );
-            iterationVars = { ...originalVars, ...transformedVars };
-            logger.debug(`[IterativeTree] Transformed vars: ${safeJsonStringify(transformedVars)}`);
-          } catch (error) {
-            logger.error(`[IterativeTree] Error transforming vars: ${error}`);
-            // Continue with original vars if transform fails
-          }
-        }
-
-        // Create iteration-specific context with updated vars
-        const iterationContext = context
-          ? {
-              ...context,
-              vars: iterationVars,
-            }
-          : undefined;
+        // Use the shared utility function to create iteration context
+        const { iterationVars, iterationContext } = await createIterationContext({
+          originalVars,
+          transformVarsConfig,
+          context,
+          iterationNumber: attempts + 1, // Using attempts + 1 as the iteration number
+          loggerTag: '[IterativeTree]',
+        });
 
         const {
           improvement,

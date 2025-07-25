@@ -1,26 +1,25 @@
-import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import {
-  type ApiProvider,
-  type AtomicTestCase,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
   GradingResult,
-  type GuardrailResponse,
-  type NunjucksFilterMap,
-  type Prompt,
-  type RedteamFileConfig,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -28,8 +27,13 @@ import {
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
-import type { TargetResponse } from './shared';
-import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -64,14 +68,6 @@ interface IterativeMetadata {
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[];
-}
-
-interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  numRequests: number;
-  cached: number;
 }
 
 export async function runRedteamConversation({
@@ -163,43 +159,15 @@ export async function runRedteamConversation({
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
 
-    // Re-run transformVars for each iteration to generate fresh values (e.g., new sessionId)
-    let iterationVars = { ...originalVars };
-    if (transformVarsConfig) {
-      logger.debug(`[Iterative] Re-running transformVars for iteration ${i + 1}`);
-      const transformContext: TransformContext = {
-        prompt: context?.prompt || {},
-        uuid: randomUUID(), // Fresh UUID for each iteration
-      };
-      try {
-        const transformedVars = await transform(
-          transformVarsConfig,
-          originalVars,
-          transformContext,
-          true,
-          TransformInputType.VARS,
-        );
-        invariant(
-          typeof transformedVars === 'object',
-          'Transform function did not return a valid object',
-        );
-        iterationVars = { ...originalVars, ...transformedVars };
-        logger.debug(
-          `[Iterative] Transformed vars for iteration ${i + 1}: ${safeJsonStringify(transformedVars)}`,
-        );
-      } catch (error) {
-        logger.error(`[Iterative] Error transforming vars: ${error}`);
-        // Continue with original vars if transform fails
-      }
-    }
+    // Use the shared utility function to create iteration context
+    const { iterationVars, iterationContext } = await createIterationContext({
+      originalVars,
+      transformVarsConfig,
+      context,
+      iterationNumber: i + 1,
+      loggerTag: '[Iterative]',
+    });
 
-    // Create iteration-specific context with updated vars
-    const iterationContext = context
-      ? {
-          ...context,
-          vars: iterationVars,
-        }
-      : undefined;
     let shouldExitEarly = false;
 
     const redteamBody = JSON.stringify(redteamHistory);
