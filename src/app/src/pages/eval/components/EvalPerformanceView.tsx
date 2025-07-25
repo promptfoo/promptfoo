@@ -272,6 +272,59 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
       });
     });
 
+    cols.push({
+      field: 'avg_pass_rate',
+      headerName: 'Avg. Pass Rate',
+      flex: 1,
+      type: 'number',
+      valueGetter: (_, row) => {
+        let promptCount = 0;
+        let totalPassRate = 0;
+        Object.entries(row).forEach(([key, value]) => {
+          if (key.startsWith('prompt_')) {
+            const { score, count, hasScore } = value as MetricScore;
+            if (hasScore) {
+              promptCount++;
+              totalPassRate += (score / count) * 100;
+            }
+          }
+        });
+        return promptCount > 0 ? totalPassRate / promptCount : 0;
+      },
+      renderCell: (params) => {
+        const { backgroundColor, color } = getPercentageColors(params.value);
+        return (
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              height: '100%',
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                backgroundColor,
+                color,
+                borderRadius: '4px',
+                width: '80px',
+                height: '24px',
+                display: 'inline-flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                fontWeight: 500,
+                fontSize: '0.875rem',
+                lineHeight: 1,
+              }}
+            >
+              {params.value.toFixed(2)}%
+            </Box>
+          </Box>
+        );
+      },
+    });
+
     return cols;
   }, [table.head.prompts, promptMetricNames]);
 
