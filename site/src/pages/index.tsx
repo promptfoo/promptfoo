@@ -82,7 +82,7 @@ function HomepageWalkthrough() {
           </p>
           <p>Generate customized attacks for your use case:</p>
           <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest redteam init</code>
+            <code>npx promptfoo@latest redteam setup</code>
           </pre>
           <p>Our language models probe for specific risks in your system.</p>
           <ul>
