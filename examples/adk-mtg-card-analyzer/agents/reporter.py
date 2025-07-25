@@ -21,6 +21,20 @@ from .base import CardReport, CardIdentity, CardGrade, CardCrop
 class ReportGeneratorAgent(GeminiAgent):
     """Agent for generating comprehensive card analysis reports using Gemini."""
     
+    # Condition mapping
+    CONDITION_MAP = {
+        "Near Mint": "NM",
+        "Lightly Played": "LP",
+        "Moderately Played": "MP",
+        "Heavily Played": "HP",
+        "Damaged": "DMG",
+        "NM": "NM",
+        "LP": "LP",
+        "MP": "MP",
+        "HP": "HP",
+        "DMG": "DMG"
+    }
+    
     def __init__(self, model_name: str = "gemini-2.5-pro", **kwargs):
         instructions = """You are CardReportBot v0.3.
         Generate comprehensive card analysis reports with the following structure:
@@ -93,6 +107,31 @@ class ReportGeneratorAgent(GeminiAgent):
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
     
+    def _normalize_condition(self, condition: str) -> str:
+        """Normalize condition names to standard abbreviations."""
+        return self.CONDITION_MAP.get(condition, condition)
+    
+    def _normalize_report(self, report: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize the report to ensure consistent formatting."""
+        # Normalize condition names in cards
+        if 'cards' in report:
+            for card in report['cards']:
+                if 'grade' in card and 'tcg_condition' in card['grade']:
+                    card['grade']['tcg_condition'] = self._normalize_condition(
+                        card['grade']['tcg_condition']
+                    )
+        
+        # Normalize condition distribution
+        if 'summary' in report and 'condition_distribution' in report['summary']:
+            old_dist = report['summary']['condition_distribution']
+            new_dist = {}
+            for condition, count in old_dist.items():
+                normalized = self._normalize_condition(condition)
+                new_dist[normalized] = new_dist.get(normalized, 0) + count
+            report['summary']['condition_distribution'] = new_dist
+        
+        return report
+    
     def _setup_custom_styles(self):
         """Setup custom PDF styles."""
         self.styles.add(ParagraphStyle(
@@ -132,7 +171,10 @@ class ReportGeneratorAgent(GeminiAgent):
             # Parse JSON from response
             try:
                 json_report = json.loads(response)
-            except:
+                # Normalize condition names
+                json_report = self._normalize_report(json_report)
+            except Exception as e:
+                print(f"Failed to parse Gemini response: {e}")
                 # Fallback to structured data
                 json_report = self._create_fallback_json_report(card_reports)
             
@@ -240,8 +282,9 @@ class ReportGeneratorAgent(GeminiAgent):
             
             report["cards"].append(card_data)
             
-            # Update summary
-            report["summary"]["condition_distribution"][card_report.grade.tcg_condition] += 1
+            # Update summary (normalize condition)
+            normalized_condition = self._normalize_condition(card_report.grade.tcg_condition)
+            report["summary"]["condition_distribution"][normalized_condition] += 1
             report["summary"]["total_estimated_value"]["low"] += card_data["estimated_value"]["low"]
             report["summary"]["total_estimated_value"]["mid"] += card_data["estimated_value"]["mid"]
             report["summary"]["total_estimated_value"]["high"] += card_data["estimated_value"]["high"]

@@ -15,6 +15,7 @@ from .identifier import IdentifierAgent
 from .grader import QualityGraderAgent
 from .reporter import ReportGeneratorAgent
 from .gemini_base import GeminiAgent
+from datetime import datetime
 
 
 @dataclass
@@ -224,11 +225,66 @@ class CoordinatorAgent:
             return final_report
             
         except Exception as e:
-            return {
-                "error": f"Report generation failed: {str(e)}",
-                "stage": "reporting",
-                "cards_analyzed": len(card_reports)
+            print(f"\nReport generation error: {str(e)}")
+            print("Creating fallback report...")
+            
+            # Create a basic report with the data we have
+            fallback_report = {
+                "report_id": f"rpt_{int(time.time())}",
+                "timestamp": datetime.now().isoformat(),
+                "total_cards": len(card_reports),
+                "cards": [],
+                "metadata": {
+                    "processing_time_seconds": time.time() - start_time,
+                    "cards_detected": len(crops),
+                    "cards_analyzed": len(card_reports),
+                    "pipeline_version": "1.0.0",
+                    "error": str(e),
+                    "token_usage": GeminiAgent.get_global_token_usage(),
+                    "estimated_cost_usd": GeminiAgent.get_global_token_usage()["total_cost_usd"]
+                },
+                "summary": {
+                    "total_estimated_value": {"low": 0, "mid": 0, "high": 0},
+                    "condition_distribution": {"NM": 0, "LP": 0, "MP": 0, "HP": 0, "DMG": 0}
+                }
             }
+            
+            # Add card data
+            for i, card in enumerate(card_reports):
+                condition = card.grade.tcg_condition
+                # Normalize condition names
+                if condition in ["Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged"]:
+                    condition_map = {
+                        "Near Mint": "NM",
+                        "Lightly Played": "LP",
+                        "Moderately Played": "MP",
+                        "Heavily Played": "HP",
+                        "Damaged": "DMG"
+                    }
+                    normalized_condition = condition_map.get(condition, condition[:2].upper())
+                else:
+                    normalized_condition = condition
+                
+                fallback_report["cards"].append({
+                    "position": i + 1,
+                    "identity": {
+                        "name": card.identity.name,
+                        "set_code": card.identity.set_code,
+                        "collector_number": card.identity.collector_number
+                    },
+                    "grade": {
+                        "tcg_condition": normalized_condition,
+                        "psa_equivalent": card.grade.psa_equivalent,
+                        "confidence": card.grade.confidence,
+                        "overall_score": card.grade.overall_score
+                    }
+                })
+                
+                # Update condition distribution
+                fallback_report["summary"]["condition_distribution"][normalized_condition] = \
+                    fallback_report["summary"]["condition_distribution"].get(normalized_condition, 0) + 1
+            
+            return fallback_report
     
     async def analyze_batch(self,
                            image_paths: List[str],

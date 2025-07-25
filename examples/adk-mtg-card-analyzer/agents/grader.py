@@ -13,6 +13,25 @@ from .base import CardCrop, CardGrade, Evidence
 class QualityGraderAgent(GeminiAgent):
     """Agent for grading card condition using Gemini 2.5 Pro vision."""
     
+    # Condition normalization map
+    CONDITION_MAP = {
+        "Near Mint": "NM",
+        "Near Mint (NM)": "NM",
+        "Lightly Played": "LP",
+        "Lightly Played (LP)": "LP",
+        "Moderately Played": "MP",
+        "Moderately Played (MP)": "MP",
+        "Heavily Played": "HP",
+        "Heavily Played (HP)": "HP",
+        "Damaged": "DMG",
+        "Damaged (DMG)": "DMG",
+        "NM": "NM",
+        "LP": "LP",
+        "MP": "MP",
+        "HP": "HP",
+        "DMG": "DMG"
+    }
+    
     def __init__(self, model_name: str = "gemini-2.5-pro", **kwargs):
         instructions = """You are a professional Magic: The Gathering card grader with expertise in TCGPlayer and PSA grading standards.
 
@@ -200,8 +219,22 @@ class QualityGraderAgent(GeminiAgent):
                     visual_markers=[{"type": "key_defects", "data": result.get("key_defects", [])}]
                 ))
             
+            # Normalize condition
+            raw_condition = result.get("tcg_condition", "LP")
+            normalized_condition = self.CONDITION_MAP.get(raw_condition, raw_condition)
+            
+            # If still not normalized, try to extract abbreviation
+            if normalized_condition not in ["NM", "LP", "MP", "HP", "DMG"]:
+                # Try to extract from parentheses
+                match = re.search(r'\((NM|LP|MP|HP|DMG)\)', normalized_condition)
+                if match:
+                    normalized_condition = match.group(1)
+                else:
+                    # Default to MP if we can't parse
+                    normalized_condition = "MP"
+            
             return CardGrade(
-                tcg_condition=result.get("tcg_condition", "LP"),
+                tcg_condition=normalized_condition,
                 psa_equivalent=result.get("psa_grade", "8"),
                 evidences=evidences,
                 confidence=result.get("confidence", 0.8),
