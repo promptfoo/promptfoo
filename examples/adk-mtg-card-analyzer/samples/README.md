@@ -2,7 +2,13 @@
 
 To test the MTG Card Analyzer, you'll need to add sample images to this directory.
 
-## Required Images
+## Available Sample Images
+
+1. **mtg_cards_sample.jpg** - A 1000x1000 test image containing multiple MTG cards
+   - Ready to use for testing the multi-card detection pipeline
+   - Contains various card conditions for grading tests
+
+## Additional Images You Can Add
 
 1. **single_card.jpg** - A clear photo of a single Magic: The Gathering card
 2. **multiple_cards.jpg** - A photo containing 3-5 MTG cards laid out on a surface
