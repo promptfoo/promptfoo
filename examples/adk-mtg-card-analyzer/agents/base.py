@@ -26,6 +26,8 @@ class CardCrop:
     image_rgb: bytes  # PNG-encoded crop
     box: BoundingBox
     original_index: int = 0
+    corners: Optional[List[Tuple[float, float]]] = None  # Normalized corner points if available
+    perspective_corrected: bool = False  # Whether perspective correction was applied
 
 
 @dataclass
