@@ -44,6 +44,43 @@ const response = await fetch('/api/traces/evaluation/123');
 - `npm run jsonSchema:generate` - Generate JSON schema for configuration
 - `npm run citation:generate` - Generate citation file
 
+## Style Checks
+
+When the CI style check is failing, run these commands to fix style issues:
+
+1. **Check all linting issues** (without fixing):
+   ```bash
+   npm run lint && npm run lint:tests && npm run lint:site
+   ```
+
+2. **Check formatting issues** (without fixing):
+   ```bash
+   npm run format:check
+   ```
+
+3. **Fix all style issues automatically**:
+   ```bash
+   # Fix linting issues for changed files
+   npm run l
+   
+   # Fix formatting issues for changed files
+   npm run f
+   
+   # Or fix all files (not just changed ones)
+   npm run format
+   ```
+
+4. **Common style issues to watch for**:
+   - Unused imports (especially React imports in TSX files)
+   - Unused variables from destructuring
+   - Missing or inconsistent formatting
+   - Import order issues (Biome will auto-sort these)
+
+5. **Before committing**, always run:
+   ```bash
+   npm run lint && npm run format:check
+   ```
+
 ## CLI Commands
 
 - `promptfoo` or `pf` - Access the CLI tool
