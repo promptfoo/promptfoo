@@ -342,13 +342,26 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
-        // If sessionIds exists, use that. Otherwise try to get a single sessionId from response or vars
-        ...(test.metadata?.sessionIds
-          ? { sessionIds: test.metadata.sessionIds }
-          : {
-              ...(response.sessionId && { sessionId: response.sessionId }),
-              ...(vars.sessionId && !response.sessionId && { sessionId: vars.sessionId as string }),
-            }),
+        // Add session information to metadata
+        ...(() => {
+          // If sessionIds array exists from iterative providers, use it
+          if (test.metadata?.sessionIds) {
+            return { sessionIds: test.metadata.sessionIds };
+          }
+
+          // Otherwise, use single sessionId (prioritize response over vars)
+          if (response.sessionId) {
+            return { sessionId: response.sessionId };
+          }
+
+          // Check if vars.sessionId is a valid string
+          const varsSessionId = vars.sessionId;
+          if (typeof varsSessionId === 'string' && varsSessionId.trim() !== '') {
+            return { sessionId: varsSessionId };
+          }
+
+          return {};
+        })(),
       },
       promptIdx,
       testIdx,

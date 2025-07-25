@@ -133,8 +133,10 @@ context.result.metadata.sessionId;
 
 This sessionId comes from either:
 
-1. The provider's response (`response.sessionId`)
-2. The test variables (`vars.sessionId`) - useful for client-generated session IDs
+1. The provider's response (`response.sessionId`) - takes priority
+2. The test variables (`vars.sessionId`) - used as fallback for client-generated session IDs
+
+**Note:** The provider's `response.sessionId` takes precedence over `vars.sessionId`. The session ID from vars is only used if the provider doesn't return one.
 
 Example usage in an extension:
 
@@ -150,7 +152,7 @@ async function extensionHook(hookName, context) {
 }
 ```
 
-For single shot optimizations, e.g jailbreak, jailbreak tree, the `sessionIds` is made available in the `afterEach` hook context at:
+For iterative red team strategies (e.g., jailbreak, tree search), the `sessionIds` array is made available in the `afterEach` hook context at:
 
 ```javascript
 context.result.metadata.sessionIds;

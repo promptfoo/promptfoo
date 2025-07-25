@@ -305,7 +305,11 @@ export async function runRedteamConversation({
       continue;
     }
 
-    const sessionId = targetResponse.sessionId || (iterationContext?.vars?.sessionId as string);
+    const responseSessionId = targetResponse.sessionId;
+    const varsSessionId = iterationContext?.vars?.sessionId;
+    const sessionId =
+      responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
+
     if (sessionId) {
       sessionIds.push(sessionId);
     }
