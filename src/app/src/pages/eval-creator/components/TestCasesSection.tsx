@@ -64,10 +64,46 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
       reader.onload = async (e) => {
         const text = e.target?.result?.toString();
         if (text) {
-          const { parse: parseCsv } = await import('csv-parse/sync');
-          const rows: CsvRow[] = parseCsv(text, { columns: true });
-          const newTestCases: TestCase[] = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
-          setTestCases([...testCases, ...newTestCases]);
+          try {
+            const fileName = file.name.toLowerCase();
+            let newTestCases: TestCase[] = [];
+
+            if (fileName.endsWith('.csv')) {
+              // Handle CSV files
+              const { parse: parseCsv } = await import('csv-parse/sync');
+              const rows: CsvRow[] = parseCsv(text, { columns: true });
+              newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
+            } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
+              // Handle YAML files
+              const yaml = await import('js-yaml');
+              const parsedYaml = yaml.load(text);
+
+              if (Array.isArray(parsedYaml)) {
+                // Array of test cases
+                newTestCases = parsedYaml as TestCase[];
+              } else if (parsedYaml && typeof parsedYaml === 'object') {
+                // Single test case
+                newTestCases = [parsedYaml as TestCase];
+              } else {
+                throw new Error(
+                  'Invalid YAML format. Expected an array of test cases or a single test case object.',
+                );
+              }
+            }
+
+            // Add description if missing
+            newTestCases = newTestCases.map((tc, idx) => ({
+              ...tc,
+              description: tc.description || `Test case #${testCases.length + idx + 1}`,
+            }));
+
+            setTestCases([...testCases, ...newTestCases]);
+          } catch (error) {
+            console.error('Error parsing file:', error);
+            alert(
+              `Error parsing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            );
+          }
         }
       };
       reader.readAsText(file);
@@ -105,7 +141,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         <Typography variant="h5">Test Cases</Typography>
         <div>
           <label htmlFor={`file-input-add-test-case`}>
-            <Tooltip title="Upload test cases from csv">
+            <Tooltip title="Upload test cases from CSV or YAML">
               <span>
                 <IconButton component="span">
                   <Publish />
@@ -113,7 +149,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                 <input
                   id={`file-input-add-test-case`}
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.yaml,.yml"
                   onChange={handleAddTestCaseFromFile}
                   style={{ display: 'none' }}
                 />
