@@ -7,9 +7,6 @@ import json
 import time
 from PIL import Image
 
-from google.adk.agents import MultiAgent
-from google.adk.agents.sessions import Session
-
 from .base import CardReport, CardCrop
 from .segmenter import SegmenterAgent
 from .identifier import IdentifierAgent
@@ -27,7 +24,7 @@ class PipelineProgress:
     percentage: float
 
 
-class CoordinatorAgent(MultiAgent):
+class CoordinatorAgent:
     """Orchestrates the multi-agent card analysis pipeline."""
     
     def __init__(self, 
@@ -47,14 +44,6 @@ class CoordinatorAgent(MultiAgent):
         self.enable_caching = enable_caching
         self.progress_callback = progress_callback
         
-        # Initialize MultiAgent with component agents
-        super().__init__(
-            name="CardAnalysisCoordinator",
-            agents=[self.segmenter, self.identifier, self.grader, self.reporter],
-            description="Coordinates multi-agent MTG card analysis pipeline",
-            **kwargs
-        )
-        
         self._cache = {} if enable_caching else None
     
     def _report_progress(self, stage: str, current: int, total: int, message: str = ""):
@@ -73,8 +62,7 @@ class CoordinatorAgent(MultiAgent):
     async def analyze_image(self, 
                            image_path: Optional[str] = None,
                            image_bytes: Optional[bytes] = None,
-                           output_format: str = "json",
-                           session: Optional[Session] = None) -> Dict[str, Any]:
+                           output_format: str = "json") -> Dict[str, Any]:
         """
         Analyze an image containing one or more MTG cards.
         
@@ -82,16 +70,11 @@ class CoordinatorAgent(MultiAgent):
             image_path: Path to image file
             image_bytes: Image data as bytes
             output_format: "json" or "pdf"
-            session: ADK session for maintaining context
             
         Returns:
             Analysis report with progress tracking
         """
         start_time = time.time()
-        
-        # Create session if not provided
-        if session is None:
-            session = Session()
         
         # Stage 1: Segmentation
         self._report_progress("segmentation", 0, 1, "Detecting cards in image...")
@@ -253,10 +236,10 @@ class CoordinatorAgent(MultiAgent):
         """Get current pipeline status and configuration."""
         return {
             "agents": {
-                "segmenter": {"status": "ready", "model": "SAM"},
-                "identifier": {"status": "ready", "model": "CLIP"},
-                "grader": {"status": "ready", "algorithms": ["centering", "corners", "surface", "edges"]},
-                "reporter": {"status": "ready", "model": "Gemini 2.0"}
+                "segmenter": {"status": "ready", "model": "Gemini 2.5 Pro"},
+                "identifier": {"status": "ready", "model": "Gemini 2.5 Pro"},
+                "grader": {"status": "ready", "model": "Gemini 2.5 Pro"},
+                "reporter": {"status": "ready", "model": "Gemini 2.5 Pro"}
             },
             "configuration": {
                 "max_parallel_cards": self.max_parallel_cards,

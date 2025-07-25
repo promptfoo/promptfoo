@@ -4,7 +4,7 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from google.adk.agents import Agent
+import google.generativeai as genai
 
 async def test_gemini():
     """Test basic Gemini functionality."""
@@ -15,23 +15,22 @@ async def test_gemini():
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         print("❌ GOOGLE_API_KEY not found in environment")
-        print("   Please set it in your .env file")
+        print("   Please set it in your .env file or the root promptfoo .env")
         return False
     
     print("✅ GOOGLE_API_KEY found")
     
     try:
-        # Initialize Gemini 2.5 Pro agent
-        agent = Agent(
-            name="test_agent",
-            model="gemini-2.5-pro",
-            instruction="You are a helpful assistant."
-        )
-        print("✅ Gemini 2.5 Pro agent initialized")
+        # Configure Gemini
+        genai.configure(api_key=api_key)
+        
+        # Initialize Gemini 2.5 Pro
+        model = genai.GenerativeModel('gemini-2.5-pro')
+        print("✅ Gemini 2.5 Pro model initialized")
         
         # Test text generation
-        response = await agent.run("Say 'Hello, MTG Card Analyzer is ready!' in exactly those words.")
-        print(f"✅ Gemini response: {response}")
+        response = await model.generate_content_async("Say 'Hello, MTG Card Analyzer is ready!' in exactly those words.")
+        print(f"✅ Gemini response: {response.text}")
         
         return True
         

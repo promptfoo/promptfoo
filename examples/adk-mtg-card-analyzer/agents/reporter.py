@@ -2,12 +2,10 @@
 
 import json
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime
-import base64
 from io import BytesIO
 
-from google.adk.agents import Agent
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, PageBreak
@@ -16,77 +14,79 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from PIL import Image
 
-from .base import MTGAnalysisAgent, CardReport, CardIdentity, CardGrade, CardCrop
+from .gemini_base import GeminiAgent
+from .base import CardReport, CardIdentity, CardGrade, CardCrop
 
 
-class ReportGeneratorAgent(Agent):
+class ReportGeneratorAgent(GeminiAgent):
     """Agent for generating comprehensive card analysis reports using Gemini."""
     
     def __init__(self, model_name: str = "gemini-2.5-pro", **kwargs):
-        super().__init__(
-            name="ReportGeneratorAgent",
-            model=model_name,
-            description="Generates structured JSON and PDF reports for card analysis",
-            instructions="""You are CardReportBot v0.3.
-            Generate comprehensive card analysis reports with the following structure:
-            
-            1. For JSON output, strictly follow this schema:
-            {
-                "report_id": "string",
-                "timestamp": "ISO 8601 datetime",
-                "total_cards": number,
-                "cards": [
-                    {
-                        "position": number,
-                        "identity": {
-                            "name": "string",
-                            "set_code": "string",
-                            "collector_number": "string",
-                            "scryfall_id": "string"
-                        },
-                        "grade": {
-                            "tcg_condition": "NM|LP|MP|HP|DMG",
-                            "psa_equivalent": "1-10",
-                            "confidence": 0-1,
-                            "overall_score": 0-10
-                        },
-                        "evidence": [
-                            {
-                                "category": "string",
-                                "score": 0-10,
-                                "description": "string"
-                            }
-                        ],
-                        "estimated_value": {
-                            "low": number,
-                            "mid": number,
-                            "high": number,
-                            "currency": "USD"
+        instructions = """You are CardReportBot v0.3.
+        Generate comprehensive card analysis reports with the following structure:
+        
+        1. For JSON output, strictly follow this schema:
+        {
+            "report_id": "string",
+            "timestamp": "ISO 8601 datetime",
+            "total_cards": number,
+            "cards": [
+                {
+                    "position": number,
+                    "identity": {
+                        "name": "string",
+                        "set_code": "string",
+                        "collector_number": "string",
+                        "scryfall_id": "string"
+                    },
+                    "grade": {
+                        "tcg_condition": "NM|LP|MP|HP|DMG",
+                        "psa_equivalent": "1-10",
+                        "confidence": 0-1,
+                        "overall_score": 0-10
+                    },
+                    "evidence": [
+                        {
+                            "category": "string",
+                            "score": 0-10,
+                            "description": "string"
                         }
-                    }
-                ],
-                "summary": {
-                    "total_estimated_value": {
+                    ],
+                    "estimated_value": {
                         "low": number,
                         "mid": number,
-                        "high": number
-                    },
-                    "condition_distribution": {
-                        "NM": number,
-                        "LP": number,
-                        "MP": number,
-                        "HP": number,
-                        "DMG": number
+                        "high": number,
+                        "currency": "USD"
                     }
                 }
+            ],
+            "summary": {
+                "total_estimated_value": {
+                    "low": number,
+                    "mid": number,
+                    "high": number
+                },
+                "condition_distribution": {
+                    "NM": number,
+                    "LP": number,
+                    "MP": number,
+                    "HP": number,
+                    "DMG": number
+                }
             }
-            
-            2. For narrative output, provide clear explanations of:
-            - Each card's condition with specific defects noted
-            - Value estimates based on condition
-            - Recommendations for selling/grading
-            
-            Use only the provided evidence data. Do not hallucinate card details.""",
+        }
+        
+        2. For narrative output, provide clear explanations of:
+        - Each card's condition with specific defects noted
+        - Value estimates based on condition
+        - Recommendations for selling/grading
+        
+        Use only the provided evidence data. Do not hallucinate card details."""
+        
+        super().__init__(
+            name="ReportGeneratorAgent",
+            model_name=model_name,
+            instructions=instructions,
             **kwargs
         )
         
@@ -125,7 +125,7 @@ class ReportGeneratorAgent(Agent):
             Card Data:
             {json.dumps(report_data, indent=2)}
             
-            Include realistic value estimates based on the conditions."""
+            Include realistic value estimates based on the conditions. Return ONLY valid JSON."""
             
             response = await self.run(prompt)
             

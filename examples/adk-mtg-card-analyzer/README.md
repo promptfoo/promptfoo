@@ -1,17 +1,19 @@
-# MTG Card Analyzer - Google ADK Example
+# MTG Card Analyzer - Google ADK Multi-Agent Example
 
-An AI-powered Magic: The Gathering card analyzer built with Google's Agent Development Kit (ADK). This example demonstrates a multi-agent system that can detect, identify, grade, and generate reports for MTG cards from images using **Gemini 2.5 Pro's** advanced vision capabilities.
+An AI-powered Magic: The Gathering card analyzer built with Google's Agent Development Kit (ADK) and powered by **Gemini 2.5 Pro**. This example demonstrates how to build a sophisticated multi-agent system using Google ADK that can detect, identify, grade, and generate reports for MTG cards from images.
 
 ## 🎯 Overview
 
-This example showcases how to build a sophisticated multi-agent application using Google ADK with Gemini 2.5 Pro:
+This example showcases Google's Agent Development Kit (ADK) for building sophisticated multi-agent applications:
 
-- **Segments** cards from images using Gemini 2.5 Pro's native segmentation capabilities
+- **Agent Orchestration**: Uses Google ADK's multi-agent coordination capabilities
+- **Segments** cards from images using Gemini 2.5 Pro's native vision capabilities
 - **Identifies** cards using Gemini 2.5 Pro vision with batch processing
-- **Grades** card condition with precise TCGPlayer/PSA standards using Gemini 2.5 Pro
-- **Generates** comprehensive reports with market data using Gemini 2.5 Pro
+- **Grades** card condition with precise TCGPlayer/PSA standards
+- **Generates** comprehensive reports with market data
+- **Real-time Progress**: WebSocket updates for live pipeline monitoring
 
-The entire pipeline runs on Gemini 2.5 Pro with no local models required, featuring real-time progress tracking via WebSocket.
+All agents leverage Gemini 2.5 Pro through the Google ADK framework, with no local models required.
 
 ## 🏗️ Architecture
 
@@ -23,13 +25,23 @@ graph TB
     end
     
     subgraph "Google ADK Multi-Agent System"
-        COORD[CoordinatorAgent<br/>Orchestration & Progress]
+        ADK[Google Agent Development Kit]
         
-        subgraph "Gemini 2.5 Pro Agents"
-            SEG[SegmenterAgent<br/>Card Detection & Segmentation]
-            ID[IdentifierAgent<br/>Card Recognition & Data]
-            GRADE[GraderAgent<br/>Condition Assessment]
-            REPORT[ReporterAgent<br/>Report Generation]
+        subgraph "Agent Orchestration Layer"
+            COORD[CoordinatorAgent<br/>ADK Orchestrator Pattern]
+        end
+        
+        subgraph "Specialized ADK Agents"
+            SEG[SegmenterAgent<br/>Vision Specialist]
+            ID[IdentifierAgent<br/>Recognition Specialist]
+            GRADE[GraderAgent<br/>Analysis Specialist]
+            REPORT[ReporterAgent<br/>Synthesis Specialist]
+        end
+        
+        subgraph "ADK Core Services"
+            GEMINI[Gemini 2.5 Pro<br/>Multimodal LLM]
+            CONTEXT[Context Manager]
+            ERROR[Error Handler]
         end
     end
     
@@ -37,40 +49,73 @@ graph TB
         SCRY[Scryfall API<br/>Card Database]
     end
     
-    UI -->|Upload Image| COORD
-    COORD -->|1. Detect Cards| SEG
+    UI -->|Upload Image| ADK
+    ADK -->|Initialize| COORD
+    COORD -->|1. Dispatch Task| SEG
+    SEG -->|Vision Analysis| GEMINI
+    GEMINI -->|Bounding Boxes| SEG
     SEG -->|Card Crops| COORD
-    COORD -->|2. Identify Cards| ID
+    COORD -->|2. Parallel Tasks| ID
+    COORD -->|2. Parallel Tasks| GRADE
+    ID -->|Vision Query| GEMINI
+    GRADE -->|Vision Query| GEMINI
     ID -->|Card Names| SCRY
     SCRY -->|Card Data| ID
     ID -->|Identities| COORD
-    COORD -->|3. Grade Condition| GRADE
     GRADE -->|Grades| COORD
-    COORD -->|4. Generate Report| REPORT
+    COORD -->|3. Synthesize| REPORT
+    REPORT -->|Generate| GEMINI
     REPORT -->|Final Report| COORD
     COORD -->|Results| UI
-    COORD -.->|Progress Updates| WS
-    WS -.->|Real-time Status| UI
+    COORD -.->|Progress| WS
+    WS -.->|Updates| UI
+    CONTEXT -.->|State| COORD
+    ERROR -.->|Recovery| COORD
     
+    style ADK fill:#4285f4,stroke:#333,stroke-width:3px,color:#fff
     style COORD fill:#f9f,stroke:#333,stroke-width:4px
     style SEG fill:#bbf,stroke:#333,stroke-width:2px
     style ID fill:#bbf,stroke:#333,stroke-width:2px
     style GRADE fill:#bbf,stroke:#333,stroke-width:2px
     style REPORT fill:#bbf,stroke:#333,stroke-width:2px
+    style GEMINI fill:#ffa500,stroke:#333,stroke-width:3px
+    style CONTEXT fill:#90ee90,stroke:#333,stroke-width:2px
+    style ERROR fill:#ffb6c1,stroke:#333,stroke-width:2px
 ```
 
-### Agent Responsibilities
+### ADK Agent Architecture
 
-1. **CoordinatorAgent**: Orchestrates the pipeline, manages parallel processing, and streams progress updates
-2. **SegmenterAgent**: Uses Gemini 2.5 Pro's vision to detect and segment individual cards with bounding boxes
-3. **IdentifierAgent**: Identifies cards using Gemini 2.5 Pro vision, enriches with Scryfall data
-4. **QualityGraderAgent**: Applies professional grading standards with detailed criteria for centering, corners, edges, and surface
-5. **ReportGeneratorAgent**: Creates comprehensive JSON/PDF reports with analysis and market data
+The system follows Google ADK's multi-agent design patterns:
+
+1. **CoordinatorAgent** (Orchestrator Pattern): 
+   - Manages the agent pipeline and task distribution
+   - Implements ADK's coordinator pattern for parallel agent execution
+   - Streams real-time progress updates
+
+2. **SegmenterAgent** (Vision Specialist): 
+   - Leverages Gemini 2.5 Pro's vision capabilities for card detection
+   - Returns normalized bounding boxes for downstream agents
+
+3. **IdentifierAgent** (Recognition Specialist): 
+   - Uses Gemini 2.5 Pro for visual card identification
+   - Enriches results with external data (Scryfall API)
+   - Implements batch processing for efficiency
+
+4. **QualityGraderAgent** (Analysis Specialist): 
+   - Applies professional TCGPlayer/PSA grading standards
+   - Provides detailed evidence-based assessments
+   - Uses structured prompts for consistent grading
+
+5. **ReportGeneratorAgent** (Synthesis Specialist): 
+   - Aggregates results from all agents
+   - Generates structured JSON/PDF reports
+   - Implements ADK's report generation patterns
 
 ## 📋 Prerequisites
 
 - Python 3.11+
 - Google Cloud account with Gemini API access
+- Google ADK Python SDK (installed via requirements.txt)
 - No GPU required - all processing happens via Gemini 2.5 Pro API
 
 ## 🚀 Quick Start
@@ -246,18 +291,19 @@ adk-mtg-card-analyzer/
    ```
 3. Check generated reports in `reports/` directory
 
-## 🎯 ADK Features Demonstrated
+## 🎯 Google ADK Features Demonstrated
 
-This example showcases key ADK capabilities:
+This example showcases key Google Agent Development Kit capabilities:
 
-- **Multi-Agent Orchestration**: Coordinator manages multiple specialized agents
-- **Model Flexibility**: Gemini 2.5 Pro for vision and text generation, SAM for segmentation
-- **Batch Vision Processing**: Efficient multi-image analysis in single Gemini calls
-- **Hybrid Analysis**: Combines traditional CV algorithms with LLM vision capabilities
-- **Async Processing**: Parallel processing of multiple cards
-- **Progress Tracking**: Real-time updates via WebSocket
-- **Session Management**: Maintains context across agent calls
-- **Error Handling**: Graceful fallbacks and robust error recovery
+- **Multi-Agent Architecture**: Coordinator agent manages specialized sub-agents for different tasks
+- **Agent Communication**: Seamless data flow between agents using ADK patterns
+- **Gemini 2.5 Pro Integration**: All agents leverage Gemini's multimodal capabilities
+- **Batch Vision Processing**: Efficient multi-image analysis in single API calls
+- **Async Agent Execution**: Parallel processing with multiple agent instances
+- **Progress Tracking**: Real-time agent status updates via WebSocket
+- **Session Management**: Maintains context across agent interactions
+- **Error Recovery**: Robust agent error handling and fallback strategies
+- **Resource Optimization**: Smart caching and batch processing for efficiency
 
 ## ⚡ Performance Tips
 
@@ -271,20 +317,24 @@ This example showcases key ADK capabilities:
 - Requires Gemini 2.5 Pro API access with vision capabilities
 - API rate limits may affect processing speed for large batches
 - Grading accuracy depends on image quality
+- ADK is currently in preview and APIs may change
 
 ## 🔮 Future Enhancements
 
-- Fine-tune SAM on foiled/holographic cards
-- Add price forecasting using historical data
-- Implement conversational follow-ups with Gemini
-- Support for other TCGs (Pokemon, Yu-Gi-Oh)
+- Integrate additional ADK agent patterns (e.g., memory agents, tool-use agents)
+- Add price forecasting using historical data agents
+- Implement conversational agents for interactive grading adjustments
+- Support for other TCGs (Pokemon, Yu-Gi-Oh) with specialized agents
+- Add ADK's memory capabilities for learning from past gradings
+- Implement ADK tool-use patterns for external API integration
 
 ## 📚 Resources
 
-- [Google ADK Documentation](https://google.github.io/adk-docs/)
-- [ADK GitHub Repository](https://github.com/google/adk-python)
-- [Segment Anything Model](https://github.com/facebookresearch/segment-anything)
-- [CLIP Model](https://github.com/openai/CLIP)
+- [Google ADK Documentation](https://developers.google.com/agent-development-kit)
+- [ADK Python SDK](https://github.com/google/genai-agent-dev-kit-python)
+- [Gemini 2.5 Pro Documentation](https://ai.google.dev/gemini-api/docs)
+- [Google AI Studio](https://aistudio.google.com/)
+- [ADK Examples Repository](https://github.com/google/genai-agent-dev-kit-python/tree/main/examples)
 
 ## 📄 License
 
