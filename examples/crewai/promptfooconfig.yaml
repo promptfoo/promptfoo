@@ -1,39 +1,78 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'CrewAI Recruitment Agent Evaluation'
 
-# 📝 Define the input prompts (using variable placeholder)
 prompts:
-  - '{{job_requirements}}'
+  - 'Find top candidates for the following role: {{role}}'
 
-# ⚙️ Define the provider — here we point to our local provider.py
 providers:
-  - id: file://./provider.py # Local file provider (make sure path is correct!)
-    label: CrewAI Recruitment Agent
+  - id: 'file://./agent.py'
+    label: 'CrewAI Recruitment Agent'
+    config:
+      model: 'openai:gpt-4.1'
 
-# ✅ Define default tests to check the agent output shape and content
+# It's a good practice to have a defaultTest that applies to all test cases.
 defaultTest:
   assert:
-    - type: is-json # Ensure output is valid JSON
-      value:
-        type: object
-        properties:
-          candidates:
-            type: array
-            items:
-              type: object
-              properties:
-                name:
-                  type: string
-                experience:
-                  type: string
-          summary:
-            type: string
-        required: ['candidates', 'summary'] # Both fields must be present
+    # We expect the agent to always return a valid JSON object
+    - type: is-json
+    # We expect the output to contain a "candidates" key
+    - type: javascript
+      value: 'output.hasOwnProperty("candidates")'
 
-# 🧪 Specific test case to validate basic output behavior
 tests:
-  - description: 'Basic test for RoR and React candidates'
+  - description: 'Senior Full-Stack Engineer'
     vars:
-      job_requirements: 'List top candidates with RoR and React'
+      role: 'A Senior Full-Stack Engineer with 8+ years of experience in Python, Django, and React.'
     assert:
-      - type: python # Custom Python check
-        value: "'candidates' in output and isinstance(output['candidates'], list) and 'summary' in output"
+      - type: javascript
+        value: |
+          // Check that there are at least 2 candidates
+          return output.candidates.length >= 2;
+
+      - type: python
+        value: |
+          # Check that all candidates have relevant skills
+          required_skills = ['python', 'django', 'react']
+          all_have_skills = all(
+              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+              for candidate in output.get('candidates', [])
+          )
+          return all_have_skills
+
+  - description: 'Data Scientist with Machine Learning and Cloud'
+    vars:
+      role: 'A Data Scientist with machine learning, Python, and cloud (AWS or GCP) experience.'
+    assert:
+      - type: javascript
+        value: |
+          // Check that there are at least 2 candidates
+          return output.candidates.length >= 2;
+
+      - type: python
+        value: |
+          # Check for relevant data science and cloud skills
+          required_skills = ['machine learning', 'python', 'aws', 'gcp', 'tensorflow', 'pytorch']
+          all_have_skills = all(
+              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+              for candidate in output.get('candidates', [])
+          )
+          return all_have_skills
+
+  - description: 'Junior UX/UI Designer'
+    vars:
+      role: 'A junior UX/UI designer with Figma and Adobe Creative Suite experience.'
+    assert:
+      - type: javascript
+        value: |
+          // Check that there are at least 2 candidates
+          return output.candidates.length >= 2;
+
+      - type: python
+        value: |
+          # Check for relevant design tool skills
+          required_skills = ['figma', 'adobe', 'ux', 'ui', 'user experience', 'user interface']
+          all_have_skills = all(
+              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+              for candidate in output.get('candidates', [])
+          )
+          return all_have_skills
