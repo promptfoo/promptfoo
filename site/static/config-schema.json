@@ -153,6 +153,9 @@
                             "FAL_KEY": {
                               "type": "string"
                             },
+                            "GITHUB_TOKEN": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
@@ -1161,6 +1164,7 @@
                           "indirect-prompt-injection",
                           "intent",
                           "mcp",
+                          "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
@@ -1346,6 +1350,7 @@
                               "indirect-prompt-injection",
                               "intent",
                               "mcp",
+                              "medical",
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",

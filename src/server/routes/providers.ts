@@ -1,8 +1,6 @@
 import dedent from 'dedent';
 import { Router } from 'express';
-import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -12,9 +10,12 @@ import {
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
-import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
+import type { Request, Response } from 'express';
+import type { ZodError } from 'zod-validation-error';
+
+import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
 export const providersRouter = Router();
 

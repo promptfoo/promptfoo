@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
@@ -13,8 +15,10 @@ import {
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
+import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -203,6 +207,76 @@ export function checkPenalizedPhrases(output: string): boolean {
   const hasExactMatch = exactMatchPhrases.includes(output.toLowerCase().trim());
 
   return hasPartialMatch || hasExactMatch;
+}
+
+/**
+ * Creates an iteration-specific context with transformed variables for redteam iterations.
+ * This utility function handles the common pattern of re-running transformVars for each
+ * iteration to generate fresh values (e.g., new sessionId).
+ *
+ * @param originalVars - The original variables before transformation
+ * @param transformVarsConfig - The transform configuration from the test
+ * @param context - The original context that may be updated
+ * @param iterationNumber - The current iteration number (for logging)
+ * @param loggerTag - The logger tag to use for debug messages (e.g., '[Iterative]', '[IterativeTree]')
+ * @returns An object containing the transformed vars and iteration-specific context
+ */
+export async function createIterationContext({
+  originalVars,
+  transformVarsConfig,
+  context,
+  iterationNumber,
+  loggerTag = '[Redteam]',
+}: {
+  originalVars: Record<string, string | object>;
+  transformVarsConfig?: string;
+  context?: CallApiContextParams;
+  iterationNumber: number;
+  loggerTag?: string;
+}): Promise<{
+  iterationVars: Record<string, string | object>;
+  iterationContext?: CallApiContextParams;
+}> {
+  let iterationVars = { ...originalVars };
+
+  if (transformVarsConfig) {
+    logger.debug(`${loggerTag} Re-running transformVars for iteration ${iterationNumber}`);
+    const transformContext: TransformContext = {
+      prompt: context?.prompt || {},
+      uuid: randomUUID(), // Fresh UUID for each iteration
+    };
+
+    try {
+      const transformedVars = await transform(
+        transformVarsConfig,
+        originalVars,
+        transformContext,
+        true,
+        TransformInputType.VARS,
+      );
+      invariant(
+        typeof transformedVars === 'object',
+        'Transform function did not return a valid object',
+      );
+      iterationVars = { ...originalVars, ...transformedVars };
+      logger.debug(
+        `${loggerTag} Transformed vars for iteration ${iterationNumber}: ${safeJsonStringify(transformedVars)}`,
+      );
+    } catch (error) {
+      logger.error(`${loggerTag} Error transforming vars: ${error}`);
+      // Continue with original vars if transform fails
+    }
+  }
+
+  // Create iteration-specific context with updated vars
+  const iterationContext = context
+    ? {
+        ...context,
+        vars: iterationVars,
+      }
+    : undefined;
+
+  return { iterationVars, iterationContext };
 }
 
 /**

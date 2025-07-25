@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { loadApiProvider } from '../../src/providers';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
+
 import type { TestCase } from '../../src/types';
 
 jest.mock('../../src/providers', () => ({

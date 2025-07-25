@@ -1,4 +1,7 @@
 import logger from '../logger';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -6,8 +9,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
 
 interface SequenceProviderConfig {
   inputs: string[];

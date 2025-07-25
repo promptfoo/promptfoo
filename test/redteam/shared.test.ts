@@ -1,7 +1,8 @@
 import * as fs from 'fs';
-import * as yaml from 'js-yaml';
 import * as os from 'os';
 import path from 'path';
+
+import * as yaml from 'js-yaml';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { checkRemoteHealth } from '../../src/util/apiHealth';

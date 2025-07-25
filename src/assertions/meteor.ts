@@ -1,8 +1,8 @@
-import type { DataRecord } from 'natural';
-import type { Stemmer } from 'natural';
 import { PorterStemmer, WordNet } from 'natural';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+import type { DataRecord, Stemmer } from 'natural';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 type WordPair = [number, string];
 type MatchPair = [number, number];

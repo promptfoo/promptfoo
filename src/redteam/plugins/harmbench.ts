@@ -3,8 +3,9 @@ import dedent from 'dedent';
 import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+
 import type { Assertion, TestCase } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:harmbench';
 

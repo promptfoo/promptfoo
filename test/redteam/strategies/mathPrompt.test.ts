@@ -3,12 +3,13 @@ import { fetchWithCache } from '../../../src/cache';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import {
+  addMathPrompt,
   DEFAULT_MATH_CONCEPTS,
   EXAMPLES,
-  addMathPrompt,
   encodeMathPrompt,
   generateMathPrompt,
 } from '../../../src/redteam/strategies/mathPrompt';
+
 import type { ApiProvider } from '../../../src/types/providers';
 
 jest.mock('cli-progress');

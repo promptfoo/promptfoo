@@ -1,14 +1,14 @@
 import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
 import { getDefaultShareViewBaseUrl } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
+import { createShareableUrl, getShareableUrl, hasEvalBeenShared, isSharingEnabled } from '../share';
 import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
+import type { Command } from 'commander';
 
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = getDefaultShareViewBaseUrl();

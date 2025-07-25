@@ -1,16 +1,18 @@
 import * as fs from 'fs';
+
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';
-import type { Tool } from '../../../src/providers/google/types';
 import {
-  maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
   loadFile,
+  maybeCoerceToGeminiFormat,
+  normalizeTools,
   parseStringObject,
   validateFunctionCall,
-  normalizeTools,
 } from '../../../src/providers/google/util';
+
+import type { Tool } from '../../../src/providers/google/types';
 
 jest.mock('google-auth-library');
 

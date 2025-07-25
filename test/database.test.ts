@@ -1,7 +1,8 @@
-import Database from 'better-sqlite3';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+import Database from 'better-sqlite3';
 
 const ORIGINAL_ENV = { ...process.env };
 
