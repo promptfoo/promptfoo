@@ -1,5 +1,5 @@
-# Google ADK
-git+https://github.com/google/adk-python.git@main
+# Google Generative AI (for Gemini models)
+google-generativeai>=0.8.0
 
 # Image handling
 Pillow>=10.0.0
@@ -18,6 +18,5 @@ python-dotenv>=1.0.0
 # PDF generation
 reportlab>=4.0.0
 
-# Google Cloud (optional for deployment)
-google-cloud-aiplatform>=1.40.0
-google-cloud-storage>=2.13.0
+# Async support
+asyncio>=3.4.3

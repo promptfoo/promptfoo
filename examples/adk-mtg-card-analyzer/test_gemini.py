@@ -4,7 +4,7 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from google.adk.generative_models import GenerativeModel
+from google.adk.agents import Agent
 
 async def test_gemini():
     """Test basic Gemini functionality."""
@@ -21,13 +21,17 @@ async def test_gemini():
     print("✅ GOOGLE_API_KEY found")
     
     try:
-        # Initialize Gemini 2.5 Pro
-        model = GenerativeModel("gemini-2.5-pro")
-        print("✅ Gemini 2.5 Pro model initialized")
+        # Initialize Gemini 2.5 Pro agent
+        agent = Agent(
+            name="test_agent",
+            model="gemini-2.5-pro",
+            instruction="You are a helpful assistant."
+        )
+        print("✅ Gemini 2.5 Pro agent initialized")
         
         # Test text generation
-        response = await model.generate_content_async("Say 'Hello, MTG Card Analyzer is ready!' in exactly those words.")
-        print(f"✅ Gemini response: {response.text}")
+        response = await agent.run("Say 'Hello, MTG Card Analyzer is ready!' in exactly those words.")
+        print(f"✅ Gemini response: {response}")
         
         return True
         

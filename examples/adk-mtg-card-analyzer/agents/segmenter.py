@@ -1,77 +1,74 @@
 """Segmentation agent using Gemini 2.5 Pro vision capabilities."""
 
-import base64
 import json
 from PIL import Image
-from typing import List, Dict, Any
+from typing import List
 from io import BytesIO
+import re
 
-from google.adk import Agent
-from google.adk.generative_models import GenerativeModel
-
+from .gemini_base import GeminiAgent
 from .base import CardCrop, BoundingBox
 
 
-class SegmenterAgent(Agent):
+class SegmenterAgent(GeminiAgent):
     """Agent for segmenting cards from images using Gemini 2.5 Pro."""
     
     def __init__(self, model_name: str = "gemini-2.5-pro", **kwargs):
-        # Initialize with Gemini model
-        model = GenerativeModel(model_name)
+        instructions = """You are an expert at detecting and segmenting Magic: The Gathering cards in images.
+        
+        Your task is to:
+        1. Identify ALL Magic: The Gathering cards visible in the image
+        2. For each card, provide precise bounding box coordinates
+        3. Handle various card orientations, overlapping cards, and different lighting conditions
+        4. Ignore non-MTG items like sleeves, playmats, or other objects
+        
+        Return a JSON response with this EXACT structure:
+        {
+            "detections": [
+                {
+                    "box_2d": [x_min, y_min, x_max, y_max],
+                    "label": "MTG Card 1",
+                    "confidence": 0.95
+                }
+            ],
+            "total_cards": 3,
+            "notes": "Any relevant observations about card conditions or layout"
+        }
+        
+        Important guidelines:
+        - Coordinates should be normalized (0.0 to 1.0) relative to image dimensions
+        - Only include cards that are at least 70% visible
+        - Sort detections from top-left to bottom-right
+        - If no cards are found, return empty detections array
+        - Be precise with bounding boxes - they should tightly fit the card edges"""
         
         super().__init__(
             name="CardSegmenterAgent",
-            model=model,
-            description="Segments Magic: The Gathering cards from images",
-            instructions="""You are an expert at detecting and segmenting Magic: The Gathering cards in images.
-            
-            Your task is to:
-            1. Identify ALL Magic: The Gathering cards visible in the image
-            2. For each card, provide precise bounding box coordinates and segmentation mask
-            3. Handle various card orientations, overlapping cards, and different lighting conditions
-            4. Ignore non-MTG items like sleeves, playmats, or other objects
-            
-            Return a JSON response with this EXACT structure:
-            {
-                "detections": [
-                    {
-                        "box_2d": [x_min, y_min, x_max, y_max],
-                        "label": "MTG Card 1",
-                        "confidence": 0.95,
-                        "mask": "base64_encoded_png_mask"
-                    }
-                ],
-                "total_cards": 3,
-                "notes": "Any relevant observations about card conditions or layout"
-            }
-            
-            Important guidelines:
-            - Coordinates should be normalized (0.0 to 1.0)
-            - Only include cards that are at least 70% visible
-            - Sort detections from top-left to bottom-right
-            - If no cards are found, return empty detections array
-            - Be precise with bounding boxes - they should tightly fit the card edges""",
+            model_name=model_name,
+            instructions=instructions,
             **kwargs
         )
     
     async def segment_image(self, image: Image.Image) -> List[CardCrop]:
         """Segment cards from an image using Gemini 2.5 Pro."""
-        # Convert image to base64
-        buffer = BytesIO()
-        image.save(buffer, format="PNG")
-        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        prompt = """Detect and segment all Magic: The Gathering cards in this image.
         
-        # Create prompt
-        prompt = f"""Detect and segment all Magic: The Gathering cards in this image.
-        
-        <image>data:image/png;base64,{image_base64}</image>
-        
-        Provide precise bounding boxes and segmentation masks for each card."""
+        Provide precise bounding boxes for each card. Return ONLY valid JSON."""
         
         try:
-            # Get Gemini's response
-            response = await self.run(prompt)
-            result = json.loads(response)
+            # Run Gemini with the image
+            response = await self.run(prompt, images=[image])
+            
+            # Try to parse JSON from response
+            try:
+                result = json.loads(response)
+            except:
+                # If response isn't pure JSON, try to extract it
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    result = {"detections": []}
             
             # Process detections
             crops = []
@@ -115,6 +112,7 @@ class SegmenterAgent(Agent):
                     original_index=idx
                 ))
             
+            print(f"Detected {len(crops)} cards")
             return crops
             
         except Exception as e:

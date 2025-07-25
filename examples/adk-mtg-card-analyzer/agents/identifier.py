@@ -8,8 +8,7 @@ from typing import List, Dict, Optional, Tuple
 import aiohttp
 import asyncio
 
-from google.adk import Agent
-from google.adk.generative_models import GenerativeModel
+from google.adk.agents import Agent
 
 from .base import MTGAnalysisAgent, CardCrop, CardIdentity
 
@@ -18,12 +17,9 @@ class IdentifierAgent(Agent):
     """Agent for identifying cards using Gemini 2.5 Pro's vision capabilities."""
     
     def __init__(self, model_name: str = "gemini-2.5-pro", **kwargs):
-        # Initialize with Gemini model
-        model = GenerativeModel(model_name)
-        
         super().__init__(
             name="CardIdentifierAgent",
-            model=model,
+            model=model_name,
             description="Identifies Magic: The Gathering cards using vision analysis",
             instructions="""You are an expert at identifying Magic: The Gathering cards from images.
             

@@ -7,8 +7,8 @@ import json
 import time
 from PIL import Image
 
-from google.adk import MultiAgent
-from google.adk.sessions import Session
+from google.adk.agents import MultiAgent
+from google.adk.agents.sessions import Session
 
 from .base import CardReport, CardCrop
 from .segmenter import SegmenterAgent

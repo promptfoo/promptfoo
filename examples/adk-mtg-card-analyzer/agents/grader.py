@@ -6,8 +6,7 @@ from PIL import Image
 from io import BytesIO
 from typing import List, Dict, Any
 
-from google.adk import Agent
-from google.adk.generative_models import GenerativeModel
+from google.adk.agents import Agent
 
 from .base import CardCrop, CardGrade, Evidence
 
@@ -39,12 +38,9 @@ class QualityGraderAgent(Agent):
     }
     
     def __init__(self, model_name: str = "gemini-2.5-pro", **kwargs):
-        # Initialize with Gemini model
-        model = GenerativeModel(model_name)
-        
         super().__init__(
             name="CardGraderAgent",
-            model=model,
+            model=model_name,
             description="Grades Magic: The Gathering card condition using precise visual analysis",
             instructions="""You are a professional Magic: The Gathering card grader with expertise in TCGPlayer and PSA grading standards.
 

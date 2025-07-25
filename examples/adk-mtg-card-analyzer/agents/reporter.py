@@ -7,8 +7,7 @@ from datetime import datetime
 import base64
 from io import BytesIO
 
-from google.adk import Agent
-from google.adk.generative_models import GenerativeModel
+from google.adk.agents import Agent
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, PageBreak
@@ -24,12 +23,9 @@ class ReportGeneratorAgent(Agent):
     """Agent for generating comprehensive card analysis reports using Gemini."""
     
     def __init__(self, model_name: str = "gemini-2.5-pro", **kwargs):
-        # Initialize with Gemini model
-        model = GenerativeModel(model_name)
-        
         super().__init__(
             name="ReportGeneratorAgent",
-            model=model,
+            model=model_name,
             description="Generates structured JSON and PDF reports for card analysis",
             instructions="""You are CardReportBot v0.3.
             Generate comprehensive card analysis reports with the following structure:
