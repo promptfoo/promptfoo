@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import Layout from '@theme/Layout';
 import styles from './careers.module.css';
 

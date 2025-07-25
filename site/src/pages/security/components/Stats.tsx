@@ -1,4 +1,3 @@
-import React from 'react';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import SearchIcon from '@mui/icons-material/Search';

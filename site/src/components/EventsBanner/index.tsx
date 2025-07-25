@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Link from '@docusaurus/Link';
 import { useLocation } from '@docusaurus/router';
 import styles from './styles.module.css';
@@ -28,7 +28,9 @@ export default function EventsBanner(): JSX.Element | null {
     sessionStorage.setItem('eventsBannerDismissed', 'true');
   };
 
-  if (!isVisible) return null;
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <div className={styles.banner}>

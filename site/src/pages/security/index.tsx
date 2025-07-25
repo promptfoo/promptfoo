@@ -1,4 +1,3 @@
-import React from 'react';
 import Layout from '@theme/Layout';
 import CallToAction from './components/CallToAction';
 import FAQ from './components/FAQ';

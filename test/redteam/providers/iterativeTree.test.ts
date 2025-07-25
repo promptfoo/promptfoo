@@ -899,9 +899,7 @@ describe('runRedteamConversation with transformVars', () => {
 });
 
 describe('Goal-Aware Grading Support', () => {
-
   it('should generate additional rubric with goal context', () => {
-
     // Test the template logic directly
     const template = `
 {% if goal %}

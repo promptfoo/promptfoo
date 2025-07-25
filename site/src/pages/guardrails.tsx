@@ -1,4 +1,3 @@
-import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
@@ -54,7 +53,7 @@ function GuardrailsHeader() {
   );
 }
 
-function FeaturesSection() {
+function _FeaturesSection() {
   return (
     <section className={styles.featuresSection}>
       <div className="container">
