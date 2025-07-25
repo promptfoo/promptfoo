@@ -49,7 +49,7 @@ export default function DefaultTestVariables() {
     });
     isUpdatingFromLocal.current = true; // Mark that we're updating from local state
     updateConfig('defaultTest', { ...config.defaultTest, vars });
-  }, [variables, config.defaultTest, updateConfig]);
+  }, [variables, updateConfig]);
 
   // Validate variable names for duplicates
   const validateVariableNames = useCallback((updatedVariables: Variable[]) => {
