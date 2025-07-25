@@ -7,13 +7,17 @@ An AI-powered Magic: The Gathering card analyzer built with Google's Agent Devel
 This example showcases Google's Agent Development Kit (ADK) for building sophisticated multi-agent applications:
 
 - **Agent Orchestration**: Uses Google ADK's multi-agent coordination capabilities
-- **Segments** cards from images using Gemini 2.5 Pro's native vision capabilities
+- **Multiple Segmentation Options**:
+  - **SAM2**: State-of-the-art Segment Anything Model 2 with automatic aspect ratio correction
+  - **GenAI**: Multi-stage reasoning with Gemini 2.5 Pro
+  - **Advanced**: Hybrid CV + Gemini approach
+  - **Basic**: Pure Gemini 2.5 Pro detection
 - **Identifies** cards using Gemini 2.5 Pro vision with batch processing
 - **Grades** card condition with precise TCGPlayer/PSA standards
 - **Generates** comprehensive reports with market data
 - **Real-time Progress**: WebSocket updates for live pipeline monitoring
 
-All agents leverage Gemini 2.5 Pro through the Google ADK framework, with no local models required.
+Combines state-of-the-art segmentation (SAM2) with Gemini 2.5 Pro's analysis capabilities.
 
 ## 🏗️ Architecture
 
@@ -132,6 +136,27 @@ cd examples/adk-mtg-card-analyzer
 pip install -r requirements.txt
 ```
 
+#### Optional: Install SAM2 for Advanced Segmentation
+
+For the best segmentation results using SAM2:
+
+```bash
+# Run the setup script
+chmod +x setup_sam2.sh
+./setup_sam2.sh
+
+# Or manually:
+# 1. Install PyTorch
+pip install torch>=2.5.1 torchvision>=0.20.1
+
+# 2. Clone and install SAM2
+git clone https://github.com/facebookresearch/sam2.git
+cd sam2 && pip install -e . && cd ..
+
+# 3. Download checkpoints from https://github.com/facebookresearch/sam2#model-checkpoints
+# Place in checkpoints/ directory
+```
+
 ### 3. Set Up Environment
 
 The example will automatically use the GOOGLE_API_KEY from the promptfoo root `.env` file if available.
@@ -156,7 +181,19 @@ No model downloads required! Everything runs through Gemini 2.5 Pro API.
 
 #### CLI Mode
 ```bash
+# Default (GenAI segmentation)
 python main.py
+
+# With SAM2 segmentation (best quality)
+python main.py --segmentation-mode sam2
+
+# Analyze specific image
+python main.py --image path/to/cards.jpg --output-format pdf
+
+# Available options:
+# --segmentation-mode: basic, advanced, genai, sam2
+# --image: path to image file
+# --output-format: json or pdf
 ```
 
 #### Web Server Mode
@@ -323,6 +360,31 @@ This example showcases key Google Agent Development Kit capabilities:
 - **Session Management**: Maintains context across agent interactions
 - **Error Recovery**: Robust agent error handling and fallback strategies
 - **Resource Optimization**: Smart caching and batch processing for efficiency
+
+### Segmentation Methods
+
+1. **SAM2 (Segment Anything Model 2)**
+   - State-of-the-art segmentation from Meta
+   - Automatic aspect ratio correction to standard card dimensions
+   - Precise mask-based detection
+   - Best for high-quality card extraction
+
+2. **GenAI (Multi-stage Reasoning)**
+   - Three-stage pipeline: detection → refinement → validation
+   - Chain-of-thought prompting
+   - Visual attention mechanism
+   - Best for complex backgrounds
+
+3. **Advanced (Hybrid CV + AI)**
+   - Computer vision preprocessing
+   - Multiple detection methods
+   - Gemini validation
+   - Good balance of speed and accuracy
+
+4. **Basic (Pure Gemini)**
+   - Simple and fast
+   - Direct Gemini 2.5 Pro detection
+   - Good for clean images
 
 ## ⚡ Performance Tips
 

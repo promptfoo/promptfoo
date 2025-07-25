@@ -8,6 +8,12 @@ numpy>=1.24.0
 scipy>=1.11.0
 scikit-image>=0.22.0
 
+# SAM2 dependencies
+torch>=2.5.1
+torchvision>=0.20.1
+# Note: Install SAM2 separately with:
+# git clone https://github.com/facebookresearch/sam2.git && cd sam2 && pip install -e .
+
 # Web Server
 fastapi>=0.109.0
 uvicorn>=0.27.0

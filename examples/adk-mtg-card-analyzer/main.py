@@ -2,6 +2,7 @@
 
 import os
 import asyncio
+import argparse
 from dotenv import load_dotenv
 from typing import Optional
 
@@ -24,12 +25,12 @@ async def analyze_image(image_path: str, output_format: str = "json"):
     """Analyze a single image."""
     print(f"\n🎴 Analyzing image: {image_path}")
     
-    # Initialize coordinator with GenAI segmentation
+    # Initialize coordinator with selected segmentation mode
     coordinator = CoordinatorAgent(
         max_parallel_cards=16,
         enable_caching=True,
         progress_callback=progress_callback,
-        segmentation_mode="genai"  # Use state-of-the-art GenAI segmentation
+        segmentation_mode=args.segmentation_mode
     )
     
     # Run analysis
@@ -67,6 +68,27 @@ async def analyze_image(image_path: str, output_format: str = "json"):
 
 async def main():
     """Main CLI entry point."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="MTG Card Analyzer - Google ADK Example")
+    parser.add_argument(
+        "--segmentation-mode",
+        choices=["basic", "advanced", "genai", "sam2"],
+        default="genai",
+        help="Segmentation method to use (default: genai)"
+    )
+    parser.add_argument(
+        "--image",
+        default="./samples/sample_cards.jpg",
+        help="Path to image file to analyze"
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=["json", "pdf"],
+        default="json",
+        help="Output format for the report (default: json)"
+    )
+    args = parser.parse_args()
+    
     # Load environment variables from current dir and parent dirs
     load_dotenv()  # Load from current directory
     load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))  # Load from promptfoo root
@@ -77,6 +99,9 @@ async def main():
     
     # Example usage
     print("🎯 MTG Card Analyzer - ADK Example")
+    print(f"   Segmentation: {args.segmentation_mode}")
+    print(f"   Image: {args.image}")
+    print(f"   Output: {args.output_format}")
     print("=" * 50)
     
     # Create sample directories
@@ -85,11 +110,11 @@ async def main():
     os.makedirs("./samples", exist_ok=True)
     
     # Check if we have a sample image
-    sample_image = "./samples/sample_cards.jpg"
+    sample_image = args.image
     
     if os.path.exists(sample_image):
         # Analyze the sample image
-        result = await analyze_image(sample_image, output_format="json")
+        result = await analyze_image(sample_image, output_format=args.output_format)
         
         # Save JSON result
         if "error" not in result:
@@ -98,15 +123,16 @@ async def main():
                 json.dump(result, f, indent=2)
             print("\n📄 JSON report saved to: ./reports/sample_analysis.json")
             
-            # Also generate PDF
-            pdf_result = await analyze_image(sample_image, output_format="pdf")
-            if "pdf_path" in pdf_result:
-                print(f"📑 PDF report saved to: {pdf_result['pdf_path']}")
+            # Also generate PDF if requested
+            if args.output_format == "json":
+                pdf_result = await analyze_image(sample_image, output_format="pdf")
+                if "pdf_path" in pdf_result:
+                    print(f"📑 PDF report saved to: {pdf_result['pdf_path']}")
     else:
-        print("\n⚠️  No sample image found at ./samples/sample_cards.jpg")
+        print(f"\n⚠️  No sample image found at {sample_image}")
         print("   Please add a sample image to test the analyzer.")
-        print("\n   You can also use the web interface by running:")
-        print("   python server.py")
+        print("\n   Usage: python main.py --image path/to/image.jpg")
+        print("   Or use the web interface: python server.py")
 
 
 if __name__ == "__main__":
