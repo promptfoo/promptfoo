@@ -822,11 +822,7 @@ export default function ResultsView({
             </Box>
           </ResponsiveStack>
           {canRenderResultsCharts && renderResultsCharts && (
-            <ResultsCharts
-              columnVisibility={currentColumnState.columnVisibility}
-              recentEvals={recentEvals}
-              handleHideCharts={() => setRenderResultsCharts(false)}
-            />
+            <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
           )}
         </Box>
         <ResultsTable

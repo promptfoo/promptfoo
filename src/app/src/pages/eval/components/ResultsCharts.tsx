@@ -28,13 +28,10 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-import type { VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
-  columnVisibility: VisibilityState;
-  recentEvals: ResultLightweightWithLabel[];
   handleHideCharts: () => void;
 }
 
@@ -624,7 +621,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [

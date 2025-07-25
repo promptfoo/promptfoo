@@ -51,8 +51,6 @@ vi.mock('@app/utils/api', () => ({
 
 describe('ResultsCharts', () => {
   const defaultProps = {
-    columnVisibility: {},
-    recentEvals: [],
     handleHideCharts: vi.fn(),
   };
 
