@@ -1436,7 +1436,7 @@ class Evaluator {
 
       if (isWebUI) {
         const provider = evalStep.provider.label || evalStep.provider.id();
-        const vars = formatVarsForDisplay(evalStep.test.vars, 50);
+        const vars = formatVarsForDisplay(evalStep.test.vars, Infinity);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (this.options.showProgressBar) {
         // Progress bar update is handled by the manager

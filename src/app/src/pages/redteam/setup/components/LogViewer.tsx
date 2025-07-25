@@ -30,8 +30,18 @@ import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Convert from 'ansi-to-html';
 
+interface RunSettings {
+  numTests?: number;
+  maxConcurrency?: number;
+  delayMs?: number;
+  debugMode?: boolean;
+  forceRegeneration?: boolean;
+}
+
 interface LogViewerProps {
   logs: string[];
+  runSettings?: RunSettings;
+  config?: any; // Red team config containing plugins list
 }
 
 interface LogSection {
@@ -52,19 +62,14 @@ interface LogSection {
   relatedContent?: string[]; // For storing related table content
 }
 
-export function LogViewer({ logs }: LogViewerProps) {
+export function LogViewer({ logs, runSettings, config }: LogViewerProps) {
   const theme = useTheme();
   const toast = useToast();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const [shouldAutoScroll, setShouldAutoScroll] = React.useState(true);
-  const [showScrollButton, setShowScrollButton] = React.useState(false);
   const [expandedSections, setExpandedSections] = React.useState<Set<string>>(new Set());
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const fullscreenLogsContainerRef = useRef<HTMLDivElement>(null);
-  const previousScrollPositionRef = useRef<{ main: number; fullscreen: number }>({
-    main: 0,
-    fullscreen: 0,
-  });
+  const testGenerationAccordionRef = useRef<HTMLDivElement>(null);
 
   const ansiConverter = useMemo(
     () =>
@@ -116,6 +121,7 @@ export function LogViewer({ logs }: LogViewerProps) {
 
     // Process each chunk to determine its type and content
     const summaryChunks: string[][] = [];
+    const testGenerationChunks: string[][] = [];
 
     for (let chunkIndex = 0; chunkIndex < logChunks.length; chunkIndex++) {
       const chunk = logChunks[chunkIndex];
@@ -131,31 +137,16 @@ export function LogViewer({ logs }: LogViewerProps) {
       let title = '';
       let progress: { current: number; total: number } | undefined;
 
-      // Test Generation section
+      // Test Generation section - collect all chunks
       if (
         firstLine.includes('Generating test cases...') ||
         chunkContent.includes('Synthesizing test cases') ||
         chunkContent.includes('Using plugins:') ||
-        chunkContent.includes('Test Generation Summary:')
+        chunkContent.includes('Test Generation Summary:') ||
+        (chunkContent.includes('Wrote ') && chunkContent.includes('test cases to'))
       ) {
-        sectionType = 'test-generation';
-        title = 'Test Generation';
-
-        // Check if this chunk also contains the test generation table
-        if (chunkContent.includes('│') && chunkContent.includes('Plugin')) {
-          // This chunk contains both generation logs and the table
-          const lines = chunk;
-          const tableStart = lines.findIndex((line) => line.includes('┌') || line.includes('│'));
-          if (tableStart !== -1) {
-            sections.push({
-              type: 'test-generation',
-              content: lines.slice(0, tableStart),
-              title,
-              relatedContent: lines.slice(tableStart),
-            });
-            continue;
-          }
-        }
+        testGenerationChunks.push(chunk);
+        continue; // Don't add to sections yet, we'll consolidate all test generation chunks
       }
 
       // Test execution section
@@ -214,6 +205,38 @@ export function LogViewer({ logs }: LogViewerProps) {
       });
     }
 
+    // Add consolidated test generation section if we found any test generation chunks
+    if (testGenerationChunks.length > 0) {
+      const consolidatedContent = testGenerationChunks.flat();
+      // Check if any chunk contains table content
+      let relatedContent: string[] | undefined;
+      for (const chunk of testGenerationChunks) {
+        const chunkContent = chunk.join('\n');
+        if (chunkContent.includes('│') && chunkContent.includes('Plugin')) {
+          const tableStart = chunk.findIndex((line) => line.includes('┌') || line.includes('│'));
+          if (tableStart !== -1) {
+            relatedContent = chunk.slice(tableStart);
+            // Remove table content from main content
+            const mainContentIndex = consolidatedContent.findIndex(
+              (line, index) =>
+                index >= chunk.length * testGenerationChunks.indexOf(chunk) + tableStart,
+            );
+            if (mainContentIndex !== -1) {
+              consolidatedContent.splice(mainContentIndex, relatedContent.length);
+            }
+            break;
+          }
+        }
+      }
+
+      sections.push({
+        type: 'test-generation',
+        content: consolidatedContent,
+        title: 'Test Generation',
+        relatedContent,
+      });
+    }
+
     // Add consolidated summary section if we found any summary chunks
     if (summaryChunks.length > 0) {
       const consolidatedContent = summaryChunks.flat();
@@ -230,6 +253,27 @@ export function LogViewer({ logs }: LogViewerProps) {
   // Determine which sections should be auto-expanded
   const getAutoExpandedSections = useMemo(() => {
     const autoExpanded = new Set<string>();
+
+    // Find test generation section and check if it's active
+    const testGenerationIndex = parseLogSections.findIndex(
+      (section) => section.type === 'test-generation',
+    );
+    const hasActiveTestGeneration =
+      testGenerationIndex !== -1 &&
+      parseLogSections[testGenerationIndex].content.some(
+        (line) =>
+          line.includes('Generating test cases...') ||
+          line.includes('Synthesizing test cases') ||
+          line.includes('Using plugins:') ||
+          line.includes('Generated ') ||
+          (line.includes('Wrote ') && line.includes('test cases to')),
+      );
+
+    // Always expand test generation if it's active or recently active
+    if (hasActiveTestGeneration) {
+      autoExpanded.add(`section-${testGenerationIndex}`);
+    }
+
     const latestSections = parseLogSections.slice(-3); // Show last 3 sections
 
     // Always expand the most recent active sections
@@ -414,169 +458,190 @@ export function LogViewer({ logs }: LogViewerProps) {
   }, []);
 
   // Parse test generation data from logs and table
-  const parseTestGenerationData = useCallback((content: string[], tableContent?: string[]) => {
-    const data = {
-      cacheEnabled: true,
-      promptCount: 0,
-      plugins: [] as Array<{ name: string; tests: number }>,
-      strategies: [] as string[],
-      summary: {
-        totalTests: 0,
-        pluginTests: 0,
-        pluginsCount: 0,
-        strategiesCount: 0,
-        maxConcurrency: 0,
-      },
-      generationStatus: [] as Array<{
-        plugin: string;
-        status: 'generating' | 'completed';
-        tests?: number;
-      }>,
-      tableResults: [] as Array<{
-        id: string;
-        type: string;
-        requested: number;
-        generated: number;
-        status: string;
-      }>,
-    };
+  const parseTestGenerationData = useCallback(
+    (content: string[], tableContent?: string[], configPlugins?: any[]) => {
+      const data = {
+        cacheEnabled: true,
+        promptCount: 0,
+        debugMode: false,
+        delayMs: 0,
+        numTests: 0,
+        plugins: [] as Array<{ name: string; tests: number }>,
+        strategies: [] as string[],
+        summary: {
+          totalTests: 0,
+          pluginTests: 0,
+          pluginsCount: 0,
+          strategiesCount: 0,
+          maxConcurrency: 0,
+        },
+        generationStatus: [] as Array<{
+          plugin: string;
+          status: 'generating' | 'completed';
+          tests?: number;
+        }>,
+        tableResults: [] as Array<{
+          id: string;
+          type: string;
+          requested: number;
+          generated: number;
+          status: string;
+        }>,
+        outputFile: {
+          count: 0,
+          path: '',
+        },
+        pluginsByStatus: {
+          pending: [] as string[],
+          generating: [] as string[],
+          completed: [] as Array<{ plugin: string; tests?: number }>,
+        },
+      };
 
-    // Parse main content
-    for (const line of content) {
-      const trimmed = line.trim();
+      // Parse main content
+      for (const line of content) {
+        const trimmed = line.trim();
 
-      // Cache status
-      if (trimmed.includes('Cache is disabled')) {
-        data.cacheEnabled = false;
-      }
+        // Cache status
+        if (trimmed.includes('Cache is disabled')) {
+          data.cacheEnabled = false;
+        }
 
-      // Prompt count
-      const promptMatch = trimmed.match(/Synthesizing test cases for (\d+) prompt/);
-      if (promptMatch) {
-        data.promptCount = parseInt(promptMatch[1]);
-      }
+        // Prompt count
+        const promptMatch = trimmed.match(/Synthesizing test cases for (\d+) prompt/);
+        if (promptMatch) {
+          data.promptCount = parseInt(promptMatch[1]);
+        }
 
-      // Summary data
-      const totalTestsMatch = trimmed.match(/Total tests:\s*\[36m(\d+)\[39m/);
-      if (totalTestsMatch) {
-        data.summary.totalTests = parseInt(totalTestsMatch[1]);
-      }
+        // Summary data
+        const totalTestsMatch = trimmed.match(/Total tests:\s*\[36m(\d+)\[39m/);
+        if (totalTestsMatch) {
+          data.summary.totalTests = parseInt(totalTestsMatch[1]);
+        }
 
-      const pluginTestsMatch = trimmed.match(/Plugin tests:\s*\[36m(\d+)\[39m/);
-      if (pluginTestsMatch) {
-        data.summary.pluginTests = parseInt(pluginTestsMatch[1]);
-      }
+        const pluginTestsMatch = trimmed.match(/Plugin tests:\s*\[36m(\d+)\[39m/);
+        if (pluginTestsMatch) {
+          data.summary.pluginTests = parseInt(pluginTestsMatch[1]);
+        }
 
-      const pluginsCountMatch = trimmed.match(/Plugins:\s*\[36m(\d+)\[39m/);
-      if (pluginsCountMatch) {
-        data.summary.pluginsCount = parseInt(pluginsCountMatch[1]);
-      }
+        const pluginsCountMatch = trimmed.match(/Plugins:\s*\[36m(\d+)\[39m/);
+        if (pluginsCountMatch) {
+          data.summary.pluginsCount = parseInt(pluginsCountMatch[1]);
+        }
 
-      const strategiesCountMatch = trimmed.match(/Strategies:\s*\[36m(\d+)\[39m/);
-      if (strategiesCountMatch) {
-        data.summary.strategiesCount = parseInt(strategiesCountMatch[1]);
-      }
+        const strategiesCountMatch = trimmed.match(/Strategies:\s*\[36m(\d+)\[39m/);
+        if (strategiesCountMatch) {
+          data.summary.strategiesCount = parseInt(strategiesCountMatch[1]);
+        }
 
-      const concurrencyMatch = trimmed.match(/Max concurrency:\s*\[36m(\d+)\[39m/);
-      if (concurrencyMatch) {
-        data.summary.maxConcurrency = parseInt(concurrencyMatch[1]);
-      }
+        const concurrencyMatch = trimmed.match(/Max concurrency:\s*\[36m(\d+)\[39m/);
+        if (concurrencyMatch) {
+          data.summary.maxConcurrency = parseInt(concurrencyMatch[1]);
+        }
 
-      // Generation status
-      const generatingMatch = trimmed.match(/Generating tests for (.+)\.\.\./);
-      if (generatingMatch) {
-        const plugin = generatingMatch[1];
-        if (!data.generationStatus.find((s) => s.plugin === plugin)) {
-          data.generationStatus.push({ plugin, status: 'generating' });
+        // Generation status
+        const generatingMatch = trimmed.match(/Generating tests for (.+)\.\.\./);
+        if (generatingMatch) {
+          const plugin = generatingMatch[1];
+          if (!data.generationStatus.find((s) => s.plugin === plugin)) {
+            data.generationStatus.push({ plugin, status: 'generating' });
+          }
+        }
+
+        const completedMatch = trimmed.match(/Generated (\d+) tests for (.+)/);
+        if (completedMatch) {
+          const tests = parseInt(completedMatch[1]);
+          const plugin = completedMatch[2];
+          const existing = data.generationStatus.find((s) => s.plugin === plugin);
+          if (existing) {
+            existing.status = 'completed';
+            existing.tests = tests;
+          } else {
+            data.generationStatus.push({ plugin, status: 'completed', tests });
+          }
+        }
+
+        // Output file information
+        const outputFileMatch = trimmed.match(/Wrote (\d+) test cases to (.+)/);
+        if (outputFileMatch) {
+          data.outputFile.count = parseInt(outputFileMatch[1]);
+          data.outputFile.path = outputFileMatch[2];
         }
       }
 
-      const completedMatch = trimmed.match(/Generated (\d+) tests for (.+)/);
-      if (completedMatch) {
-        const tests = parseInt(completedMatch[1]);
-        const plugin = completedMatch[2];
-        const existing = data.generationStatus.find((s) => s.plugin === plugin);
-        if (existing) {
-          existing.status = 'completed';
-          existing.tests = tests;
-        } else {
-          data.generationStatus.push({ plugin, status: 'completed', tests });
+      // Parse table content if available
+      if (tableContent) {
+        for (const line of tableContent) {
+          // Parse table rows with plugin data
+          const rowMatch = line.match(
+            /│\s*(\d+)\s*│\s*(Plugin)\s*│\s*([^│]+?)\s*│\s*(\d+)\s*│\s*(\d+)\s*│\s*\[32m(.*?)\[39m\s*│/,
+          );
+          if (rowMatch) {
+            data.tableResults.push({
+              id: rowMatch[3].trim(),
+              type: rowMatch[2],
+              requested: parseInt(rowMatch[4]),
+              generated: parseInt(rowMatch[5]),
+              status: rowMatch[6].trim(),
+            });
+          }
         }
       }
-    }
 
-    // Parse table content if available
-    if (tableContent) {
-      for (const line of tableContent) {
-        // Parse table rows with plugin data
-        const rowMatch = line.match(
-          /│\s*(\d+)\s*│\s*(Plugin)\s*│\s*([^│]+?)\s*│\s*(\d+)\s*│\s*(\d+)\s*│\s*\[32m(.*?)\[39m\s*│/,
-        );
-        if (rowMatch) {
-          data.tableResults.push({
-            id: rowMatch[3].trim(),
-            type: rowMatch[2],
-            requested: parseInt(rowMatch[4]),
-            generated: parseInt(rowMatch[5]),
-            status: rowMatch[6].trim(),
-          });
-        }
+      // Categorize plugins by status if config is available
+      if (configPlugins && configPlugins.length > 0) {
+        // Get all plugin names from config
+        const allPluginNames = configPlugins
+          .map((plugin) => {
+            if (typeof plugin === 'string') {
+              return plugin;
+            }
+            if (typeof plugin === 'object' && plugin.id) {
+              return plugin.id;
+            }
+            return 'unknown';
+          })
+          .filter((name) => name !== 'unknown');
+
+        // Track which plugins have been seen in generation status
+        const seenInLogs = new Set<string>();
+
+        // Add generating and completed plugins
+        data.generationStatus.forEach((status) => {
+          seenInLogs.add(status.plugin);
+          if (status.status === 'generating') {
+            data.pluginsByStatus.generating.push(status.plugin);
+          } else if (status.status === 'completed') {
+            data.pluginsByStatus.completed.push({
+              plugin: status.plugin,
+              tests: status.tests,
+            });
+          }
+        });
+
+        // Add table results to completed if not already there
+        data.tableResults.forEach((result) => {
+          if (!seenInLogs.has(result.id)) {
+            data.pluginsByStatus.completed.push({
+              plugin: result.id,
+              tests: result.generated,
+            });
+            seenInLogs.add(result.id);
+          }
+        });
+
+        // Add remaining plugins as pending
+        allPluginNames.forEach((pluginName) => {
+          if (!seenInLogs.has(pluginName)) {
+            data.pluginsByStatus.pending.push(pluginName);
+          }
+        });
       }
-    }
 
-    return data;
-  }, []);
-
-  // Auto-scroll effect
-  useEffect(() => {
-    if (shouldAutoScroll) {
-      if (logsContainerRef.current) {
-        const container = logsContainerRef.current;
-        container.scrollTop = container.scrollHeight;
-      }
-      if (fullscreenLogsContainerRef.current) {
-        const container = fullscreenLogsContainerRef.current;
-        container.scrollTop = container.scrollHeight;
-      }
-    } else {
-      // Restore previous scroll positions
-      if (logsContainerRef.current) {
-        logsContainerRef.current.scrollTop = previousScrollPositionRef.current.main;
-      }
-      if (fullscreenLogsContainerRef.current) {
-        fullscreenLogsContainerRef.current.scrollTop = previousScrollPositionRef.current.fullscreen;
-      }
-    }
-  }, [logs, shouldAutoScroll]);
-
-  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-      setShouldAutoScroll(true);
-    }
-  }, []);
-
-  const handleScroll = useCallback(() => {
-    if (logsContainerRef.current) {
-      const container = logsContainerRef.current;
-      const isAtBottom =
-        Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
-      setShouldAutoScroll(isAtBottom);
-      setShowScrollButton(!isAtBottom);
-      previousScrollPositionRef.current.main = container.scrollTop;
-    }
-  }, []);
-
-  const handleFullscreenScroll = useCallback(() => {
-    if (fullscreenLogsContainerRef.current) {
-      const container = fullscreenLogsContainerRef.current;
-      const isAtBottom =
-        Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
-      setShouldAutoScroll(isAtBottom);
-      setShowScrollButton(!isAtBottom);
-      previousScrollPositionRef.current.fullscreen = container.scrollTop;
-    }
-  }, []);
+      return data;
+    },
+    [config],
+  );
 
   const handleOpenFullscreen = () => setIsFullscreen(true);
   const handleCloseFullscreen = () => setIsFullscreen(false);
@@ -740,18 +805,30 @@ export function LogViewer({ logs }: LogViewerProps) {
             );
 
           case 'test-generation':
-            const testData = parseTestGenerationData(section.content, section.relatedContent);
+            const testData = parseTestGenerationData(
+              section.content,
+              section.relatedContent,
+              config?.plugins,
+            );
+            // Merge with run settings
+            if (runSettings) {
+              testData.debugMode = runSettings.debugMode ?? testData.debugMode;
+              testData.delayMs = runSettings.delayMs ?? testData.delayMs;
+              testData.numTests = runSettings.numTests ?? testData.numTests;
+              testData.summary.maxConcurrency =
+                runSettings.maxConcurrency ?? testData.summary.maxConcurrency;
+            }
 
             return (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {/* Configuration Info */}
                 <Card variant="outlined">
                   <CardContent sx={{ pb: '16px !important' }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                      Configuration
+                    <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
+                      Run Configuration
                     </Typography>
                     <Grid container spacing={2}>
-                      <Grid item xs={6}>
+                      <Grid item xs={6} sm={4}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography variant="body2">Cache:</Typography>
                           <Chip
@@ -761,11 +838,40 @@ export function LogViewer({ logs }: LogViewerProps) {
                           />
                         </Box>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid item xs={6} sm={4}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2">Debug:</Typography>
+                          <Chip
+                            label={testData.debugMode ? 'Enabled' : 'Disabled'}
+                            color={testData.debugMode ? 'info' : 'default'}
+                            size="small"
+                          />
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6} sm={4}>
                         <Typography variant="body2">
-                          <strong>Prompts:</strong> {testData.promptCount}
+                          <strong>Test Cases:</strong> {testData.numTests || 'Default'}
                         </Typography>
                       </Grid>
+                      <Grid item xs={6} sm={4}>
+                        <Typography variant="body2">
+                          <strong>Max Concurrency:</strong> {testData.summary.maxConcurrency || 1}
+                        </Typography>
+                      </Grid>
+                      {testData.promptCount > 0 && (
+                        <Grid item xs={6} sm={4}>
+                          <Typography variant="body2">
+                            <strong>Prompts:</strong> {testData.promptCount}
+                          </Typography>
+                        </Grid>
+                      )}
+                      {testData.delayMs > 0 && (
+                        <Grid item xs={6} sm={4}>
+                          <Typography variant="body2">
+                            <strong>Delay:</strong> {testData.delayMs}ms
+                          </Typography>
+                        </Grid>
+                      )}
                     </Grid>
                   </CardContent>
                 </Card>
@@ -815,87 +921,252 @@ export function LogViewer({ logs }: LogViewerProps) {
                               color="success.main"
                               sx={{ fontWeight: 'bold' }}
                             >
-                              {testData.summary.maxConcurrency}
+                              {testData.summary.pluginTests}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Max Concurrency
+                              Plugin Tests
                             </Typography>
                           </Box>
                         </Grid>
                       </Grid>
+                      {/* Output File Information */}
+                      {testData.outputFile.count > 0 && (
+                        <Box
+                          sx={{
+                            mt: 2,
+                            p: 2,
+                            backgroundColor: theme.palette.action.hover,
+                            borderRadius: 1,
+                          }}
+                        >
+                          <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                            Output File
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Wrote {testData.outputFile.count} test cases to:
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontFamily: 'monospace',
+                              fontSize: '0.75rem',
+                              backgroundColor: theme.palette.background.paper,
+                              p: 1,
+                              borderRadius: 0.5,
+                              border: `1px solid ${theme.palette.divider}`,
+                              wordBreak: 'break-all',
+                            }}
+                          >
+                            {testData.outputFile.path}
+                          </Typography>
+                        </Box>
+                      )}
                     </CardContent>
                   </Card>
                 )}
 
                 {/* Plugin Generation Results */}
-                {(testData.generationStatus.length > 0 || testData.tableResults.length > 0) && (
+                {(testData.generationStatus.length > 0 ||
+                  testData.tableResults.length > 0 ||
+                  testData.pluginsByStatus.pending.length > 0 ||
+                  testData.pluginsByStatus.generating.length > 0 ||
+                  testData.pluginsByStatus.completed.length > 0) && (
                   <Card variant="outlined">
                     <CardContent sx={{ pb: '16px !important' }}>
                       <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-                        Plugin Results
+                        Plugin Status
                       </Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        {/* Show table results if available, otherwise show generation status */}
-                        {testData.tableResults.length > 0
-                          ? testData.tableResults.map((item, i) => (
-                              <Box
-                                key={i}
+
+                      {/* Three-column layout for plugin status */}
+                      {testData.pluginsByStatus.pending.length > 0 ||
+                      testData.pluginsByStatus.generating.length > 0 ||
+                      testData.pluginsByStatus.completed.length > 0 ? (
+                        <Grid container spacing={2}>
+                          {/* Pending Plugins */}
+                          <Grid item xs={12} sm={4}>
+                            <Box
+                              sx={{
+                                p: 1,
+                                border: `1px solid ${theme.palette.divider}`,
+                                borderRadius: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="subtitle2"
                                 sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 2,
-                                  p: 1,
-                                  backgroundColor: theme.palette.action.hover,
-                                  borderRadius: 1,
+                                  mb: 1,
+                                  fontWeight: 'bold',
+                                  color: theme.palette.warning.main,
                                 }}
                               >
-                                <Box sx={{ minWidth: '200px' }}>
-                                  <Typography
-                                    variant="body2"
-                                    sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}
-                                  >
-                                    {item.id}
-                                  </Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    {item.requested} requested
-                                  </Typography>
-                                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    •
-                                  </Typography>
-                                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                    {item.generated} generated
-                                  </Typography>
-                                </Box>
-                                <Chip
-                                  label={`✓ ${item.status}`}
-                                  color="success"
-                                  size="small"
-                                  variant="filled"
-                                />
+                                Pending ({testData.pluginsByStatus.pending.length})
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 0.5,
+                                  maxHeight: '200px',
+                                  overflow: 'auto',
+                                }}
+                              >
+                                {testData.pluginsByStatus.pending.map((plugin, i) => (
+                                  <Chip
+                                    key={i}
+                                    label={plugin}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ justifyContent: 'flex-start' }}
+                                  />
+                                ))}
                               </Box>
-                            ))
-                          : testData.generationStatus.map((item, i) => (
-                              <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Box sx={{ minWidth: '200px' }}>
-                                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                                    {item.plugin}
-                                  </Typography>
-                                </Box>
-                                <Chip
-                                  label={
-                                    item.status === 'completed'
-                                      ? `✓ ${item.tests} tests`
-                                      : 'Generating...'
-                                  }
-                                  color={item.status === 'completed' ? 'success' : 'default'}
-                                  size="small"
-                                  variant={item.status === 'completed' ? 'filled' : 'outlined'}
-                                />
+                            </Box>
+                          </Grid>
+
+                          {/* Generating Plugins */}
+                          <Grid item xs={12} sm={4}>
+                            <Box
+                              sx={{
+                                p: 1,
+                                border: `1px solid ${theme.palette.divider}`,
+                                borderRadius: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="subtitle2"
+                                sx={{ mb: 1, fontWeight: 'bold', color: theme.palette.info.main }}
+                              >
+                                Generating ({testData.pluginsByStatus.generating.length})
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 0.5,
+                                  maxHeight: '200px',
+                                  overflow: 'auto',
+                                }}
+                              >
+                                {testData.pluginsByStatus.generating.map((plugin, i) => (
+                                  <Chip
+                                    key={i}
+                                    label={`${plugin}...`}
+                                    size="small"
+                                    color="info"
+                                    variant="filled"
+                                    sx={{ justifyContent: 'flex-start' }}
+                                  />
+                                ))}
                               </Box>
-                            ))}
-                      </Box>
+                            </Box>
+                          </Grid>
+
+                          {/* Completed Plugins */}
+                          <Grid item xs={12} sm={4}>
+                            <Box
+                              sx={{
+                                p: 1,
+                                border: `1px solid ${theme.palette.divider}`,
+                                borderRadius: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="subtitle2"
+                                sx={{
+                                  mb: 1,
+                                  fontWeight: 'bold',
+                                  color: theme.palette.success.main,
+                                }}
+                              >
+                                Completed ({testData.pluginsByStatus.completed.length})
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 0.5,
+                                  maxHeight: '200px',
+                                  overflow: 'auto',
+                                }}
+                              >
+                                {testData.pluginsByStatus.completed.map((item, i) => (
+                                  <Chip
+                                    key={i}
+                                    label={`✓ ${item.plugin}${item.tests ? ` (${item.tests})` : ''}`}
+                                    size="small"
+                                    color="success"
+                                    variant="filled"
+                                    sx={{ justifyContent: 'flex-start' }}
+                                  />
+                                ))}
+                              </Box>
+                            </Box>
+                          </Grid>
+                        </Grid>
+                      ) : (
+                        /* Fallback to original layout if no categorized data */
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {testData.tableResults.length > 0
+                            ? testData.tableResults.map((item, i) => (
+                                <Box
+                                  key={i}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 2,
+                                    p: 1,
+                                    backgroundColor: theme.palette.action.hover,
+                                    borderRadius: 1,
+                                  }}
+                                >
+                                  <Box sx={{ minWidth: '200px' }}>
+                                    <Typography
+                                      variant="body2"
+                                      sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}
+                                    >
+                                      {item.id}
+                                    </Typography>
+                                  </Box>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                      {item.requested} requested
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                      •
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                      {item.generated} generated
+                                    </Typography>
+                                  </Box>
+                                  <Chip
+                                    label={`✓ ${item.status}`}
+                                    color="success"
+                                    size="small"
+                                    variant="filled"
+                                  />
+                                </Box>
+                              ))
+                            : testData.generationStatus.map((item, i) => (
+                                <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <Box sx={{ minWidth: '200px' }}>
+                                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                      {item.plugin}
+                                    </Typography>
+                                  </Box>
+                                  <Chip
+                                    label={
+                                      item.status === 'completed'
+                                        ? `✓ ${item.tests} tests`
+                                        : 'Generating...'
+                                    }
+                                    color={item.status === 'completed' ? 'success' : 'default'}
+                                    size="small"
+                                    variant={item.status === 'completed' ? 'filled' : 'outlined'}
+                                  />
+                                </Box>
+                              ))}
+                        </Box>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -1227,6 +1498,7 @@ export function LogViewer({ logs }: LogViewerProps) {
           key={sectionId}
           expanded={isExpanded}
           onChange={handleAccordionChange(sectionId)}
+          ref={section.type === 'test-generation' ? testGenerationAccordionRef : undefined}
           sx={{
             mb: 1,
             '&.MuiAccordion-root': {
@@ -1270,14 +1542,23 @@ export function LogViewer({ logs }: LogViewerProps) {
         </Accordion>
       );
     },
-    [convertAnsiToHtml, theme, expandedSections, handleAccordionChange],
+    [
+      convertAnsiToHtml,
+      theme,
+      expandedSections,
+      handleAccordionChange,
+      parseTestGenerationData,
+      parseSummaryData,
+      runSettings,
+      toast,
+      config,
+    ],
   );
 
   const LogContent = useCallback(
-    ({ containerRef, onScroll, sx }: any) => (
+    ({ containerRef, sx }: any) => (
       <Box
         ref={containerRef}
-        onScroll={onScroll}
         sx={{
           backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           borderRadius: 1,
@@ -1308,22 +1589,7 @@ export function LogViewer({ logs }: LogViewerProps) {
       </Box>
 
       <Box sx={{ position: 'relative' }}>
-        <LogContent containerRef={logsContainerRef} onScroll={handleScroll} sx={{ p: 2 }} />
-        {showScrollButton && !isFullscreen && (
-          <Fab
-            size="small"
-            color="primary"
-            sx={{
-              position: 'absolute',
-              right: 16,
-              bottom: 16,
-              zIndex: 1,
-            }}
-            onClick={() => scrollToBottom(logsContainerRef)}
-          >
-            <KeyboardDoubleArrowDownIcon />
-          </Fab>
-        )}
+        <LogContent containerRef={logsContainerRef} sx={{ p: 2 }} />
       </Box>
 
       <Dialog
@@ -1350,26 +1616,7 @@ export function LogViewer({ logs }: LogViewerProps) {
           </Box>
         </DialogTitle>
         <DialogContent sx={{ p: 0, position: 'relative' }}>
-          <LogContent
-            containerRef={fullscreenLogsContainerRef}
-            onScroll={handleFullscreenScroll}
-            sx={{ p: 3 }}
-          />
-          {showScrollButton && isFullscreen && (
-            <Fab
-              size="small"
-              color="primary"
-              sx={{
-                position: 'fixed',
-                right: 16,
-                bottom: 16,
-                zIndex: 1,
-              }}
-              onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
-            >
-              <KeyboardDoubleArrowDownIcon />
-            </Fab>
-          )}
+          <LogContent containerRef={fullscreenLogsContainerRef} sx={{ p: 3 }} />
         </DialogContent>
       </Dialog>
     </>

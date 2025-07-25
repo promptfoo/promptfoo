@@ -814,7 +814,19 @@ export default function Review() {
               </Tooltip>
             </Box>
           </Box>
-          {logs.length > 0 && <LogViewer logs={logs} />}
+          {logs.length > 0 && (
+            <LogViewer
+              logs={logs}
+              runSettings={{
+                numTests: config.numTests,
+                maxConcurrency: Number(maxConcurrency),
+                delayMs: Number(delayMs),
+                debugMode,
+                forceRegeneration,
+              }}
+              config={config}
+            />
+          )}
         </Box>
       </Paper>
 
