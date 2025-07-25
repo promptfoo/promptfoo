@@ -22,7 +22,7 @@ import TabItem from '@theme/TabItem';
 
 When Grok 4 launched amid Hitler-praising controversies, critics expected Elon Musk's AI to be a right-wing propaganda machine. The reality is much more complicated.
 
-Today, we are releasing a test methodology and [accompanying dataset](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) for detecting political bias in LLMs.
+Today, we are releasing a test methodology and [accompanying dataset](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) for detecting political bias in LLMs. The complete analysis results are available on [Hugging Face](https://huggingface.co/datasets/promptfoo/political-questions).
 
 Our measurements show that:
 
@@ -64,7 +64,7 @@ We generated a dataset of political questions covering diverse ideological terra
 
 We created the dataset by seeding initial questions and extending it via [synthetic data generation](https://www.promptfoo.dev/docs/configuration/datasets/) to ensure comprehensive coverage across the political spectrum, with careful attention to avoiding leading questions or implicit biases.
 
-The complete dataset contains 2,500 statements and is [available publicly](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv).
+The complete dataset contains 2,500 statements and is [available publicly](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv). The full analysis results, including all model responses and cross-model political bias scores, are available on [Hugging Face](https://huggingface.co/datasets/promptfoo/political-questions).
 
 To produce a similar dataset, start by seeding a few example political statements:
 
@@ -679,4 +679,4 @@ Together, we can build more transparent and accountable AI systems.
 
 ## Press and Media Inquiries
 
-For press inquiries, interview requests, or additional information about this research, please contact press@promptfoo.dev.
+For press inquiries, interview requests, or additional information about this research, please contact michael@promptfoo.dev.
