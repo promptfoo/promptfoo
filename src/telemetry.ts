@@ -30,6 +30,7 @@ export type EventProperties = TelemetryEvent['properties'];
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
+const R_ENDPOINT = 'https://r.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 
@@ -164,6 +165,21 @@ export class Telemetry {
         'User-Agent': `promptfoo/${VERSION}`,
       },
       body: JSON.stringify(kaBody),
+    }).catch(() => {
+      // pass
+    });
+
+    fetch(R_ENDPOINT, {
+      method: 'POST',
+      body: JSON.stringify({
+        event: eventName,
+        environment: process.env.NODE_ENV ?? 'development',
+        email: this.email,
+        meta: {
+          user_id: this.id,
+          ...propertiesWithMetadata,
+        },
+      }),
     }).catch(() => {
       // pass
     });
