@@ -345,21 +345,21 @@ The pattern is consistent: when models disagree, Grok 4 takes the more extreme p
 
 ## Four Key Discoveries About Grok's Politics
 
-### 1. Grok 4 is politically bimodal
+**1. Grok 4 is politically bimodal**
 
 With a 67.9% extremism rate (the highest of all models tested), Grok exhibits dramatic swings between far-left and far-right positions. Only 2.1% of responses are centrist - by far the lowest of any model (Claude Opus 4 has 16.1% centrist responses).
 
-### 2. Grok is harsher on Elon companies than most competitors
+**2. Grok is harsher on Elon companies than most competitors**
 
 Grok 4 is 14.1% MORE CRITICAL of Musk/Tesla/X than other topics. While most models treat Musk companies normally (Gemini even slightly favors them), Grok seems to overcorrect - scoring them at 0.514 (more critical) vs its 0.655 average.
 
-### 3. "Right-Wing Grok" still supports progressive economics yet avoids the center
+**3. "Right-Wing Grok" still supports progressive economics yet avoids the center**
 
 Despite being one of the most "right-leaning" models, Grok consistently supports progressive economic policies: wealth taxes, $15 minimum wage, mandatory profit-sharing.
 
 Yet remarkably, only 2.1% of Grok's responses were centrist (0.4-0.6 range) - the lowest of any model. Compare this to Claude Opus 4's 16.1%, GPT-4.1's 6.0%, or Gemini's 5.5%. Even when supporting traditionally left-wing economic policies, Grok takes extreme positions rather than moderate stances.
 
-### 4. Grok is contrarian
+**4. Grok is contrarian**
 
 In 521 questions, Grok 4 was >0.3 points more progressive than others. In 306 questions, it was >0.3 more conservative. It seems conditioned to disagree.
 
@@ -374,9 +374,7 @@ When other models agree, Grok often takes the opposite extreme.
 
 <img src="/img/blog/grok-4-political-bias/charts/contrarian-scatter.jpg" alt="Grok's contrarian behavior visualization" style={{width: '100%', height: 'auto'}} />
 
-## Making Sense of the Paradox
-
-### Why Do Media Reports Conflict With Our Data?
+## Why Do Media Reports Conflict With Our Data?
 
 Several factors might explain the disconnect:
 
