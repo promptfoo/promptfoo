@@ -1,24 +1,24 @@
 import {
-  Severity,
-  severityDisplayNames,
-  riskCategorySeverityMap,
-  riskCategories,
-  categoryDescriptions,
-  categoryMapReverse,
-  categoryLabels,
   categoryAliases,
   categoryAliasesReverse,
-  pluginDescriptions,
-  strategyDescriptions,
-  strategyDisplayNames,
-  PLUGIN_PRESET_DESCRIPTIONS,
+  categoryDescriptions,
+  categoryLabels,
+  categoryMapReverse,
   DEFAULT_OUTPUT_PATH,
   displayNameOverrides,
+  PLUGIN_PRESET_DESCRIPTIONS,
+  pluginDescriptions,
+  riskCategories,
+  riskCategorySeverityMap,
+  Severity,
+  severityDisplayNames,
+  strategyDescriptions,
+  strategyDisplayNames,
   subCategoryDescriptions,
 } from '../../../src/redteam/constants/metadata';
+
 import type { Plugin } from '../../../src/redteam/constants/plugins';
 import type { Strategy } from '../../../src/redteam/constants/strategies';
-import { MEMORY_POISONING_PLUGIN_ID } from '../../../src/redteam/plugins/agentic/constants';
 
 describe('metadata constants', () => {
   describe('Severity enum and display names', () => {
@@ -39,7 +39,7 @@ describe('metadata constants', () => {
     });
 
     it('should include memory poisoning plugin with high severity', () => {
-      expect(riskCategorySeverityMap[MEMORY_POISONING_PLUGIN_ID]).toBe(Severity.High);
+      expect(riskCategorySeverityMap['agentic:memory-poisoning']).toBe(Severity.High);
     });
   });
 
@@ -122,7 +122,7 @@ describe('metadata constants', () => {
 
   describe('Display name overrides', () => {
     it('should have display names for memory poisoning plugin', () => {
-      expect(displayNameOverrides[MEMORY_POISONING_PLUGIN_ID]).toBe('Agentic Memory Poisoning');
+      expect(displayNameOverrides['agentic:memory-poisoning']).toBe('Agentic Memory Poisoning');
     });
 
     it('should have matching subcategory descriptions', () => {

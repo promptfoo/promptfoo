@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
 import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -28,20 +29,19 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import type { RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
+import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job } from '@promptfoo/types';
 
 interface PolicyPlugin {
   id: 'policy';
@@ -233,6 +233,22 @@ export default function Review() {
       targetType: config.target.id,
     });
 
+    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
+      // Track report export
+      recordEvent('webui_action', {
+        action: 'redteam_run_with_example',
+      });
+    }
+    // Track funnel milestone - evaluation started
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_evaluation_started',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
     setIsRunning(true);
     setLogs([]);
     setEvalId(null);
@@ -269,6 +285,14 @@ export default function Review() {
 
           if (status.status === 'complete' && status.result && status.evalId) {
             setEvalId(status.evalId);
+
+            // Track funnel milestone - evaluation completed
+            recordEvent('funnel', {
+              type: 'redteam',
+              step: 'webui_evaluation_completed',
+              source: 'webui',
+              evalId: status.evalId,
+            });
           } else if (status.status === 'complete') {
             console.warn('No evaluation result was generated');
             showToast(
@@ -350,6 +374,7 @@ export default function Review() {
         onChange={handleDescriptionChange}
         variant="outlined"
         sx={{ mb: 4 }}
+        autoFocus
       />
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>

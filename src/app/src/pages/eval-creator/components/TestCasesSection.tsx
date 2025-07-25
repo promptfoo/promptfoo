@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { useStore } from '@app/stores/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
@@ -21,15 +22,17 @@ import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
-import type { CsvRow, TestCase } from '@promptfoo/types';
 import TestCaseDialog from './TestCaseDialog';
+import type { CsvRow, TestCase } from '@promptfoo/types';
 
 interface TestCasesSectionProps {
   varsList: string[];
 }
 
 const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
-  const { testCases, setTestCases } = useStore();
+  const { config, updateConfig } = useStore();
+  const testCases = (config.tests || []) as TestCase[];
+  const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);

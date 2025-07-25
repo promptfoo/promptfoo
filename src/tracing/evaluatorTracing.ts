@@ -1,5 +1,8 @@
 import { randomBytes } from 'crypto';
+
 import logger from '../logger';
+import telemetry from '../telemetry';
+
 import type { TestCase, TestSuite } from '../types';
 
 // Track whether OTLP receiver has been started
@@ -55,6 +58,9 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     testSuite.tracing?.otlp?.http?.enabled &&
     !otlpReceiverStarted
   ) {
+    telemetry.record('feature_used', {
+      feature: 'tracing',
+    });
     try {
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');

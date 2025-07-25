@@ -1,12 +1,12 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
-import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
-import { getCache, isCacheEnabled, fetchWithCache } from '../../src/cache';
+import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
 import * as envarsModule from '../../src/envars';
 import logger from '../../src/logger';
 import {
-  WatsonXProvider,
-  generateConfigHash,
   clearModelSpecsCache,
+  generateConfigHash,
+  WatsonXProvider,
 } from '../../src/providers/watsonx';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
@@ -61,6 +61,12 @@ describe('WatsonXProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    clearModelSpecsCache();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    clearModelSpecsCache();
   });
 
   describe('constructor', () => {

@@ -1,19 +1,23 @@
 import crypto from 'crypto';
+
+import z from 'zod';
+import { fromError } from 'zod-validation-error';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { transform } from '../util/transform';
+
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { transform } from '../util/transform';
 import type { TransformContext } from '../util/transform';
-import { parseChatPrompt } from './shared';
 
 /**
  * Sleep utility function for implementing delays
@@ -22,49 +26,64 @@ import { parseChatPrompt } from './shared';
  */
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'custom'] as const;
 /**
- * Options for configuring SageMaker provider
+ * Zod schema for validating SageMaker options
  */
-interface SageMakerOptions {
-  // AWS credentials options
-  accessKeyId?: string;
-  profile?: string;
-  region?: string;
-  secretAccessKey?: string;
-  sessionToken?: string;
+const SageMakerConfigSchema = z
+  .object({
+    // AWS credentials options
+    accessKeyId: z.string().optional(),
+    profile: z.string().optional(),
+    region: z.string().optional(),
+    secretAccessKey: z.string().optional(),
+    sessionToken: z.string().optional(),
 
-  // SageMaker specific options
-  endpoint?: string;
-  contentType?: string;
-  acceptType?: string;
+    // SageMaker specific options
+    endpoint: z.string().optional(),
+    contentType: z.string().optional(),
+    acceptType: z.string().optional(),
 
-  // Model parameters
-  maxTokens?: number;
-  temperature?: number;
-  topP?: number;
-  stopSequences?: string[];
+    // Model parameters
+    maxTokens: z.number().optional(),
+    temperature: z.number().optional(),
+    topP: z.number().optional(),
+    stopSequences: z.array(z.string()).optional(),
 
-  // Provider behavior options
-  delay?: number; // Delay between API calls in milliseconds
-  transform?: string; // Transform function or file path to transform prompts
+    // Provider behavior options
+    delay: z.number().optional(), // Delay between API calls in milliseconds
+    transform: z.string().optional(), // Transform function or file path to transform prompts
 
-  // Model type for request/response handling
-  modelType?: 'openai' | 'anthropic' | 'llama' | 'huggingface' | 'jumpstart' | 'custom';
+    // Model type for request/response handling
+    // TODO(Will): What is custom? User uploaded model?
+    // - Jumpstart is a model service, not a model type.
+    modelType: z.enum(SUPPORTED_MODEL_TYPES).optional(),
 
-  // Response format options
-  responseFormat?: {
-    type?: string;
-    path?: string; // JavaScript expression to extract content (formerly JSONPath)
-  };
+    // Response format options
+    responseFormat: z
+      .object({
+        type: z.string().optional(),
+        path: z.string().optional(), // JavaScript expression to extract content (formerly JSONPath)
+      })
+      .optional(),
+
+    basePath: z.string().optional(),
+  })
+  .strict();
+
+type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
+
+interface SageMakerOptions extends ProviderOptions {
+  config?: SageMakerConfig;
 }
 
 /**
  * Base class for SageMaker providers with common functionality
  */
-export abstract class SageMakerGenericProvider {
+abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
-  config: SageMakerOptions;
+  config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
   transform?: string; // Transform function for modifying prompts before sending
@@ -72,20 +91,21 @@ export abstract class SageMakerGenericProvider {
   // Custom provider ID, separate from the id() method
   private providerId?: string;
 
-  constructor(
-    endpointName: string,
-    options: {
-      config?: SageMakerOptions;
-      id?: string;
-      env?: EnvOverrides;
-      delay?: number;
-      transform?: string;
-    } = {},
-  ) {
+  constructor(endpointName: string, options: SageMakerOptions) {
     const { config, id, env, delay, transform } = options;
     this.env = env;
     this.endpointName = endpointName;
-    this.config = config || {};
+
+    // Validate the config
+    try {
+      SageMakerConfigSchema.parse(config);
+    } catch (error) {
+      logger.warn(
+        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${fromError(error).message}`,
+      );
+    }
+
+    this.config = config ?? {};
     this.delay = delay || this.config.delay;
     this.transform = transform || this.config.transform;
     this.providerId = id; // Store custom ID if provided
@@ -395,20 +415,53 @@ export abstract class SageMakerGenericProvider {
  * Provider for text generation with SageMaker endpoints
  */
 export class SageMakerCompletionProvider extends SageMakerGenericProvider implements ApiProvider {
-  static SAGEMAKER_MODEL_TYPES = [
-    'openai',
-    'anthropic',
-    'llama',
-    'huggingface',
-    'jumpstart',
-    'custom',
-  ];
+  readonly modelType: SageMakerConfig['modelType'];
+
+  constructor(endpointName: string, options: SageMakerOptions) {
+    super(endpointName, options);
+
+    this.modelType = this.parseModelType(options.config?.modelType);
+  }
+
+  /**
+   * Model type must be specified within the id or the `config.modelType` field.
+   */
+  private parseModelType(modelType: SageMakerConfig['modelType']): SageMakerConfig['modelType'] {
+    // If an ID is provided, attempt to extract the model type from it
+    const match = this.id().match(/^sagemaker:(?<modelType>.+):.+$/);
+    if (match) {
+      const modelTypeFromId = match.groups!.modelType;
+
+      // Validate the model type from ID
+      if (SUPPORTED_MODEL_TYPES.includes(modelTypeFromId as any)) {
+        return modelTypeFromId as SageMakerConfig['modelType'];
+      } else {
+        throw new Error(
+          `Invalid model type "${modelTypeFromId}" in provider ID. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
+        );
+      }
+    }
+
+    // If a model type is provided in the config, validate it
+    if (modelType) {
+      if (SUPPORTED_MODEL_TYPES.includes(modelType)) {
+        return modelType;
+      } else {
+        throw new Error(
+          `Invalid model type "${modelType}" in \`config.modelType\`. Valid types are: ${SUPPORTED_MODEL_TYPES.join(', ')}`,
+        );
+      }
+    }
+
+    throw new Error(
+      'Model type must be set either in `config.modelType` or as part of the Provider ID, for example: "sagemaker:<model_type>:<endpoint>"',
+    );
+  }
 
   /**
    * Format the request payload based on model type
    */
   formatPayload(prompt: string): string {
-    const modelType = this.config.modelType || 'custom';
     const maxTokens = this.config.maxTokens || getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') || 1024;
     const temperature =
       typeof this.config.temperature === 'number'
@@ -422,9 +475,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     let payload: any;
 
-    logger.debug(`Formatting payload for model type: ${modelType}`);
+    logger.debug(`Formatting payload for model type: ${this.modelType}`);
 
-    switch (modelType) {
+    switch (this.modelType) {
       case 'openai':
         try {
           // Try to parse as JSON array of messages
@@ -449,42 +502,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
             top_p: topP,
             stop: stopSequences.length > 0 ? stopSequences : undefined,
           };
-        }
-        break;
-
-      case 'anthropic':
-        try {
-          const messages = JSON.parse(prompt);
-          if (Array.isArray(messages)) {
-            payload = {
-              messages,
-              max_tokens: maxTokens,
-              temperature,
-              top_p: topP,
-              stop_sequences: stopSequences.length > 0 ? stopSequences : undefined,
-            };
-          } else {
-            throw new Error('Not valid messages format');
-          }
-        } catch {
-          // Extract system and user messages using the same logic as Anthropic provider
-          const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-
-          // Extract system message if present
-          const systemMessages = messages.filter((msg: any) => msg.role === 'system');
-          const nonSystemMessages = messages.filter((msg: any) => msg.role !== 'system');
-
-          payload = {
-            messages: nonSystemMessages,
-            max_tokens: maxTokens,
-            temperature,
-            top_p: topP,
-            stop_sequences: stopSequences.length > 0 ? stopSequences : undefined,
-          };
-
-          if (systemMessages.length > 0) {
-            payload.system = systemMessages[0].content;
-          }
         }
         break;
 
@@ -566,10 +583,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
    * Parse the response from SageMaker endpoint
    */
   async parseResponse(responseBody: string): Promise<any> {
-    const modelType = this.config.modelType || 'custom';
     let responseJson;
 
-    logger.debug(`Parsing response for model type: ${modelType}`);
+    logger.debug(`Parsing response for model type: ${this.modelType}`);
 
     try {
       responseJson = JSON.parse(responseBody);
@@ -601,7 +617,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       return responseJson.generated_text;
     }
 
-    switch (modelType) {
+    switch (this.modelType) {
       case 'openai':
         return (
           responseJson.choices?.[0]?.message?.content ||
@@ -609,9 +625,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           responseJson.generation ||
           responseJson
         );
-
-      case 'anthropic':
-        return responseJson.content?.[0]?.text || responseJson.completion || responseJson;
 
       case 'llama':
         return (
@@ -702,9 +715,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cacheKey = this.getCacheKey(transformedPrompt);
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+      const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(cacheKey);
@@ -780,6 +791,18 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       const output = await this.parseResponse(responseBody);
 
+      // Handle known errors:
+      if (typeof output === 'object' && output !== null && 'code' in output) {
+        const code = output.code;
+        // 424 has been observed to result from malformed request payloads, specifically incorrect keys within the
+        // `parameters` object.
+        if (Number.isInteger(code) && code === 424) {
+          const errorMessage = `API Error: 424${output?.message ? ` ${output.message}` : ''}\n${JSON.stringify(output)}`;
+          logger.error(errorMessage);
+          return { error: errorMessage };
+        }
+      }
+
       // Calculate token usage estimation (very rough estimate)
       // Note: 4 characters per token is a simplified approximation
       const promptTokens = Math.ceil(payload.length / 4);
@@ -805,9 +828,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       // Save result to cache if successful and caching enabled
       if (isCacheEnabled() && !bustCache && result.output && !result.error) {
         const cacheKey = this.getCacheKey(transformedPrompt);
-        const cache = (await getCache)
-          ? await getCache()
-          : await import('../cache').then((m) => m.getCache());
+        const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
         const resultToCache = JSON.stringify(result);
 
         try {

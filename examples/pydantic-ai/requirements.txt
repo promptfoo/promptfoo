@@ -1,4 +1,4 @@
-pydantic-ai>=0.3.0
-pydantic>=2.10.0
-openai>=1.0.0
-python-dotenv>=1.0.0
+openai==1.95.1
+pydantic==2.11.7
+pydantic-ai==0.4.2
+python-dotenv==1.1.1

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -192,9 +193,9 @@ export default function DefaultTestVariables() {
               py: 6,
               px: 3,
               borderRadius: 2,
-              bgcolor: 'grey.50',
+              bgcolor: 'action.hover',
               border: '1px dashed',
-              borderColor: 'grey.300',
+              borderColor: 'divider',
             }}
           >
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

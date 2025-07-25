@@ -1,4 +1,5 @@
 import type winston from 'winston';
+
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -113,6 +114,7 @@ export interface GuardrailResponse {
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
   flagged?: boolean;
+  reason?: string;
 }
 
 export interface ProviderResponse {
@@ -135,6 +137,7 @@ export interface ProviderResponse {
   isRefusal?: boolean;
   sessionId?: string;
   guardrails?: GuardrailResponse;
+  finishReason?: string;
   audio?: {
     id?: string;
     expiresAt?: number;

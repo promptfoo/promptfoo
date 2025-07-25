@@ -1,13 +1,15 @@
+import { randomUUID } from 'crypto';
+
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import type { GlobalConfig } from '../configTypes';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
+
+import type { GlobalConfig } from '../configTypes';
 
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
@@ -40,7 +42,7 @@ export function isLoggedIntoCloud(): boolean {
   return !!userEmail && !isCI();
 }
 
-export interface EmailStatusResult {
+interface EmailStatusResult {
   status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'no_email';
   message?: string;
   email?: string;

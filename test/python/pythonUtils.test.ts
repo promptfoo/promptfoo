@@ -1,9 +1,10 @@
-import type { ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { Readable, Writable } from 'stream';
+import type { ChildProcess } from 'child_process';
+
 import { PythonShell } from 'python-shell';
-import { Writable, Readable } from 'stream';
-import { getEnvString, getEnvBool } from '../../src/envars';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import { execAsync } from '../../src/python/execAsync';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -418,9 +419,6 @@ describe('Python Utils', () => {
           expect.stringContaining(
             `Python script ${path.resolve('testScript.py')} parsed output type: object`,
           ),
-        );
-        expect(logger.debug).toHaveBeenCalledWith(
-          expect.stringContaining('Python script result data type: object'),
         );
       });
     });

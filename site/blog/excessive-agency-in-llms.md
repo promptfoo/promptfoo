@@ -17,6 +17,7 @@ keywords:
   ]
 date: 2024-10-08
 authors: [ian]
+tags: [security-vulnerability, best-practices, owasp, excessive-agency]
 ---
 
 # Understanding Excessive Agency in LLMs

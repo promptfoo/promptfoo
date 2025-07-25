@@ -1,5 +1,6 @@
 import { fetchWithProxy } from './fetch';
 import logger from './logger';
+
 import type { CsvRow } from './types';
 
 export async function checkGoogleSheetAccess(url: string) {
@@ -43,17 +44,29 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
   }
   const spreadsheetId = match[1];
 
-  let range = 'A1:ZZZ';
+  let range: string;
   const gid = Number(new URL(url).searchParams.get('gid'));
+
   if (gid) {
+    // When gid is provided, get the specific sheet by gid
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheetName = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid)
-      ?.properties?.title;
-    if (!sheetName) {
+    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
+    if (!sheet || !sheet.properties?.title) {
       throw new Error(`Sheet not found for gid: ${gid}`);
     }
-    range = `${sheetName}!${range}`;
+    // Use just the sheet name to get all data from that sheet
+    range = sheet.properties.title;
+  } else {
+    // When no gid is provided, get the first sheet
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
+    const firstSheet = spreadsheet.data.sheets?.[0];
+    if (!firstSheet || !firstSheet.properties?.title) {
+      throw new Error(`No sheets found in spreadsheet`);
+    }
+    // Use just the sheet name to get all data from the first sheet
+    range = firstSheet.properties.title;
   }
+
   const response = await sheets.spreadsheets.values.get({ spreadsheetId, range, auth });
 
   const rows = response.data.values;
@@ -96,16 +109,40 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
   }
   const spreadsheetId = match[1];
 
-  let range = 'A1:ZZZ';
+  // Extract headers from the first row
+  const headers = Object.keys(rows[0]);
+
+  // Convert rows to a 2D array
+  const values = [headers, ...rows.map((row) => headers.map((header) => row[header]))];
+
+  // Helper function to convert column number to A1 notation
+  const getColumnLetter = (col: number): string => {
+    let letter = '';
+    while (col > 0) {
+      col--;
+      letter = String.fromCharCode(65 + (col % 26)) + letter;
+      col = Math.floor(col / 26);
+    }
+    return letter;
+  };
+
+  // Calculate the range based on actual data dimensions
+  const numRows = values.length;
+  const numCols = headers.length;
+  const endColumn = getColumnLetter(numCols);
+
+  let range: string;
   const gid = Number(new URL(url).searchParams.get('gid'));
+
   if (gid) {
+    // Use existing sheet with gid
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheetName = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid)
-      ?.properties?.title;
-    if (!sheetName) {
+    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
+    if (!sheet || !sheet.properties?.title) {
       throw new Error(`Sheet not found for gid: ${gid}`);
     }
-    range = `${sheetName}!${range}`;
+    // Create range with actual data dimensions
+    range = `${sheet.properties.title}!A1:${endColumn}${numRows}`;
   } else {
     // Create a new sheet if no gid is provided
     const newSheetTitle = `Sheet${Date.now()}`;
@@ -124,14 +161,9 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
         ],
       },
     });
-    range = `${newSheetTitle}!${range}`;
+    // Create range with actual data dimensions
+    range = `${newSheetTitle}!A1:${endColumn}${numRows}`;
   }
-
-  // Extract headers from the first row
-  const headers = Object.keys(rows[0]);
-
-  // Convert rows to a 2D array
-  const values = [headers, ...rows.map((row) => headers.map((header) => row[header]))];
 
   // Write data to the sheet
   logger.debug(`Writing CSV to Google Sheets URL: ${url} with ${values.length} rows`);

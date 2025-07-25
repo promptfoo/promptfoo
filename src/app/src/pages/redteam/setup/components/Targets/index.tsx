@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -10,24 +11,25 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
-import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import type { ProviderOptions } from '../../types';
+import { customTargetOption, predefinedTargets } from '../constants';
 import LoadExampleButton from '../LoadExampleButton';
 import Prompts from '../Prompts';
-import { customTargetOption, predefinedTargets } from '../constants';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import TestTargetConfiguration from './TestTargetConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
+
+import type { ProviderOptions } from '../../types';
 
 interface TargetsProps {
   onNext: () => void;
@@ -315,33 +317,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
 
       const data = (await response.json()) as ProviderTestResponse;
-
-      // Handle Target Server Errors:
-      if (data.providerResponse?.metadata?.http?.status !== 200) {
-        let errorMessage = 'Target Server Error: ';
-
-        if (data.providerResponse.raw) {
-          try {
-            // Attempt to parse the raw response as JSON
-            const parsedResponse = JSON.parse(data.providerResponse.raw);
-            if (parsedResponse.error) {
-              // Check for an error property on the JSON
-              errorMessage += parsedResponse.error;
-            } else {
-              // Fallback: render the raw response
-              errorMessage += data.providerResponse.raw;
-            }
-          } catch {
-            // Fallback: render the raw response
-            errorMessage += data.providerResponse.raw;
-          }
-        } else {
-          // If there's no raw response, render the metadata.statusText
-          errorMessage += data.providerResponse?.metadata?.statusText || 'Unknown error';
-        }
-
-        throw new Error(errorMessage);
-      }
 
       const result = data.testResult;
 

@@ -16,7 +16,7 @@ import 'swiper/css/pagination';
 import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
-import styles from './llm-vulnerability-scanner.module.css';
+import styles from './landing-page.module.css';
 // Import Swiper styles
 import 'swiper/css';
 
@@ -32,7 +32,7 @@ function HeroSection() {
         />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer noBackground noBorder className={styles.heroLogos} />
         </div>
         <h2>Move beyond fuzzing and canned attacks</h2>
         <p>Our agentic red teamers specifically target your application use case.</p>

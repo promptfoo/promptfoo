@@ -4,22 +4,26 @@ import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { readProviderPromptMap, processPrompts } from './prompts';
+import { processPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
+import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
+import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
-import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
+import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
+import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies';
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
-import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import { maybeLoadFromExternalFile } from './util/file';
 import { readTests } from './util/testCaseReader';
 
-export * from './types';
+import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
+import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
+export * from './types';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
@@ -37,8 +41,15 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
+  // Resolve defaultTest from file reference if needed
+  let resolvedDefaultTest = testSuite.defaultTest;
+  if (typeof testSuite.defaultTest === 'string' && testSuite.defaultTest.startsWith('file://')) {
+    resolvedDefaultTest = await maybeLoadFromExternalFile(testSuite.defaultTest);
+  }
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
+    defaultTest: resolvedDefaultTest as TestSuite['defaultTest'],
     scenarios: testSuite.scenarios as Scenario[],
     providers: loadedProviders,
     tests: await readTests(testSuite.tests),
@@ -50,7 +61,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
-  if (constructedTestSuite.defaultTest?.options?.provider) {
+  if (
+    typeof constructedTestSuite.defaultTest === 'object' &&
+    constructedTestSuite.defaultTest?.options?.provider
+  ) {
     constructedTestSuite.defaultTest.options.provider = await resolveProvider(
       constructedTestSuite.defaultTest.options.provider,
       providerMap,
@@ -118,6 +132,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 const redteam = {
   Extractors: {
     extractEntities,
+    extractMcpToolsInfo,
     extractSystemPurpose,
   },
   Graders: GRADERS,
@@ -127,15 +142,17 @@ const redteam = {
     Plugin: RedteamPluginBase,
     Grader: RedteamGraderBase,
   },
+  generate: doGenerateRedteam,
+  run: doRedteamRun,
 };
 
-export { assertions, cache, evaluate, loadApiProvider, redteam, guardrails };
+export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
 
 export default {
   assertions,
   cache,
   evaluate,
+  guardrails,
   loadApiProvider,
   redteam,
-  guardrails,
 };

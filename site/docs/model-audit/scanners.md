@@ -26,27 +26,18 @@ ModelAudit includes specialized scanners for different model formats and file ty
 
 ## Pickle Scanner
 
-**File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`
+**File types:** `.pkl`, `.pickle`, `.dill`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`
 
-The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It automatically detects pickle-formatted `.bin` files and performs deep content analysis to detect embedded executables.
+The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It supports standard pickle files as well as dill-serialized files (an extended pickle format).
 
-**What it checks for:**
+**Key checks:**
 
 - Suspicious module imports (e.g., `os`, `subprocess`, `sys`)
-- Potentially dangerous functions (e.g., `eval`, `exec`, `system`)
-- Malicious serialization patterns often used in pickle exploits
-- Encoded payloads that might contain hidden code
-- Suspicious string patterns that could indicate code injection
-- Dangerous pickle opcodes (REDUCE, INST, OBJ, NEWOBJ, STACK_GLOBAL)
-- Code execution patterns in STACK_GLOBAL operations
-- Anomalous opcode sequences suggesting malicious intent
-
-**Features:**
-
-- **ML Context Detection**: Framework detection for major ML libraries and model architectures
-- **Pattern Analysis**: Distinguishes between legitimate ML operations (like `torch.nn` imports) and actual security threats
-- **Binary Analysis**: Scans additional binary content in `.bin` files for embedded executables with PE file detection including DOS stub validation
-- **Opcode Analysis**: Context-aware evaluation of dangerous opcodes (REDUCE, INST, OBJ)
+- Dangerous functions (e.g., `eval`, `exec`, `system`)
+- Malicious pickle opcodes (REDUCE, INST, OBJ, NEWOBJ, STACK_GLOBAL)
+- Encoded payloads and suspicious string patterns
+- Embedded executables in binary content
+- ML context detection to reduce false positives
 
 **Why it matters:**
 Pickle files are a common serialization format for ML models but can execute arbitrary code during unpickling. Attackers can craft malicious pickle files that execute harmful commands when loaded.
@@ -57,12 +48,12 @@ Pickle files are a common serialization format for ML models but can execute arb
 
 This scanner examines TensorFlow models saved in the SavedModel format.
 
-**What it checks for:**
+**Key checks:**
 
 - Suspicious TensorFlow operations that could access files or the system
-- Potentially harmful Python function calls embedded in the graph
+- Python function calls embedded in the graph
 - Operations that allow arbitrary code execution (e.g., `PyFunc`)
-- File I/O operations that might read from or write to unexpected locations
+- File I/O operations that might access unexpected locations
 - Execution operations that could run system commands
 
 **Why it matters:**
@@ -74,16 +65,32 @@ TensorFlow models can contain operations that interact with the filesystem or ex
 
 This scanner examines TensorFlow Lite model files, which are optimized for mobile and embedded devices.
 
-**What it checks for:**
+**Key checks:**
 
 - Custom operations that could contain malicious code
 - Flex delegate operations that enable full TensorFlow ops execution
-- Model metadata that could contain executable content or malicious payloads
+- Model metadata that could contain executable content
 - Suspicious operator configurations or patterns
-- Buffer validation to detect tampering or corruption
+- Buffer validation to detect tampering
 
 **Why it matters:**
 While TensorFlow Lite models are generally safer than full TensorFlow models due to their limited operator set, they can still include custom operations or use the Flex delegate to access the full TensorFlow runtime, potentially introducing security risks. Malicious actors could embed harmful code in custom ops or metadata.
+
+## TensorRT Scanner
+
+**File types:** `.engine`, `.plan`
+
+This scanner examines NVIDIA TensorRT engine files, which are optimized inference engines for NVIDIA GPUs.
+
+**Key checks:**
+
+- Suspicious file paths (`/tmp/`, `../`) that might indicate unauthorized access
+- Embedded shared library references (`.so` files) that could contain malicious code
+- Script execution patterns (`exec`, `eval`) that could run arbitrary code
+- Unauthorized plugin references that might load malicious extensions
+
+**Why it matters:**
+TensorRT engines can contain custom plugins and operations. While generally safer than pickle files, they could be crafted to include malicious plugins or reference unauthorized system resources.
 
 ## Keras H5 Scanner
 
@@ -91,9 +98,9 @@ While TensorFlow Lite models are generally safer than full TensorFlow models due
 
 This scanner analyzes Keras models stored in HDF5 format.
 
-**What it checks for:**
+**Key checks:**
 
-- Potentially unsafe Lambda layers that could contain arbitrary Python code
+- Unsafe Lambda layers that could contain arbitrary Python code
 - Suspicious layer configurations with embedded code
 - Custom layers or metrics that might execute malicious code
 - Dangerous string patterns in model configurations
@@ -107,12 +114,12 @@ Keras models with Lambda layers can contain arbitrary Python code that executes 
 
 This scanner examines ONNX (Open Neural Network Exchange) model files for security issues and integrity problems.
 
-**What it checks for:**
+**Key checks:**
 
-- **Custom operators**: Identifies custom operator domains that might contain malicious functionality
-- **External data integrity**: Validates external data file references and prevents path traversal attacks
-- **Tensor validation**: Checks tensor sizes and data integrity to detect corruption or tampering
-- **File size mismatches**: Detects discrepancies between expected and actual tensor data sizes
+- Custom operators that might contain malicious functionality
+- External data file references and path traversal attempts
+- Tensor size and data integrity validation
+- File size mismatches that could indicate tampering
 
 **Why it matters:**
 ONNX models can reference external data files and custom operators. Malicious actors could exploit these features to include harmful custom operations or manipulate external data references to access unauthorized files on the system.
@@ -123,7 +130,7 @@ ONNX models can reference external data files and custom operators. Malicious ac
 
 This scanner examines PyTorch model files, which are ZIP archives containing pickled data.
 
-**What it checks for:**
+**Key checks:**
 
 - Malicious pickle files embedded within the PyTorch model
 - Python code files included in the model archive
@@ -135,16 +142,16 @@ PyTorch models are essentially ZIP archives containing pickled objects, which ca
 
 ## GGUF/GGML Scanner
 
-**File types:** `.gguf`, `.ggml`
+**File types:** `.gguf`, `.ggml`, `.ggmf`, `.ggjt`, `.ggla`, `.ggsa`
 
 This scanner validates GGUF (GPT-Generated Unified Format) and GGML model files commonly used for large language models like LLaMA, Alpaca, and other quantized models.
 
-**What it checks for:**
+**Key checks:**
 
 - **Header validation**: Verifies file format integrity and header structure
 - **Metadata security**: Scans JSON metadata for suspicious content and path traversal attempts
 - **Tensor integrity**: Validates tensor dimensions, types, and data alignment
-- **Resource limits**: Enforces security limits to prevent denial of service attacks
+- **Resource limits**: Enforces security limits to prevent denial-of-service attacks
 - **Compression validation**: Checks for reasonable tensor sizes and prevents decompression bombs
 
 **Why it matters:**
@@ -156,7 +163,7 @@ GGUF/GGML files are increasingly popular for distributing large language models.
 
 This scanner analyzes joblib serialized files, which are commonly used by ML libraries for model persistence.
 
-**What it checks for:**
+**Key checks:**
 
 - **Compression bomb detection**: Identifies files with suspicious compression ratios that could cause resource exhaustion
 - **Embedded pickle analysis**: Decompresses and scans embedded pickle content for malicious code
@@ -168,11 +175,11 @@ Joblib files often contain compressed pickle data, inheriting the same security 
 
 ## Flax/JAX Scanner
 
-**File types:** `.msgpack`
+**File types:** `.msgpack`, `.flax`, `.orbax`, `.jax`
 
-This scanner analyzes Flax/JAX model files serialized in MessagePack format.
+This scanner analyzes Flax/JAX model files serialized in MessagePack format and other JAX-specific formats.
 
-**What it checks for:**
+**Key checks:**
 
 - Suspicious MessagePack structures that could exploit deserializers
 - Embedded code objects or executable content
@@ -181,15 +188,32 @@ This scanner analyzes Flax/JAX model files serialized in MessagePack format.
 - Unusual data types that might indicate tampering
 
 **Why it matters:**
-Flax models serialized as msgpack files can potentially contain embedded code or malicious data structures. While MessagePack is generally safer than pickle, it can still be exploited through carefully crafted payloads that target specific deserializer vulnerabilities or cause denial of service through resource exhaustion.
+Flax models serialized as msgpack files can potentially contain embedded code or malicious data structures. While MessagePack is generally safer than pickle, it can still be exploited through carefully crafted payloads that target specific deserializer vulnerabilities or cause denial-of-service attacks through resource exhaustion.
+
+## JAX Checkpoint Scanner
+
+**File types:** `.ckpt`, `.checkpoint`, `.orbax-checkpoint`, `.pickle` (when in JAX context)
+
+This scanner analyzes JAX checkpoint files in various serialization formats, including Orbax checkpoints and JAX-specific pickle files.
+
+**Key checks:**
+
+- Dangerous JAX operations like experimental callbacks (`jax.experimental.host_callback.call`)
+- Custom restore functions in Orbax checkpoint metadata
+- Dangerous pickle opcodes in JAX-serialized files
+- Directory-based checkpoint structure validation
+- Resource limits to prevent denial-of-service attacks
+
+**Why it matters:**
+JAX checkpoints can contain custom restore functions or experimental callbacks that could be exploited. Orbax checkpoints may include metadata with arbitrary restore functions that execute during model loading.
 
 ## NumPy Scanner
 
-**File types:** `.npy`
+**File types:** `.npy`, `.npz`
 
 This scanner validates NumPy binary array files for integrity issues and potential security risks.
 
-**What it checks for:**
+**Key checks:**
 
 - **Array validation**: Checks array dimensions and data types for malicious manipulation
 - **Header integrity**: Validates NumPy file headers and magic numbers
@@ -198,7 +222,7 @@ This scanner validates NumPy binary array files for integrity issues and potenti
 - **Dimension limits**: Enforces reasonable limits on array dimensions to prevent DoS attacks
 
 **Why it matters:**
-While NumPy files are generally safer than pickle files, they can still be crafted maliciously. Object arrays can contain arbitrary Python objects (including code), and extremely large arrays can cause denial of service. The scanner ensures arrays are safe to load and don't contain hidden threats.
+While NumPy files are generally safer than pickle files, they can still be crafted maliciously. Object arrays can contain arbitrary Python objects (including code), and extremely large arrays can cause denial-of-service attacks. The scanner ensures arrays are safe to load and don't contain hidden threats.
 
 ## OCI Layer Scanner
 
@@ -206,7 +230,7 @@ While NumPy files are generally safer than pickle files, they can still be craft
 
 This scanner examines OCI (Open Container Initiative) and Docker manifest files that contain embedded model files in compressed layers.
 
-**What it checks for:**
+**Key checks:**
 
 - **Layer extraction**: Safely extracts and scans model files from `.tar.gz` layers
 - **Manifest validation**: Parses JSON and YAML manifest formats
@@ -222,7 +246,7 @@ Container images are increasingly used to distribute ML models and datasets. The
 
 This scanner analyzes model configuration files and manifests.
 
-**What it checks for:**
+**Key checks:**
 
 - Blacklisted model names that might indicate known vulnerable models
 - Suspicious configuration patterns related to:
@@ -241,7 +265,7 @@ Model configuration files can contain settings that lead to insecure behavior, s
 
 This scanner examines raw PyTorch binary tensor files that contain serialized weight data. It performs binary content scanning to detect various threats.
 
-**What it checks for:**
+**Key checks:**
 
 - Embedded code patterns (imports, function calls, eval/exec)
 - Executable file signatures (Windows PE with DOS stub validation, Linux ELF, macOS Mach-O)
@@ -260,13 +284,13 @@ While `.bin` files typically contain raw tensor data, attackers could embed mali
 
 This scanner examines ZIP archives and their contents recursively.
 
-**What it checks for:**
+**Key checks:**
 
 - **Directory traversal attacks:** Detects entries with paths containing ".." or absolute paths that could overwrite system files
 - **Zip bombs:** Identifies files with suspicious compression ratios (>100x) that could cause resource exhaustion
 - **Nested archives:** Scans ZIP files within ZIP files up to a configurable depth to prevent infinite recursion attacks
 - **Malicious content:** Each file within the archive is scanned with its appropriate scanner (e.g., pickle files with PickleScanner)
-- **Resource limits:** Enforces maximum number of entries and file sizes to prevent denial of service
+- **Resource limits:** Enforces maximum number of entries and file sizes to prevent denial-of-service attacks
 
 **Why it matters:**
 ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
@@ -277,7 +301,7 @@ ZIP archives are commonly used to distribute models and datasets. Malicious acto
 
 This scanner analyzes neural network weight distributions to detect potential backdoors or trojaned models by identifying statistical anomalies.
 
-**What it checks for:**
+**Key checks:**
 
 - **Outlier neurons:** Detects output neurons with abnormally high weight magnitudes using Z-score analysis
 - **Dissimilar weight vectors:** Identifies neurons whose weight patterns are significantly different from others in the same layer (using cosine similarity)
@@ -304,7 +328,7 @@ Large language models with vocabulary layers (>10,000 outputs) use more conserva
 
 This scanner examines SafeTensors format files, which are designed to be a safer alternative to pickle files.
 
-**What it checks for:**
+**Key checks:**
 
 - **Header validation**: Verifies SafeTensors format structure and JSON header integrity
 - **Metadata security**: Scans metadata for suspicious content, encoded payloads, and unusually large sections
@@ -320,7 +344,7 @@ While SafeTensors is designed to be safer than pickle files, the metadata sectio
 
 This scanner performs security checks on PMML (Predictive Model Markup Language) files to detect potential XML External Entity (XXE) attacks, malicious scripts, and suspicious external references.
 
-**What it checks for:**
+**Key checks:**
 
 - **XXE Attack Prevention**: Detects `<!DOCTYPE`, `<!ENTITY`, `<!ELEMENT`, and `<!ATTLIST` declarations that could enable XML External Entity attacks
 - **Safe XML Parsing**: Uses defusedxml when available for secure XML parsing; warns when using unsafe parsers
@@ -357,6 +381,39 @@ ModelAudit includes comprehensive file format detection for ambiguous file exten
 
 This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied instead of assuming it's a raw binary file.
 
+## License Checking and Compliance
+
+ModelAudit includes license detection across all file formats to help organizations identify legal obligations before deployment.
+
+**Key features:**
+
+- **License Detection**: Scans headers, LICENSE files, and metadata for license information
+- **AGPL Warnings**: Alerts about network copyleft obligations
+- **Commercial Restrictions**: Identifies non-commercial licenses
+- **Unlicensed Content**: Flags large datasets without clear licensing
+- **SBOM Generation**: Creates CycloneDX-compliant Software Bill of Materials
+
+**Example warnings:**
+
+```text
+⚠️ AGPL license detected: Component is under AGPL-3.0
+   This may require source code disclosure if used in network services
+
+🚨 Non-commercial license detected: Creative Commons NonCommercial
+   This component cannot be used for commercial purposes
+```
+
+**Generate SBOM:**
+
+```bash
+promptfoo scan-model ./models/ --sbom model-sbom.json
+```
+
+The SBOM includes component information, license metadata, risk scores, and copyright details in CycloneDX format.
+
+**Why it matters:**
+AI/ML projects often combine components with different licenses. AGPL requires source disclosure for network services, non-commercial licenses block commercial use, and unlicensed datasets create legal risks.
+
 ## HuggingFace URL Support
 
 ModelAudit can scan models directly from HuggingFace URLs without manual downloading. When a HuggingFace URL is provided, ModelAudit:
@@ -372,9 +429,3 @@ ModelAudit can scan models directly from HuggingFace URLs without manual downloa
 - `hf://user/model`
 
 This feature requires the `huggingface-hub` package to be installed.
-
-## See Also
-
-- [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
-- [Installation & Usage](./usage.md) - How to install and use ModelAudit
-- [Command Line Reference](./usage.md#command-line-interface) - CLI options and examples

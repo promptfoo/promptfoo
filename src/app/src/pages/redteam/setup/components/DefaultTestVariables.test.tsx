@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DefaultTestVariables from './DefaultTestVariables';
 
 // Mock the useRedTeamConfig hook
@@ -243,6 +243,14 @@ describe('DefaultTestVariables Component', () => {
           expect.stringContaining('Delete variable'),
         );
       });
+    });
+
+    it('renders the empty state container with correct background and border colors', () => {
+      render(<DefaultTestVariables />);
+
+      const emptyStateContainer = screen.getByText('No test variables configured').closest('div');
+      expect(emptyStateContainer).toHaveStyle('background-color: rgba(0, 0, 0, 0.04)');
+      expect(emptyStateContainer).toHaveStyle('border-color: rgba(0, 0, 0, 0.12)');
     });
   });
 

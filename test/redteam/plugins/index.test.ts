@@ -1,18 +1,19 @@
-import type { FetchWithCacheResult } from '../../../src/cache';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import {
+  ADDITIONAL_PLUGINS,
+  ALL_PLUGINS,
+  BASE_PLUGINS,
+  HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
-  BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
-  HARM_PLUGINS,
-  ALL_PLUGINS,
 } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+
+import type { FetchWithCacheResult } from '../../../src/cache';
 import type { ApiProvider, TestCase } from '../../../src/types';
 
 jest.mock('../../../src/cache');
@@ -142,9 +143,18 @@ describe('Plugins', () => {
   });
 
   describe('remote generation', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it('should call remote generation with correct parameters', async () => {
-      // Mock shouldGenerateRemote to return true for this test
+      // Mock both functions for this test
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      jest.mocked(neverGenerateRemote).mockReturnValue(false);
 
       const mockResponse = {
         data: { result: [{ test: 'case' }] },

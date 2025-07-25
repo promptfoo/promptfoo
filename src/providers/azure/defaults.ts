@@ -3,12 +3,12 @@ import type { AzureModelCost } from './types';
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 
 export const AZURE_MODELS: AzureModelCost[] = [
-  // GPT-4.5 models
+  // GPT-4.1 models
   {
-    id: 'gpt-4.5-preview-2025-02-27',
+    id: 'gpt-4.1-2025-04-14',
     cost: {
-      input: 75 / 1000000,
-      output: 150 / 1000000,
+      input: 2 / 1000000,
+      output: 8 / 1000000,
     },
   },
   // o1 reasoning models

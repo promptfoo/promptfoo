@@ -220,3 +220,9 @@ export interface BaseRedteamMetadata {
   stopReason: string;
   redteamHistory?: { prompt: string; output: string }[];
 }
+
+/**
+ * Options for generating red team tests via the public API
+ * This is a cleaner subset of RedteamCliGenerateOptions for external use
+ */
+export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;

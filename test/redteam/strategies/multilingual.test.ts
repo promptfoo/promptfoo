@@ -6,6 +6,7 @@ import {
   getConcurrencyLimit,
   translateBatch,
 } from '../../../src/redteam/strategies/multilingual';
+
 import type { TestCase } from '../../../src/types';
 
 jest.mock('cli-progress', () => ({

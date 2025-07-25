@@ -1,25 +1,26 @@
 import dedent from 'dedent';
 import { Router } from 'express';
-import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import promptfoo from '../../index';
+import logger from '../../logger';
+import Eval from '../../models/eval';
+import EvalResult from '../../models/evalResult';
+import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
+import invariant from '../../util/invariant';
+import { ApiSchemas } from '../apiSchemas';
+import type { Request, Response } from 'express';
+
 import type {
+  EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
   ResultsFile,
-  EvalTableDTO,
 } from '../../index';
-import promptfoo from '../../index';
-import logger from '../../logger';
-import Eval from '../../models/eval';
-import EvalResult from '../../models/evalResult';
-import { updateResult, deleteEval, writeResultsToDatabase } from '../../util/database';
-import invariant from '../../util/invariant';
-import { ApiSchemas } from '../apiSchemas';
 
 export const evalRouter = Router();
 
@@ -168,9 +169,13 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const { id } = req.params;
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
-  const filter = String(req.query.filter || 'all');
+  const filterMode = String(req.query.filterMode || 'all');
   const searchText = req.query.search ? String(req.query.search) : '';
-  const metricFilter = req.query.metric ? String(req.query.metric) : '';
+  const filters = Array.isArray(req.query.filter)
+    ? req.query.filter
+    : typeof req.query.filter === 'string'
+      ? [req.query.filter]
+      : [];
 
   const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
     ? req.query.comparisonEvalIds
@@ -187,9 +192,9 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const table = await eval_.getTablePage({
     offset,
     limit,
-    filterMode: filter as any,
+    filterMode,
     searchQuery: searchText,
-    metricFilter,
+    filters: filters as string[],
   });
 
   const indices = table.body.map((row) => row.testIdx);
@@ -197,7 +202,6 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   let returnTable = { head: table.head, body: table.body };
 
   if (comparisonEvalIds.length > 0) {
-    console.log('comparisonEvalIds', comparisonEvalIds);
     const comparisonEvals = await Promise.all(
       comparisonEvalIds.map(async (comparisonEvalId) => {
         const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
@@ -219,7 +223,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           filterMode: 'all',
           testIndices: indices,
           searchQuery: searchText,
-          metricFilter,
+          filters: filters as string[],
         });
       }),
     );
