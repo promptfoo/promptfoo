@@ -145,6 +145,20 @@ function HistogramChart({ table }: ChartProps) {
             },
           },
         },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Frequency',
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Score',
+            },
+          },
+        },
       },
     });
   }, [table]);
