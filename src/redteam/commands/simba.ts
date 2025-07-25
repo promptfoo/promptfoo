@@ -130,7 +130,7 @@ async function runSimbaSession(options: SimbaCommandOptions, testSuite: TestSuit
   // Main conversation loop
   let round = 0;
   let totalTokens = 0;
-  const responses: Record<string, string> = {};
+  let responses: Record<string, string> = {};
   const completedConversations = new Set<string>();
 
   let multipleZeroRoundRequests = 0;
@@ -172,8 +172,7 @@ async function runSimbaSession(options: SimbaCommandOptions, testSuite: TestSuit
 
       logger.info(`Received ${batchResponse.operations.length} operations`);
 
-      // Clear responses for next round
-      Object.keys(responses).forEach((key) => delete responses[key]);
+      responses = {};
 
       // Process all operations in parallel
       const providerCalls = batchResponse.operations.map(async (op) => {
