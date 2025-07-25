@@ -12,12 +12,10 @@ import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
-// Import required Swiper modules
 import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
 import styles from './landing-page.module.css';
-// Import Swiper styles
 import 'swiper/css';
 
 function HeroSection() {
