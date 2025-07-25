@@ -1,6 +1,7 @@
 import React from 'react';
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
+
 import './CustomMetrics.css';
+
 import Box from '@mui/material/Box';
 
 const NUM_METRICS_TO_DISPLAY_ABOVE_FOLD = 10;
@@ -78,6 +79,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
               data-testid={`metric-${metric}`}
               onClick={() => handleMetricClick(metric)}
               className={`metric-chip ${onMetricFilter ? 'filterable' : ''}`}
+              key={`${metric}-${score}`}
             >
               <div className="metric-content">
                 <span data-testid={`metric-name-${metric}`} className="metric-name">
@@ -92,7 +94,6 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
                   />
                 </span>
               </div>
-              {onMetricFilter && <FilterAltIcon className="filter-icon" sx={{ opacity: 0.35 }} />}
             </div>
           ) : null,
         )}

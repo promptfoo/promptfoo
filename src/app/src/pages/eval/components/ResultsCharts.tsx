@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import React, { useEffect, useRef, useState } from 'react';
+
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
@@ -11,23 +11,26 @@ import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import { useTheme } from '@mui/material/styles';
-import type { VisibilityState } from '@tanstack/table-core';
 import {
-  Chart,
   BarController,
-  LineController,
-  ScatterController,
-  CategoryScale,
-  LinearScale,
   BarElement,
+  CategoryScale,
+  Chart,
+  Colors,
+  LinearScale,
+  LineController,
   LineElement,
   PointElement,
+  ScatterController,
   Tooltip,
-  Colors,
   type TooltipItem,
 } from 'chart.js';
+import { ErrorBoundary } from 'react-error-boundary';
+import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from './types';
+import type { VisibilityState } from '@tanstack/table-core';
+
+import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
@@ -153,6 +156,7 @@ function HistogramChart({ table }: ChartProps) {
 }
 
 function PassRateChart({ table }: ChartProps) {
+  const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
@@ -165,18 +169,11 @@ function PassRateChart({ table }: ChartProps) {
       passRateChartInstance.current.destroy();
     }
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const outputs = table.body
-        .map((row) => row.outputs[promptIdx])
-        .filter((output) => output != null);
-      const passCount = outputs.filter((output) => output.pass).length;
-      const passRate = (passCount / outputs.length) * 100;
-      return {
-        label: `Column ${promptIdx + 1}`,
-        data: [passRate],
-        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
-      };
-    });
+    const datasets = table.head.prompts.map((prompt, promptIdx) => ({
+      label: prompt.provider,
+      data: [passRates[promptIdx]],
+      backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+    }));
 
     passRateChartInstance.current = new Chart(passRateCanvasRef.current, {
       type: 'bar',
@@ -189,10 +186,17 @@ function PassRateChart({ table }: ChartProps) {
         plugins: {
           title: {
             display: true,
-            text: 'Pass rate',
+            text: 'Pass Rate',
           },
           legend: {
             display: true,
+          },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+              },
+            },
           },
         },
       },

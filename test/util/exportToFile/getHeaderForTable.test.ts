@@ -1,6 +1,7 @@
+import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
+
 import type Eval from '../../../src/models/eval';
 import type { TestCase } from '../../../src/types';
-import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 
 describe('getHeaderForTable', () => {
   let mockEval: Eval;

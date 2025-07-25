@@ -1,5 +1,6 @@
-import { Command } from 'commander';
 import * as path from 'path';
+
+import { Command } from 'commander';
 import { disableCache } from '../../src/cache';
 import {
   doEval,
@@ -14,9 +15,10 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');

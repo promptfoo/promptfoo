@@ -1,6 +1,7 @@
-import type { Prompt } from '../types';
 import { sha256 } from '../util/createHash';
 import { VALID_FILE_EXTENSIONS } from './constants';
+
+import type { Prompt } from '../types';
 
 /**
  * Determines if a string is a valid file path.

@@ -1,12 +1,14 @@
 import * as fs from 'fs';
-import type { Options as PythonShellOptions } from 'python-shell';
+
 import { PythonShell } from 'python-shell';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
-import type { Prompt, ApiProvider, PromptFunctionContext } from '../../types';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import type { Options as PythonShellOptions } from 'python-shell';
+
+import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
 
 /**
  * Python prompt function. Runs a specific function from the python file.

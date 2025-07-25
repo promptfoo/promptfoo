@@ -1,8 +1,9 @@
+import { callApi } from '@app/utils/api';
 import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { useTableStore, type ResultsFilter } from './store';
-import { callApi } from '@app/utils/api';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { type ResultsFilter, useTableStore } from './store';
+
 import type { EvaluateTable, PromptMetrics } from './types';
 
 vi.mock('uuid', () => ({
@@ -38,6 +39,7 @@ describe('useTableStore', () => {
           appliedCount: 0,
           options: {
             metric: [],
+            metadata: [],
           },
         },
       });
@@ -72,6 +74,7 @@ describe('useTableStore', () => {
         ...newFilter,
         id: mockFilterId,
         logicOperator: 'and',
+        sortIndex: 0,
       });
     });
 
@@ -132,6 +135,7 @@ describe('useTableStore', () => {
         operator: 'equals' as const,
         value: 'test-metric-value',
         logicOperator: 'and' as const,
+        sortIndex: 0,
       };
 
       act(() => {
@@ -149,6 +153,7 @@ describe('useTableStore', () => {
       const updatedFilter: ResultsFilter = {
         ...initialFilter,
         value: '',
+        sortIndex: 0,
       };
 
       act(() => {
@@ -171,6 +176,7 @@ describe('useTableStore', () => {
         operator: 'equals',
         value: filterValue,
         logicOperator: 'and',
+        sortIndex: 0,
       };
 
       const expectedEncodedFilterValue = JSON.stringify({

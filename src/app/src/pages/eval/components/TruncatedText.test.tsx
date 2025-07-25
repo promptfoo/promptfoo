@@ -1,6 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import TruncatedText from './TruncatedText';
 
 describe('TruncatedText', () => {
@@ -100,7 +101,7 @@ describe('TruncatedText', () => {
   it('should correctly truncate and render an array of React nodes according to maxLength, preserving the structure of nodes that fit within the limit', () => {
     const nodes = [
       'This is the first part, ',
-      <span>and this is the second part</span>,
+      <span key="second-part">and this is the second part</span>,
       ', and this is the third part.',
     ];
     const maxLength = 40;

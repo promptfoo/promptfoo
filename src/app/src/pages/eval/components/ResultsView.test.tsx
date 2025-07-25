@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
+
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 
 // Mock data
@@ -114,6 +115,7 @@ let mockTableStoreData = {
     appliedCount: 0,
     options: {
       metric: [] as string[],
+      metadata: [] as string[],
     },
   },
 };
@@ -175,12 +177,6 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
-vi.mock('@app/hooks/useFeatureFlag', () => ({
-  useFeatureFlag: vi.fn(() => true),
-}));
-
-import { useFeatureFlag } from '@app/hooks/useFeatureFlag';
-
 declare global {
   interface Window {
     resizeHandler: any;
@@ -223,6 +219,7 @@ describe('ResultsView', () => {
         appliedCount: 0,
         options: {
           metric: [] as string[],
+          metadata: [] as string[],
         },
       },
     };
@@ -306,7 +303,18 @@ describe('ResultsView', () => {
     });
   });
 
-  it('renders FiltersButton and FiltersForm when multi-metric filtering is enabled and metric filters are available', () => {
+  it('renders FiltersButton and FiltersForm when filters are available', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      filters: {
+        ...mockTableStoreData.filters,
+        options: {
+          metric: ['accuracy', 'f1-score'],
+          metadata: [],
+        },
+      },
+    };
+
     renderWithProviders(
       <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
     );
@@ -324,28 +332,6 @@ describe('ResultsView', () => {
     expect(screen.queryByTestId('filters-button')).toBeNull();
     expect(screen.queryByTestId('filters-form')).toBeNull();
     expect(screen.queryByTestId('metric-filter-selector')).toBeNull();
-  });
-
-  it('handles the case where the multi-metric filtering feature flag is enabled but there are no available metrics', () => {
-    vi.mocked(useFeatureFlag).mockReturnValue(true);
-
-    mockTableStoreData = {
-      ...mockTableStoreData,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
-    };
-
-    renderWithProviders(
-      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
-    );
-
-    expect(screen.queryByText('Filters')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Metric' })).toBeNull();
   });
 
   it('should not update charts visibility state on window resize after mount', () => {

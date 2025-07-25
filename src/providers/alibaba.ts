@@ -1,6 +1,7 @@
-import type { ProviderOptions } from '../types';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+
+import type { ProviderOptions } from '../types';
 
 const KNOWN_MODELS = new Set([
   // Flagship models

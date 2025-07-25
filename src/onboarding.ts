@@ -1,18 +1,20 @@
+import fs from 'fs';
+import path from 'path';
+
 import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import fs from 'fs';
-import path from 'path';
 import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import type { EnvOverrides } from './types/env';
 import { isRunningUnderNpx } from './util';
 import { getNunjucksEngine } from './util/templates';
+
+import type { EnvOverrides } from './types/env';
 
 const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 

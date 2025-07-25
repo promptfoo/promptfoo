@@ -1,9 +1,9 @@
-import chalk from 'chalk';
-import chokidar from 'chokidar';
-import type { Command } from 'commander';
-import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
+
+import chalk from 'chalk';
+import chokidar from 'chokidar';
+import dedent from 'dedent';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
@@ -19,6 +19,20 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
+import { isApiProvider } from '../types/providers';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile } from '../util/file';
+import { formatDuration } from '../util/formatDuration';
+import invariant from '../util/invariant';
+import { TokenUsageTracker } from '../util/tokenUsage';
+import { filterProviders } from './eval/filterProviders';
+import { filterTests } from './eval/filterTests';
+import { notCloudEnabledShareInstructions } from './share';
+import type { Command } from 'commander';
+
 import type {
   CommandLineOptions,
   EvaluateOptions,
@@ -27,21 +41,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
-import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
-import { resolveConfigs } from '../util/config/load';
-import { maybeLoadFromExternalFile } from '../util/file';
-import { formatDuration } from '../util/formatDuration';
-import invariant from '../util/invariant';
-import { TokenUsageTracker } from '../util/tokenUsage';
-import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
-import { filterTests } from './eval/filterTests';
-import { notCloudEnabledShareInstructions } from './share';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),

@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+
 import logger from './logger';
 import { safeResolve } from './util/file.node';
 

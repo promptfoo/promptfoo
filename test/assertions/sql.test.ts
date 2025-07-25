@@ -1,4 +1,5 @@
 import { handleIsSql } from '../../src/assertions/sql';
+
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types';
 
 const assertion: Assertion = {

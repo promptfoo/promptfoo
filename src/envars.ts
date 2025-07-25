@@ -1,5 +1,7 @@
 import 'dotenv/config';
+
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
@@ -215,6 +217,9 @@ type EnvVars = {
 
   // FAL
   FAL_KEY?: string;
+
+  // GitHub
+  GITHUB_TOKEN?: string;
 
   // Groq
   GROQ_API_KEY?: string;

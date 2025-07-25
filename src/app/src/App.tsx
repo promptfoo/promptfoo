@@ -1,19 +1,20 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
+
 import {
   createBrowserRouter,
   createRoutesFromElements,
   Navigate,
+  Outlet,
   Route,
   RouterProvider,
   useLocation,
-  Outlet,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
-import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
+import EvalCreatorPage from './pages/eval-creator/page';
 import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';

@@ -1,12 +1,5 @@
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
 import React, { useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { Link, useNavigate } from 'react-router-dom';
+
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
 import {
@@ -16,34 +9,47 @@ import {
   type FilterMode,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import { alpha } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
 import yaml from 'js-yaml';
+import ReactMarkdown from 'react-markdown';
+import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import type { TruncatedTextProps } from './TruncatedText';
-import TruncatedText from './TruncatedText';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import TruncatedText from './TruncatedText';
+import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+
+import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
+
 import ButtonGroup from '@mui/material/ButtonGroup';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -161,7 +167,6 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
-    totalResultsCount,
     fetchEvalData,
     isFetching,
     filters,
@@ -184,8 +189,18 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: 50,
+    pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  /**
+   * Reset the pagination state when the filtered results count changes.
+   */
+  React.useEffect(() => {
+    setPagination({
+      pageIndex: 0,
+      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    });
+  }, [filteredResultsCount]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -345,9 +360,29 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Create a stable reference for applied filters to avoid unnecessary re-renders
+  const appliedFiltersString = React.useMemo(() => {
+    const appliedFilters = Object.values(filters.values)
+      .filter((filter) =>
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+      )
+      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
+    // Create a stable string representation of applied filters
+    return JSON.stringify(
+      appliedFilters.map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex, // Include sortIndex for complete representation
+      })),
+    );
+  }, [filters.values]);
+
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
+  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -384,7 +419,10 @@ function ResultsTable({
       filterMode,
       searchText: debouncedSearchText,
       // Only pass the filters that have been applied (have a value).
-      filters: Object.values(filters.values).filter((filter) => Boolean(filter.value)),
+      // For metadata filters, both field and value must be present.
+      filters: Object.values(filters.values).filter((filter) =>
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+      ),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -395,24 +433,13 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
-    filters.values,
-    // Ensure this re-triggers for filter CxUD operations.
-    filters.appliedCount,
+    appliedFiltersString, // Use the stable string representation instead of filters.values
+    // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
-  const numGoodTests = React.useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
-    [head.prompts, body],
-  );
-
-  const numTests = React.useMemo(
-    () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
-      ),
-    [head.prompts, body],
-  );
+  const testCounts = useTestCounts();
+  const passingTestCounts = usePassingTestCounts();
+  const passRates = usePassRates();
 
   const numAsserts = React.useMemo(
     () =>
@@ -616,10 +643,7 @@ function ResultsTable({
           columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
             id: `Prompt ${idx + 1}`,
             header: () => {
-              const pct =
-                numGoodTests[idx] && numTests[idx]
-                  ? ((numGoodTests[idx] / numTests[idx]) * 100.0).toFixed(2)
-                  : '0.00';
+              const pct = passRates[idx] ? passRates[idx].toFixed(2) : '0.00';
               const columnId = `Prompt ${idx + 1}`;
               const isChecked = failureFilter[columnId] || false;
 
@@ -636,8 +660,8 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / numTests[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / numTests[idx])} per test`}
+                          maximumFractionDigits: prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
+                        }).format(prompt.metrics.cost / testCounts[idx])} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -663,7 +687,7 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / numTests[idx])}
+                      }).format(prompt.metrics.tokenUsage.total / testCounts[idx])}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -671,7 +695,7 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / numTests[idx])}{' '}
+                      }).format(prompt.metrics.totalLatencyMs / testCounts[idx])}{' '}
                       ms
                     </div>
                   ) : null}
@@ -729,12 +753,13 @@ function ResultsTable({
                     <div className="summary">
                       <div
                         className={`highlight ${
-                          numGoodTests[idx] && numTests[idx]
-                            ? `success-${Math.round(((numGoodTests[idx] / numTests[idx]) * 100) / 20) * 20}`
+                          passRates[idx]
+                            ? `success-${Math.round(passRates[idx] / 20) * 20}`
                             : 'success-0'
                         }`}
                       >
-                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{numTests[idx]} cases)
+                        <strong>{pct}% passing</strong> ({passingTestCounts[idx]}/{testCounts[idx]}{' '}
+                        cases)
                       </div>
                     </div>
                     {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
@@ -841,12 +866,14 @@ function ResultsTable({
     metricTotals,
     numAsserts,
     numGoodAsserts,
-    numGoodTests,
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
     filters.appliedCount,
     handleMetricFilterClick,
+    passRates,
+    passingTestCounts,
+    testCounts,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -905,9 +932,9 @@ function ResultsTable({
     const params = parseQueryParams(window.location.search);
     const rowId = params['rowId'];
 
-    if (rowId) {
+    if (rowId && Number.isInteger(Number(rowId))) {
       const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, tableBody.length - 1));
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -977,7 +1004,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
 
   const tableWidth = React.useMemo(() => {
     let width = 0;
@@ -1041,8 +1068,29 @@ function ResultsTable({
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
+          position: 'relative',
         }}
       >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
+            zIndex: 1000,
+            opacity: isFetching ? 1 : 0,
+            pointerEvents: isFetching ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease-in-out',
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <CircularProgress size={60} />
+        </Box>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1166,30 +1214,31 @@ function ResultsTable({
         </table>
       </div>
 
-      {
-        // Use `totalResultsCount` instead of `filteredResultsCount`; this ensures that changing
-        // filters does not hide the pagination controls.
-        // 10 is the smallest page size i.e. smaller result-sets cannot be paginated.
-        totalResultsCount > 10 && (
-          <Box
-            className="pagination"
-            px={2}
-            mx={-2}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-              backgroundColor: 'background.paper',
-              borderTop: '1px solid',
-              borderColor: 'divider',
-              width: '100vw',
-              boxShadow: 3,
-            }}
-          >
-            <Box>
-              Showing{' '}
+      <Box
+        className="pagination"
+        px={2}
+        mx={-2}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          backgroundColor: 'background.paper',
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          width: '100vw',
+          boxShadow: 3,
+        }}
+      >
+        <Box>
+          Showing{' '}
+          {filteredResultsCount === 0 ? (
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              0
+            </Typography>
+          ) : (
+            <>
               <Typography component="span" sx={{ fontWeight: 600 }}>
                 {pagination.pageIndex * pagination.pageSize + 1}
               </Typography>{' '}
@@ -1200,117 +1249,131 @@ function ResultsTable({
               of{' '}
               <Typography component="span" sx={{ fontWeight: 600 }}>
                 {filteredResultsCount}
-              </Typography>{' '}
-              results
-            </Box>
-
-            <Box>
-              Page{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {reactTable.getState().pagination.pageIndex + 1}
-              </Typography>{' '}
-              of{' '}
-              <Typography component="span" sx={{ fontWeight: 600 }}>
-                {pageCount}
               </Typography>
-            </Box>
+            </>
+          )}{' '}
+          results
+        </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {/* PAGE SIZE SELECTOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Results per page:</span>
-                <Select
-                  value={pagination.pageSize}
-                  onChange={(e) => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageSize: Number(e.target.value),
-                    }));
-                    window.scrollTo(0, 0);
-                  }}
-                  displayEmpty
-                  inputProps={{ 'aria-label': 'Results per page' }}
-                  size="small"
-                  sx={{ m: 1, minWidth: 80 }}
-                >
-                  <MenuItem value={10}>10</MenuItem>
-                  <MenuItem value={50} disabled={filteredResultsCount <= 10}>
-                    50
-                  </MenuItem>
-                  <MenuItem value={100} disabled={filteredResultsCount <= 50}>
-                    100
-                  </MenuItem>
-                  <MenuItem value={500} disabled={filteredResultsCount <= 100}>
-                    500
-                  </MenuItem>
-                  <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
-                    1000
-                  </MenuItem>
-                </Select>
-              </Typography>
-
-              {/* PAGE NAVIGATOR */}
-              <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Go to:</span>
-                <TextField
-                  size="small"
-                  type="number"
-                  onChange={(e) => {
-                    const page = e.target.value ? Number(e.target.value) - 1 : null;
-                    if (page !== null && page >= 0 && page < pageCount) {
-                      setPagination((prev) => ({
-                        ...prev,
-                        pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                      }));
-                      clearRowIdFromUrl();
-                    }
-                  }}
-                  sx={{
-                    width: '60px',
-                    textAlign: 'center',
-                  }}
-                  slotProps={{
-                    htmlInput: {
-                      min: 1,
-                      max: pageCount,
-                    },
-                  }}
-                />
-              </Typography>
-
-              {/* PAGE NAVIGATION BUTTONS */}
-              <ButtonGroup>
-                <IconButton
-                  onClick={() => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.max(prev.pageIndex - 1, 0),
-                    }));
-                    clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
-                  }}
-                  disabled={reactTable.getState().pagination.pageIndex === 0}
-                >
-                  <ArrowBackIcon />
-                </IconButton>
-                <IconButton
-                  onClick={() => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
-                    }));
-                    clearRowIdFromUrl();
-                    window.scrollTo(0, 0);
-                  }}
-                  disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-                >
-                  <ArrowForwardIcon />
-                </IconButton>
-              </ButtonGroup>
-            </Box>
+        {filteredResultsCount > 0 && (
+          <Box>
+            Page{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {reactTable.getState().pagination.pageIndex + 1}
+            </Typography>{' '}
+            of{' '}
+            <Typography component="span" sx={{ fontWeight: 600 }}>
+              {pageCount}
+            </Typography>
           </Box>
-        )
-      }
+        )}
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* PAGE SIZE SELECTOR */}
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <span>Results per page:</span>
+            <Select
+              value={pagination.pageSize}
+              onChange={(e) => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageSize: Number(e.target.value),
+                }));
+                window.scrollTo(0, 0);
+              }}
+              displayEmpty
+              inputProps={{ 'aria-label': 'Results per page' }}
+              size="small"
+              sx={{ m: 1, minWidth: 80 }}
+              disabled={filteredResultsCount <= 10}
+            >
+              <MenuItem value={10}>10</MenuItem>
+              <MenuItem value={50} disabled={filteredResultsCount <= 10}>
+                50
+              </MenuItem>
+              <MenuItem value={100} disabled={filteredResultsCount <= 50}>
+                100
+              </MenuItem>
+              <MenuItem value={500} disabled={filteredResultsCount <= 100}>
+                500
+              </MenuItem>
+              <MenuItem value={1000} disabled={filteredResultsCount <= 500}>
+                1000
+              </MenuItem>
+            </Select>
+          </Typography>
+
+          {/* PAGE NAVIGATOR */}
+          <Typography
+            component="span"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              opacity: pageCount > 1 ? 1 : 0.5,
+              pointerEvents: pageCount > 1 ? 'auto' : 'none',
+            }}
+          >
+            <span>Go to:</span>
+            <TextField
+              size="small"
+              type="number"
+              value={pagination.pageIndex + 1}
+              onChange={(e) => {
+                const page = e.target.value ? Number(e.target.value) - 1 : null;
+                if (page !== null && page >= 0 && page < pageCount) {
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
+                  }));
+                  clearRowIdFromUrl();
+                }
+              }}
+              sx={{
+                width: '60px',
+                textAlign: 'center',
+              }}
+              slotProps={{
+                htmlInput: {
+                  min: 1,
+                  max: pageCount,
+                },
+              }}
+              disabled={pageCount === 1}
+            />
+          </Typography>
+
+          {/* PAGE NAVIGATION BUTTONS */}
+          <ButtonGroup>
+            <IconButton
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.max(prev.pageIndex - 1, 0),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex === 0}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+            <IconButton
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+            >
+              <ArrowForwardIcon />
+            </IconButton>
+          </ButtonGroup>
+        </Box>
+      </Box>
     </>
   );
 }
