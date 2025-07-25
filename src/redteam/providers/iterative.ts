@@ -68,6 +68,7 @@ interface IterativeMetadata {
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[];
+  sessionIds: string[]; // All session IDs from iterations
 }
 
 export async function runRedteamConversation({
@@ -138,6 +139,8 @@ export async function runRedteamConversation({
   let storedGraderResult: GradingResult | undefined = undefined;
   let stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached' =
     'Max iterations reached';
+
+  const sessionIds: string[] = [];
 
   const totalTokenUsage = {
     total: 0,
@@ -300,6 +303,15 @@ export async function runRedteamConversation({
         `[Iterative] ${i + 1}/${numIterations} - Empty target response. Full response: ${JSON.stringify(targetResponse)}`,
       );
       continue;
+    }
+
+    const responseSessionId = targetResponse.sessionId;
+    const varsSessionId = iterationContext?.vars?.sessionId;
+    const sessionId =
+      responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
+
+    if (sessionId) {
+      sessionIds.push(sessionId);
     }
 
     let assertToUse = test?.assert?.find(
@@ -536,6 +548,7 @@ export async function runRedteamConversation({
       redteamFinalPrompt: bestInjectVar,
       storedGraderResult,
       stopReason: stopReason,
+      sessionIds,
     },
     tokenUsage: totalTokenUsage,
   };

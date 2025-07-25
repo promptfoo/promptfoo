@@ -88,6 +88,23 @@ export const MAX_WIDTH = 10; // w parameter from paper
 const BRANCHING_FACTOR = 4; // b parameter from paper
 
 /**
+ * Extracts defined session IDs from tree outputs
+ * @param outputs - Array of tree search outputs
+ * @returns Array of defined session IDs
+ */
+function extractSessionIds(outputs: TreeSearchOutput[]): string[] {
+  const sessionIds = outputs.map((t) => t.sessionId).filter((id): id is string => id !== undefined);
+
+  if (sessionIds.length < outputs.length) {
+    logger.debug(
+      `[TreeIterative] Filtered out ${outputs.length - sessionIds.length} undefined session IDs from tree outputs`,
+    );
+  }
+
+  return sessionIds;
+}
+
+/**
  * Renders system prompts for the red team, on-topic check, and judge.
  * @param nunjucks - The Nunjucks environment for rendering templates.
  * @param goal - The goal or objective for the red team.
@@ -428,6 +445,7 @@ export interface TreeSearchOutput {
   wasSelected: boolean;
   graderPassed?: boolean;
   guardrails?: GuardrailResponse;
+  sessionId?: string; // Session ID for this specific attempt
 }
 
 /**
@@ -440,6 +458,7 @@ interface TreeIterativeMetadata extends BaseRedteamMetadata {
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
+  sessionIds: string[]; // All session IDs from the tree exploration
 }
 
 /**
@@ -734,6 +753,11 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
           });
           return {
             output: targetResponse.output,
@@ -745,6 +769,7 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -766,6 +791,11 @@ async function runRedteamConversation({
             parentId: node.id,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
           });
           return {
             output: bestResponse,
@@ -777,6 +807,7 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -799,6 +830,11 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
           });
           return {
             output: bestResponse,
@@ -810,6 +846,7 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -840,6 +877,11 @@ async function runRedteamConversation({
           score,
           wasSelected: true,
           guardrails: targetResponse.guardrails,
+          sessionId:
+            targetResponse.sessionId ||
+            (typeof iterationContext?.vars?.sessionId === 'string'
+              ? iterationContext.vars.sessionId
+              : undefined),
         });
       }
     }
@@ -894,6 +936,7 @@ async function runRedteamConversation({
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse.guardrails,
+    sessionId: finalTargetResponse.sessionId,
   });
   return {
     output: bestResponse,
@@ -905,6 +948,7 @@ async function runRedteamConversation({
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
       storedGraderResult,
+      sessionIds: extractSessionIds(treeOutputs),
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,
