@@ -48,37 +48,23 @@ const response = await fetch('/api/traces/evaluation/123');
 
 When the CI style check is failing, run these commands to fix style issues:
 
-1. **Check all linting issues** (without fixing):
-   ```bash
-   npm run lint && npm run lint:tests && npm run lint:site
-   ```
+1. **Fix all style issues automatically**:
 
-2. **Check formatting issues** (without fixing):
-   ```bash
-   npm run format:check
-   ```
-
-3. **Fix all style issues automatically**:
    ```bash
    # Fix linting issues for changed files
    npm run l
-   
+
    # Fix formatting issues for changed files
    npm run f
-   
+
    # Or fix all files (not just changed ones)
    npm run format
    ```
 
-4. **Common style issues to watch for**:
-   - Unused imports (especially React imports in TSX files)
-   - Unused variables from destructuring
-   - Missing or inconsistent formatting
-   - Import order issues (Biome will auto-sort these)
+2. **Before committing**, always run:
 
-5. **Before committing**, always run:
    ```bash
-   npm run lint && npm run format:check
+   npm run l && npm run f
    ```
 
 ## CLI Commands
