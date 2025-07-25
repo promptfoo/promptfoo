@@ -4,12 +4,14 @@ import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
+import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { type EvaluateResult } from '../types';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
 
+import { ResultFailureReason } from '../types';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -17,7 +19,6 @@ import type {
   Prompt,
   ProviderOptions,
   ProviderResponse,
-  ResultFailureReason,
 } from '../types';
 
 // Removes circular references from the provider object and ensures consistent format
@@ -116,20 +117,59 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    db.transaction((tx) => {
+
+    logger.debug(`Starting transaction to insert ${results.length} results for eval ${evalId}`);
+
+    db.transaction(() => {
       for (const result of results) {
+        const {
+          prompt,
+          error,
+          score,
+          latencyMs,
+          success,
+          provider,
+          gradingResult,
+          namedScores,
+          cost,
+          metadata,
+          failureReason,
+          testCase,
+        } = result;
+
         const insertedId = randomUUID();
         const insertData = {
-          ...result,
-          evalId,
           id: insertedId,
-          response: result.response ?? null, // Convert undefined to null
-          gradingResult: result.gradingResult ?? null, // Convert undefined to null
+          evalId,
+          testCase: {
+            ...testCase,
+            ...(testCase.provider && {
+              provider: sanitizeProvider(testCase.provider),
+            }),
+          },
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+          prompt,
+          promptId: hashPrompt(prompt),
+          error: error?.toString() || null,
+          success,
+          score: score == null ? 0 : score,
+          response: result.response || null,
+          gradingResult: gradingResult || null,
+          namedScores: namedScores || {},
+          provider: sanitizeProvider(provider),
+          latencyMs: latencyMs || 0,
+          cost: cost || 0,
+          metadata: metadata || {},
+          failureReason: failureReason || ResultFailureReason.NONE,
         };
-        tx.insert(evalResultsTable).values(insertData).run();
+        db.insert(evalResultsTable).values(insertData).run();
         returnResults.push(new EvalResult({ ...insertData, persisted: true }));
       }
     });
+
+    logger.debug(`Transaction completed. Inserted ${returnResults.length} results`);
+
     return returnResults;
   }
 

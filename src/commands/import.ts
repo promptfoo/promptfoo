@@ -76,9 +76,12 @@ export function importCommand(program: Command) {
 
             // Import results if available
             if (resultsData.results && Array.isArray(resultsData.results)) {
+              logger.debug(`Found ${resultsData.results.length} results to import`);
               // Transform v3 format results to full EvaluateResult format
               const evaluateResults = transformV3ResultsToEvaluateResults(resultsData.results);
+              logger.debug(`Transformed ${evaluateResults.length} results`);
               await EvalResult.createManyFromEvaluateResult(evaluateResults, evalId);
+              logger.debug(`Created ${evaluateResults.length} results in database`);
             }
           } else {
             // v2 format
