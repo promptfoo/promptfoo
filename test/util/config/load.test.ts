@@ -1512,7 +1512,7 @@ describe('resolveConfigs', () => {
 
     // Verify the defaultTest was loaded with the embedding provider configuration
     expect(result.testSuite.defaultTest).toBeDefined();
-    expect(result.testSuite.defaultTest?.options?.provider).toEqual({
+    expect((result.testSuite.defaultTest as any)?.options?.provider).toEqual({
       embedding: {
         id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
         config: {
@@ -1567,7 +1567,7 @@ describe('resolveConfigs', () => {
 
     // Verify the defaultTest was loaded with the provider string
     expect(result.testSuite.defaultTest).toBeDefined();
-    expect(result.testSuite.defaultTest?.options?.provider).toBe('openai:gpt-4');
+    expect((result.testSuite.defaultTest as any)?.options?.provider).toBe('openai:gpt-4');
   });
 });
 
