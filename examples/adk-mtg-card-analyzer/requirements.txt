@@ -1,0 +1,23 @@
+# Google ADK
+git+https://github.com/google/adk-python.git@main
+
+# Image handling
+Pillow>=10.0.0
+
+# Web Server
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6
+
+# Utilities
+requests>=2.31.0
+aiofiles>=23.2.1
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+
+# PDF generation
+reportlab>=4.0.0
+
+# Google Cloud (optional for deployment)
+google-cloud-aiplatform>=1.40.0
+google-cloud-storage>=2.13.0
