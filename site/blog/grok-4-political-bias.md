@@ -181,7 +181,7 @@ We used [Promptfoo](https://github.com/promptfoo/promptfoo) to run a systematic 
 - 99.98% success rate
 - Approximately $280 in API costs, 20 minutes runtime with 20 concurrent threads
 
-The full experiment code is available in our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias) under CC-BY 4.0 license.
+The full experiment code and dataset are available in our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias) and [HuggingFace](https://huggingface.co/datasets/promptfoo/political-questions/) under CC-BY 4.0 license.
 
 ## Results
 
