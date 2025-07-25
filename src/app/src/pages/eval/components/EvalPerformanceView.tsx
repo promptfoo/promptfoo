@@ -30,26 +30,6 @@ interface MetricRow {
   [key: string]: any; // For dynamic prompt columns
 }
 
-function CustomToolbar() {
-  const theme = useTheme();
-  return (
-    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <GridToolbarFilterButton />
-      </Box>
-      <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
-          },
-        }}
-      />
-    </GridToolbarContainer>
-  );
-}
-
 const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
   handleSwitchToResultsTab,
 }) => {
@@ -395,7 +375,24 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
             backgroundColor: 'action.hover',
           },
         }}
-        slots={{ toolbar: CustomToolbar }}
+        slots={{
+          toolbar: () => (
+            <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <GridToolbarFilterButton />
+              </Box>
+              <Box sx={{ flexGrow: 1 }} />
+              <GridToolbarQuickFilter
+                sx={{
+                  '& .MuiInputBase-root': {
+                    borderRadius: 2,
+                    backgroundColor: theme.palette.background.paper,
+                  },
+                }}
+              />
+            </GridToolbarContainer>
+          ),
+        }}
         hideFooter
       />
     </Paper>
