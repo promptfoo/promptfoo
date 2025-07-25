@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { useFeatureFlag } from './useFeatureFlag';
 
 describe('useFeatureFlag', () => {
   it('documentation: Vite boolean stringification fix', () => {
