@@ -456,26 +456,55 @@ function processImagesInContents(
       for (const part of content.parts) {
         if (part.text) {
           const lines = part.text.split('\n');
+          let foundValidImage = false;
+          let currentTextBlock = '';
+          const processedParts: Part[] = [];
 
+          // First pass: check if any line is a valid base64 image from context variables
           for (const line of lines) {
             const trimmedLine = line.trim();
 
             // Check if this line is a base64 image that was loaded from a variable
             if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
-              const mimeType = getMimeTypeFromBase64(trimmedLine);
+              foundValidImage = true;
 
-              newParts.push({
+              // Add any accumulated text as a text part
+              if (currentTextBlock.length > 0) {
+                processedParts.push({
+                  text: currentTextBlock,
+                });
+                currentTextBlock = '';
+              }
+
+              // Add the image part
+              const mimeType = getMimeTypeFromBase64(trimmedLine);
+              processedParts.push({
                 inlineData: {
                   mimeType,
                   data: trimmedLine,
                 },
               });
-            } else if (trimmedLine.length > 0) {
-              // Regular text
-              newParts.push({
-                text: trimmedLine,
-              });
+            } else {
+              // Accumulate text, preserving original formatting including newlines
+              if (currentTextBlock.length > 0) {
+                currentTextBlock += '\n';
+              }
+              currentTextBlock += line;
             }
+          }
+
+          // Add any remaining text block
+          if (currentTextBlock.length > 0) {
+            processedParts.push({
+              text: currentTextBlock,
+            });
+          }
+
+          // If we found valid images, use the processed parts; otherwise, keep the original part
+          if (foundValidImage) {
+            newParts.push(...processedParts);
+          } else {
+            newParts.push(part);
           }
         } else {
           // Keep non-text parts as is
