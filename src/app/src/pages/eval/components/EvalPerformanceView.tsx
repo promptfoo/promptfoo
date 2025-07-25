@@ -2,15 +2,15 @@ import React from 'react';
 
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Box from '@mui/material/Box';
+import { green, orange, red } from '@mui/material/colors';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
-  type GridRenderCellParams,
-  GridToolbarColumnsButton,
+  GridColumnGroupingModel,
   GridToolbarContainer,
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
@@ -35,7 +35,6 @@ function CustomToolbar() {
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <GridToolbarColumnsButton />
         <GridToolbarFilterButton />
       </Box>
       <Box sx={{ flexGrow: 1 }} />
@@ -55,9 +54,53 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
   handleSwitchToResultsTab,
 }) => {
   const { table, filters, addFilter } = useTableStore();
+  const theme = useTheme();
 
   if (!table || !table.head || !table.head.prompts) {
     return null;
+  }
+
+  function getPercentageColors(percentage: number) {
+    let backgroundColor;
+    let color;
+
+    if (percentage >= 75) {
+      let shade = 700;
+      if (percentage >= 90) {
+        shade = 900;
+      } else if (percentage >= 80) {
+        shade = 800;
+      }
+      color = theme.palette.success.contrastText;
+      backgroundColor = alpha(green[shade as keyof typeof green], percentage / 100);
+    } else if (percentage >= 50) {
+      let shade = 700;
+      if (percentage >= 70) {
+        shade = 900;
+      } else if (percentage >= 60) {
+        shade = 800;
+      }
+      color = theme.palette.warning.contrastText;
+      backgroundColor = alpha(orange[shade as keyof typeof orange], percentage / 100);
+    } else {
+      let shade = 400;
+      if (percentage <= 10) {
+        shade = 900;
+      } else if (percentage <= 20) {
+        shade = 800;
+      } else if (percentage <= 30) {
+        shade = 600;
+      } else if (percentage <= 40) {
+        shade = 500;
+      }
+      color = theme.palette.error.contrastText;
+      backgroundColor = alpha(red[shade as keyof typeof red], 1 - percentage / 100);
+    }
+
+    return {
+      backgroundColor,
+      color,
+    };
   }
 
   /**
@@ -164,36 +207,85 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
     // Add a column for each prompt
     table.head.prompts.forEach((prompt, idx) => {
       const columnId = `prompt_${idx}`;
-      cols.push({
-        field: columnId,
-        headerName: prompt.provider,
-        flex: 1,
-        width: 100,
-        type: 'number',
-        renderHeader: (params) => <strong>{params.colDef.headerName}</strong>,
-        valueGetter: (value: MetricScore) => {
-          return value.hasScore ? value.score : 0;
-        },
-        renderCell: (params: GridRenderCellParams) => {
-          const { hasScore, score, count } = params.row[params.field] as MetricScore;
-          const percentage = hasScore ? (score / count) * 100 : 0;
-          //const color = getPercentageColor(percentage);
 
+      cols.push({
+        field: `${columnId}_pass_rate`,
+        headerName: 'Pass Rate',
+        flex: 1,
+        type: 'number',
+        valueGetter: (_, row) => {
+          const { hasScore, score, count } = row[columnId] as MetricScore;
+          return hasScore ? (score / count) * 100 : 0;
+        },
+        renderCell: (params) => {
+          const { backgroundColor, color } = getPercentageColors(params.value);
           return (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'end' }}>
-              {/* <span style={{ backgroundColor: color, width: 10, height: 10, borderRadius: 10 }} /> */}
-              <span>
-                {percentage.toFixed(2)}%{' '}
-                {hasScore ? `(${score.toFixed(2)}/${count.toFixed(2)})` : ''}
-              </span>
-            </span>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                height: '100%',
+              }}
+            >
+              <Box
+                component="span"
+                sx={{
+                  backgroundColor,
+                  color,
+                  borderRadius: '4px',
+                  width: '80px',
+                  height: '24px',
+                  display: 'inline-flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  fontWeight: 500,
+                  fontSize: '0.875rem',
+                  lineHeight: 1,
+                }}
+              >
+                {params.value.toFixed(2)}%
+              </Box>
+            </Box>
           );
+        },
+      });
+      cols.push({
+        field: `${columnId}_score`,
+        headerName: 'Pass Count',
+        flex: 0.5,
+        type: 'number',
+        valueGetter: (_, row) => {
+          const { hasScore, score } = row[columnId] as MetricScore;
+          return hasScore ? score : 0;
+        },
+      });
+      cols.push({
+        field: `${columnId}_count`,
+        headerName: 'Test Count',
+        flex: 0.5,
+        type: 'number',
+        valueGetter: (_, row) => {
+          const { count } = row[columnId] as MetricScore;
+          return count;
         },
       });
     });
 
     return cols;
   }, [table.head.prompts, promptMetricNames]);
+
+  const columnGroupingModel: GridColumnGroupingModel = React.useMemo(() => {
+    return table.head.prompts.map((prompt, idx) => ({
+      groupId: `prompt_${idx}`,
+      headerName: prompt.provider,
+      children: [
+        { field: `prompt_${idx}_pass_rate` },
+        { field: `prompt_${idx}_score` },
+        { field: `prompt_${idx}_count` },
+      ],
+    }));
+  }, [table.head.prompts]);
 
   // Create rows for DataGrid
   const rows: MetricRow[] = React.useMemo(() => {
@@ -225,10 +317,11 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
   }
 
   return (
-    <Paper sx={{ width: '100%', height: '100%' }}>
+    <Paper sx={{ width: '100%' }}>
       <DataGrid
         rows={rows}
         columns={columns}
+        columnGroupingModel={columnGroupingModel}
         density="compact"
         disableRowSelectionOnClick
         initialState={{
@@ -243,6 +336,7 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
           },
         }}
         slots={{ toolbar: CustomToolbar }}
+        hideFooter
       />
     </Paper>
   );
@@ -254,7 +348,7 @@ const EvalPerformanceView: React.FC<{
   renderMetricsTable: boolean;
 }> = ({ handleSwitchToResultsTab, renderResultsCharts, renderMetricsTable }) => {
   return (
-    <Box sx={{ height: 'calc(100vh - 300px)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {renderResultsCharts && (
         <Box>
           <ResultsCharts />
