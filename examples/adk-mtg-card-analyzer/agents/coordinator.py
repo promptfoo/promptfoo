@@ -9,6 +9,8 @@ from PIL import Image
 
 from .base import CardReport, CardCrop
 from .segmenter import SegmenterAgent
+from .advanced_segmenter import AdvancedSegmenterAgent
+from .genai_segmenter import GenAISegmenterAgent
 from .identifier import IdentifierAgent
 from .grader import QualityGraderAgent
 from .reporter import ReportGeneratorAgent
@@ -33,6 +35,7 @@ class CoordinatorAgent:
                  enable_caching: bool = True,
                  progress_callback: Optional[Callable[[PipelineProgress], None]] = None,
                  track_tokens: bool = True,
+                 segmentation_mode: str = "genai",  # "basic", "advanced", "genai"
                  **kwargs):
         
         # Reset token tracking for new session
@@ -40,7 +43,16 @@ class CoordinatorAgent:
             GeminiAgent.reset_global_token_tracking()
         
         # Initialize component agents
-        self.segmenter = SegmenterAgent(track_tokens=track_tokens)
+        if segmentation_mode == "genai":
+            self.segmenter = GenAISegmenterAgent(track_tokens=track_tokens)
+            print("Using GenAI multi-stage segmentation")
+        elif segmentation_mode == "advanced":
+            self.segmenter = AdvancedSegmenterAgent(track_tokens=track_tokens)
+            print("Using advanced segmentation with CV preprocessing")
+        else:
+            self.segmenter = SegmenterAgent(track_tokens=track_tokens)
+            print("Using basic segmentation")
+        
         self.identifier = IdentifierAgent(track_tokens=track_tokens)
         self.grader = QualityGraderAgent(track_tokens=track_tokens)
         self.reporter = ReportGeneratorAgent(track_tokens=track_tokens)

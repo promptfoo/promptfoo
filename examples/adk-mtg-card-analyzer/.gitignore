@@ -36,4 +36,4 @@ temp/
 Thumbs.db
 
 # Logs
-*.log
+*.logtest_output/

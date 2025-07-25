@@ -24,11 +24,12 @@ async def analyze_image(image_path: str, output_format: str = "json"):
     """Analyze a single image."""
     print(f"\n🎴 Analyzing image: {image_path}")
     
-    # Initialize coordinator
+    # Initialize coordinator with GenAI segmentation
     coordinator = CoordinatorAgent(
         max_parallel_cards=16,
         enable_caching=True,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
+        segmentation_mode="genai"  # Use state-of-the-art GenAI segmentation
     )
     
     # Run analysis
