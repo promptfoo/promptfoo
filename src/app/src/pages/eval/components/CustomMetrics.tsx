@@ -29,12 +29,6 @@ interface MetricValueProps {
 }
 
 const MetricValue: React.FC<MetricValueProps> = ({ metric, score, counts, metricTotals }) => {
-  console.log({
-    metric,
-    score,
-    counts,
-    metricTotals,
-  });
   if (metricTotals && metricTotals[metric]) {
     if (metricTotals[metric] === 0) {
       return <span data-testid={`metric-value-${metric}`}>0%</span>;
