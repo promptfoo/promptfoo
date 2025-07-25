@@ -611,8 +611,6 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('callApi error handling', () => {
-    let _mockProvider: any;
-
     beforeEach(() => {
       // Reset all mocks
       jest.clearAllMocks();
