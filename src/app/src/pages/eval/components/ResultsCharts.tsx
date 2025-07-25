@@ -105,7 +105,7 @@ function HistogramChart({ table }: ChartProps) {
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
-        label: `Column ${promptIdx + 1}`,
+        label: prompt.provider,
         data: counts,
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -131,7 +131,7 @@ function HistogramChart({ table }: ChartProps) {
             callbacks: {
               title(context) {
                 const datasetIndex = context[0].datasetIndex;
-                return `Column ${datasetIndex + 1}`;
+                return table.head.prompts[datasetIndex].provider;
               },
               label(context) {
                 const labelIndex = context.dataIndex;
