@@ -171,6 +171,9 @@ export class Telemetry {
 
     fetch(R_ENDPOINT, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         event: eventName,
         environment: process.env.NODE_ENV ?? 'development',
