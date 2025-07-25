@@ -1,5 +1,3 @@
-import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
@@ -9,6 +7,9 @@ import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
 import { VALID_SCHEMA_TYPES } from './types';
+import type { AnySchema } from 'ajv';
+import type { GoogleAuth } from 'google-auth-library';
+
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
@@ -293,8 +294,13 @@ export async function hasGoogleDefaultCredentials() {
 }
 
 export function getCandidate(data: GeminiResponseData) {
-  if (!(data && data.candidates && data.candidates.length === 1)) {
-    throw new Error('Expected one candidate in API response.');
+  if (!data || !data.candidates || data.candidates.length < 1) {
+    throw new Error('Expected at least one candidate in AI Studio API response.');
+  }
+  if (data.candidates.length > 1) {
+    logger.debug(
+      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}.`,
+    );
   }
   const candidate = data.candidates[0];
   return candidate;

@@ -2,8 +2,9 @@ import { runAssertions } from '../../src/assertions';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
-import type { ApiProvider, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
 import { TestGrader } from '../util/utils';
+
+import type { ApiProvider, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
@@ -67,7 +68,7 @@ jest.mock('../../src/matchers', () => {
   };
 });
 
-const Grader = new TestGrader();
+const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {

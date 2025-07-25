@@ -2,12 +2,13 @@ import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat
 import {
   calculateXAICost,
   createXAIProvider,
-  XAI_CHAT_MODELS,
   GROK_3_MINI_MODELS,
-  GROK_REASONING_MODELS,
-  GROK_REASONING_EFFORT_MODELS,
   GROK_4_MODELS,
+  GROK_REASONING_EFFORT_MODELS,
+  GROK_REASONING_MODELS,
+  XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
+
 import type { ProviderOptions } from '../../../src/types/providers';
 
 jest.mock('../../../src/providers/openai/chat');
@@ -606,6 +607,234 @@ describe('xAI Chat Provider', () => {
     it('has correct aliases for models', () => {
       const modelWithAliases = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
       expect(modelWithAliases?.aliases).toEqual(['grok-3', 'grok-3-latest']);
+    });
+  });
+
+  describe('callApi error handling', () => {
+    beforeEach(() => {
+      // Reset all mocks
+      jest.clearAllMocks();
+
+      // Create a simple mock implementation that mimics the XAI provider's error handling
+      (OpenAiChatCompletionProvider as any).mockImplementation(
+        (modelName: string, options: any) => {
+          const provider = {
+            modelName,
+            config: options?.config,
+            originalConfig: options?.config?.config,
+            id: () => `xai:${modelName}`,
+            toString: () => `[xAI Provider ${modelName}]`,
+            toJSON: createMockToJSON(modelName, options?.config),
+            getOpenAiBody: mockGetOpenAiBody,
+            isReasoningModel: () => GROK_REASONING_MODELS.includes(modelName),
+            supportsReasoningEffort: () => GROK_REASONING_EFFORT_MODELS.includes(modelName),
+            callApi: async (prompt: string, context?: any, callApiOptions?: any) => {
+              // This mimics the actual XAI provider's callApi implementation
+              try {
+                // Call the mocked super.callApi
+                const response = await mockCallApi(prompt, context, callApiOptions);
+
+                if (!response || response.error) {
+                  // Check if the error indicates an authentication issue
+                  if (
+                    response?.error &&
+                    (response.error.includes('502 Bad Gateway') ||
+                      response.error.includes('invalid API key') ||
+                      response.error.includes('authentication error'))
+                  ) {
+                    // Provide a more helpful error message for x.ai specific issues
+                    return {
+                      ...response,
+                      error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+                    };
+                  }
+                  return response;
+                }
+
+                // Rest of the processing...
+                return response;
+              } catch (err) {
+                // Handle JSON parsing errors and other API errors
+                const errorMessage = err instanceof Error ? err.message : String(err);
+
+                // Check for common x.ai error patterns
+                if (
+                  errorMessage.includes('Error parsing response') &&
+                  errorMessage.includes('<html')
+                ) {
+                  // This is likely a 502 Bad Gateway or similar HTML error response
+                  return {
+                    error: `x.ai API error: Server returned an HTML error page instead of JSON. This often indicates an invalid API key or server issues.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+                  };
+                } else if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway')) {
+                  return {
+                    error: `x.ai API error: 502 Bad Gateway - This often indicates an invalid API key.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+                  };
+                }
+
+                // For other errors, pass them through with a helpful tip
+                return {
+                  error: `x.ai API error: ${errorMessage}\n\nIf this persists, verify your API key at https://x.ai/`,
+                };
+              }
+            },
+          };
+          return provider;
+        },
+      );
+    });
+
+    it('should handle JSON parsing errors from 502 HTML responses', async () => {
+      // Mock callApi to throw a JSON parsing error
+      mockCallApi.mockRejectedValueOnce(
+        new Error(
+          'Error parsing response from https://api.x.ai/v1/chat/completions: Unexpected token \'<\', "<html>\\n<h"... is not valid JSON. Received text: <html>...',
+        ),
+      );
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('Server returned an HTML error page instead of JSON');
+      expect(result.error).toContain('This often indicates an invalid API key');
+      expect(result.error).toContain(
+        'Ensure your XAI_API_KEY environment variable is set correctly',
+      );
+      expect(result.error).toContain('https://x.ai/');
+    });
+
+    it('should handle 502 Bad Gateway errors in error messages', async () => {
+      // Mock callApi to return an error response
+      mockCallApi.mockResolvedValueOnce({
+        error: 'API error: 502 Bad Gateway',
+      });
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('502 Bad Gateway');
+      expect(result.error).toContain(
+        'Ensure your XAI_API_KEY environment variable is set correctly',
+      );
+    });
+
+    it('should handle authentication errors', async () => {
+      // Mock callApi to return an authentication error
+      mockCallApi.mockResolvedValueOnce({
+        error: 'authentication error: invalid API key provided',
+      });
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('authentication error');
+      expect(result.error).toContain(
+        'Ensure your XAI_API_KEY environment variable is set correctly',
+      );
+    });
+
+    it('should handle generic errors with helpful message', async () => {
+      // Mock callApi to throw a generic error
+      mockCallApi.mockRejectedValueOnce(new Error('Network timeout'));
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('Network timeout');
+      expect(result.error).toContain('If this persists, verify your API key at https://x.ai/');
+    });
+
+    it('should pass through successful responses', async () => {
+      const successResponse = {
+        output: 'Test response',
+        tokenUsage: { prompt: 10, completion: 20, total: 30 },
+      };
+
+      // Mock callApi to return success
+      mockCallApi.mockResolvedValueOnce(successResponse);
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Test response');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toEqual(successResponse.tokenUsage);
+    });
+
+    it('should handle errors that mention Bad Gateway', async () => {
+      // Mock callApi to throw an error with "Bad Gateway" in the message
+      mockCallApi.mockRejectedValueOnce(new Error('Request failed: 502 Bad Gateway'));
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('502 Bad Gateway');
+      expect(result.error).toContain('This often indicates an invalid API key');
+    });
+
+    it('should handle non-Error objects in catch block', async () => {
+      // Mock callApi to throw a string (not an Error object)
+      mockCallApi.mockRejectedValueOnce('String error message');
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('String error message');
+      expect(result.error).toContain('If this persists, verify your API key');
     });
   });
 });

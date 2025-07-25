@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
@@ -51,8 +51,6 @@ vi.mock('@app/utils/api', () => ({
 
 describe('ResultsCharts', () => {
   const defaultProps = {
-    columnVisibility: {},
-    recentEvals: [],
     handleHideCharts: vi.fn(),
   };
 
@@ -103,6 +101,176 @@ describe('ResultsCharts', () => {
     fireEvent.click(closeButton);
 
     expect(handleHideCharts).toHaveBeenCalled();
+  });
+
+  it('should render without errors with a large number of providers', () => {
+    const numProviders = 12;
+    const prompts = Array.from({ length: numProviders }, (_, i) => ({
+      provider: `provider-${i + 1}`,
+      metrics: { namedScores: {} },
+    }));
+    const mockTable = {
+      head: {
+        prompts: prompts,
+        vars: [],
+      },
+      body: [
+        {
+          outputs: prompts.map((_, i) => ({
+            score: 0.5 + i * 0.04,
+            pass: true,
+            text: 'valid output',
+          })),
+          vars: [],
+        },
+        {
+          outputs: prompts.map((_, i) => ({
+            score: 0.6 + i * 0.03,
+            pass: true,
+            text: 'valid output',
+          })),
+          vars: [],
+        },
+      ],
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    const { container } = render(<ResultsCharts {...defaultProps} />);
+
+    expect(() => render(<ResultsCharts {...defaultProps} />)).not.toThrow();
+
+    const canvasElements = container.querySelectorAll('canvas');
+    expect(canvasElements.length).toBeGreaterThan(0);
+  });
+
+  it('should render without errors in a constrained space', () => {
+    const mockTable = {
+      head: {
+        prompts: [
+          { provider: 'test-provider-1', metrics: { namedScores: {} } },
+          { provider: 'test-provider-2', metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: [
+        {
+          outputs: [
+            { score: 0.8, pass: true, text: 'valid output' },
+            { score: 0.9, pass: true, text: 'valid output' },
+          ],
+          vars: [],
+        },
+        {
+          outputs: [
+            { score: 0.6, pass: true, text: 'another valid' },
+            { score: 0.7, pass: true, text: 'another valid' },
+          ],
+          vars: [],
+        },
+      ],
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    const { container } = render(<ResultsCharts {...defaultProps} />);
+
+    expect(container.firstChild).toBeInTheDocument();
+  });
+
+  it('should handle extremely long provider IDs in histogram chart labels and tooltips', () => {
+    const longProviderId =
+      'this-is-an-extremely-long-provider-id-that-should-not-cause-overflow-or-layout-issues';
+    const mockTable = {
+      head: {
+        prompts: [
+          { provider: longProviderId, metrics: { namedScores: {} } },
+          { provider: 'test-provider-2', metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: [
+        {
+          outputs: [
+            { score: 0.8, pass: true, text: 'valid output' },
+            { score: 0.9, pass: true, text: 'valid output' },
+          ],
+          vars: [],
+        },
+        {
+          outputs: [
+            { score: 0.6, pass: true, text: 'another valid' },
+            { score: 0.7, pass: true, text: 'another valid' },
+          ],
+          vars: [],
+        },
+      ],
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    expect(() => {
+      render(<ResultsCharts {...defaultProps} />);
+    }).not.toThrow();
+  });
+
+  it('handles table data where some prompts are missing the provider property', () => {
+    const mockTable = {
+      head: {
+        prompts: [
+          { provider: 'test-provider-1', metrics: { namedScores: {} } },
+          { metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: [
+        {
+          outputs: [
+            { score: 0.8, pass: true, text: 'valid output' },
+            { score: 0.9, pass: true, text: 'valid output' },
+          ],
+          vars: [],
+        },
+        {
+          outputs: [
+            { score: 0.6, pass: true, text: 'another valid' },
+            { score: 0.7, pass: true, text: 'another valid' },
+          ],
+          vars: [],
+        },
+      ],
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    const { container } = render(<ResultsCharts {...defaultProps} />);
+
+    const canvasElements = container.querySelectorAll('canvas');
+    expect(canvasElements.length).toBeGreaterThan(0);
   });
 
   describe('Null Safety and Data Validation', () => {
@@ -333,7 +501,7 @@ describe('ResultsCharts', () => {
         fetchEvalData: vi.fn(),
       });
 
-      const { container } = render(<ResultsCharts {...defaultProps} recentEvals={[]} />);
+      const { container } = render(<ResultsCharts {...defaultProps} />);
 
       expect(container).toBeDefined();
 

@@ -1,6 +1,8 @@
 /// <reference types="vitest" />
-import react from '@vitejs/plugin-react';
+
 import path from 'path';
+
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
@@ -85,7 +87,5 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
     ),
-    'import.meta.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING':
-      process.env.FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING === 'true',
   },
 });

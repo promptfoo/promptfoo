@@ -1,6 +1,7 @@
 import { matchesSimilarity } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export const handleSimilar = async ({
   assertion,

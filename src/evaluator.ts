@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import type winston from 'winston';
+
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -341,6 +342,26 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
+        // Add session information to metadata
+        ...(() => {
+          // If sessionIds array exists from iterative providers, use it
+          if (test.metadata?.sessionIds) {
+            return { sessionIds: test.metadata.sessionIds };
+          }
+
+          // Otherwise, use single sessionId (prioritize response over vars)
+          if (response.sessionId) {
+            return { sessionId: response.sessionId };
+          }
+
+          // Check if vars.sessionId is a valid string
+          const varsSessionId = vars.sessionId;
+          if (typeof varsSessionId === 'string' && varsSessionId.trim() !== '') {
+            return { sessionId: varsSessionId };
+          }
+
+          return {};
+        })(),
       },
       promptIdx,
       testIdx,

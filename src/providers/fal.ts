@@ -1,10 +1,11 @@
-import type { Cache } from 'cache-manager';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { ellipsize } from '../util/text';
+import type { Cache } from 'cache-manager';
+
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { ellipsize } from '../util/text';
 
 type FalProviderOptions = {
   apiKey?: string;

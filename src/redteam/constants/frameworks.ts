@@ -1,5 +1,6 @@
-import type { Plugin } from './plugins';
 import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
+
+import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const FRAMEWORK_NAMES: Record<string, string> = {

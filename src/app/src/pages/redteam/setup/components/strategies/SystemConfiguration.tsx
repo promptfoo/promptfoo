@@ -1,4 +1,3 @@
-import React from 'react';
 import Alert from '@mui/material/Alert';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';

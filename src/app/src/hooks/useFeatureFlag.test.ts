@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { useFeatureFlag } from './useFeatureFlag';
 
 describe('useFeatureFlag', () => {
   it('documentation: Vite boolean stringification fix', () => {
@@ -33,4 +34,7 @@ describe('useFeatureFlag', () => {
     // - If the flag is undefined, it returns false (via ??)
     // - If the flag is true/false (actual boolean from Vite), it returns that value
   });
+
+  // No active feature flags to test currently
+  // Tests can be added when feature flags are reintroduced
 });

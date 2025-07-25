@@ -1,8 +1,9 @@
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import * as fs from 'fs';
+import * as path from 'path';
+
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';

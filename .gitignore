@@ -34,4 +34,8 @@ examples/huggingface-dataset-factuality/.cache
 examples/redteam-dalle/images
 examples/redteam-medical-agent/redteam.yaml
 
+# Evaluation results
+examples/grok-4-political-bias/results.json
+examples/grok-4-political-bias/results-multi-judge.json
+
 **/.claude/settings.local.json

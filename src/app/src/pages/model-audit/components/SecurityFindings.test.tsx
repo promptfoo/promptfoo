@@ -1,8 +1,8 @@
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import SecurityFindings from './SecurityFindings';
+
 import type { ScanResult } from '../ModelAudit.types';
 
 describe('SecurityFindings', () => {

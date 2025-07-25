@@ -8,9 +8,11 @@
  *
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
-import type { AssertionParams, GradingResult } from '../types';
+
 import invariant from '../util/invariant';
 import { getNGrams } from './ngrams';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 /**
  * Calculates the brevity penalty for BLEU score.

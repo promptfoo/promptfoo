@@ -1,6 +1,8 @@
 import path from 'path';
-import type { UnifiedConfig } from '../../types';
+
 import { maybeReadConfig } from './load';
+
+import type { UnifiedConfig } from '../../types';
 
 /**
  * Cache to store loaded configurations for different directories.

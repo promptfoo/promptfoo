@@ -12,7 +12,6 @@ interface ImportMetaEnv {
   readonly VITE_PROMPTFOO_LAUNCHER?: string;
   readonly VITE_IS_HOSTED?: string;
   readonly VITE_PROMPTFOO_NO_CHAT?: string;
-  readonly FEATURE_ENABLED__EVAL_RESULTS_MULTI_FILTERING?: boolean;
 }
 
 interface ImportMeta {

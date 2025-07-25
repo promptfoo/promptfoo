@@ -1,9 +1,10 @@
 import fs from 'fs';
+
 import {
-  fetchWithCache,
+  clearCache,
   disableCache,
   enableCache,
-  clearCache,
+  fetchWithCache,
   isCacheEnabled,
 } from '../src/cache';
 
