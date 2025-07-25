@@ -331,7 +331,7 @@ describe('ResultsCharts', () => {
         fetchEvalData: vi.fn(),
       });
 
-      const { container } = render(<ResultsCharts {...defaultProps} recentEvals={[]} />);
+      const { container } = render(<ResultsCharts {...defaultProps} />);
 
       expect(container).toBeDefined();
 
