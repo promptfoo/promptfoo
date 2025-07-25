@@ -28,13 +28,10 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-import type { VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
-  columnVisibility: VisibilityState;
-  recentEvals: ResultLightweightWithLabel[];
   handleHideCharts: () => void;
 }
 
@@ -108,7 +105,7 @@ function HistogramChart({ table }: ChartProps) {
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
-        label: `Column ${promptIdx + 1}`,
+        label: prompt.provider,
         data: counts,
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -134,7 +131,7 @@ function HistogramChart({ table }: ChartProps) {
             callbacks: {
               title(context) {
                 const datasetIndex = context[0].datasetIndex;
-                return `Column ${datasetIndex + 1}`;
+                return table.head.prompts[datasetIndex].provider;
               },
               label(context) {
                 const labelIndex = context.dataIndex;
@@ -145,6 +142,20 @@ function HistogramChart({ table }: ChartProps) {
                 }
                 return `${lowerBound} <= score < ${upperBound}`;
               },
+            },
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Frequency',
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Score',
             },
           },
         },
@@ -624,7 +635,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [
