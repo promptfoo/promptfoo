@@ -60,6 +60,13 @@ const MetricsTable: React.FC<{ handleSwitchToResultsTab: () => void }> = ({
     return null;
   }
 
+  /**
+   * Given the pass rate percentages, calculates the color and text color for the cell.
+   * Uses a diverging RdYlGn scale.
+   * @param percentage - The pass rate percentage.
+   * @returns The background color and text color for the cell.
+   * @see https://observablehq.com/@d3/color-schemes#diverging
+   */
   function getPercentageColors(percentage: number) {
     let backgroundColor;
     let color;
