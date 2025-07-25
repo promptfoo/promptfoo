@@ -1,3 +1,4 @@
+import React from 'react';
 import Link from '@docusaurus/Link';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
 import styles from './BlogPostCard.module.css';
@@ -8,7 +9,7 @@ interface BlogPostCardProps {
 
 export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
   const { metadata } = post;
-  const { title, date, permalink, description } = metadata;
+  const { title, date, permalink, tags, description } = metadata;
   const author = metadata.authors[0];
 
   return (
