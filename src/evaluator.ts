@@ -1,10 +1,12 @@
-import { randomUUID } from 'crypto';
-import * as path from 'path';
-
 import async from 'async';
 import chalk from 'chalk';
+import type { MultiBar, SingleBar } from 'cli-progress';
 import cliProgress from 'cli-progress';
+import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
+import * as path from 'path';
+import type winston from 'winston';
+
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -13,6 +15,7 @@ import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
+import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -25,6 +28,7 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
+import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
   type AssertionType,
@@ -46,12 +50,7 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from './util/transform';
-import type { MultiBar, SingleBar } from 'cli-progress';
-import type winston from 'winston';
-
-import type Eval from './models/eval';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
+import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -343,9 +342,13 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
-        // Ensure sessionId is available in metadata from either response or current vars
-        ...(response.sessionId && { sessionId: response.sessionId }),
-        ...(vars.sessionId && !response.sessionId && { sessionId: vars.sessionId as string }),
+        // If sessionIds exists, use that. Otherwise try to get a single sessionId from response or vars
+        ...(test.metadata?.sessionIds
+          ? { sessionIds: test.metadata.sessionIds }
+          : {
+              ...(response.sessionId && { sessionId: response.sessionId }),
+              ...(vars.sessionId && !response.sessionId && { sessionId: vars.sessionId as string }),
+            }),
       },
       promptIdx,
       testIdx,

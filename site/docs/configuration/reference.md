@@ -150,6 +150,37 @@ async function extensionHook(hookName, context) {
 }
 ```
 
+For single shot optimizations, e.g jailbreak, jailbreak tree, the `sessionIds` is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionIds;
+```
+
+This is an array containing all session IDs from the iterative exploration process. Each iteration may have its own session ID, allowing you to track the full conversation history across multiple attempts.
+
+Example usage for iterative providers:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    // For regular providers - single session ID
+    const sessionId = context.result.metadata.sessionId;
+
+    // For iterative providers (jailbreak, tree search) - array of session IDs
+    const sessionIds = context.result.metadata.sessionIds;
+    if (sessionIds && Array.isArray(sessionIds)) {
+      console.log(`Jailbreak completed with ${sessionIds.length} iterations`);
+      sessionIds.forEach((id, index) => {
+        console.log(`  Iteration ${index + 1}: session ${id}`);
+      });
+      // You can use these sessionIds for detailed tracking of the attack path
+    }
+  }
+}
+```
+
+Note: The `sessionIds` array only contains defined session IDs - any iterations without a session ID are filtered out.
+
 ### Implementing Hooks
 
 To implement these hooks, create a JavaScript or Python file with a function that handles the hooks you want to use. Then, specify the path to this file and the function name in the `extensions` array in your configuration.

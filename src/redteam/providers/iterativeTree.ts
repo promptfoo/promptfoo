@@ -428,6 +428,7 @@ export interface TreeSearchOutput {
   wasSelected: boolean;
   graderPassed?: boolean;
   guardrails?: GuardrailResponse;
+  sessionId?: string; // Session ID for this specific attempt
 }
 
 /**
@@ -440,6 +441,7 @@ interface TreeIterativeMetadata extends BaseRedteamMetadata {
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
+  sessionIds: string[]; // All session IDs from the tree exploration
 }
 
 /**
@@ -734,6 +736,7 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId: targetResponse.sessionId || (iterationContext?.vars?.sessionId as string),
           });
           return {
             output: targetResponse.output,
@@ -745,6 +748,9 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: treeOutputs
+                .map((t) => t.sessionId)
+                .filter((id): id is string => id !== undefined),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -766,6 +772,7 @@ async function runRedteamConversation({
             parentId: node.id,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId: targetResponse.sessionId || (iterationContext?.vars?.sessionId as string),
           });
           return {
             output: bestResponse,
@@ -777,6 +784,9 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: treeOutputs
+                .map((t) => t.sessionId)
+                .filter((id): id is string => id !== undefined),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -799,6 +809,7 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId: targetResponse.sessionId || (iterationContext?.vars?.sessionId as string),
           });
           return {
             output: bestResponse,
@@ -810,6 +821,9 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: treeOutputs
+                .map((t) => t.sessionId)
+                .filter((id): id is string => id !== undefined),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -840,6 +854,7 @@ async function runRedteamConversation({
           score,
           wasSelected: true,
           guardrails: targetResponse.guardrails,
+          sessionId: targetResponse.sessionId || (iterationContext?.vars?.sessionId as string),
         });
       }
     }
@@ -894,6 +909,7 @@ async function runRedteamConversation({
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse.guardrails,
+    sessionId: finalTargetResponse.sessionId,
   });
   return {
     output: bestResponse,
@@ -905,6 +921,9 @@ async function runRedteamConversation({
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
       storedGraderResult,
+      sessionIds: treeOutputs
+        .map((t) => t.sessionId)
+        .filter((id): id is string => id !== undefined),
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,
