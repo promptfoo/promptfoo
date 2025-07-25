@@ -32,6 +32,17 @@ Our measurements show that:
 - Grok is the **most contrarian** and the most likely to adopt **maximalist positions** - it tends to disagree when other AIs agree
 - **All popular AIs are left of center** with Claude Opus 4 and Grok being closest to neutral.
 
+<div style={{textAlign: 'center', margin: '2rem 0'}}>
+  <img 
+    src="/img/blog/grok-4-political-bias/charts/political-bias-likert-scale.png" 
+    alt="Political bias comparison across AI models on a 7-point Likert scale"
+    style={{maxWidth: '100%', height: 'auto', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}}
+  />
+  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
+    Political bias comparison across AI models measured on a 7-point Likert scale
+  </p>
+</div>
+
 Our methodology, [published open-source](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/), involves measuring direct bias through responses across a 7-point likert scale, as well as indirect political bias by having each model score other models' responses.
 
 <!-- truncate -->
