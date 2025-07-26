@@ -1,18 +1,20 @@
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import {
-  type ApiProvider,
-  type AtomicTestCase,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
   GradingResult,
-  type GuardrailResponse,
-  type NunjucksFilterMap,
-  type Prompt,
-  type RedteamFileConfig,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
@@ -25,9 +27,13 @@ import {
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
-import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
-
-import type { TargetResponse } from './shared';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -62,14 +68,7 @@ interface IterativeMetadata {
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[];
-}
-
-interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  numRequests: number;
-  cached: number;
+  sessionIds: string[]; // All session IDs from iterations
 }
 
 export async function runRedteamConversation({
@@ -104,6 +103,11 @@ export async function runRedteamConversation({
   tokenUsage: TokenUsage;
 }> {
   const nunjucks = getNunjucksEngine();
+
+  // Store the original vars and transformVars config
+  const originalVars = { ...vars };
+  const transformVarsConfig = test?.options?.transformVars;
+
   const goal = context?.test?.metadata?.goal || vars[injectVar];
 
   // Generate goal-specific evaluation rubric
@@ -136,6 +140,8 @@ export async function runRedteamConversation({
   let stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached' =
     'Max iterations reached';
 
+  const sessionIds: string[] = [];
+
   const totalTokenUsage = {
     total: 0,
     prompt: 0,
@@ -155,6 +161,16 @@ export async function runRedteamConversation({
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
+
+    // Use the shared utility function to create iteration context
+    const { iterationVars, iterationContext } = await createIterationContext({
+      originalVars,
+      transformVarsConfig,
+      context,
+      iterationNumber: i + 1,
+      loggerTag: '[Iterative]',
+    });
+
     let shouldExitEarly = false;
 
     const redteamBody = JSON.stringify(redteamHistory);
@@ -212,7 +228,7 @@ export async function runRedteamConversation({
     targetPrompt = await renderPrompt(
       prompt,
       {
-        ...vars,
+        ...iterationVars,
         [injectVar]: newInjectVar,
       },
       filters,
@@ -272,7 +288,7 @@ export async function runRedteamConversation({
     const targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
-      context,
+      iterationContext,
       options,
     );
     logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
@@ -289,6 +305,15 @@ export async function runRedteamConversation({
       continue;
     }
 
+    const responseSessionId = targetResponse.sessionId;
+    const varsSessionId = iterationContext?.vars?.sessionId;
+    const sessionId =
+      responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
+
+    if (sessionId) {
+      sessionIds.push(sessionId);
+    }
+
     let assertToUse = test?.assert?.find(
       (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
     );
@@ -303,10 +328,15 @@ export async function runRedteamConversation({
     if (test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
       if (grader) {
+        // Create test object with iteration-specific vars
+        const iterationTest = {
+          ...test,
+          vars: iterationVars,
+        };
         const { grade } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
-          test,
+          iterationTest,
           gradingProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
@@ -518,6 +548,7 @@ export async function runRedteamConversation({
       redteamFinalPrompt: bestInjectVar,
       storedGraderResult,
       stopReason: stopReason,
+      sessionIds,
     },
     tokenUsage: totalTokenUsage,
   };

@@ -69,7 +69,7 @@ async function fetchRemoteTestCases(
   purpose: string,
   injectVar: string,
   n: number,
-  config?: PluginConfig,
+  config: PluginConfig,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -123,7 +123,7 @@ function createPluginFactory<T extends PluginConfig>(
         logger.debug(`Using local redteam generation for ${key}`);
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
-      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -219,7 +219,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.purpose,
         params.injectVar,
         params.n,
-        params.config,
+        params.config ?? {},
       );
       return testCases.map((testCase) => ({
         ...testCase,
@@ -253,6 +253,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.purpose,
       params.injectVar,
       params.n,
+      params.config ?? {},
     );
     return testCases.map((testCase) => ({
       ...testCase,
@@ -275,7 +276,13 @@ function createRemotePlugin<T extends PluginConfig>(
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
-      const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases: TestCase[] = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        config ?? {},
+      );
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
         metadata: {

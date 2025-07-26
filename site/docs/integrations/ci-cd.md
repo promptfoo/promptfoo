@@ -1,120 +1,543 @@
 ---
 sidebar_label: CI/CD
+title: CI/CD Integration for LLM Eval and Security
+description: Integrate promptfoo into CI/CD pipelines for automated prompt eval, security scanning, and quality assurance
+keywords:
+  [
+    ci/cd,
+    continuous integration,
+    llm testing,
+    automated evaluation,
+    security scanning,
+    github actions,
+  ]
 ---
 
-# Setting up CI/CD for LLM evaluation
+# CI/CD Integration for LLM Evaluation and Security
 
-When scaling an LLM app, it's essential to be able to measure the impact of any prompt or model change. This guide shows how to use integrate promptfoo with CI/CD workflows to automatically evaluate test cases and ensure quality.
+Integrate promptfoo into your CI/CD pipelines to automatically evaluate prompts, test for security vulnerabilities, and ensure quality before deployment. This guide covers modern CI/CD workflows for both quality testing and security scanning.
 
-This approach works for any CI system. If you're using Github, you can skip directly to the [Github Actions tutorial](/docs/integrations/github-action) or view the action on the [Github Marketplace](https://github.com/marketplace/actions/test-llm-outputs).
+## Why CI/CD for LLM Apps?
 
-![automatic LLM eval on CI](/img/docs/github-action-comment.png)
+- **Catch regressions early** - Test prompt changes before they reach production
+- **Security scanning** - Automated red teaming and vulnerability detection
+- **Quality gates** - Enforce minimum performance thresholds
+- **Compliance** - Generate reports for OWASP, NIST, and other frameworks
+- **Cost control** - Track token usage and API costs over time
 
-### Prerequisites
+## Quick Start
 
-- A CI/CD platform that supports custom scripts or actions (e.g., GitHub Actions, GitLab CI, Jenkins).
-- The promptfoo CLI installed in your CI/CD environment.
-- Your LLM provider's API keys, if required.
+If you're using GitHub Actions, check out our [dedicated GitHub Actions guide](/docs/integrations/github-action) or the [GitHub Marketplace action](https://github.com/marketplace/actions/test-llm-outputs).
 
-### Steps to Integrate promptfoo in CI/CD
+For other platforms, here's a basic example:
 
-1. **Monitor Changes**: Configure your CI/CD pipeline to trigger on changes to prompt files. This can be done by setting path filters for pull requests or merge requests.
+```bash
+# Run eval (no global install required)
+npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 
-2. **Install promptfoo**: Ensure that the `promptfoo`` CLI is installed in the CI/CD environment. You can install it using package managers like npm:
-
-   ```sh
-   npm install -g promptfoo
-   ```
-
-   See [Getting Started](/docs/getting-started) for more info.
-
-3. **Set API Keys**: Set the necessary API keys as environment variables in your CI/CD configuration. This may include keys for OpenAI, Azure, or other LLM providers.
-
-4. **Run Evaluation**: Create a step in your pipeline to execute the promptfoo evaluation. Use the `promptfoo eval` command, specifying the configuration file and the prompts to evaluate.
-
-   ```sh
-   promptfoo eval -c path/to/config.yaml --prompts path/to/prompts/**/*.json --share -o output.json
-   ```
-
-   If do not want to automatically create a web-accessible eval view, remove the `--share` option.
-
-5. **Handle Results**: After running the evaluation, you can parse the results and take actions such as commenting on pull requests, failing the build if there are issues, or posting the results to a dashboard.
-
-The schema of the `output.json` file is defined [here](https://github.com/promptfoo/promptfoo/blob/da4fe137bcfd38ba7f6ac64a523537ebfbfe6ac1/src/types.ts#L498), and follows this format:
-
-```typescript
-interface OutputFile {
-  evalId?: string;
-  results: EvaluateSummary;
-  config: Partial<UnifiedConfig>;
-  shareableUrl: string | null;
-}
+# Run security scan (red teaming)
+npx promptfoo@latest redteam run
 ```
 
-See definitions of [EvaluateSummary](https://promptfoo.dev/docs/configuration/reference/#evaluatesummary) and [UnifiedConfig](https://promptfoo.dev/docs/configuration/reference/#unifiedconfig).
+## Prerequisites
 
-Here's an example of how you can use the output:
+- Node.js 18+ installed in your CI environment
+- LLM provider API keys (stored as secure environment variables)
+- A promptfoo configuration file (`promptfooconfig.yaml`)
+- (Optional) Docker for containerized environments
 
-```typescript
-// Parse the output file to get the evaluation results
-const output: OutputFile = JSON.parse(fs.readFileSync('output.json', 'utf8'));
+## Core Concepts
 
-// Log the number of successful and failed evaluations
-console.log(`Successes: ${output.results.stats.successes}`);
-console.log(`Failures: ${output.results.stats.failures}`);
-console.log(`View eval results: ${output.shareableUrl}`);
+### 1. Eval vs Red Teaming
+
+Promptfoo supports two main CI/CD workflows:
+
+**Eval** - Test prompt quality and performance:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.yaml
 ```
 
-For a real-world example, see the [Github Action source code](https://github.com/promptfoo/promptfoo-action/blob/2d7ef1972c406db5770779312962f615ed383d09/src/main.ts#L126-L143).
+**Red Teaming** - Security vulnerability scanning:
 
-6. **Cache Results**: To improve efficiency and reduce API calls, you can enable caching in your CI/CD pipeline. This will reuse results from previous LLM requests and outputs for subsequent evaluations.
+```bash
+npx promptfoo@latest redteam run
+```
 
-   Configure caching by setting the `PROMPTFOO_CACHE_PATH` environment variable to a persistent directory in your CI environment. You can also control cache behavior using other environment variables such as `PROMPTFOO_CACHE_TYPE`, `PROMPTFOO_CACHE_MAX_FILE_COUNT`, and `PROMPTFOO_CACHE_TTL`. For more details on caching configuration, refer to the [caching documentation](/docs/configuration/caching).
+See our [red team quickstart](/docs/red-team/quickstart) for security testing details.
 
-   Here's an example of how to set up caching in a GitHub Actions workflow:
+### 2. Output Formats
 
-   ```yml
-   jobs:
-     evaluate:
-       runs-on: ubuntu-latest
-       steps:
-         - name: Set up caching for promptfoo
-           uses: actions/cache@v2
-           with:
-             path: ~/.promptfoo/cache
-             key: ${{ runner.os }}-promptfoo-${{ hashFiles('**/prompts/**') }}
-             restore-keys: |
-               ${{ runner.os }}-promptfoo-
-   ```
+Promptfoo supports multiple output formats for different CI/CD needs:
 
-   Ensure that the `PROMPTFOO_CACHE_PATH` environment variable in your `promptfoo eval` command matches the path specified in the cache action.
+```bash
+# JSON for programmatic processing
+npx promptfoo@latest eval -o results.json
 
-### Example: GitHub Actions Integration
+# HTML for human-readable reports
+npx promptfoo@latest eval -o report.html
 
-Here's a simplified example of how you might set up a GitHub Actions workflow to evaluate prompts on every pull request:
+# XML for enterprise tools
+npx promptfoo@latest eval -o results.xml
 
-```yml
-name: 'LLM Prompt Evaluation'
+# Multiple formats
+npx promptfoo@latest eval -o results.json -o report.html
+```
 
+Learn more about [output formats and processing](/docs/configuration/outputs).
+
+:::info Enterprise Feature
+
+SonarQube integration is available in [Promptfoo Enterprise](/docs/enterprise/). Use the standard JSON output format and process it for SonarQube import.
+
+:::
+
+### 3. Quality Gates
+
+Fail the build when quality thresholds aren't met:
+
+```bash
+# Fail on any test failures
+npx promptfoo@latest eval --fail-on-error
+
+# Custom threshold checking
+npx promptfoo@latest eval -o results.json
+PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+if (( $(echo "$PASS_RATE < 95" | bc -l) )); then
+  echo "Quality gate failed: Pass rate ${PASS_RATE}% < 95%"
+  exit 1
+fi
+```
+
+See [assertions and metrics](/docs/configuration/expected-outputs) for comprehensive validation options.
+
+## Platform-Specific Guides
+
+### GitHub Actions
+
+```yaml title=".github/workflows/eval.yml"
+name: LLM Eval
 on:
   pull_request:
     paths:
-      - 'path/to/prompts/**'
+      - 'prompts/**'
+      - 'promptfooconfig.yaml'
 
 jobs:
   evaluate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Set up promptfoo
-        run: npm install -g promptfoo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
 
-      - name: Run promptfoo evaluation
-        run: promptfoo eval -c path/to/config.yaml --prompts path/to/prompts/**/*.json -o output.json
+      - name: Cache promptfoo
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/promptfoo
+          key: ${{ runner.os }}-promptfoo-${{ hashFiles('prompts/**') }}
+          restore-keys: |
+            ${{ runner.os }}-promptfoo-
+
+      - name: Run eval
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PROMPTFOO_CACHE_PATH: ~/.cache/promptfoo
+        run: |
+          npx promptfoo@latest eval \
+            -c promptfooconfig.yaml \
+            --share \
+            -o results.json \
+            -o report.html
+
+      - name: Check quality gate
+        run: |
+          FAILURES=$(jq '.results.stats.failures' results.json)
+          if [ "$FAILURES" -gt 0 ]; then
+            echo "❌ Eval failed with $FAILURES failures"
+            exit 1
+          fi
+          echo "✅ All tests passed!"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            results.json
+            report.html
 ```
 
-If you're using Github, there's a full solution in the [Github Actions tutorial](/docs/integrations/github-action), and you can also view the action on the [Github Marketplace](https://github.com/marketplace/actions/test-llm-outputs).
+For red teaming in CI/CD:
+
+```yaml title=".github/workflows/redteam.yml"
+name: Security Scan
+on:
+  schedule:
+    - cron: '0 0 * * *' # Daily
+  workflow_dispatch:
+
+jobs:
+  red-team:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run red team scan
+        uses: promptfoo/promptfoo-action@v1
+        with:
+          type: 'redteam'
+          config: 'promptfooconfig.yaml'
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+See also: [Standalone GitHub Action example](https://github.com/promptfoo/promptfoo/tree/main/examples/github-action).
+
+### GitLab CI
+
+See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
+
+```yaml title=".gitlab-ci.yml"
+image: node:20
+
+evaluate:
+  script:
+    - |
+      npx promptfoo@latest eval \
+        -c promptfooconfig.yaml \
+        --share \
+        -o output.json
+  variables:
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+    PROMPTFOO_CACHE_PATH: .cache/promptfoo
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-promptfoo
+    paths:
+      - .cache/promptfoo
+  artifacts:
+    reports:
+      junit: output.xml
+    paths:
+      - output.json
+      - report.html
+```
+
+### Jenkins
+
+See our [detailed Jenkins guide](/docs/integrations/jenkins).
+
+```groovy title="Jenkinsfile"
+pipeline {
+    agent any
+
+    environment {
+        OPENAI_API_KEY = credentials('openai-api-key')
+        PROMPTFOO_CACHE_PATH = "${WORKSPACE}/.cache/promptfoo"
+    }
+
+    stages {
+        stage('Evaluate') {
+            steps {
+                sh '''
+                    npx promptfoo@latest eval \
+                        -c promptfooconfig.yaml \
+                        --share \
+                        -o results.json
+                '''
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                script {
+                    def results = readJSON file: 'results.json'
+                    def failures = results.results.stats.failures
+                    if (failures > 0) {
+                        error("Eval failed with ${failures} failures")
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+### Other Platforms
+
+- [Azure Pipelines](/docs/integrations/azure-pipelines)
+- [CircleCI](/docs/integrations/circle-ci)
+- [Bitbucket Pipelines](/docs/integrations/bitbucket-pipelines)
+- [Travis CI](/docs/integrations/travis-ci)
+- [n8n workflows](/docs/integrations/n8n)
+- [Looper](/docs/integrations/looper)
+
+## Advanced Patterns
+
+### 1. Docker-based CI/CD
+
+Create a custom Docker image with promptfoo pre-installed:
+
+```dockerfile title="Dockerfile"
+FROM node:20-slim
+WORKDIR /app
+COPY . .
+CMD ["npx", "promptfoo@latest", "eval"]
+```
+
+### 2. Parallel Testing
+
+Test multiple models or configurations in parallel:
+
+```yaml
+# GitHub Actions example
+strategy:
+  matrix:
+    model: [gpt-4, gpt-3.5-turbo, claude-3-opus]
+steps:
+  - name: Test ${{ matrix.model }}
+    run: |
+      npx promptfoo@latest eval \
+        --providers.0.config.model=${{ matrix.model }} \
+        -o results-${{ matrix.model }}.json
+```
+
+### 3. Scheduled Security Scans
+
+Run comprehensive security scans on a schedule:
+
+```yaml
+# GitHub Actions
+on:
+  schedule:
+    - cron: '0 2 * * *' # 2 AM daily
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Full red team scan
+        run: |
+          npx promptfoo@latest redteam generate \
+            --plugins harmful,pii,contracts \
+            --strategies jailbreak,prompt-injection
+          npx promptfoo@latest redteam run
+```
+
+### 4. SonarQube Integration
+
+:::info Enterprise Feature
+
+Direct SonarQube output format is available in [Promptfoo Enterprise](/docs/enterprise/). For open-source users, export to JSON and transform the results.
+
+:::
+
+For enterprise environments, integrate with SonarQube:
+
+```yaml
+# Export results for SonarQube processing
+- name: Run promptfoo security scan
+  run: |
+    npx promptfoo@latest eval \
+      --config promptfooconfig.yaml \
+      -o results.json
+
+# Transform results for SonarQube (custom script required)
+- name: Transform for SonarQube
+  run: |
+    node transform-to-sonarqube.js results.json > sonar-report.json
+
+- name: SonarQube scan
+  env:
+    SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  run: |
+    sonar-scanner \
+      -Dsonar.externalIssuesReportPaths=sonar-report.json
+```
+
+See our [SonarQube integration guide](/docs/integrations/sonarqube) for detailed setup.
+
+## Processing Results
+
+### Parsing JSON Output
+
+The output JSON follows this schema:
+
+```typescript
+interface OutputFile {
+  evalId?: string;
+  results: {
+    stats: {
+      successes: number;
+      failures: number;
+      errors: number;
+    };
+    outputs: Array<{
+      pass: boolean;
+      score: number;
+      error?: string;
+      // ... other fields
+    }>;
+  };
+  config: UnifiedConfig;
+  shareableUrl: string | null;
+}
+```
+
+Example processing script:
+
+```javascript title="process-results.js"
+const fs = require('fs');
+const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+
+// Calculate metrics
+const passRate =
+  (results.results.stats.successes /
+    (results.results.stats.successes + results.results.stats.failures)) *
+  100;
+
+console.log(`Pass rate: ${passRate.toFixed(2)}%`);
+console.log(`Shareable URL: ${results.shareableUrl}`);
+
+// Check for specific failures
+const criticalFailures = results.results.outputs.filter(
+  (o) => o.error?.includes('security') || o.error?.includes('injection'),
+);
+
+if (criticalFailures.length > 0) {
+  console.error('Critical security failures detected!');
+  process.exit(1);
+}
+```
+
+### Posting Results
+
+Post eval results to PR comments, Slack, or other channels:
+
+```bash
+# Extract and post results
+SHARE_URL=$(jq -r '.shareableUrl' results.json)
+PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+
+# Post to GitHub PR
+gh pr comment --body "
+## Promptfoo Eval Results
+- Pass rate: ${PASS_RATE}%
+- [View detailed results](${SHARE_URL})
+"
+```
+
+## Caching Strategies
+
+Optimize CI/CD performance with proper caching [[memory:3455374]]:
+
+```yaml
+# Set cache location
+env:
+  PROMPTFOO_CACHE_PATH: ~/.cache/promptfoo
+  PROMPTFOO_CACHE_TTL: 86400 # 24 hours
+
+# Cache configuration
+cache:
+  key: promptfoo-${{ hashFiles('prompts/**', 'promptfooconfig.yaml') }}
+  paths:
+    - ~/.cache/promptfoo
+```
+
+## Security Best Practices
+
+1. **API Key Management**
+   - Store API keys as encrypted secrets
+   - Use least-privilege access controls
+   - Rotate keys regularly
+
+2. **Network Security**
+   - Use private runners for sensitive data
+   - Restrict outbound network access
+   - Consider on-premise deployments for enterprise
+
+3. **Data Privacy**
+   - Enable output stripping for sensitive data:
+
+   ```bash
+   export PROMPTFOO_STRIP_RESPONSE_OUTPUT=true
+   export PROMPTFOO_STRIP_TEST_VARS=true
+   ```
+
+4. **Audit Logging**
+   - Keep eval history
+   - Track who triggered security scans
+   - Monitor for anomalous patterns
+
+## Troubleshooting
+
+### Common Issues
+
+| Issue         | Solution                                         |
+| ------------- | ------------------------------------------------ |
+| Rate limits   | Enable caching, reduce concurrency with `-j 1`   |
+| Timeouts      | Increase timeout values, use `--max-concurrency` |
+| Memory issues | Use streaming mode, process results in batches   |
+| Cache misses  | Check cache key includes all relevant files      |
+
+### Debug Mode
+
+Enable detailed logging:
+
+```bash
+LOG_LEVEL=debug npx promptfoo@latest eval -c config.yaml
+```
+
+## Real-World Examples
+
+### Automated Testing Examples
+
+- [Self-grading example](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading) - Automated LLM evaluation
+- [Custom grading prompts](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-grading-prompt) - Complex evaluation logic
+- [Store and reuse outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/store-and-reuse-outputs) - Multi-step testing
+
+### Security Examples
+
+- [Red team starter](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-starter) - Basic security testing
+- [RAG poisoning tests](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-poisoning) - Document poisoning detection
+- [DoNotAnswer dataset](https://github.com/promptfoo/promptfoo/tree/main/examples/donotanswer) - Harmful content detection
+
+### Integration Examples
+
+- [GitHub Action standalone](https://github.com/promptfoo/promptfoo/tree/main/examples/github-action) - Custom GitHub workflows
+- [JSON output processing](https://github.com/promptfoo/promptfoo/tree/main/examples/json-output) - Result parsing patterns
+- [CSV test data](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-test) - Bulk test management
+
+## Related Documentation
+
+### Configuration & Testing
+
+- [Configuration Guide](/docs/configuration/guide) - Complete setup instructions
+- [Test Cases](/docs/configuration/test-cases) - Writing effective tests
+- [Assertions & Metrics](/docs/configuration/expected-outputs) - Validation strategies
+- [Python Assertions](/docs/configuration/expected-outputs/python) - Custom Python validators
+- [JavaScript Assertions](/docs/configuration/expected-outputs/javascript) - Custom JS validators
+
+### Security & Red Teaming
+
+- [Red Team Architecture](/docs/red-team/architecture) - Security testing framework
+- [OWASP Top 10 for LLMs](/docs/red-team/owasp-llm-top-10) - Security compliance
+- [RAG Security Testing](/docs/red-team/rag) - Testing retrieval systems
+- [MCP Security Testing](/docs/red-team/mcp-security-testing) - Model Context Protocol security
+
+### Enterprise & Scaling
+
+- [Enterprise Features](/docs/enterprise/) - Team collaboration and compliance
+- [Red Teams in Enterprise](/docs/enterprise/red-teams) - Organization-wide security
+- [Service Accounts](/docs/enterprise/service-accounts) - Automated access
+
+## See Also
+
+- [GitHub Actions Integration](/docs/integrations/github-action)
+- [Red Team Quickstart](/docs/red-team/quickstart)
+- [Enterprise Features](/docs/enterprise/)
+- [Configuration Reference](/docs/configuration/reference)
