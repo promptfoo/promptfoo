@@ -95,6 +95,8 @@ class ProgressBarManager {
     }
 
     // Calculate work distribution
+    const maxConcurrentBars = Math.min(concurrency, 20);
+
     for (let i = 0; i < runEvalOptions.length; i++) {
       const evalOption = runEvalOptions[i];
       if (evalOption.test.options?.runSerially) {
@@ -103,7 +105,7 @@ class ProgressBarManager {
       } else {
         this.indexToContext.set(i, {
           phase: 'concurrent',
-          barIndex: this.concurrentCount % Math.min(concurrency, 20),
+          barIndex: this.concurrentCount % maxConcurrentBars,
         });
         this.concurrentCount++;
       }
@@ -1552,13 +1554,10 @@ class Evaluator {
     const isWebUI = Boolean(cliState.webUI);
     const progressBarManager = new ProgressBarManager(isWebUI);
 
-    // Count rows that will need comparisons - we'll create the comparison bar later
-    // when we know the actual count
-    const rowsRequiringComparisons = 0;
-
     // Initialize progress bar manager if needed
     if (this.options.showProgressBar) {
-      await progressBarManager.initialize(runEvalOptions, concurrency, rowsRequiringComparisons);
+      // We'll create the comparison bar dynamically later when we know the actual count
+      await progressBarManager.initialize(runEvalOptions, concurrency, 0);
     }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
