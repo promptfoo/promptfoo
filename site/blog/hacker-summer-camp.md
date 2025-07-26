@@ -23,9 +23,7 @@ We're packing up our prompts and heading to hacker summer camp. See you at Black
 
 <!-- truncate -->
 
-:::tip
-**Can't make it to Vegas?** [Grab our free LLM Pen-Testing Checklist](https://promptfoo.dev/security-checklist) and red-team from your couch.
-:::
+
 
 ## Black Hat AI Summit (Tentative): Tuesday, August 5
 
@@ -110,20 +108,10 @@ Open bar, bad puns, good hackers. Space is limited, RSVP now before we run out o
 35,000 developers already use Promptfoo. Help us protect the next 350,000.
 
 - **AI Red Team Engineer**: Break LLMs all day (legally)
-- **Security Engineer**: Build tools that make attackers cry
+- **Security Engineer**: Build tools that make attackers cry  
 - **Developer Advocate**: Teach the world to hack responsibly
 
-<iframe
-  src="https://jobs.ashbyhq.com/promptfoo/embed"
-  width="100%"
-  height="525"
-  frameborder="0"
-  title="View open positions at Promptfoo"
-  loading="lazy"
-></iframe>
-<noscript>
-  <a href="https://jobs.ashbyhq.com/promptfoo">View all open positions</a>
-</noscript>
+Check out our open positions at [jobs.ashbyhq.com/promptfoo](https://jobs.ashbyhq.com/promptfoo).
 
 ## FAQ
 
@@ -143,6 +131,4 @@ Nope! All demos are free. The only cost is listening to our engineers explain wh
 
 Your worst prompts, your best questions, and a healthy skepticism about AI security claims.
 
----
 
-P.S. Can't attend? [Download our LLM Security Checklist](https://promptfoo.dev/docs/red-team/quickstart) and start breaking things from home. No plane ticket required.
