@@ -122,8 +122,16 @@ export const providerSchemas: Record<string, ProviderSchema> = {
       commonFields.maxTokens,
     ],
     validate: (config) => {
-      if (config.endpoint && !config.endpoint.includes('.openai.azure.com')) {
-        return 'Invalid Azure OpenAI endpoint format';
+      if (config.endpoint) {
+        try {
+          const url = new URL(config.endpoint);
+          // Check if the host ends with the allowed Azure OpenAI domain
+          if (!url.hostname.endsWith('.openai.azure.com')) {
+            return 'Invalid Azure OpenAI endpoint format';
+          }
+        } catch (_e) {
+          return 'Invalid Azure OpenAI endpoint format';
+        }
       }
       return null;
     },

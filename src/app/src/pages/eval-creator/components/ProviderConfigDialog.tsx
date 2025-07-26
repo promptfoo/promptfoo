@@ -185,7 +185,11 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           <JsonTextField
             label={field.label}
             defaultValue={JSON.stringify(value || (field.type === 'array' ? [] : {}))}
-            onChange={(parsed) => handleFieldChange(field.name, parsed)}
+            onChange={(parsed, error) => {
+              if (!error) {
+                handleFieldChange(field.name, parsed);
+              }
+            }}
             fullWidth
             multiline
             minRows={3}

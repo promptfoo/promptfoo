@@ -46,7 +46,7 @@ export const useStore = create<EvalConfigState>()(
         set((state) => ({
           config: {
             ...state.config,
-            providers: state.config.providers?.map((provider) =>
+            providers: (state.config.providers || []).map((provider) =>
               provider.id === providerId ? { ...provider, config: newConfig } : provider,
             ),
           },
