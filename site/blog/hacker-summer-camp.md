@@ -15,7 +15,7 @@ keywords:
     enterprise AI,
   ]
 date: 2025-07-25
-authors: ['vanessa', 'mldangelo']
+authors: ['vanessa']
 tags: [company-update, conferences, defcon, blackhat]
 ---
 
