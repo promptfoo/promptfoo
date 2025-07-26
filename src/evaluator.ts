@@ -1730,9 +1730,6 @@ class Evaluator {
         (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
       );
 
-    // Get redteam state from CLI state
-    const isRedteam = Boolean(cliState.config?.redteam);
-
     telemetry.record('eval_ran', {
       // Basic metrics
       numPrompts: prompts.length,
