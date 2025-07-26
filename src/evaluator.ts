@@ -73,10 +73,8 @@ class ProgressBarManager {
   private comparisonCompleted: number = 0;
 
   // Map original indices to execution context
-  private indexToContext: Map<
-    number,
-    { phase: 'serial' | 'concurrent' | 'comparison'; barIndex: number }
-  > = new Map();
+  private indexToContext: Map<number, { phase: 'serial' | 'concurrent'; barIndex: number }> =
+    new Map();
 
   constructor(isWebUI: boolean) {
     this.isWebUI = isWebUI;
@@ -171,14 +169,13 @@ class ProgressBarManager {
   updateProgress(
     index: number,
     evalStep: RunEvalOptions | undefined,
-    phase: 'serial' | 'concurrent' | 'comparison' = 'concurrent',
+    phase: 'serial' | 'concurrent' = 'concurrent',
   ): void {
     if (this.isWebUI || !evalStep) {
       return;
     }
 
-    const context =
-      phase === 'comparison' ? { phase, barIndex: 0 } : this.indexToContext.get(index);
+    const context = this.indexToContext.get(index);
     if (!context) {
       logger.warn(`No context found for index ${index}`);
       return;
@@ -213,17 +210,6 @@ class ProgressBarManager {
           logger.warn(`Invalid bar index ${context.barIndex} for concurrent progress update`);
         }
         break;
-
-      case 'comparison':
-        this.comparisonCompleted++;
-        this.comparisonBar?.increment({
-          phase: 'select-best',
-          status: `Running (${this.comparisonCompleted}/${this.comparisonCount})`,
-          provider: 'Grading',
-          prompt,
-          vars: '',
-        });
-        break;
     }
   }
 
@@ -235,12 +221,20 @@ class ProgressBarManager {
       return;
     }
 
+    // Validate we don't exceed the total
+    if (this.comparisonCompleted >= this.comparisonCount) {
+      logger.warn(
+        `Comparison progress already at maximum (${this.comparisonCompleted}/${this.comparisonCount})`,
+      );
+      return;
+    }
+
     this.comparisonCompleted++;
     this.comparisonBar.increment({
       phase: 'select-best',
       status: `Running (${this.comparisonCompleted}/${this.comparisonCount})`,
       provider: 'Grading',
-      prompt: prompt.slice(0, 10).replace(/\n/g, ''),
+      prompt: prompt.slice(0, 10).replace(/\n/g, ' '),
       vars: '',
     });
   }
