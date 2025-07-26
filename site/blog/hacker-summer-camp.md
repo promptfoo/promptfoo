@@ -1,7 +1,7 @@
 ---
 title: 'Catch Promptfoo at Black Hat 2025 & DEF CON 33: Live LLM Hacks, Free Swag, Pool Party'
 description: 'Watch Promptfoo catch LLM exploits live at Black Hat USA and DEF CON 33. Booth 4712, Arsenal Labs demos, CEO deep-dive, and a pool-side open bar.'
-image: /img/blog/hacker-summer-camp-hero.jpg
+image: /img/blog/hacker-summer-camp-hero.webp
 imageAlt: 'Neon desert skyline with Promptfoo red panda mascot'
 keywords:
   [
