@@ -13,7 +13,12 @@ import {
 import type { UnifiedConfig } from '../../../src/types';
 
 jest.mock('os');
-jest.mock('fs');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  writeFileSync: jest.fn(),
+}));
 jest.mock('js-yaml');
 jest.mock('../../../src/logger', () => ({
   __esModule: true,

@@ -36,10 +36,9 @@ jest.mock('../../src/util/templates', () => {
   };
 });
 
-jest.mock('process', () => ({
-  ...jest.requireActual('process'),
-  exit: jest.fn(),
-}));
+jest.spyOn(process, 'exit').mockImplementation(() => {
+  return undefined as never;
+});
 
 jest.mock('../../src/redteam/strategies', () => ({
   ...jest.requireActual('../../src/redteam/strategies'),
@@ -63,6 +62,10 @@ describe('synthesize', () => {
     generate: jest.fn(),
     id: () => 'test-provider',
   };
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();

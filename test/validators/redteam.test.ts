@@ -117,21 +117,7 @@ describe('RedteamConfigSchema', () => {
       plugins: ['invalid-plugin-name'],
     };
 
-    let error: z.ZodError | undefined;
-
-    expect(() => {
-      try {
-        RedteamConfigSchema.parse(config);
-      } catch (e) {
-        if (e instanceof z.ZodError) {
-          error = e;
-        }
-        throw e;
-      }
-    }).toThrow(z.ZodError);
-
-    expect(error).toBeDefined();
-    expect(error?.issues[0].message).toContain('Custom plugins must start with file://');
+    expect(() => RedteamConfigSchema.parse(config)).toThrow(/Invalid plugin id/);
   });
 
   it('should handle numTests override', () => {
