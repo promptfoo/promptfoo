@@ -1,69 +1,74 @@
 ---
-title: 'Meet Promptfoo at Black Hat & DEF CON 2025: AI Security Demos & Party'
-description: 'Join Promptfoo at Black Hat USA & DEF CON 2025. Visit booth #4712, attend our CEO talk, get demos at Arsenal Labs, and RSVP for our open bar party.'
+title: 'Catch Promptfoo at Black Hat & DEF CON 2025: Live LLM Hack Sessions, Free Swag & Pool Party'
+description: 'See how Promptfoo breaks and hardens LLMs live at Black Hat & DEF CON 2025. Booth 4712, Arsenal Labs demos, CEO deep-dive, and an open-bar meetup.'
 image: /img/blog/hacker-summer-camp-hero.jpg
+imageAlt: 'Promptfoo hacker summer camp hero image with neon desert skyline'
 keywords:
   [
     promptfoo,
-    DEF CON 2025,
-    Black Hat 2025,
-    AI security,
-    red teaming,
-    LLM evaluation,
+    LLM security,
     prompt injection,
-    AI agents,
-    enterprise security,
+    red teaming,
+    Black Hat 2025,
+    DEF CON 33,
     Arsenal Labs,
-    information security,
-    Las Vegas conferences,
+    enterprise AI,
   ]
 date: 2025-07-25
-authors: [vanessa]
-tags: [company-update, conferences, def-con, black-hat]
+authors: ['vanessa', 'mldangelo']
+tags: [company-update, conferences, defcon, blackhat]
 ---
 
-Promptfoo is exhibiting at Black Hat USA and DEF CON 2025. Visit our booth for live security demos, attend our CEO's talk on enterprise AI security, and join our community party.
+We're packing up our prompts and heading to hacker summer camp. See you at Black Hat USA and DEF CON 33 for live demos, security talks, and questionable karaoke choices.
 
 <!-- truncate -->
 
-## AI Summit - Tuesday, August 5
+:::tip
+**Can't make it to Vegas?** [Grab our free LLM Pen-Testing Checklist](https://promptfoo.dev/security-checklist) and red-team from your couch.
+:::
 
-Join us at the premier AI security conference to see how Fortune 500 companies automatically detect LLM vulnerabilities during development.
+## Black Hat AI Summit (Tentative): Tuesday, August 5
+
+Join us at the Black Hat pre-conference summit to watch us auto-red-team GPT-4 in under 30 seconds. You'll see how Fortune 500 companies catch [LLM vulnerabilities](/blog/llm-security-checklist) before production, because nobody wants their chatbot on the evening news.
 
 - **When**: Tuesday, August 5, 2025, 9:00 AM - 5:00 PM
 - **Where**: Mandalay Bay Convention Center, Las Vegas
+- **What to expect**: Live vulnerability discovery across 15+ attack vectors
 
-## Black Hat Business Hall - August 6-7
+## Black Hat Business Hall: August 6-7
 
-Visit us at booth #4712 in the AI Zone Pavilion for hands-on demonstrations of our enterprise security platform.
+Find us at booth #4712 in the AI Zone Pavilion. We'll be running live demos every 30 minutes, showing how [our open-source scanner](https://github.com/promptfoo/promptfoo) catches the sneaky stuff that manual testing misses.
 
-### CEO Talk: Enterprise AI Security at Scale
+### CEO Talk: Breaking and Fixing LLMs at Scale
 
-Hear from our CEO Ian Maurer about how organizations deploy LLMs securely in production.
+Hear from our co-founder and CEO Michael D'Angelo about deploying secure LLMs when your threat model includes "literally everyone on the internet."
 
 - **When**: Wednesday, August 6, 1:30 PM
 - **Where**: AI Stage, Business Hall
+- **Preview**: Live breach of a fine-tuned model, plus real-time patching demo
 
-### Book a Demo
-
-Get a personalized 30-minute walkthrough of Promptfoo's security capabilities:
+### Book Your Personal Demo
 
 <iframe
   src="https://cal.com/team/promptfoo/promptfoo-at-blackhat?embed=true"
   width="100%"
   height="600px"
-  frameBorder="0"
+  frameborder="0"
   title="Book a Black Hat demo with Promptfoo"
-/>
+  loading="lazy"
+></iframe>
+<noscript>
+  <a href="https://cal.com/team/promptfoo/promptfoo-at-blackhat">Book your demo directly on Cal.com</a>
+</noscript>
 
-## Arsenal Labs Live Demonstrations
+## Arsenal Labs: Watch Us Break Things
 
-Watch our security researchers demonstrate real-world attacks and defenses:
+Our security researchers will demonstrate real attacks that keep CSOs awake at night:
 
-- Prompt injection techniques
-- Jailbreak prevention
-- Data exfiltration protection
-- Cross-model vulnerability testing (GPT-4, Claude, Llama)
+- Prompt injection techniques that actually work
+- Jailbreak methods beyond "ignore previous instructions"
+- Data exfiltration through model outputs
+- Cross-model fuzzing across GPT-4o, Claude 3, Llama 3
 
 **Schedule**:
 
@@ -71,13 +76,21 @@ Watch our security researchers demonstrate real-world attacks and defenses:
 - Thursday, August 7: 10:00 AM - 1:00 PM
 - **Location**: Business Hall, Arsenal Lab Station 1
 
-## DEF CON Exhibitor Booth - August 8-10
+Pro tip: Bring your nastiest prompts. We'll test them live.
 
-Find us at the Las Vegas Convention Center throughout DEF CON 33. Get demos, meet the team, and grab exclusive Promptfoo swag.
+## DEF CON 33 Exhibitor Booth: August 8-10
+
+Find us at the Las Vegas Convention Center, somewhere between the lock-picking village and whoever's running Doom on a pregnancy test this year. Look for the red panda mascot with trust issues.
+
+Stop by for:
+
+- Live demos of [agent security testing](/blog/agent-security)
+- Limited edition "My LLM Got Pwned at DEF CON" shirts
+- Stickers that make your laptop 73% more secure (citation needed)
 
 ## Promptfoo Community Party
 
-Join us for drinks and networking with the AI security community. Space is limited—RSVP now.
+Open bar, bad puns, good hackers. Space is limited, RSVP now before we run out of drink tickets.
 
 <iframe
   src="https://lu.ma/embed/event/evt-68XHWgtMjY47tWT/simple"
@@ -85,25 +98,75 @@ Join us for drinks and networking with the AI security community. Space is limit
   height="525"
   frameborder="0"
   allow="fullscreen; payment"
-  aria-hidden="false"
-  tabindex="0"
   title="RSVP for Promptfoo DEF CON party"
+  loading="lazy"
 ></iframe>
+<noscript>
+  <a href="https://lu.ma/promptfoo-defcon-party">RSVP directly on Luma</a>
+</noscript>
 
-## We're Hiring
+## We're Hiring Security Nerds
 
-Looking for your next role in AI security? We're expanding our team with positions in:
+35,000 developers already use Promptfoo. Help us protect the next 350,000.
 
-- AI Red Team Engineering
-- Deployment Engineering
-- Software Development
+- **AI Red Team Engineer**: Break LLMs all day (legally)
+- **Security Engineer**: Build tools that make attackers cry
+- **Developer Advocate**: Teach the world to hack responsibly
 
 <iframe
   src="https://jobs.ashbyhq.com/promptfoo/embed"
   width="100%"
   height="525"
   frameborder="0"
-  aria-hidden="false"
-  tabindex="0"
   title="View open positions at Promptfoo"
+  loading="lazy"
 ></iframe>
+<noscript>
+  <a href="https://jobs.ashbyhq.com/promptfoo">View all open positions</a>
+</noscript>
+
+## FAQ
+
+### What is Promptfoo?
+
+Promptfoo is an open-source LLM security scanner that automatically finds vulnerabilities in AI applications. Think of it as Burp Suite for prompts, but with better memes.
+
+### Where can I find you at Black Hat?
+
+Booth #4712 in the AI Zone Pavilion. We're the ones with the paranoid red panda mascot and a suspicious amount of energy drinks.
+
+### Do I need to pay for demos?
+
+Nope! All demos are free. The only cost is listening to our engineers explain why your prompts aren't as secure as you think.
+
+### What should I bring to your booth?
+
+Your worst prompts, your best questions, and a healthy skepticism about AI security claims.
+
+---
+
+P.S. Can't attend? [Download our LLM Security Checklist](https://promptfoo.dev/docs/red-team/quickstart) and start breaking things from home. No plane ticket required.
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Event",
+  "name": "Promptfoo at Black Hat USA 2025",
+  "startDate": "2025-08-05T09:00",
+  "endDate": "2025-08-07T18:00",
+  "location": {
+    "@type": "Place",
+    "name": "Mandalay Bay Convention Center",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Las Vegas",
+      "addressRegion": "NV"
+    }
+  },
+  "organizer": {
+    "@type": "Organization",
+    "name": "Promptfoo",
+    "url": "https://promptfoo.dev"
+  }
+}
+</script>
