@@ -342,7 +342,7 @@ export async function runRedteamConversation({
         );
         storedGraderResult = grade;
         if (grade.tokensUsed) {
-          accumulateTokenUsage(totalTokenUsage, grade.tokensUsed);
+          accumulateTokenUsage(totalTokenUsage, grade.tokensUsed, true);
         } else {
           totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
         }

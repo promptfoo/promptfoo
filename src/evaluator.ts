@@ -638,7 +638,7 @@ export async function runEval({
         ret.tokenUsage.assertions = createEmptyAssertions();
       }
       ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
-      
+
       // Track assertion token usage if provided
       if (checkResult.tokensUsed) {
         accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
