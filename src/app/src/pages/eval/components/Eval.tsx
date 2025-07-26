@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import './Eval.css';
 
 interface EvalOptions {
@@ -35,6 +37,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
+    resetFilters,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -107,6 +110,10 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
 
   useEffect(() => {
+    // Reset filters when navigating to a different eval; necessary because Zustand
+    // is a global store.
+    resetFilters();
+
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
@@ -127,7 +134,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      async function handleResultsFile(data: ResultsFile) {
+      const handleResultsFile = async (data: ResultsFile) => {
         setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author ?? null);
@@ -138,7 +145,7 @@ export default function Eval({ fetchId }: EvalOptions) {
           setEvalId(newId);
           loadEvalById(newId);
         }
-      }
+      };
 
       socket
         .on('init', async (data) => {
@@ -193,14 +200,13 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
+    resetFilters,
   ]);
 
-  /**
-   * Set the document title to the eval description or eval id.
-   */
-  useEffect(() => {
-    document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
-  }, [config, evalId]);
+  usePageMeta({
+    title: config?.description || evalId || 'Eval',
+    description: 'View evaluation results',
+  });
 
   /**
    * If and when a table is available, set loaded to true.

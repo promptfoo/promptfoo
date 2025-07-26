@@ -1,18 +1,20 @@
+import { URL } from 'url';
+
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { URL } from 'url';
-import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
-import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
+import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
+import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
-import type Eval from './models/eval';
-import type EvalResult from './models/evalResult';
 import { makeRequest as makeCloudRequest } from './util/cloud';
 
-export interface ShareDomainResult {
+import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
+
+interface ShareDomainResult {
   domain: string;
   isPublicShare: boolean;
 }
@@ -300,6 +302,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
  */
 export async function getShareableUrl(
   eval_: Eval,
+  remoteEvalId: string,
   showAuth: boolean = false,
 ): Promise<string | null> {
   const { domain } = determineShareDomain(eval_);
@@ -309,10 +312,10 @@ export async function getShareableUrl(
   const finalDomain = customDomain || domain;
 
   const fullUrl = cloudConfig.isEnabled()
-    ? `${finalDomain}/eval/${eval_.id}`
+    ? `${finalDomain}/eval/${remoteEvalId}`
     : getShareViewBaseUrl() === getDefaultShareViewBaseUrl() && !customDomain
-      ? `${finalDomain}/eval/${eval_.id}`
-      : `${finalDomain}/eval/?evalId=${eval_.id}`;
+      ? `${finalDomain}/eval/${remoteEvalId}`
+      : `${finalDomain}/eval/?evalId=${remoteEvalId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
@@ -346,13 +349,7 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  // Note: Eval ID will differ on self-hosted instance because self-hosted doesn't implement
-  // sharing idempotency.
-  if (evalId !== evalRecord.id) {
-    evalRecord.id = evalId;
-  }
-
-  return getShareableUrl(evalRecord, showAuth);
+  return getShareableUrl(evalRecord, evalId, showAuth);
 }
 
 /**

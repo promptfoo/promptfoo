@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   CheckCircle as CheckCircleIcon,
   Code as CodeIcon,
@@ -7,21 +6,19 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
-import {
-  Alert,
-  Box,
-  Button,
-  Collapse,
-  Divider,
-  MenuItem,
-  Paper,
-  Select,
-  Stack,
-  Typography,
-  alpha,
-  useTheme,
-} from '@mui/material';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
+import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
+import Stack from '@mui/material/Stack';
+import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
+
 import type { ScanResult } from '../ModelAudit.types';
 
 interface SecurityFindingsProps {
@@ -181,7 +178,17 @@ export default function SecurityFindings({
                   )}
                   {issue.details && (
                     <Collapse in={true}>
-                      <Paper sx={{ p: 2, mt: 2, bgcolor: 'grey.50' }} variant="outlined">
+                      <Paper
+                        sx={{
+                          p: 2,
+                          mt: 2,
+                          bgcolor: (theme) =>
+                            theme.palette.mode === 'dark'
+                              ? theme.palette.grey[800]
+                              : theme.palette.grey[50],
+                        }}
+                        variant="outlined"
+                      >
                         <Typography
                           variant="caption"
                           component="pre"
@@ -207,8 +214,10 @@ export default function SecurityFindings({
           <Paper
             sx={{
               p: 2,
-              bgcolor: 'grey.900',
-              color: 'grey.100',
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50],
+              color: (theme) =>
+                theme.palette.mode === 'dark' ? theme.palette.grey[100] : theme.palette.grey[900],
               overflow: 'auto',
               maxHeight: 400,
               fontFamily: 'monospace',

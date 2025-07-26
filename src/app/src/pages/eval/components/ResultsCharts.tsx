@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import React, { useEffect, useRef, useState } from 'react';
+
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
@@ -11,27 +11,28 @@ import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import { useTheme } from '@mui/material/styles';
-import type { VisibilityState } from '@tanstack/table-core';
 import {
-  Chart,
   BarController,
-  LineController,
-  ScatterController,
-  CategoryScale,
-  LinearScale,
   BarElement,
+  CategoryScale,
+  Chart,
+  Colors,
+  LinearScale,
+  LineController,
   LineElement,
   PointElement,
+  ScatterController,
   Tooltip,
-  Colors,
   type TooltipItem,
 } from 'chart.js';
+import { ErrorBoundary } from 'react-error-boundary';
+import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from './types';
+
+import type { EvaluateTable, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
-  columnVisibility: VisibilityState;
-  recentEvals: ResultLightweightWithLabel[];
+  handleHideCharts: () => void;
 }
 
 interface ChartProps {
@@ -104,7 +105,7 @@ function HistogramChart({ table }: ChartProps) {
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
-        label: `Column ${promptIdx + 1}`,
+        label: prompt.provider,
         data: counts,
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -130,7 +131,7 @@ function HistogramChart({ table }: ChartProps) {
             callbacks: {
               title(context) {
                 const datasetIndex = context[0].datasetIndex;
-                return `Column ${datasetIndex + 1}`;
+                return table.head.prompts[datasetIndex].provider;
               },
               label(context) {
                 const labelIndex = context.dataIndex;
@@ -144,6 +145,20 @@ function HistogramChart({ table }: ChartProps) {
             },
           },
         },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Frequency',
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Score',
+            },
+          },
+        },
       },
     });
   }, [table]);
@@ -152,6 +167,7 @@ function HistogramChart({ table }: ChartProps) {
 }
 
 function PassRateChart({ table }: ChartProps) {
+  const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
@@ -164,18 +180,11 @@ function PassRateChart({ table }: ChartProps) {
       passRateChartInstance.current.destroy();
     }
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const outputs = table.body
-        .map((row) => row.outputs[promptIdx])
-        .filter((output) => output != null);
-      const passCount = outputs.filter((output) => output.pass).length;
-      const passRate = (passCount / outputs.length) * 100;
-      return {
-        label: `Column ${promptIdx + 1}`,
-        data: [passRate],
-        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
-      };
-    });
+    const datasets = table.head.prompts.map((prompt, promptIdx) => ({
+      label: prompt.provider,
+      data: [passRates[promptIdx]],
+      backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+    }));
 
     passRateChartInstance.current = new Chart(passRateCanvasRef.current, {
       type: 'bar',
@@ -188,10 +197,17 @@ function PassRateChart({ table }: ChartProps) {
         plugins: {
           title: {
             display: true,
-            text: 'Pass rate',
+            text: 'Pass Rate',
           },
           legend: {
             display: true,
+          },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+              },
+            },
           },
         },
       },
@@ -619,56 +635,52 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
-  const [showCharts, setShowCharts] = useState(true);
-  const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
+  const [
+    showPerformanceOverTimeChart,
+    //setShowPerformanceOverTimeChart
+  ] = useState(false);
 
-  const { table, evalId, config } = useTableStore();
+  // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
+  // non-null.
+  const { table, evalId } = useTableStore();
 
-  useEffect(() => {
-    if (config?.description && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
-      const filteredEvals = recentEvals.filter(
-        (evaluation) => evaluation.description === config.description,
-      );
-      if (filteredEvals.length > 1) {
-        setShowPerformanceOverTimeChart(true);
-      }
-    } else {
-      setShowPerformanceOverTimeChart(false);
-    }
-  }, [config?.description, recentEvals]);
+  // TODO(Will): Release performance over time chart; it's been hidden for 10 months.
+  // useEffect(() => {
+  //   if (config?.description && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
+  //     const filteredEvals = recentEvals.filter(
+  //       (evaluation) => evaluation.description === config.description,
+  //     );
+  //     if (filteredEvals.length > 1) {
+  //       setShowPerformanceOverTimeChart(true);
+  //     }
+  //   } else {
+  //     setShowPerformanceOverTimeChart(false);
+  //   }
+  // }, [config?.description, recentEvals]);
 
-  if (
-    !table ||
-    !config ||
-    !showCharts ||
-    (table.head.prompts.length < 2 && !showPerformanceOverTimeChart)
-  ) {
-    return null;
-  }
+  // if (table.head.prompts.length < 2 && showPerformanceOverTimeChart) {
+  //   return (
+  //     <ErrorBoundary fallback={null}>
+  //       <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
+  //         <IconButton
+  //           style={{ position: 'absolute', right: 0, top: 0 }}
+  //           onClick={() => handleHideCharts()}
+  //         >
+  //           <CloseIcon />
+  //         </IconButton>
 
-  if (table.head.prompts.length < 2 && showPerformanceOverTimeChart) {
-    return (
-      <ErrorBoundary fallback={null}>
-        <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
-          <IconButton
-            style={{ position: 'absolute', right: 0, top: 0 }}
-            onClick={() => setShowCharts(false)}
-          >
-            <CloseIcon />
-          </IconButton>
+  //         <div style={{ width: '100%' }}>
+  //           <PerformanceOverTimeChart table={table} evalId={evalId} />
+  //         </div>
+  //       </Paper>
+  //     </ErrorBoundary>
+  //   );
+  // }
 
-          <div style={{ width: '100%' }}>
-            <PerformanceOverTimeChart table={table} evalId={evalId} />
-          </div>
-        </Paper>
-      </ErrorBoundary>
-    );
-  }
-
-  const scores = table.body
+  const scores = table!.body
     .flatMap((row) => row.outputs.map((output) => output?.score))
     .filter((score) => typeof score === 'number' && !Number.isNaN(score));
 
@@ -690,28 +702,28 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
       <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
         <IconButton
           style={{ position: 'absolute', right: 0, top: 0 }}
-          onClick={() => setShowCharts(false)}
+          onClick={() => handleHideCharts()}
         >
           <CloseIcon />
         </IconButton>
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ width: chartWidth }}>
-            <PassRateChart table={table} />
+            <PassRateChart table={table!} />
           </div>
           <div style={{ width: chartWidth }}>
             {scoreSet.size <= 3 &&
-            Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
-              <MetricChart table={table} />
+            Object.keys(table!.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
+              <MetricChart table={table!} />
             ) : (
-              <HistogramChart table={table} />
+              <HistogramChart table={table!} />
             )}
           </div>
           <div style={{ width: chartWidth }}>
-            <ScatterChart table={table} />
+            <ScatterChart table={table!} />
           </div>
           {showPerformanceOverTimeChart && (
             <div style={{ width: chartWidth }}>
-              <PerformanceOverTimeChart table={table} evalId={evalId} />
+              <PerformanceOverTimeChart table={table!} evalId={evalId} />
             </div>
           )}
         </div>

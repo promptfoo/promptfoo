@@ -1,8 +1,13 @@
+import { getCache, isCacheEnabled } from '../cache';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
+import logger from '../logger';
+import { safeJsonStringify } from '../util/json';
+import { ellipsize } from '../util/text';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { parseChatPrompt } from './shared';
 import type { Cache } from 'cache-manager';
 import type Replicate from 'replicate';
-import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
-import logger from '../logger';
+
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -13,9 +18,6 @@ import type {
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { safeJsonStringify } from '../util/json';
-import { ellipsize } from '../util/text';
-import { parseChatPrompt } from './shared';
 
 async function getReplicateClient(): Promise<typeof Replicate> {
   try {
@@ -166,7 +168,7 @@ export class ReplicateProvider implements ApiProvider {
 
       const result = {
         output: formattedOutput,
-        tokenUsage: {}, // TODO: add token usage once Replicate API supports it
+        tokenUsage: createEmptyTokenUsage(), // TODO: add token usage once Replicate API supports it
       };
       if (cache && cacheKey) {
         await cache.set(cacheKey, JSON.stringify(result));
@@ -180,7 +182,7 @@ export class ReplicateProvider implements ApiProvider {
   }
 }
 
-export const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
+const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
   S1: 'Violent Crimes',
   S2: 'Non-Violent Crimes',
   S3: 'Sex Crimes',

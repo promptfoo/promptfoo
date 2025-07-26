@@ -1,5 +1,6 @@
-import type { Prompt } from '../../types';
 import invariant from '../../util/invariant';
+
+import type { Prompt } from '../../types';
 
 /**
  * Processes a string as a literal prompt.

@@ -1,7 +1,8 @@
 import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
 import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
-import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
+
+import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 import type { ApiProvider } from '../../../../src/types';
 
 describe('AlignedHarmfulPlugin', () => {

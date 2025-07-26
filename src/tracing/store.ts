@@ -1,11 +1,13 @@
 import { randomUUID } from 'crypto';
+
 import { eq, lt } from 'drizzle-orm';
 import { getDb } from '../database';
-import { tracesTable, spansTable } from '../database/tables';
+import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 
-export interface TraceData {
-  traceId: string;
+import type { TraceData } from '../types/tracing';
+
+interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
   testCaseId: string;
   metadata?: Record<string, any>;
@@ -38,7 +40,7 @@ export class TraceStore {
     return this.db;
   }
 
-  async createTrace(trace: TraceData): Promise<void> {
+  async createTrace(trace: StoreTraceData): Promise<void> {
     try {
       logger.debug(
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,

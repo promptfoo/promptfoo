@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess } from 'child_process';
-import { exec } from 'child_process';
+import { type ChildProcess, exec, spawn } from 'child_process';
+
 import { Command } from 'commander';
-import { modelScanCommand, checkModelAuditInstalled } from '../../src/commands/modelScan';
+import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
 
 jest.mock('child_process');
@@ -104,8 +104,11 @@ describe('modelScanCommand', () => {
       'output.json',
       '--timeout',
       '600',
+      '--verbose',
       '--max-file-size',
       '1000000',
+      '--max-total-size',
+      '5000000',
     ]);
 
     expect(mockSpawn).toHaveBeenCalledWith(
@@ -121,9 +124,12 @@ describe('modelScanCommand', () => {
         '--output',
         'output.json',
         '--timeout',
-        600,
+        '600',
+        '--verbose',
         '--max-file-size',
         '1000000',
+        '--max-total-size',
+        '5000000',
       ],
       { stdio: 'inherit' },
     );

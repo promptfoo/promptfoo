@@ -1,6 +1,7 @@
 import React from 'react';
-import type { TextFieldProps } from '@mui/material/TextField';
+
 import TextField from '@mui/material/TextField';
+import type { TextFieldProps } from '@mui/material/TextField';
 
 interface JsonTextFieldProps extends Omit<TextFieldProps, 'onChange'> {
   onChange?: (parsed: any) => void;

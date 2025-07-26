@@ -12,12 +12,114 @@ tests:
     metadata:
       tracingEnabled: true
       testCaseId: 'test-case-1'
+    assert:
+      # Original javascript assertion
+      - type: javascript
+        value: file://trace-assertions.js
+
+      # Ensure all expected spans are present
+      - type: trace-span-count
+        value:
+          pattern: 'rag_agent_workflow'
+          min: 1
+          max: 1
+
+      # Ensure we retrieve exactly 3 documents
+      - type: trace-span-count
+        value:
+          pattern: 'retrieve_document_*'
+          min: 3
+          max: 3
+
+      # Ensure all reasoning steps occur
+      - type: trace-span-count
+        value:
+          pattern: 'reasoning_*'
+          min: 3
+
+      # Ensure the overall workflow completes quickly
+      - type: trace-span-duration
+        value:
+          pattern: 'rag_agent_workflow'
+          max: 5000 # 5 seconds max
+
+      # Ensure individual operations don't take too long
+      - type: trace-span-duration
+        value:
+          pattern: '*'
+          max: 1000 # No single span should exceed 1 second
+
+      # Ensure no errors occur
+      - type: trace-error-spans
+        value:
+          max_count: 0
 
   - vars:
       topic: 'machine learning'
     metadata:
       tracingEnabled: true
       testCaseId: 'test-case-2'
+    assert:
+      # Original javascript assertion
+      - type: javascript
+        value: file://trace-assertions.js
+
+      # Same trace assertions as above
+      - type: trace-span-count
+        value:
+          pattern: 'rag_agent_workflow'
+          min: 1
+          max: 1
+
+      - type: trace-span-count
+        value:
+          pattern: 'retrieve_document_*'
+          min: 3
+          max: 3
+
+      - type: trace-span-count
+        value:
+          pattern: 'reasoning_*'
+          min: 3
+
+      - type: trace-span-duration
+        value:
+          pattern: 'rag_agent_workflow'
+          max: 5000
+
+      - type: trace-span-duration
+        value:
+          pattern: '*'
+          max: 1000
+
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+# Default assertions that apply to all test cases
+defaultTest:
+  assert:
+    # Monitor 95th percentile latency (metric only, won't fail tests)
+    - type: trace-span-duration
+      value:
+        pattern: '*'
+        max: 2000
+        percentile: 95
+      weight: 0 # This makes it a metric-only assertion
+      metric: p95_latency
+
+    # Ensure retrieval operations are fast
+    - type: trace-span-duration
+      value:
+        pattern: 'retrieve_document_*'
+        max: 300 # Each document retrieval should be under 300ms
+
+    # Allow up to 5% error rate (more forgiving for production)
+    - type: trace-error-spans
+      value:
+        max_percentage: 5
+        pattern: '*'
+      metric: error_rate
 
 # Tracing configuration
 tracing:

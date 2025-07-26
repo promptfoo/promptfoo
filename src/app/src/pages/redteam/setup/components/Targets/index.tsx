@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -10,24 +11,25 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
-import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import type { ProviderOptions } from '../../types';
+import { customTargetOption, predefinedTargets } from '../constants';
+import LoadExampleButton from '../LoadExampleButton';
 import Prompts from '../Prompts';
-import { predefinedTargets, customTargetOption } from '../constants';
-import LoadExampleButton from './../LoadExampleButton';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import TestTargetConfiguration from './TestTargetConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
+
+import type { ProviderOptions } from '../../types';
 
 interface TargetsProps {
   onNext: () => void;
@@ -286,19 +288,36 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     setTestResult(null);
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 30000);
+
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(selectedTarget),
+        signal: abortController.signal,
       });
 
+      clearTimeout(timeoutId);
+
+      // Handle PF Server Errors:
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        let errorMessage = 'Network response was not ok';
+        try {
+          const errorData = (await response.json()) as { error?: string };
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          // ignore json parsing errors
+        }
+        throw new Error(errorMessage);
       }
 
       const data = (await response.json()) as ProviderTestResponse;
+
       const result = data.testResult;
 
       if (result.error) {
@@ -321,9 +340,17 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
     } catch (error) {
       console.error('Error testing target:', error);
+      let message: string;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        message = 'Request timed out after 30 seconds';
+      } else {
+        message = error instanceof Error ? error.message : String(error);
+      }
+
       setTestResult({
         success: false,
-        message: 'An error occurred while testing the target.',
+        message,
       });
     } finally {
       setTestingTarget(false);

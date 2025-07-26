@@ -1,31 +1,33 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  MEDICAL_PLUGINS,
   PII_PLUGINS,
   type Plugin,
-  type Strategy,
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
+  type Strategy,
 } from '../redteam/constants';
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
+import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
+
 export const pluginOptions: string[] = [
-  ...COLLECTIONS,
-  ...REDTEAM_ALL_PLUGINS,
-  ...ALIASED_PLUGINS,
+  ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
 ].sort();
 /**
  * Schema for individual redteam plugins
@@ -82,28 +84,34 @@ export const RedteamPluginSchema = z.union([
   RedteamPluginObjectSchema,
 ]);
 
-export const strategyIdSchema = z
-  .union([
-    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
-      if (!ALL_STRATEGIES.includes(val as Strategy)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.invalid_enum_value,
-          options: [...ALL_STRATEGIES] as [string, ...string[]],
-          received: val,
-          message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
-        });
-      }
-    }),
-    z.string().refine(
-      (value) => {
-        return value.startsWith('file://') && isJavascriptFile(value);
-      },
-      {
-        message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
-      },
-    ),
-  ])
-  .describe('Name of the strategy');
+export const strategyIdSchema = z.union([
+  z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+    if (!ALL_STRATEGIES.includes(val as Strategy)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.invalid_enum_value,
+        options: [...ALL_STRATEGIES] as [string, ...string[]],
+        received: val,
+        message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+      });
+    }
+  }),
+  z.string().refine(
+    (value) => {
+      return value.startsWith('file://') && isJavascriptFile(value);
+    },
+    {
+      message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
+    },
+  ),
+  z.string().refine(
+    (value) => {
+      return isCustomStrategy(value);
+    },
+    {
+      message: `Strategy must be one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+    },
+  ),
+]);
 /**
  * Schema for individual redteam strategies
  */
@@ -268,8 +276,12 @@ export const RedteamConfigSchema = z
         expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
       } else if (id === 'pii') {
         expandCollection([...PII_PLUGINS], config, numTests, severity);
+      } else if (id === 'medical') {
+        expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
+      } else if (id === 'guardrails-eval') {
+        expandCollection([...GUARDRAILS_EVALUATION_PLUGINS], config, numTests, severity);
       }
     };
 
@@ -383,8 +395,7 @@ export const RedteamConfigSchema = z
   });
 
 // Ensure that schemas match their corresponding types
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
+function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();
