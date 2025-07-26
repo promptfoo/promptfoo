@@ -2,7 +2,7 @@ import React from 'react';
 import Link from '@docusaurus/Link';
 import styles from '../styles.module.css';
 
-export default function CallToAction(): JSX.Element {
+export default function CallToAction(): React.ReactElement {
   return (
     <section className={`${styles.section} ${styles.ctaSection}`}>
       <div className={styles.container}>

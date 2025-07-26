@@ -1,5 +1,5 @@
+import { fireEvent, render, screen, renderWithTheme } from '@app/test-utils';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CommentDialog from './TableCommentDialog';
@@ -16,13 +16,6 @@ describe('CommentDialog', () => {
     onClose: vi.fn(),
     onSave: vi.fn(),
     onChange: vi.fn(),
-  };
-
-  const renderWithTheme = (component: React.ReactNode) => {
-    const theme = createTheme({
-      palette: { mode: 'light' },
-    });
-    return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
   };
 
   it('renders correctly when open', () => {

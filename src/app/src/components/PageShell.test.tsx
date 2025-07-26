@@ -44,12 +44,12 @@ const ThemeDisplay = () => {
   return <div data-testid="theme-mode">{theme.palette.mode}</div>;
 };
 
-const renderPageShell = (initialPath = '/', children: React.ReactNode = null) => {
+const renderPageShell = (initialPath = '/', children: React.ReactElement | null = null) => {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/" element={<PageShell />}>
-          {children && <Route index element={children} />}
+          {children && <Route index element={children as any} />}
         </Route>
       </Routes>
     </MemoryRouter>,

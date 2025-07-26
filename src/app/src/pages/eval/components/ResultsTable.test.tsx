@@ -113,7 +113,7 @@ describe('ResultsTable Metrics Display', () => {
     atInitialVerticalScrollPosition: true,
   };
 
-  const renderWithProviders = (ui: React.ReactElement) => {
+  const renderWithProviders = (ui: React.ReactElement<any>) => {
     return render(ui);
   };
 

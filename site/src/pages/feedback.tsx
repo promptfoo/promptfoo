@@ -8,7 +8,7 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
 const FeedbackPageContent = () => {
-  const isBrowser = useIsBrowser();
+  const _isBrowser = useIsBrowser();
   const { colorMode } = useColorMode();
 
   const theme = React.useMemo(

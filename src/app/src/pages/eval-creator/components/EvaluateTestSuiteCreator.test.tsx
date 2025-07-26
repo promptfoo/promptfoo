@@ -1,8 +1,11 @@
-import React from 'react';
-
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
+import {
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+  within,
+  renderWithTheme,
+} from '@app/test-utils';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
@@ -51,11 +54,6 @@ vi.mock('./YamlEditor', () => ({
     </div>
   )),
 }));
-
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 describe('EvaluateTestSuiteCreator', () => {
   beforeEach(() => {

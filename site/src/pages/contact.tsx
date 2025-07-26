@@ -57,12 +57,12 @@ function TabPanel(props: TabPanelProps) {
       aria-labelledby={`contact-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+      {value === index && <div style={{ paddingTop: 24, paddingBottom: 24 }}>{children}</div>}
     </div>
   );
 }
 
-function Contact(): JSX.Element {
+function Contact(): React.ReactElement {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [tabValue, setTabValue] = useState(0);
 
@@ -406,7 +406,7 @@ function Contact(): JSX.Element {
   );
 }
 
-export default function Page(): JSX.Element {
+export default function Page(): React.ReactElement {
   return (
     <Layout
       title="Contact Enterprise Sales"
