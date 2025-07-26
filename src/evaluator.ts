@@ -1747,6 +1747,10 @@ class Evaluator {
       numSuccesses: this.stats.successes,
       numFailures: this.stats.failures,
       numErrors: this.stats.errors,
+      
+      // Backwards compatibility - deprecated field names
+      numPasses: this.stats.successes,  // @deprecated Use numSuccesses
+      numFails: this.stats.failures,    // @deprecated Use numFailures
 
       // Performance metrics
       totalEvalTimeMs,
