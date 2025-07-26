@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import Editor from 'react-simple-code-editor';
+import React, { useEffect, useState, useMemo } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
-import InfoIcon from '@mui/icons-material/Info';
+import { getProviderSchema, validateProviderConfig, type FieldSchema } from '@app/schemas/providerSchemas';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -11,20 +12,16 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
 import Switch from '@mui/material/Switch';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import yaml from 'js-yaml';
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-yaml';
-import './ProviderConfigDialog.css';
 
 /**
- * Dialog for configuring provider settings with both form and YAML editing modes
+ * Dialog for configuring provider settings with validation
  */
 interface ProviderConfigDialogProps {
   /** Whether the dialog is open */
@@ -39,21 +36,6 @@ interface ProviderConfigDialogProps {
   onSave: (providerId: string, config: Record<string, any>) => void;
 }
 
-// Common fields that should always be visible
-const COMMON_FIELDS = {
-  apiKey: { type: 'string', label: 'API Key', description: 'Authentication key for the provider' },
-  apiBaseUrl: { type: 'string', label: 'API Base URL', description: 'Base URL for API requests' },
-  apiHost: { type: 'string', label: 'API Host', description: 'Hostname for the API' },
-  temperature: { type: 'number', label: 'Temperature', description: 'Controls randomness (0-2)' },
-  max_tokens: { type: 'number', label: 'Max Tokens', description: 'Maximum tokens in response' },
-  timeout: {
-    type: 'number',
-    label: 'Timeout (ms)',
-    description: 'Request timeout in milliseconds',
-  },
-  headers: { type: 'object', label: 'Headers', description: 'Custom HTTP headers' },
-};
-
 const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   open,
   providerId,
@@ -61,366 +43,263 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   onClose,
   onSave,
 }) => {
-  const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
-  const [localConfig, setLocalConfig] = useState<Record<string, any>>(config);
+  const [localConfig, setLocalConfig] = useState<Record<string, any>>({});
   const [tabValue, setTabValue] = useState(0);
-  const [yamlConfig, setYamlConfig] = useState('');
-  const [yamlError, setYamlError] = useState<string | null>(null);
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const isAzureProvider = providerId.startsWith('azure:');
-  const originalConfigRef = useRef(config);
+  const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
-  // Update original config ref when config prop changes
-  useEffect(() => {
-    originalConfigRef.current = config;
-  }, [config]);
+  // Get schema for current provider
+  const schema = useMemo(() => getProviderSchema(providerId), [providerId]);
+  const hasSchema = !!schema;
 
-  // Helper function to check if a value has content
-  const hasContent = (val: any): boolean => {
-    return val !== undefined && val !== null && val !== '';
+  // Validate configuration
+  const validateConfig = (configToValidate: Record<string, any>) => {
+    const { errors } = validateProviderConfig(providerId, configToValidate);
+    setValidationErrors(errors);
+    return errors.length === 0;
   };
 
-  const isDeploymentIdValid = !isAzureProvider || hasContent(localConfig.deployment_id);
-
-  // Convert config to YAML
-  const configToYaml = useCallback((configObj: Record<string, any>) => {
-    return yaml.dump(configObj, { skipInvalid: true });
-  }, []);
-
-  // Sync form state to YAML when in form editor mode
+  // Initialize config when dialog opens or provider changes
   useEffect(() => {
-    if (tabValue === 0) {
-      // When switching to form, update YAML with full config
-      // This preserves any fields not shown in the form
-      const fullConfig = { ...originalConfigRef.current };
-      Object.keys(localConfig).forEach((key) => {
-        fullConfig[key] = localConfig[key];
+    if (!open) {
+      return;
+    }
+    
+    // If we have a schema, initialize with defaults
+    if (schema) {
+      const initialConfig: Record<string, any> = {};
+      schema.fields.forEach(field => {
+        // Always include the field in config so it shows in the form
+        const value = config[field.name] ?? field.defaultValue ?? '';
+        initialConfig[field.name] = value;
       });
-      setYamlConfig(configToYaml(fullConfig));
-    }
-  }, [localConfig, tabValue, configToYaml]);
-
-  // Handle save functionality
-  const handleSave = useCallback(
-    (silent = false) => {
-      let configToSave: Record<string, any>;
-
-      if (tabValue === 1) {
-        // Save from YAML editor
-        try {
-          configToSave = yaml.load(yamlConfig) as Record<string, any>;
-        } catch (err) {
-          if (!silent) {
-            let errorMessage = 'Invalid YAML syntax';
-            if (err instanceof Error) {
-              // Extract more helpful error messages from yaml parser
-              if (err.message.includes('duplicated mapping key')) {
-                errorMessage = 'Duplicate keys found in YAML';
-              } else if (err.message.includes('unexpected end')) {
-                errorMessage = 'Incomplete YAML - check for missing quotes or brackets';
-              } else if (err.message.includes('bad indentation')) {
-                errorMessage = 'Invalid indentation - YAML requires consistent spacing';
-              } else {
-                errorMessage = `YAML error: ${err.message}`;
-              }
-            }
-            setYamlError(errorMessage);
-          }
-          return;
-        }
-      } else {
-        // Save from form editor - merge with original config to preserve non-form fields
-        configToSave = { ...originalConfigRef.current };
-
-        // Update all form fields, including removing cleared ones
-        Object.keys(COMMON_FIELDS).forEach((key) => {
-          if (key in localConfig) {
-            if (localConfig[key] === undefined) {
-              // Field was cleared, remove it
-              delete configToSave[key];
-            } else {
-              configToSave[key] = localConfig[key];
-            }
-          }
-        });
-
-        // Handle deployment_id for Azure providers
-        if (isAzureProvider && 'deployment_id' in localConfig) {
-          if (localConfig.deployment_id === undefined) {
-            delete configToSave.deployment_id;
-          } else {
-            configToSave.deployment_id = localConfig.deployment_id;
-          }
-        }
-      }
-
-      onSave(providerId, configToSave);
-      setHasUnsavedChanges(false);
-
-      if (!silent) {
-        onClose();
-      }
-    },
-    [tabValue, yamlConfig, localConfig, providerId, onSave, onClose, isAzureProvider],
-  );
-
-  // Auto-save functionality
-  useEffect(() => {
-    if (hasUnsavedChanges) {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-
-      autoSaveTimerRef.current = setTimeout(() => {
-        handleSave(true); // Silent save
-      }, 5000); // Increased to 5 seconds to reduce API calls
-    }
-
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-    };
-  }, [hasUnsavedChanges, handleSave]);
-
-  // Reset local config when the dialog opens or providerId changes
-  useEffect(() => {
-    // Start with all common fields (they can be undefined)
-    const formConfig: Record<string, any> = {};
-    Object.keys(COMMON_FIELDS).forEach((key) => {
-      formConfig[key] = config[key]; // This will be undefined if not in config
-    });
-
-    // Add deployment_id for Azure providers
-    if (isAzureProvider) {
-      formConfig.deployment_id = config.deployment_id;
-    }
-
-    setLocalConfig(formConfig);
-    setYamlConfig(configToYaml(config));
-    setHasUnsavedChanges(false);
-    originalConfigRef.current = config;
-  }, [open, providerId, config, configToYaml, isAzureProvider]);
-
-  const handleYamlChange = (code: string) => {
-    setYamlConfig(code);
-    setYamlError(null);
-    setHasUnsavedChanges(true);
-
-    // Try to parse and sync to form if valid
-    try {
-      const parsed = yaml.load(code) as Record<string, any>;
-
-      // Update localConfig with all common fields (can be undefined)
-      const newLocalConfig: Record<string, any> = {};
-      Object.keys(COMMON_FIELDS).forEach((key) => {
-        newLocalConfig[key] = parsed[key]; // This will be undefined if not in parsed
-      });
-
-      if (isAzureProvider) {
-        newLocalConfig.deployment_id = parsed.deployment_id;
-      }
-
-      setLocalConfig(newLocalConfig);
-    } catch {
-      // Invalid YAML, don't sync
-    }
-  };
-
-  const updateLocalConfigField = (key: string, value: any) => {
-    setLocalConfig({ ...localConfig, [key]: value });
-    setHasUnsavedChanges(true);
-  };
-
-  const renderFieldInput = (
-    key: string,
-    value: any,
-    onChange: (value: any) => void,
-    isRequired = false,
-  ) => {
-    if (
-      typeof value === 'number' ||
-      (COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.type === 'number' && value === undefined)
-    ) {
-      return (
-        <TextField
-          label={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.label || key}
-          value={value === undefined ? '' : value}
-          onChange={(e) =>
-            onChange(e.target.value === '' ? undefined : Number.parseFloat(e.target.value))
-          }
-          fullWidth
-          required={isRequired}
-          type="number"
-          InputLabelProps={{ shrink: true }}
-          helperText={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.description}
-        />
-      );
-    } else if (typeof value === 'boolean') {
-      return (
-        <FormControlLabel
-          control={<Switch checked={value || false} onChange={(e) => onChange(e.target.checked)} />}
-          label={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.label || key}
-        />
-      );
-    } else if (
-      typeof value === 'object' ||
-      COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.type === 'object'
-    ) {
-      return (
-        <JsonTextField
-          label={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.label || key}
-          defaultValue={JSON.stringify(value || {})}
-          onChange={(parsed) => onChange(parsed)}
-          fullWidth
-          multiline
-          minRows={2}
-          InputLabelProps={{ shrink: true }}
-          helperText={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.description}
-        />
-      );
+      setLocalConfig(initialConfig);
+      // Validate initial config
+      validateConfig(initialConfig);
     } else {
-      return (
-        <TextField
-          label={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.label || key}
-          value={value === undefined ? '' : value}
-          onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
-          fullWidth
-          required={isRequired}
-          InputLabelProps={{ shrink: true }}
-          helperText={COMMON_FIELDS[key as keyof typeof COMMON_FIELDS]?.description}
-        />
-      );
+      // No schema, just use the provided config
+      setLocalConfig(config);
+      setValidationErrors([]);
+    }
+    
+    setJsonError(null);
+    setTabValue(hasSchema ? 0 : 1); // Default to JSON tab if no schema
+  }, [open, providerId, config, schema, hasSchema]);
+
+  // Handle field change
+  const handleFieldChange = (fieldName: string, value: any) => {
+    const newConfig = { ...localConfig, [fieldName]: value };
+    setLocalConfig(newConfig);
+    
+    // Clear validation errors as user types
+    if (validationErrors.length > 0) {
+      validateConfig(newConfig);
     }
   };
 
-  // Create an ordered list of keys with deployment_id first for Azure providers
-  const configKeys = React.useMemo(() => {
-    const keys = Object.keys(localConfig);
-    if (isAzureProvider) {
-      return ['deployment_id', ...keys.filter((key) => key !== 'deployment_id')];
+  // Handle save
+  const handleSave = () => {
+    let configToSave = localConfig;
+    
+    if (tabValue === 1) {
+      // In JSON mode, localConfig is already the parsed JSON
+      configToSave = localConfig;
     }
-    return keys;
-  }, [localConfig, isAzureProvider]);
 
-  // Check if there are additional fields beyond common ones
-  const hasAdditionalFields = useMemo(() => {
-    return Object.keys(config).some(
-      (key) => !COMMON_FIELDS[key as keyof typeof COMMON_FIELDS] && key !== 'deployment_id',
-    );
-  }, [config]);
+    // Clean up empty values
+    const cleanedConfig = Object.entries(configToSave).reduce((acc, [key, value]) => {
+      if (value !== '' && value !== undefined && value !== null) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, any>);
 
-  const handleClose = () => {
-    if (hasUnsavedChanges) {
-      handleSave(true);
+    // Validate before saving
+    if (!validateConfig(cleanedConfig)) {
+      return;
     }
+
+    onSave(providerId, cleanedConfig);
     onClose();
   };
 
+  // Toggle sensitive field visibility
+  const toggleSensitiveVisibility = (fieldName: string) => {
+    setShowSensitive(prev => ({ ...prev, [fieldName]: !prev[fieldName] }));
+  };
+
+  // Render field based on schema
+  const renderField = (field: FieldSchema) => {
+    const rawValue = localConfig[field.name];
+    // Ensure we have a controlled value
+    const value = rawValue === undefined || rawValue === null ? '' : rawValue;
+    const error = validationErrors.find(err => err.includes(field.label));
+
+    switch (field.type) {
+      case 'boolean':
+        return (
+          <FormControlLabel
+            control={
+              <Switch 
+                checked={!!value} 
+                onChange={(e) => handleFieldChange(field.name, e.target.checked)} 
+              />
+            }
+            label={field.label}
+          />
+        );
+      
+      case 'number':
+        return (
+          <TextField
+            fullWidth
+            label={field.label}
+            type="number"
+            value={value}
+            onChange={(e) => handleFieldChange(field.name, e.target.value ? Number(e.target.value) : '')}
+            error={!!error}
+            helperText={error || field.description}
+            required={field.required}
+            InputProps={{
+              inputProps: {
+                min: field.validation?.min,
+                max: field.validation?.max,
+              }
+            }}
+          />
+        );
+      
+      case 'object':
+      case 'array':
+        return (
+          <JsonTextField
+            label={field.label}
+            defaultValue={JSON.stringify(value || (field.type === 'array' ? [] : {}))}
+            onChange={(parsed) => handleFieldChange(field.name, parsed)}
+            fullWidth
+            multiline
+            minRows={3}
+            error={!!error}
+            helperText={error || field.description}
+          />
+        );
+      
+      default: // string
+        return (
+          <TextField
+            fullWidth
+            label={field.label}
+            value={value}
+            onChange={(e) => handleFieldChange(field.name, e.target.value)}
+            error={!!error}
+            helperText={error || field.description}
+            required={field.required}
+            type={field.sensitive && !showSensitive[field.name] ? 'password' : 'text'}
+            InputProps={field.sensitive ? {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={() => toggleSensitiveVisibility(field.name)}
+                    edge="end"
+                    size="small"
+                  >
+                    {showSensitive[field.name] ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            } : undefined}
+          />
+        );
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
         <Box>
-          Provider Configuration
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mt: 0.5, fontSize: '0.9rem', fontFamily: 'monospace' }}
-          >
+          <Typography variant="h6">Provider Configuration</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
             {providerId}
           </Typography>
         </Box>
       </DialogTitle>
+      
       <DialogContent>
-        <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
-          <Tab label="Form" />
-          <Tab label="YAML" />
-        </Tabs>
+        {hasSchema && (
+          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
+            <Tab label="Form" />
+            <Tab label="JSON" />
+          </Tabs>
+        )}
 
-        {tabValue === 0 ? (
-          <>
-            {isAzureProvider && (
-              <Box mb={2}>
-                <Alert severity={isDeploymentIdValid ? 'info' : 'warning'}>
-                  {isDeploymentIdValid
-                    ? 'Azure OpenAI requires a deployment ID that matches your deployment name in the Azure portal.'
-                    : 'You must specify a deployment ID for Azure OpenAI models. This is the name you gave your model deployment in the Azure portal.'}
-                </Alert>
+        {!hasSchema && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            No configuration schema available for this provider. Use JSON editor to configure.
+          </Alert>
+        )}
+
+        {validationErrors.length > 0 && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight="bold">
+              Please fix the following errors:
+            </Typography>
+            <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+              {validationErrors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </Alert>
+        )}
+
+        {tabValue === 0 && schema ? (
+          <Box>
+            {schema.fields.map((field) => (
+              <Box key={field.name} mb={2}>
+                {renderField(field)}
               </Box>
-            )}
-
-            {hasAdditionalFields && (
-              <Alert
-                severity="info"
-                sx={{ mb: 2 }}
-                icon={<InfoIcon />}
-                action={
-                  <Button size="small" onClick={() => setTabValue(1)}>
-                    Switch to YAML
-                  </Button>
-                }
-              >
-                Additional configuration detected. Use YAML tab to edit all fields.
-              </Alert>
-            )}
-
-            {configKeys.map((key) => {
-              const value = localConfig[key];
-              const isDeploymentId = isAzureProvider && key === 'deployment_id';
-              const isRequired = isDeploymentId;
-
-              return (
-                <Box key={key} my={2}>
-                  {renderFieldInput(
-                    key,
-                    value,
-                    (newValue) => updateLocalConfigField(key, newValue),
-                    isRequired,
-                  )}
-                </Box>
-              );
-            })}
-
-            <Box sx={{ mt: 3, textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Need more configuration options? Use the{' '}
-                <Button size="small" onClick={() => setTabValue(1)} sx={{ textTransform: 'none' }}>
-                  YAML tab
-                </Button>{' '}
-                to add any field.
-              </Typography>
-            </Box>
-          </>
+            ))}
+          </Box>
         ) : (
           <Box>
-            {yamlError && (
+            {jsonError && (
               <Alert severity="error" sx={{ mb: 2 }}>
-                {yamlError}
+                {jsonError}
               </Alert>
             )}
-            <Editor
-              value={yamlConfig}
-              onValueChange={handleYamlChange}
-              highlight={(code) => highlight(code, languages.yaml)}
-              padding={10}
-              style={{
-                fontFamily: '"Fira code", "Fira Mono", monospace',
-                fontSize: 14,
-                backgroundColor: isDarkMode ? '#1e1e1e' : '#f5f5f5',
-                border: `1px solid ${isDarkMode ? '#444' : '#e0e0e0'}`,
-                borderRadius: 4,
-                minHeight: 400,
-                color: isDarkMode ? '#d4d4d4' : '#333',
+            <JsonTextField
+              label="Configuration JSON"
+              defaultValue={JSON.stringify(localConfig, null, 2)}
+              onChange={(parsed, error) => {
+                if (error) {
+                  setJsonError(error);
+                } else {
+                  setJsonError(null);
+                  setLocalConfig(parsed);
+                  // Validate JSON in real-time
+                  if (hasSchema) {
+                    validateConfig(parsed);
+                  }
+                }
               }}
+              fullWidth
+              multiline
+              minRows={15}
+              maxRows={25}
+              error={!!jsonError}
+              helperText={hasSchema ? undefined : "Enter your provider configuration as JSON"}
             />
           </Box>
         )}
       </DialogContent>
+      
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={() => handleSave(false)} disabled={!isDeploymentIdValid}>
+        <Button 
+          onClick={handleSave} 
+          variant="contained"
+          disabled={validationErrors.length > 0 || !!jsonError}
+        >
           Save
         </Button>
       </DialogActions>

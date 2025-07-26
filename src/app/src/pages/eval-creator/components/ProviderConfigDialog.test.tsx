@@ -1,16 +1,21 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import React from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, Mock } from 'vitest';
 import ProviderConfigDialog from './ProviderConfigDialog';
+import * as providerSchemas from '@app/schemas/providerSchemas';
 
-const theme = createTheme();
+// Mock the provider schemas module
+vi.mock('@app/schemas/providerSchemas', () => ({
+  getProviderSchema: vi.fn(),
+  validateProviderConfig: vi.fn(),
+  FieldSchema: {} // Add type export
+}));
 
 describe('ProviderConfigDialog', () => {
   const defaultProps = {
     open: true,
     providerId: 'openai:gpt-4',
     config: {
+      apiKey: 'test-key',
       temperature: 0.7,
       max_tokens: 1024,
     },
@@ -18,76 +23,128 @@ describe('ProviderConfigDialog', () => {
     onSave: vi.fn(),
   };
 
-  const renderWithTheme = (ui: React.ReactElement) => {
-    return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+  const mockSchema = {
+    fields: [
+      {
+        name: 'apiKey',
+        type: 'string' as const,
+        label: 'API Key',
+        description: 'Authentication key',
+        required: true,
+        sensitive: true,
+        defaultValue: '',
+      },
+      {
+        name: 'temperature',
+        type: 'number' as const,
+        label: 'Temperature',
+        description: 'Controls randomness',
+        validation: { min: 0, max: 2 },
+        defaultValue: 0.7,
+      },
+      {
+        name: 'max_tokens',
+        type: 'number' as const,
+        label: 'Max Tokens',
+        description: 'Maximum tokens',
+        defaultValue: 1024,
+      },
+    ],
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (providerSchemas.getProviderSchema as Mock).mockReturnValue(mockSchema);
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
+      valid: true, 
+      errors: [] 
+    });
   });
 
   it('renders provider configuration dialog', () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+    render(<ProviderConfigDialog {...defaultProps} />);
 
     expect(screen.getByText('Provider Configuration')).toBeInTheDocument();
     expect(screen.getByText('openai:gpt-4')).toBeInTheDocument();
   });
 
-  it('displays form editor by default', () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+  it('displays form editor by default when schema exists', () => {
+    render(<ProviderConfigDialog {...defaultProps} />);
 
     expect(screen.getByRole('tab', { name: 'Form' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'YAML' })).toBeInTheDocument();
-  });
-
-  it('shows common fields even if not in config', () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
-
-    expect(screen.getByLabelText('API Key')).toBeInTheDocument();
-    expect(screen.getByLabelText('API Base URL')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'JSON' })).toBeInTheDocument();
+    
+    // Check that the schema mock was called
+    expect(providerSchemas.getProviderSchema).toHaveBeenCalledWith('openai:gpt-4');
+    
+    // Check for form fields - they should exist even with initial values
     expect(screen.getByLabelText('Temperature')).toBeInTheDocument();
     expect(screen.getByLabelText('Max Tokens')).toBeInTheDocument();
   });
 
-  it('switches between form and YAML editor', async () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+  it('displays JSON editor when no schema exists', () => {
+    (providerSchemas.getProviderSchema as Mock).mockReturnValue(null);
+    render(<ProviderConfigDialog {...defaultProps} />);
 
-    const yamlTab = screen.getByRole('tab', { name: 'YAML' });
-    fireEvent.click(yamlTab);
-
-    await waitFor(() => {
-      // Check for the code editor by looking for textarea
-      const editor = document.querySelector('textarea');
-      expect(editor).toBeInTheDocument();
-    });
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.getByText(/No configuration schema available/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Configuration JSON')).toBeInTheDocument();
   });
 
-  it('shows message to use YAML tab for additional fields', () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+  it('handles sensitive fields with visibility toggle', () => {
+    render(<ProviderConfigDialog {...defaultProps} />);
 
-    expect(screen.getByText(/Need more configuration options\?/)).toBeInTheDocument();
-    expect(screen.getByText('YAML tab')).toBeInTheDocument();
+    // API Key should be a password field
+    const passwordInputs = screen.getAllByDisplayValue('test-key');
+    const apiKeyInput = passwordInputs[0] as HTMLInputElement;
+    
+    expect(apiKeyInput).toBeInTheDocument();
+    expect(apiKeyInput.type).toBe('password');
+
+    // Find the visibility toggle button using a more specific selector
+    const visibilityButtons = screen.getAllByRole('button');
+    const visibilityButton = visibilityButtons.find(btn => 
+      btn.querySelector('svg[data-testid="VisibilityIcon"]') || 
+      btn.querySelector('svg[data-testid="VisibilityOffIcon"]')
+    );
+    
+    expect(visibilityButton).toBeInTheDocument();
+    fireEvent.click(visibilityButton!);
+
+    expect(apiKeyInput.type).toBe('text');
   });
 
-  it('shows alert when config has additional fields beyond common ones', () => {
-    const propsWithExtraFields = {
+  it('validates configuration before saving', () => {
+    // Create a new test that starts with empty config to trigger validation
+    const propsWithEmptyConfig = {
       ...defaultProps,
-      config: {
-        temperature: 0.7,
-        max_tokens: 1024,
-        custom_field: 'custom_value',
-        nested_config: { key: 'value' },
-      },
+      config: {},
     };
+    
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
+      valid: false, 
+      errors: ['API Key is required'] 
+    });
 
-    renderWithTheme(<ProviderConfigDialog {...propsWithExtraFields} />);
+    render(<ProviderConfigDialog {...propsWithEmptyConfig} />);
 
-    expect(screen.getByText(/Additional configuration detected/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Switch to YAML' })).toBeInTheDocument();
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    
+    // Save button should be disabled due to validation errors
+    expect(saveButton).toBeDisabled();
+    
+    // Check that error appears (use getAllByText since it appears in both alert and field)
+    const errors = screen.getAllByText('API Key is required');
+    expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('saves configuration from form editor', async () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+  it('saves valid configuration', async () => {
+    // First mock returns initial validation result, then mock valid for save
+    (providerSchemas.validateProviderConfig as Mock)
+      .mockReturnValueOnce({ valid: false, errors: ['API Key is required'] }) // Initial load
+      .mockReturnValue({ valid: true, errors: [] }); // After change and save
+    
+    render(<ProviderConfigDialog {...defaultProps} />);
 
     const temperatureInput = screen.getByLabelText('Temperature');
     fireEvent.change(temperatureInput, { target: { value: '0.9' } });
@@ -99,6 +156,7 @@ describe('ProviderConfigDialog', () => {
       expect(defaultProps.onSave).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({
+          apiKey: 'test-key',
           temperature: 0.9,
           max_tokens: 1024,
         }),
@@ -106,61 +164,125 @@ describe('ProviderConfigDialog', () => {
     });
   });
 
-  it('syncs YAML editor with form changes', async () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+  it('switches between form and JSON editor', () => {
+    render(<ProviderConfigDialog {...defaultProps} />);
 
-    // Make a change in form editor
-    const temperatureInput = screen.getByLabelText('Temperature');
-    fireEvent.change(temperatureInput, { target: { value: '0.9' } });
+    // Initially in form mode
+    expect(screen.getByLabelText('Temperature')).toBeInTheDocument();
 
-    // Switch to YAML editor
-    const yamlTab = screen.getByRole('tab', { name: 'YAML' });
-    fireEvent.click(yamlTab);
+    const jsonTab = screen.getByRole('tab', { name: 'JSON' });
+    fireEvent.click(jsonTab);
 
-    // YAML should contain the updated temperature
-    await waitFor(() => {
-      const yamlContent = document.querySelector('textarea')?.value || '';
-      expect(yamlContent).toContain('temperature: 0.9');
-    });
+    // Should show JSON editor
+    expect(screen.getByLabelText('Configuration JSON')).toBeInTheDocument();
+    
+    // Form fields should not be visible
+    expect(screen.queryByLabelText('Temperature')).not.toBeInTheDocument();
   });
 
   it('validates Azure deployment_id requirement', () => {
+    const azureSchema = {
+      fields: [
+        {
+          name: 'deployment_id',
+          type: 'string' as const,
+          label: 'Deployment ID',
+          required: true,
+          defaultValue: '',
+        },
+      ],
+    };
+
+    (providerSchemas.getProviderSchema as Mock).mockReturnValue(azureSchema);
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
+      valid: false, 
+      errors: ['Deployment ID is required'] 
+    });
+
     const azureProps = {
       ...defaultProps,
       providerId: 'azure:chat:gpt-4',
       config: {},
     };
 
-    renderWithTheme(<ProviderConfigDialog {...azureProps} />);
+    render(<ProviderConfigDialog {...azureProps} />);
 
-    expect(
-      screen.getByText(/You must specify a deployment ID for Azure OpenAI models/),
-    ).toBeInTheDocument();
-
+    // Check for required field by looking for the input
+    const inputs = screen.getAllByRole('textbox');
+    expect(inputs.length).toBeGreaterThan(0);
+    
+    // With validation errors shown, the save button should be disabled
+    const errors = screen.getAllByText('Deployment ID is required');
+    expect(errors.length).toBeGreaterThan(0);
+    
     const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).toBeDisabled();
   });
 
-  it('handles YAML editor errors gracefully', async () => {
-    renderWithTheme(<ProviderConfigDialog {...defaultProps} />);
+  it('handles JSON editor errors gracefully', async () => {
+    render(<ProviderConfigDialog {...defaultProps} />);
 
-    const yamlTab = screen.getByRole('tab', { name: 'YAML' });
-    fireEvent.click(yamlTab);
+    const jsonTab = screen.getByRole('tab', { name: 'JSON' });
+    fireEvent.click(jsonTab);
 
     await waitFor(() => {
-      const editor = document.querySelector('textarea');
-      if (editor) {
-        // Simulate invalid YAML input
-        fireEvent.change(editor, { target: { value: 'invalid: yaml: syntax:' } });
-      }
+      const jsonInput = screen.getByLabelText('Configuration JSON');
+      fireEvent.change(jsonInput, { target: { value: 'invalid json' } });
     });
+
+    // The JsonTextField component should handle the error
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    expect(saveButton).toBeDisabled();
+  });
+
+  it('cleans up empty values before saving', async () => {
+    // Mock valid validation
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
+      valid: true, 
+      errors: [] 
+    });
+    
+    render(<ProviderConfigDialog {...defaultProps} />);
+
+    const maxTokensInput = screen.getByLabelText('Max Tokens');
+    fireEvent.change(maxTokensInput, { target: { value: '' } });
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Invalid YAML/)).toBeInTheDocument();
-      expect(defaultProps.onSave).not.toHaveBeenCalled();
+      expect(defaultProps.onSave).toHaveBeenCalledWith(
+        'openai:gpt-4',
+        expect.objectContaining({
+          apiKey: 'test-key',
+          temperature: 0.7,
+          // max_tokens should not be present
+        }),
+      );
+      
+      // Verify max_tokens was removed
+      const savedConfig = defaultProps.onSave.mock.calls[0][1];
+      expect(savedConfig).not.toHaveProperty('max_tokens');
     });
+  });
+
+  it('initializes fields with default values from schema', () => {
+    const schemaWithDefaults = {
+      fields: [
+        {
+          name: 'model',
+          type: 'string' as const,
+          label: 'Model',
+          defaultValue: 'gpt-4',
+        },
+      ],
+    };
+
+    (providerSchemas.getProviderSchema as Mock).mockReturnValue(schemaWithDefaults);
+
+    render(<ProviderConfigDialog {...defaultProps} config={{}} />);
+
+    const modelInput = screen.getByLabelText('Model') as HTMLInputElement;
+    expect(modelInput.value).toBe('gpt-4');
   });
 });

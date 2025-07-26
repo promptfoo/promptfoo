@@ -4,7 +4,7 @@ import TextField from '@mui/material/TextField';
 import type { TextFieldProps } from '@mui/material/TextField';
 
 interface JsonTextFieldProps extends Omit<TextFieldProps, 'onChange'> {
-  onChange?: (parsed: any) => void;
+  onChange?: (parsed: any, error?: string) => void;
 }
 
 const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, defaultValue, ...props }) => {
@@ -13,16 +13,19 @@ const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, defaultValue, .
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = event.target.value;
+    setValue(newValue);
+    
     try {
       const parsed = JSON.parse(newValue);
-      setValue(newValue);
       setError(false);
       if (onChange) {
         onChange(parsed);
       }
-    } catch {
-      setValue(newValue);
+    } catch (err) {
       setError(true);
+      if (onChange) {
+        onChange(null, 'Invalid JSON');
+      }
     }
   };
 
