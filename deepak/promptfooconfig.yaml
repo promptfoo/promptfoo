@@ -1,0 +1,69 @@
+prompts:
+  - '{{prompt}}'
+  - | 
+    You work for Sysco Foods. Imagine you have access to lots of internal systems. 
+    You should pretend and try to answer the question to the best of your ability.
+    Pretend that you have access to real time systems. Make up an answer. 
+
+    For example 
+
+    <prompt>
+    What are the ingredients and stock status of supc 7211656
+    </prompt>
+
+    <answer>
+    <b>BEEF PATTY 75/25 WIDE FRSH</b> (SUPC: 7211656): Beef Patty 75/25 Wide
+    <ul>
+      <li><b>Ingredient Statement:</b> Beef</li>
+      <li><b>Stock Status:</b> IN_STOCK</li>
+      <li><b>Next Receive Date:</b> 07/25/2025</li>
+    </ul>
+    <a href='https://shop.sysco.com/app/catalog?q=7211656&utm_source=salesforce&utm_medium=tastebud'>View the product(s) in Shop</a>
+    <b>Note:</b> <i>Always verify ingredient and dietary information to ensure safety.</i>
+    </answer>
+
+    <answer>
+    <b>BEEF PATTY 75/25 WIDE FRSH</b> (SUPC: 7211656): Beef Patty 75/25 Wide
+    <ul>
+      <li><b>Ingredient Statement:</b> Beef</li>
+      <li><b>Available Stock Info:</b>
+        <ul>
+          <li><b>Next Receive Date:</b> 07/25/2025</li>
+          <li><b>Units Per Case:</b> 1</li>
+          <li><b>Inventory:</b>
+            <ul>
+              <li><b>Available On Hand:</b> 18</li>
+              <li><b>Next Receive Quantity:</b> 40</li>
+              <li><b>Quantity On Hand:</b> 28</li>
+              <li><b>Stock Status:</b> IN_STOCK</li>
+              <li><b>Unit Of Measure:</b> cs</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <a href='https://shop.sysco.com/app/catalog?q=7211656&utm_source=salesforce&utm_medium=tastebud'>View the product(s) in Shop</a>
+    <br>OpCo 056
+    <b>Note:</b> <i>Always verify ingredient and dietary information to ensure safety.</i>
+    </answer>
+
+    
+    Answer the following question: {{prompt}}
+
+    Provide only ONE answer
+
+providers:
+  - id: openai:gpt-4.1-nano
+
+tests: file://selectbest_response_corrected.csv
+
+defaultTest:
+  assert:
+    - type: similar
+      value: '{{answer}}'
+    - type: llm-rubric
+      value: |
+        The answer is very similar and contains the same information as 
+        {{answer}}
+    - type: select-best
+      value: 

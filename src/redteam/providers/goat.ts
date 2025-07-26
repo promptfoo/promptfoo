@@ -4,7 +4,15 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { getGoalRubric } from './prompts';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
+
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,23 +21,18 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { sleep } from '../../util/time';
 import {
   createEmptyTokenUsage,
   accumulateResponseTokenUsage,
   accumulateGraderTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
  */
-export interface GoatMetadata extends BaseRedteamMetadata {
+interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached';
   successfulAttacks?: Array<{
@@ -38,12 +41,13 @@ export interface GoatMetadata extends BaseRedteamMetadata {
     response: string;
   }>;
   totalSuccessfulAttacks?: number;
+  storedGraderResult?: GradingResult;
 }
 
 /**
  * Represents the complete response from a GOAT conversation.
  */
-export interface GoatResponse extends ProviderResponse {
+interface GoatResponse extends ProviderResponse {
   metadata: GoatMetadata;
 }
 
@@ -62,6 +66,7 @@ interface GoatConfig {
 
 export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
+  private readonly nunjucks: any;
   private successfulAttacks: Array<{
     turn: number;
     prompt: string;
@@ -93,6 +98,7 @@ export default class GoatProvider implements ApiProvider {
         options.excludeTargetOutputFromAgenticAttackGeneration ?? false,
       continueAfterSuccess: options.continueAfterSuccess ?? false,
     };
+    this.nunjucks = getNunjucksEngine();
     logger.debug(
       `[GOAT] Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
@@ -126,16 +132,28 @@ export default class GoatProvider implements ApiProvider {
 
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
+    let storedGraderResult: GradingResult | undefined;
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
 
     if (context?.test) {
       test = context?.test;
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+      assertToUse = test?.assert?.find(
+        (a: { type: string }) => a.type && a.type.includes(test?.metadata?.pluginId),
+      );
+
+      // Fallback: if no assertion matches the pluginId, use the first assertion with a type
+      if (!assertToUse) {
+        assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+      }
     }
 
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
+
+    // Generate goal-specific evaluation rubric
+    const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
+    const additionalRubric = getGoalRubric(userGoal);
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
@@ -334,8 +352,10 @@ export default class GoatProvider implements ApiProvider {
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            additionalRubric,
           );
           graderPassed = grade.pass;
+          storedGraderResult = grade;
           accumulateGraderTokenUsage(totalTokenUsage, grade);
         }
 
@@ -371,6 +391,7 @@ export default class GoatProvider implements ApiProvider {
         redteamHistory: messagesToRedteamHistory(messages),
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
+        storedGraderResult,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

@@ -1,5 +1,6 @@
 import { matchesClosedQa } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+
 import type { GradingConfig } from '../../src/types';
 
 describe('matchesClosedQa', () => {
@@ -31,7 +32,7 @@ describe('matchesClosedQa', () => {
 
     await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: true,
-      reason: 'The submission meets the criterion',
+      reason: 'The submission meets the criterion:\nfoo \n \n bar\n Y Y \n',
       score: 1,
       tokensUsed: {
         total: expect.any(Number),
@@ -106,7 +107,7 @@ describe('matchesClosedQa', () => {
     });
     await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: true,
-      reason: 'The submission meets the criterion',
+      reason: 'The submission meets the criterion:\nfoo \n \n bar\n Y Y',
       score: 1,
       tokensUsed: {
         total: expect.any(Number),

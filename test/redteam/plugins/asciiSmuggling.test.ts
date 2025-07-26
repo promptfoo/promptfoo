@@ -1,4 +1,5 @@
-import { AsciiSmugglingGrader, PLUGIN_ID } from '../../../src/redteam/plugins/asciiSmuggling';
+import { AsciiSmugglingGrader } from '../../../src/redteam/plugins/asciiSmuggling';
+
 import type { AtomicTestCase } from '../../../src/types';
 
 describe('AsciiSmugglingGrader', () => {
@@ -9,8 +10,7 @@ describe('AsciiSmugglingGrader', () => {
   });
 
   it('should have the correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
-    expect(PLUGIN_ID).toBe('promptfoo:redteam:ascii-smuggling');
+    expect(grader.id).toBe('promptfoo:redteam:ascii-smuggling');
   });
 
   it('should detect when model follows injected instructions', async () => {

@@ -1,0 +1,843 @@
+{
+  "report_id": "rpt_20250724_235455",
+  "timestamp": "2025-07-24T23:54:55.910534",
+  "total_cards": 17,
+  "cards": [
+    {
+      "position": 1,
+      "identity": {
+        "name": "Sensor Splicer",
+        "set_code": "2x2",
+        "collector_number": "29",
+        "scryfall_id": "2d308c11-cc8d-4fa6-bbe1-357b164733ad"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "10",
+        "confidence": 0.75,
+        "overall_score": 9.6
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 9.0,
+          "description": "Estimated 55/45 left-right, 55/45 top-bottom - Slightly off-center on both axes, favoring the right and bottom borders. This is well within tolerance for a high grade."
+        },
+        {
+          "category": "corners",
+          "score": 10.0,
+          "description": "All four corners appear perfectly sharp with no visible whitening or rounding. The card is well-preserved within its sleeve."
+        },
+        {
+          "category": "edges",
+          "score": 10.0,
+          "description": "The visible portions of all four edges appear pristine and free of any nicks, chips, or whitening."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "Visible areas of the surface appear clean and free of defects. A significant portion of the art box is obscured by a bright glare, preventing a complete inspection."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.6,
+          "description": "The card presents as Gem Mint. Corners and edges are pristine. Centering is the only minor, quantifiable flaw. A definitive surface grade is impossible due to heavy glare in the photo, but no defects are visible elsewhere. High potential for PSA 10."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 2,
+      "identity": {
+        "name": "Witherbloom Apprentice",
+        "set_code": "stx",
+        "collector_number": "247",
+        "scryfall_id": "7f80a11b-188b-464c-b00d-c9d1cfb8ddee"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.65,
+        "overall_score": 9.0
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "Approx. 60/40 left-right, 50/50 top-bottom - The card is slightly off-center, with the left border appearing wider than the right. Top and bottom borders appear relatively even."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "All four corners appear sharp and well-preserved within the sleeve. No visible whitening or rounding based on the image."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "The visible portions of all four edges appear clean and free of chipping or whitening."
+        },
+        {
+          "category": "surface",
+          "score": 9.0,
+          "description": "The surface appears clean, but significant glare and low image resolution make a definitive assessment difficult. No scratches, scuffs, or print defects are visible."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.0,
+          "description": "The card presents as Near Mint. The primary flaw is the left-to-right centering. Corners, edges, and surface appear pristine, but this assessment is made with low confidence due to poor image quality, heavy glare, and the card being inside a binder sleeve."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 3,
+      "identity": {
+        "name": "Brazen Dwarf",
+        "set_code": "afr",
+        "collector_number": "134",
+        "scryfall_id": "3658e65b-df54-4327-9104-c2f3dd65df85"
+      },
+      "grade": {
+        "tcg_condition": "LP",
+        "psa_equivalent": "8",
+        "confidence": 0.4,
+        "overall_score": 8.23
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "Estimated 60/40 left-right - Appears slightly off-center to the right. Top and bottom centering cannot be determined as the card is cropped within the image."
+        },
+        {
+          "category": "corners",
+          "score": 8.0,
+          "description": "The visible top-left corner appears sharp. The other three corners are obscured by the binder sleeve or cropped out of the image. The score is lowered due to the inability to fully inspect the card."
+        },
+        {
+          "category": "edges",
+          "score": 8.5,
+          "description": "The visible top and left edges appear clean. The right and bottom edges are obscured. A definitive grade is not possible."
+        },
+        {
+          "category": "surface",
+          "score": 8.5,
+          "description": "The surface is viewed through a textured binder sleeve, which prevents a detailed inspection for micro-scratches or print defects. No major blemishes are visible."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 8.23,
+          "description": "A definitive grade cannot be provided due to the poor image quality. The card is cropped, angled, and housed in a textured sleeve, obscuring most key grading areas. The assessment is a conservative estimate based on the few visible details. A physical inspection is required for an accurate grade."
+        }
+      ],
+      "estimated_value": {
+        "low": 5.6,
+        "mid": 7.0,
+        "high": 8.4,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 4,
+      "identity": {
+        "name": "Ground Assault",
+        "set_code": "2x2",
+        "collector_number": "223",
+        "scryfall_id": "e8c61bd1-4bf5-4c38-835d-2249f8e8d5d4"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.9,
+        "overall_score": 9.1
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "60/40 left-right, 55/45 top-bottom - The card is noticeably off-center, favoring the right and bottom borders. The left border is significantly wider than the right."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "All four corners appear sharp and clean with no visible whitening or wear, even under magnification through the sleeve."
+        },
+        {
+          "category": "edges",
+          "score": 10.0,
+          "description": "The edges appear pristine and free of any visible whitening, chipping, or wear."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The foil surface appears clean and free of scratches, scuffs, or print defects. There is a slight possibility of micro-scratches not visible in the image."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.1,
+          "description": "The card is in excellent, pack-fresh condition with sharp corners, clean edges, and a flawless surface. The sole detracting factor is the factory centering, which prevents a higher grade. A strong candidate for PSA 9."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 5,
+      "identity": {
+        "name": "Bonded Horncrest",
+        "set_code": "xln",
+        "collector_number": "133",
+        "scryfall_id": "a50ad54a-73f8-4b97-b890-2be9a178bc42"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.9,
+        "overall_score": 9.2
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "Approx. 60/40 left-right, 50/50 top-bottom - The card is noticeably off-center horizontally, with the left border appearing significantly wider than the right. Top-to-bottom centering appears near-perfect."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "All four corners appear sharp and well-preserved with no visible whitening or wear. The assessment is made through a sleeve, but they present as Gem Mint."
+        },
+        {
+          "category": "edges",
+          "score": 10.0,
+          "description": "All visible edges of the card appear clean and free of any whitening, chipping, or nicks."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The surface appears clean, glossy, and free of any visible scratches, scuffs, or print defects. The card is viewed through a sleeve which may obscure microscopic flaws."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.2,
+          "description": "A very sharp card whose primary and only significant flaw is the horizontal centering. The corners, edges, and surface appear pristine, making it a high-grade example that just misses Gem Mint criteria due to centering."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 6,
+      "identity": {
+        "name": "Mourning Patrol",
+        "set_code": "mid",
+        "collector_number": "28",
+        "scryfall_id": "2d3687e2-09e0-4753-aa02-88a19bde3330"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "10",
+        "confidence": 0.85,
+        "overall_score": 9.75
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 9.0,
+          "description": "55/45 left-right, 52/48 top-bottom - The card is slightly off-center, favoring the left and top borders. This is within the tolerance for a high grade."
+        },
+        {
+          "category": "corners",
+          "score": 10.0,
+          "description": "All four corners appear perfectly sharp and crisp with no visible whitening or wear. Assessment is based on visibility through the sleeve."
+        },
+        {
+          "category": "edges",
+          "score": 10.0,
+          "description": "All four edges appear pristine and free of any chipping, nicks, or whitening."
+        },
+        {
+          "category": "surface",
+          "score": 10.0,
+          "description": "The surface appears flawless, with no visible scratches, scuffs, print lines, or indentations. The image has some glare, but no defects are apparent."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.75,
+          "description": "The card appears to be in exceptional condition, a strong candidate for Gem Mint. The only observable flaw is the centering, which is slightly off but within PSA 10 tolerance. A definitive grade would require inspection outside of the sleeve."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 7,
+      "identity": {
+        "name": "Imperial Lancer",
+        "set_code": "xln",
+        "collector_number": "15",
+        "scryfall_id": "7ed3784a-2dc0-4626-aa6a-268c1e2ac83c"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "8",
+        "confidence": 0.88,
+        "overall_score": 9.1
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 7.0,
+          "description": "Approx. 65/35 left-right, 55/45 top-bottom - The card is significantly off-center, favoring the right and bottom borders. The left-to-right centering is the primary issue."
+        },
+        {
+          "category": "corners",
+          "score": 10.0,
+          "description": "All four corners appear perfectly sharp and crisp, with no signs of whitening or wear, even under magnification."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "The visible portions of the edges appear clean and free of any nicks or whitening. A perfect score is withheld due to the binder sleeve slightly obscuring a full view."
+        },
+        {
+          "category": "surface",
+          "score": 10.0,
+          "description": "The card surface is flawless. It is clean, glossy, and shows no scratches, scuffs, print lines, or other imperfections."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.1,
+          "description": "This card is pack-fresh in terms of its corners, edges, and surface. However, the grade is limited by its centering, which falls within the 65/35 tolerance, capping the potential grade at a PSA 8. While the overall score is high, the centering prevents a higher grade. Under TCGPlayer standards, this would still be considered Near Mint, often with an 'OC' (Off-Center) qualifier."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 8,
+      "identity": {
+        "name": "Steadfast Paladin",
+        "set_code": "afr",
+        "collector_number": "38",
+        "scryfall_id": "a2c06b6e-faf5-467d-bfe1-9ff00be9e2f5"
+      },
+      "grade": {
+        "tcg_condition": "LP",
+        "psa_equivalent": "8",
+        "confidence": 0.3,
+        "overall_score": 8.63
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 7.0,
+          "description": "Approx. 65/35 left-right, top-bottom is not fully assessable - The card is significantly off-center on the horizontal axis, with the left border being much wider than the right."
+        },
+        {
+          "category": "corners",
+          "score": 9.0,
+          "description": "The top-left corner is the only one clearly visible and it appears sharp. The other three corners are not visible in the provided image."
+        },
+        {
+          "category": "edges",
+          "score": 9.0,
+          "description": "The visible portions of the top and left edges appear clean and free of wear. The right and bottom edges are not visible."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The visible surface area appears clean with no discernible scratches, scuffs, or print defects. Assessment is limited by the plastic sleeve and image resolution."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 8.63,
+          "description": "This grade is highly provisional due to the limited visibility of the card. Only the top-left quadrant is shown. The primary flaw is the 65/35 left-right centering, which prevents a Near Mint grade. The visible corner, edges, and surface appear to be in excellent condition, but a complete and accurate assessment is impossible without seeing the entire card front and back."
+        }
+      ],
+      "estimated_value": {
+        "low": 5.6,
+        "mid": 7.0,
+        "high": 8.4,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 9,
+      "identity": {
+        "name": "Viashino Lashclaw",
+        "set_code": "mh2",
+        "collector_number": "146",
+        "scryfall_id": "3457e346-a5de-4624-b577-f59d4c186537"
+      },
+      "grade": {
+        "tcg_condition": "LP",
+        "psa_equivalent": "8",
+        "confidence": 0.85,
+        "overall_score": 8.88
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 7.0,
+          "description": "65/35 left-right, 50/50 top-bottom - The card is significantly off-center to the left. The left border is noticeably thinner than the right. Top-to-bottom centering appears balanced."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "The visible corners on the left side appear pristine and sharp with no signs of whitening or wear. The right-side corners are partially obscured but appear to be in similar condition."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "Visible edges, particularly the left and bottom, are clean and show no signs of chipping or whitening. The right edge is not visible."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The surface appears clean and free of scratches, scuffs, or print defects under the available lighting. The gloss is consistent."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 8.88,
+          "description": "The card's condition is excellent apart from one major flaw: its centering. The heavy shift to the left prevents a Near Mint grade under TCGPlayer standards and would likely cap the PSA grade at an 8. The visible corners, edges, and surface are otherwise pristine. Confidence is slightly reduced as the right side of the card is obscured by the binder sleeve."
+        }
+      ],
+      "estimated_value": {
+        "low": 5.6,
+        "mid": 7.0,
+        "high": 8.4,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 10,
+      "identity": {
+        "name": "Foundry Helix",
+        "set_code": "mh2",
+        "collector_number": "196",
+        "scryfall_id": "9c54b7c6-f94c-4349-8725-319c54240409"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.85,
+        "overall_score": 9.2
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "Approx. 60/40 left-right, 50/50 top-bottom - The card is noticeably off-center horizontally, with the left border being significantly wider than the right. The top-to-bottom centering appears near-perfect."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "The visible corners of the card appear very sharp with no signs of whitening or wear. The assessment is based on the top-left and top-right corners which are clearly visible."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "The visible portions of the edges (top and left) are clean and free of any nicks or whitening. The card appears to have been handled minimally."
+        },
+        {
+          "category": "surface",
+          "score": 10.0,
+          "description": "The surface is flawless, viewed through a clean binder sleeve. There are no visible scratches, scuffs, print lines, or other imperfections on the card face."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.2,
+          "description": "The card is in excellent condition, with pristine corners, edges, and surface. The only notable flaw is the horizontal centering, which prevents a higher grade. It qualifies as a strong PSA 9 or TCGPlayer Near Mint."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 11,
+      "identity": {
+        "name": "Thornglint Bridge",
+        "set_code": "mh2",
+        "collector_number": "258",
+        "scryfall_id": "9d483643-6a11-47f7-a0aa-190e0179525f"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.85,
+        "overall_score": 9.0
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "Approx. 60/40 left-right, 50/50 top-bottom - The card is noticeably off-center horizontally, with the left border being wider than the right. Top-to-bottom centering appears near perfect."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "All four corners appear sharp and well-preserved within the sleeve. No visible whitening or wear under magnification."
+        },
+        {
+          "category": "edges",
+          "score": 9.0,
+          "description": "The visible portions of all four edges appear clean and free of nicks or whitening. The assessment is slightly limited by the binder sleeve."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The foil surface appears clean, glossy, and free of any major scratches, scuffs, or print lines. No clouding is visible."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.0,
+          "description": "A very clean card whose grade is primarily limited by its horizontal centering. Corners, edges, and surface are all in excellent condition, consistent with a pack-fresh card."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 12,
+      "identity": {
+        "name": "Brandywine Farmer",
+        "set_code": "ltr",
+        "collector_number": "155",
+        "scryfall_id": "1c24b5fa-506d-4eaf-881b-bc282c74a16c"
+      },
+      "grade": {
+        "tcg_condition": "LP",
+        "psa_equivalent": "8",
+        "confidence": 0.85,
+        "overall_score": 8.8
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "Approx. 60/40 left-right, 55/45 top-bottom - The card is noticeably off-center. The left border is significantly wider than the right, and the top border is slightly wider than the bottom."
+        },
+        {
+          "category": "corners",
+          "score": 9.0,
+          "description": "Corners appear sharp and clean through the sleeve. A conservative grade is given, as micro-wear may be present but is not visible at this resolution."
+        },
+        {
+          "category": "edges",
+          "score": 9.0,
+          "description": "The visible front edges appear clean and free of whitening or chipping. Grade assumes minimal wear consistent with a pack-fresh card."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The surface appears pristine, with no visible scratches, scuffs, or print defects. The card is protected by a sleeve, which helps maintain surface quality."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 8.8,
+          "description": "The primary factor limiting this card's grade is the centering, which is clearly outside of Near Mint standards. The corners, edges, and surface appear to be in excellent condition, but the centering would likely result in a PSA 8 grade. The overall calculated score places it in the high-end Lightly Played category for TCGPlayer."
+        }
+      ],
+      "estimated_value": {
+        "low": 5.6,
+        "mid": 7.0,
+        "high": 8.4,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 13,
+      "identity": {
+        "name": "Goblin Legion // Squee, Dubious Monarch",
+        "set_code": "TDMU",
+        "collector_number": "8",
+        "scryfall_id": "gemini-6329248415421879272"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.85,
+        "overall_score": 9.13
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 8.0,
+          "description": "Approx. 60/40 left-right, 50/50 top-bottom - The card is noticeably off-center horizontally. The left border is significantly wider than the right border. Top-to-bottom centering appears balanced."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "All four corners appear sharp and clean with no visible whitening or wear. The assessment is made through a sleeve, but they present as pristine."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "All edges appear clean and sharp. No nicks, chips, or whitening are visible through the sleeve."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The card surface appears flawless, with no visible scratches, scuffs, or print defects. The card is in a sleeve which may obscure microscopic flaws."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.13,
+          "description": "The card's primary and only visible flaw is its 60/40 horizontal centering. Otherwise, the corners, edges, and surface appear to be in mint condition. The assessment is limited by the low-resolution image and the card being in a sleeve, but it strongly presents as a PSA 9 candidate."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 14,
+      "identity": {
+        "name": "Relentless Rohirrim",
+        "set_code": "ltr",
+        "collector_number": "144",
+        "scryfall_id": "21b7606a-6a4c-4bf0-b311-1883383161d2"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.65,
+        "overall_score": 9.35
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 9.0,
+          "description": "Est. 55/45 left-right, 55/45 top-bottom - Slightly off-center on both axes, with the left and top borders appearing marginally thicker. Well within Near Mint standards."
+        },
+        {
+          "category": "corners",
+          "score": 9.5,
+          "description": "Corners appear sharp and clean based on visible areas. Full inspection is limited by the sleeve and image quality, but no whitening is visible."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "Visible edges appear pristine and free of wear. The bottom edge is heavily obscured by glare from the sleeve."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "Surface appears clean and free of scratches, scuffs, or print defects. Assessment is limited by glare and two layers of plastic (sleeve and binder page)."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.35,
+          "description": "The card appears to be in strong Near Mint condition. The only visible imperfection is slight off-centering. A definitive grade is difficult due to the low-resolution image, glare, and obstruction from the sleeve and binder page. The grade is based on the assumption that no defects are hidden by these factors."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 15,
+      "identity": {
+        "name": "Access Tunnel",
+        "set_code": "tdc",
+        "collector_number": "337",
+        "scryfall_id": "4bef5957-71a4-4fe0-b2ce-dff8e8690bd9"
+      },
+      "grade": {
+        "tcg_condition": "LP",
+        "psa_equivalent": "8",
+        "confidence": 0.4,
+        "overall_score": 8.73
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 7.0,
+          "description": "Approx. 65/35 left-right - The card is noticeably off-center horizontally, favoring the left side. Top-to-bottom centering cannot be accurately assessed due to the cropped image."
+        },
+        {
+          "category": "corners",
+          "score": 9.0,
+          "description": "The top-left corner appears sharp and well-preserved. The other three corners are not visible in the provided image. This score is an estimate assuming the unseen corners are in similar condition."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "The visible portions of the top and left edges appear clean with no signs of whitening or chipping. The right and bottom edges are obscured."
+        },
+        {
+          "category": "surface",
+          "score": 9.5,
+          "description": "The visible surface appears clean and free of defects through the binder sleeve. A definitive inspection for micro-scratches or print lines is hindered by the sleeve and image quality."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 8.73,
+          "description": "The grade is primarily determined by the 65/35 centering, which prevents a Near Mint assessment. A full and accurate grade is impossible as three corners and two full edges are not visible. The grade assumes the non-visible portions are in excellent condition. Card is in a sleeve, limiting surface inspection."
+        }
+      ],
+      "estimated_value": {
+        "low": 5.6,
+        "mid": 7.0,
+        "high": 8.4,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 16,
+      "identity": {
+        "name": "Gargadon",
+        "set_code": "cmm",
+        "collector_number": "226",
+        "scryfall_id": "079d5536-1b2e-4d5b-bae9-9fd14562087a"
+      },
+      "grade": {
+        "tcg_condition": "LP",
+        "psa_equivalent": "8",
+        "confidence": 0.65,
+        "overall_score": 8.13
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 7.0,
+          "description": "Approx. 65/35 left-right, 45/55 top-bottom - The card is noticeably off-center, favoring the left and bottom borders. The left border is significantly thicker than the right."
+        },
+        {
+          "category": "corners",
+          "score": 8.5,
+          "description": "Top corners appear sharp under limited visibility. Bottom corners are obscured by the binder sleeve but are assumed to have minor, if any, wear based on the visible areas."
+        },
+        {
+          "category": "edges",
+          "score": 8.5,
+          "description": "Visible top, left, and right edges appear clean with no obvious whitening or chipping. The bottom edge is fully obscured."
+        },
+        {
+          "category": "surface",
+          "score": 9.0,
+          "description": "No scratches, scuffs, or other major defects are visible. However, the card is in a glossy sleeve and the image resolution is low, which could hide minor imperfections like micro-scratches or print lines."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 8.13,
+          "description": "The most significant grading factor is the centering, which is outside of Near Mint standards. Corners and edges that are visible appear to be in good condition. The surface assessment is limited, but no major flaws are apparent. The card's final grade is constrained by the centering, placing it firmly in the Lightly Played / PSA 8 category. A higher confidence assessment would require removing the card from the sleeve and providing high-resolution images."
+        }
+      ],
+      "estimated_value": {
+        "low": 5.6,
+        "mid": 7.0,
+        "high": 8.4,
+        "currency": "USD"
+      }
+    },
+    {
+      "position": 17,
+      "identity": {
+        "name": "Zombie Ogre",
+        "set_code": "afr",
+        "collector_number": "129",
+        "scryfall_id": "d4dbed36-190c-4748-b282-409a2fb5d134"
+      },
+      "grade": {
+        "tcg_condition": "NM",
+        "psa_equivalent": "9",
+        "confidence": 0.75,
+        "overall_score": 9.1
+      },
+      "evidence": [
+        {
+          "category": "centering",
+          "score": 9.0,
+          "description": "Est. 55/45 left-right, 50/50 top-bottom - The card is slightly off-center left-to-right, with the left border being visibly thicker than the right. Top-to-bottom centering appears near-perfect."
+        },
+        {
+          "category": "corners",
+          "score": 9.0,
+          "description": "Corners appear to be sharp with no obvious signs of whitening or wear. The low resolution of the image prevents a definitive inspection for very minor blemishes."
+        },
+        {
+          "category": "edges",
+          "score": 9.5,
+          "description": "The visible portions of the edges appear clean and free of nicks or whitening. The card is in a sleeve, which limits full inspection but also provides protection."
+        },
+        {
+          "category": "surface",
+          "score": 9.0,
+          "description": "The surface appears clean and free of major defects like scratches or scuffs. However, the binder sleeve and low image quality make it impossible to rule out minor print lines or micro-scratches."
+        },
+        {
+          "category": "overall_assessment",
+          "score": 9.1,
+          "description": "The primary condition issue is the centering. The card otherwise presents as Near Mint, but the low-resolution image and binder sleeve obscure fine details, reducing grading confidence. The grade assumes no hidden flaws on the surface, corners, or edges."
+        }
+      ],
+      "estimated_value": {
+        "low": 8.0,
+        "mid": 10.0,
+        "high": 12.0,
+        "currency": "USD"
+      }
+    }
+  ],
+  "summary": {
+    "total_estimated_value": {
+      "low": 121.59999999999998,
+      "mid": 152.0,
+      "high": 182.40000000000003
+    },
+    "condition_distribution": {
+      "NM": 11,
+      "LP": 6,
+      "MP": 0,
+      "HP": 0,
+      "DMG": 0
+    }
+  },
+  "metadata": {
+    "processing_time_seconds": 227.8703100681305,
+    "cards_detected": 17,
+    "cards_analyzed": 17,
+    "pipeline_version": "1.0.0"
+  }
+}

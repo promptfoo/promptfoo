@@ -1,8 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
+
 import type {
-  Tool as GoogleTool,
   FunctionDeclaration as GoogleFunctionDeclaration,
   Schema as GoogleSchema,
+  Tool as GoogleTool,
 } from '../google/types';
 import type { OpenAiTool } from '../openai/util';
 import type { MCPTool, MCPToolInputSchema } from './types';

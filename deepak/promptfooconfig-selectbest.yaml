@@ -1,0 +1,78 @@
+# Configuration for Select Best Response Evaluation
+description: 'Evaluate which response is better for customer queries'
+
+prompts:
+  # Simple passthrough to test with your reference answers
+  - '{{prompt}}'
+  
+  # Alternative: Add context for a real LLM
+  # - |
+  #   You are a helpful customer service assistant for a food supplier.
+  #   Please answer the following question accurately and concisely:
+  #   
+  #   {{prompt}}
+
+providers:
+  # Start with echo to test the setup
+  - id: echo
+    label: 'Test Echo'
+  
+  # Add actual LLM providers to generate responses
+  # - id: openai:gpt-4
+  #   label: 'GPT-4'
+  #   config:
+  #     temperature: 0.3  # Lower temperature for more consistent responses
+  
+  # - id: anthropic:claude-3-haiku-20240307  
+  #   label: 'Claude 3 Haiku'
+  #   config:
+  #     temperature: 0.3
+
+tests: file://selectbest_response.csv
+
+# Assertions to check response quality
+defaultAsserts:
+  # Check if response addresses the question
+  - type: llm-rubric
+    value: |
+      Evaluate if the response appropriately answers the customer's question about: {{prompt}}
+      
+      The response should:
+      1. Directly address the question asked
+      2. Provide accurate information
+      3. Be formatted clearly (using appropriate HTML if needed)
+      4. Include relevant details like dates, product codes (SUPC), or nutritional information when applicable
+      
+      Reference answer to compare against: {{answer}}
+    
+  # Optional: Check for specific content based on question type
+  - type: javascript
+    value: |
+      // Check if response includes key information based on question type
+      const prompt = "{{prompt}}".toLowerCase();
+      const response = output.toLowerCase();
+      
+      if (prompt.includes('ingredient') || prompt.includes('stock')) {
+        // Should include SUPC code and stock status
+        return response.includes('supc') && response.includes('stock');
+      }
+      
+      if (prompt.includes('delivery') || prompt.includes('receive date')) {
+        // Should include dates
+        return response.match(/\d{2}\/\d{2}\/\d{4}/);
+      }
+      
+      if (prompt.includes('nutrition')) {
+        // Should include nutritional information
+        return response.includes('calories') || response.includes('protein');
+      }
+      
+      return true; // Pass by default for other question types
+
+# Output settings
+outputFormat: html  # HTML format to preserve formatting in responses
+outputPath: results/selectbest_evaluation.html
+
+# Optional: Enable side-by-side comparison view
+view:
+  type: 'comparison' 

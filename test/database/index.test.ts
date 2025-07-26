@@ -1,11 +1,12 @@
 import * as path from 'path';
+
 import {
+  closeDb,
+  DrizzleLogWriter,
   getDb,
   getDbPath,
   getDbSignalPath,
-  closeDb,
   isDbOpen,
-  DrizzleLogWriter,
 } from '../../src/database';
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';

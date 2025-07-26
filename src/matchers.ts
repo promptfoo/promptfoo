@@ -1,11 +1,11 @@
 import path from 'path';
+
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
-import { getEnvString, getEnvBool } from './envars';
+import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
-  SELECT_BEST_PROMPT,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
@@ -13,10 +13,11 @@ import {
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
+  GEVAL_PROMPT_EVALUATE,
+  GEVAL_PROMPT_STEPS,
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
-  GEVAL_PROMPT_STEPS,
-  GEVAL_PROMPT_EVALUATE,
+  SELECT_BEST_PROMPT,
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -24,6 +25,12 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
+import { maybeLoadFromExternalFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
+import invariant from './util/invariant';
+import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { getNunjucksEngine } from './util/templates';
+
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -38,11 +45,6 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types';
-import { maybeLoadFromExternalFile } from './util/file';
-import { isJavascriptFile } from './util/fileExtensions';
-import invariant from './util/invariant';
-import { extractJsonObjects, extractFirstJsonObject } from './util/json';
-import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 class LlmRubricProviderError extends Error {
@@ -520,13 +522,27 @@ export async function matchesLlmRubric(
     jsonObjects = [resp.output];
   } else {
     return fail(
-      'llm-rubric produced malformed response - output must be string or object',
+      `llm-rubric produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
+  }
+
+  if (!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
+    return fail(
+      `llm-rubric produced malformed response - We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
       resp.tokenUsage,
     );
   }
 
   // expects properties pass, score, and reason
   const parsed = jsonObjects[0] as Partial<GradingResult>;
+
+  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
+    return fail(
+      `llm-rubric produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
+  }
 
   let pass = parsed.pass ?? true;
   if (typeof pass !== 'boolean') {
@@ -781,7 +797,7 @@ export async function matchesClosedQa(
     const pass = resp.output.trimEnd().endsWith('Y');
     let reason;
     if (pass) {
-      reason = 'The submission meets the criterion';
+      reason = `The submission meets the criterion:\n${resp.output}`;
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {

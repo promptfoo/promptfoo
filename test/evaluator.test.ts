@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+
 import glob from 'glob';
 import { FILE_METADATA_KEY } from '../src/constants';
 import {
@@ -14,7 +15,7 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
+import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -2656,6 +2657,247 @@ describe('evaluator', () => {
 
     // The main verification is at the stats level (already done above)
     // Individual results may not always have tokenUsage populated in the summary
+  });
+
+  it('should include sessionId in metadata for afterEach hook', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        sessionId: 'test-session-123',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBe('test-session-123');
+  });
+
+  it('should use sessionId from vars if not in response', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        // No sessionId in response
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1', sessionId: 'vars-session-456' },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBe('vars-session-456');
+  });
+
+  it('should prioritize response sessionId over vars sessionId', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        sessionId: 'response-session-priority',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1', sessionId: 'vars-session-ignored' },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBe('response-session-priority');
+    expect(capturedContext.result.metadata.sessionId).not.toBe('vars-session-ignored');
+  });
+
+  it('should include sessionIds array from test metadata for iterative providers', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          metadata: {
+            sessionIds: ['iter-session-1', 'iter-session-2', 'iter-session-3'],
+          },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionIds).toEqual([
+      'iter-session-1',
+      'iter-session-2',
+      'iter-session-3',
+    ]);
+    expect(capturedContext.result.metadata.sessionId).toBeUndefined();
+  });
+
+  it('should handle empty sessionIds array', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          metadata: {
+            sessionIds: [],
+          },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionIds).toEqual([]);
+  });
+
+  it('should ignore non-string sessionId in vars', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        // No sessionId in response
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: {
+            var1: 'value1',
+            sessionId: { invalid: 'object' }, // Non-string sessionId
+          },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBeUndefined();
   });
 });
 

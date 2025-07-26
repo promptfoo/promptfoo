@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -12,6 +13,7 @@ import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+
 import type { ScanOptions } from '../ModelAudit.types';
 
 interface AdvancedOptionsDialogProps {

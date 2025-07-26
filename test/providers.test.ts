@@ -1,6 +1,7 @@
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import yaml from 'js-yaml';
 import cliState from '../src/cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
@@ -10,8 +11,9 @@ import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
+import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
+
 import type { ProviderOptions } from '../src/types';
-import { getProviderFromCloud, isCloudProvider, getCloudDatabaseId } from '../src/util/cloud';
 
 jest.mock('fs');
 jest.mock('js-yaml');
@@ -174,6 +176,28 @@ describe('loadApiProvider', () => {
         }),
       },
     );
+    expect(provider).toBeDefined();
+  });
+
+  it('should load GitHub provider with default model', async () => {
+    const provider = await loadApiProvider('github:');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should load GitHub provider with specific model', async () => {
+    const provider = await loadApiProvider('github:openai/gpt-4.1-mini');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1-mini', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      }),
+    });
     expect(provider).toBeDefined();
   });
 

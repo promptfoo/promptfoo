@@ -1,15 +1,17 @@
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import type {
   ApiProvider,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
-  Prompt,
   NunjucksFilterMap,
-  RedteamFileConfig,
+  Prompt,
   ProviderResponse,
+  RedteamFileConfig,
   TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
@@ -17,7 +19,12 @@ import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../../util/tokenUsageUtils';
-import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
+import {
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 interface ImageGenerationOutput {
   prompt: string;
@@ -208,6 +215,7 @@ async function runRedteamConversation({
   injectVar,
   context,
   options,
+  test,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
@@ -217,11 +225,16 @@ async function runRedteamConversation({
   injectVar: string;
   context?: CallApiContextParams;
   options?: CallApiOptionsParams;
+  test?: AtomicTestCase;
 }) {
   // Assume redteam provider is also a vision model
   const visionProvider = redteamProvider;
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
+
+  // Store the original vars and transformVars config
+  const originalVars = { ...vars };
+  const transformVarsConfig = test?.options?.transformVars;
 
   const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
@@ -247,6 +260,15 @@ async function runRedteamConversation({
 
   for (let i = 0; i < numIterations; i++) {
     try {
+      // Use the shared utility function to create iteration context
+      const { iterationVars, iterationContext } = await createIterationContext({
+        originalVars,
+        transformVarsConfig,
+        context,
+        iterationNumber: i + 1,
+        loggerTag: '[IterativeImage]',
+      });
+
       const redteamBody = JSON.stringify(redteamHistory);
 
       // Get new prompt
@@ -281,7 +303,7 @@ async function runRedteamConversation({
       targetPrompt = await renderPrompt(
         prompt,
         {
-          ...vars,
+          ...iterationVars,
           [injectVar]: newInjectVar,
         },
         filters,
@@ -319,7 +341,7 @@ async function runRedteamConversation({
       const targetResponse = await getTargetResponse(
         targetProvider,
         targetPrompt,
-        context,
+        iterationContext,
         options,
       );
       if (targetResponse.error) {
@@ -536,6 +558,7 @@ class RedteamIterativeProvider implements ApiProvider {
       injectVar,
       context,
       options,
+      test: context.test,
     });
   }
 }

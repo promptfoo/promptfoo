@@ -1,17 +1,18 @@
 import { randomUUID } from 'crypto';
+
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
+  evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
+  evalsToTagsTable,
   promptsTable,
   tagsTable,
-  evalsToTagsTable,
-  evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
@@ -19,17 +20,17 @@ import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import {
   type CompletedPrompt,
+  type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
-  type EvaluateSummaryV3,
   type EvaluateSummaryV2,
+  type EvaluateSummaryV3,
   type EvaluateTable,
-  ResultFailureReason,
+  type EvaluateTableRow,
   type Prompt,
+  ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-  type EvalSummary,
-  type EvaluateTableRow,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -429,27 +430,59 @@ export default class Eval {
     limit?: number;
     filterMode?: string;
     searchQuery?: string;
-    metricFilter?: string;
+    filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
-    const filter = opts.filterMode ?? 'all';
+    const mode = opts.filterMode ?? 'all';
 
     // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
-    if (filter === 'errors') {
+    if (mode === 'errors') {
       conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
-    } else if (filter === 'failures') {
+    } else if (mode === 'failures') {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
-    } else if (filter === 'passes') {
+    } else if (mode === 'passes') {
       conditions.push(`success = 1`);
     }
 
-    // Add specific metric filter if provided
-    if (opts.metricFilter && opts.metricFilter.trim() !== '') {
-      const sanitizedMetric = opts.metricFilter.replace(/'/g, "''");
-      conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
+    // Add filters
+    if (opts.filters && opts.filters.length > 0) {
+      const filterConditions: string[] = [];
+      opts.filters.forEach((filter) => {
+        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        let condition: string | null = null;
+
+        if (type === 'metric' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
+          // in double quotes.
+          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+        } else if (type === 'metadata' && field) {
+          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedField = field.replace(/'/g, "''");
+
+          if (operator === 'equals') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
+          } else if (operator === 'contains') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
+          } else if (operator === 'not_contains') {
+            condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          }
+        }
+
+        if (condition) {
+          // Logic operator can only be applied if there are already conditions
+          filterConditions.push(
+            // Logic operator can only be applied if there are already conditions
+            filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
+          );
+        }
+      });
+      if (filterConditions.length > 0) {
+        conditions.push(`(${filterConditions.join(' ')})`);
+      }
     }
 
     // Add search condition if searchQuery is provided
@@ -507,7 +540,7 @@ export default class Eval {
     filterMode?: string;
     testIndices?: number[];
     searchQuery?: string;
-    metricFilter?: string;
+    filters?: string[];
   }): Promise<{
     head: { prompts: Prompt[]; vars: string[] };
     body: EvaluateTableRow[];
@@ -533,7 +566,7 @@ export default class Eval {
         limit: opts.limit,
         filterMode: opts.filterMode,
         searchQuery: opts.searchQuery,
-        metricFilter: opts.metricFilter,
+        filters: opts.filters,
       });
 
       testIndices = queryResult.testIndices;

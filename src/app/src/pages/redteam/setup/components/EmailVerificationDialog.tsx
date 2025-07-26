@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useToast } from '@app/hooks/useToast';
 import Box from '@mui/material/Box';

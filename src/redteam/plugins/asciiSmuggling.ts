@@ -1,7 +1,8 @@
-import type { AtomicTestCase, GradingResult } from '../../types';
 import { RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:ascii-smuggling';
+import type { AtomicTestCase, GradingResult } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:ascii-smuggling';
 
 export class AsciiSmugglingGrader extends RedteamGraderBase {
   id = PLUGIN_ID;

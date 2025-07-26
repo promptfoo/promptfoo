@@ -6,9 +6,10 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { ApiProvider } from '../../types';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+
+import type { ApiProvider } from '../../types';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),

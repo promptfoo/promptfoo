@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -7,8 +8,9 @@ import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
 import { TestGrader } from '../util/utils';
+
+import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),
@@ -156,7 +158,8 @@ describe('matchesLlmRubric', () => {
       assertion: undefined,
       pass: false,
       score: 0,
-      reason: 'llm-rubric produced malformed response - output must be string or object',
+      reason:
+        'llm-rubric produced malformed response - output must be string or object. Output: 42',
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -224,6 +227,123 @@ describe('matchesLlmRubric', () => {
         cached: 0,
         completionDetails: undefined,
         numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when string output contains only empty JSON array', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'Here is the result: []',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: undefined,
+      },
+    });
+  });
+
+  it('should fail when string contains only null', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'Result: null',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    // Since extractJsonObjects only looks for objects starting with {, this returns no objects
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: undefined,
+      },
+    });
+  });
+
+  it('should fail when string contains only a JSON string primitive', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: '"just a string"',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: undefined,
+      },
+    });
+  });
+
+  it('should fail when string contains only a number', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'Result: 123',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: undefined,
       },
     });
   });
