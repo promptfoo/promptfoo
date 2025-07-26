@@ -1,6 +1,5 @@
 import { screen, waitFor, renderWithTheme } from '@app/test-utils';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '@app/stores/evalConfig';
 import ConfigureEnvButton from './ConfigureEnvButton';

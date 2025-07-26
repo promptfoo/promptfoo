@@ -28,7 +28,7 @@ export default function EventsBanner(): React.ReactElement | null {
     sessionStorage.setItem('eventsBannerDismissed', 'true');
   };
 
-  if (!isVisible) return null;
+  if (!isVisible) { return null; }
 
   return (
     <div className={styles.banner}>

@@ -202,7 +202,7 @@ const MCPConnectionSimulator: React.FC = () => {
     });
   };
 
-  const getStatusIcon = (status: ComponentStatus['status']) => {
+  const _getStatusIcon = (status: ComponentStatus['status']) => {
     switch (status) {
       case 'idle':
         return '○';

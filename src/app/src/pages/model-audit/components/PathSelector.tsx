@@ -121,7 +121,7 @@ export default function PathSelector({
             },
           }}
         >
-          <>{icon}</>
+          {icon}
         </Badge>
       );
     }

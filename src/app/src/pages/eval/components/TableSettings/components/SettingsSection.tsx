@@ -64,7 +64,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
                 fontSize: '1.25rem',
               }}
             >
-              {React.isValidElement(icon) ? icon : <>{icon}</>}
+              {React.isValidElement(icon) ? icon : icon}
             </Box>
           ) : null}
           <Typography
@@ -105,7 +105,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           role: 'list',
         }}
       >
-        {React.isValidElement(children) ? children : <>{children}</>}
+        {React.isValidElement(children) ? children : children}
       </Box>
     </Box>
   );

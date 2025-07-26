@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react';
+import React, { useState } from 'react';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -18,7 +18,6 @@ import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
 import type { ButtonProps } from '@mui/material/Button';
-import type { LinkProps } from 'react-router-dom';
 import './Navigation.css';
 
 const NavButton = styled(Button)<ButtonProps>(({ theme }) => ({

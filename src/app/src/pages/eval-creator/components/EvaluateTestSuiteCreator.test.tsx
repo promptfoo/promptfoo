@@ -1,4 +1,4 @@
-import React from 'react';
+
 
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { screen, waitFor, waitForElementToBeRemoved, within, renderWithTheme } from '@app/test-utils';

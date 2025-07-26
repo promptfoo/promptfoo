@@ -54,7 +54,7 @@ function GuardrailsHeader() {
   );
 }
 
-function FeaturesSection() {
+function _FeaturesSection() {
   return (
     <section className={styles.featuresSection}>
       <div className="container">

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { screen, renderWithTheme } from '@app/test-utils';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
