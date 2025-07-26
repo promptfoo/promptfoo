@@ -199,14 +199,16 @@ class ProgressBarManager {
 
       case 'concurrent':
         this.concurrentCompleted++;
-        const bar = this.concurrentBars[context.barIndex];
-        if (bar) {
+        if (context.barIndex >= 0 && context.barIndex < this.concurrentBars.length) {
+          const bar = this.concurrentBars[context.barIndex];
           bar.increment({
             status: 'Running',
             provider,
             prompt,
             vars,
           });
+        } else {
+          logger.warn(`Invalid bar index ${context.barIndex} for concurrent progress update`);
         }
         break;
 
@@ -237,6 +239,24 @@ class ProgressBarManager {
       status: `Running (${this.comparisonCompleted}/${this.comparisonCount})`,
       provider: 'Grading',
       prompt: prompt.slice(0, 10).replace(/\n/g, ''),
+      vars: '',
+    });
+  }
+
+  /**
+   * Create comparison progress bar dynamically when we know the actual count
+   */
+  createComparisonBar(comparisonCount: number): void {
+    if (this.isWebUI || !this.multibar || comparisonCount <= 0) {
+      return;
+    }
+
+    this.comparisonCount = comparisonCount;
+    this.comparisonBar = this.multibar.create(comparisonCount, 0, {
+      phase: 'select-best',
+      status: 'Running',
+      provider: 'Grading',
+      prompt: '',
       vars: '',
     });
   }
@@ -1532,10 +1552,9 @@ class Evaluator {
     const isWebUI = Boolean(cliState.webUI);
     const progressBarManager = new ProgressBarManager(isWebUI);
 
-    // Count rows that will need comparisons
-    const rowsRequiringComparisons = tests.filter((test) =>
-      test.assert?.some((a) => a.type === 'select-best'),
-    ).length;
+    // Count rows that will need comparisons - we'll create the comparison bar later
+    // when we know the actual count
+    const rowsRequiringComparisons = 0;
 
     // Initialize progress bar manager if needed
     if (this.options.showProgressBar) {
@@ -1621,6 +1640,11 @@ class Evaluator {
     // Mark concurrent phase as complete
     if (this.options.showProgressBar) {
       progressBarManager.completePhase('concurrent');
+
+      // Create comparison progress bar now that we know the actual count
+      if (compareRowsCount > 0) {
+        progressBarManager.createComparisonBar(compareRowsCount);
+      }
     }
 
     let compareCount = 0;
