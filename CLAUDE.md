@@ -44,6 +44,29 @@ const response = await fetch('/api/traces/evaluation/123');
 - `npm run jsonSchema:generate` - Generate JSON schema for configuration
 - `npm run citation:generate` - Generate citation file
 
+## Style Checks
+
+When the CI style check is failing, run these commands to fix style issues:
+
+1. **Fix all style issues automatically**:
+
+   ```bash
+   # Fix linting issues for changed files
+   npm run l
+
+   # Fix formatting issues for changed files
+   npm run f
+
+   # Or fix all files (not just changed ones)
+   npm run format
+   ```
+
+2. **Before committing**, always run:
+
+   ```bash
+   npm run l && npm run f
+   ```
+
 ## CLI Commands
 
 - `promptfoo` or `pf` - Access the CLI tool

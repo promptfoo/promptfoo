@@ -1,23 +1,30 @@
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import {
-  type ApiProvider,
-  type AtomicTestCase,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
   GradingResult,
-  type GuardrailResponse,
-  type NunjucksFilterMap,
-  type Prompt,
-  type RedteamFileConfig,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -25,9 +32,13 @@ import {
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
-import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
-
-import type { TargetResponse } from './shared';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -62,14 +73,7 @@ interface IterativeMetadata {
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[];
-}
-
-interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  numRequests: number;
-  cached: number;
+  sessionIds: string[]; // All session IDs from iterations
 }
 
 export async function runRedteamConversation({
@@ -104,6 +108,11 @@ export async function runRedteamConversation({
   tokenUsage: TokenUsage;
 }> {
   const nunjucks = getNunjucksEngine();
+
+  // Store the original vars and transformVars config
+  const originalVars = { ...vars };
+  const transformVarsConfig = test?.options?.transformVars;
+
   const goal = context?.test?.metadata?.goal || vars[injectVar];
 
   // Generate goal-specific evaluation rubric
@@ -136,13 +145,9 @@ export async function runRedteamConversation({
   let stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached' =
     'Max iterations reached';
 
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  const sessionIds: string[] = [];
+
+  const totalTokenUsage = createEmptyTokenUsage();
 
   const previousOutputs: {
     prompt: string;
@@ -155,6 +160,16 @@ export async function runRedteamConversation({
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
+
+    // Use the shared utility function to create iteration context
+    const { iterationVars, iterationContext } = await createIterationContext({
+      originalVars,
+      transformVarsConfig,
+      context,
+      iterationNumber: i + 1,
+      loggerTag: '[Iterative]',
+    });
+
     let shouldExitEarly = false;
 
     const redteamBody = JSON.stringify(redteamHistory);
@@ -212,7 +227,7 @@ export async function runRedteamConversation({
     targetPrompt = await renderPrompt(
       prompt,
       {
-        ...vars,
+        ...iterationVars,
         [injectVar]: newInjectVar,
       },
       filters,
@@ -272,7 +287,7 @@ export async function runRedteamConversation({
     const targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
-      context,
+      iterationContext,
       options,
     );
     logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
@@ -289,6 +304,15 @@ export async function runRedteamConversation({
       continue;
     }
 
+    const responseSessionId = targetResponse.sessionId;
+    const varsSessionId = iterationContext?.vars?.sessionId;
+    const sessionId =
+      responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
+
+    if (sessionId) {
+      sessionIds.push(sessionId);
+    }
+
     let assertToUse = test?.assert?.find(
       (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
     );
@@ -303,22 +327,24 @@ export async function runRedteamConversation({
     if (test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
       if (grader) {
+        // Create test object with iteration-specific vars
+        const iterationTest = {
+          ...test,
+          vars: iterationVars,
+        };
         const { grade } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
-          test,
+          iterationTest,
           gradingProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
         );
         storedGraderResult = grade;
         if (grade.tokensUsed) {
-          totalTokenUsage.total += grade.tokensUsed.total || 0;
-          totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
-          totalTokenUsage.completion += grade.tokensUsed.completion || 0;
-          totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, grade.tokensUsed, true);
         } else {
-          totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+          totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
         }
       }
     }
@@ -459,49 +485,11 @@ export async function runRedteamConversation({
       guardrails: targetResponse.guardrails,
     });
 
-    if (redteamResp.tokenUsage) {
-      totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (redteamResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += redteamResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (isOnTopicResp.tokenUsage) {
-      totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (isOnTopicResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += isOnTopicResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (judgeResp.tokenUsage) {
-      totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (judgeResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += judgeResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (targetResponse.tokenUsage) {
-      totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-      totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (targetResponse.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
+    // Update all the token usage accumulation patterns
+    accumulateResponseTokenUsage(totalTokenUsage, redteamResp);
+    accumulateResponseTokenUsage(totalTokenUsage, isOnTopicResp);
+    accumulateResponseTokenUsage(totalTokenUsage, judgeResp);
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     // Break after all processing is complete if we should exit early
     if (shouldExitEarly) {
@@ -518,6 +506,7 @@ export async function runRedteamConversation({
       redteamFinalPrompt: bestInjectVar,
       storedGraderResult,
       stopReason: stopReason,
+      sessionIds,
     },
     tokenUsage: totalTokenUsage,
   };

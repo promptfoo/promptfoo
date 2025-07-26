@@ -54,9 +54,7 @@ describe('DefaultTestVariables Component', () => {
       ).toBeInTheDocument();
       expect(screen.getByText('Add Variable')).toBeInTheDocument();
       expect(screen.getByText('No test variables configured')).toBeInTheDocument();
-      expect(
-        screen.getByText('Optional variables that will be added to every test case'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Click "Add Variable" to get started')).toBeInTheDocument();
     });
 
     it('renders with existing variables', () => {
@@ -394,6 +392,102 @@ describe('DefaultTestVariables Component', () => {
         const varsEntries = Object.entries(lastCall[1].vars as Record<string, string>)[0];
         expect(varsEntries[0].length > 1000 || varsEntries[1].length > 1000).toBe(true);
       });
+    });
+  });
+
+  describe('Local state preservation', () => {
+    it('preserves local edits when global config changes', async () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithVariables,
+        updateConfig: mockUpdateConfig,
+      });
+      render(<DefaultTestVariables />);
+
+      const apiKeyField = screen.getByDisplayValue('test-key');
+
+      fireEvent.change(apiKeyField, { target: { value: 'edited-key' } });
+
+      const newConfig = {
+        ...configWithVariables,
+        defaultTest: {
+          vars: {
+            apiKey: 'new-global-key',
+            language: 'en',
+            endpoint: 'https://api.example.com',
+          },
+        },
+      };
+      mockUseRedTeamConfig.mockReturnValue({
+        config: newConfig,
+        updateConfig: mockUpdateConfig,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('edited-key')).toBeInTheDocument();
+      });
+    });
+  });
+
+  it('shows validation error when variable names have same trimmed value but different raw values', async () => {
+    render(<DefaultTestVariables />);
+
+    const addButton = screen.getByText('Add Variable');
+    fireEvent.click(addButton);
+    await waitFor(() => {
+      const variableInputs = screen.getAllByLabelText('Variable name');
+      expect(variableInputs.length).toBe(1);
+      fireEvent.change(variableInputs[0], { target: { value: ' var' } });
+    });
+
+    fireEvent.click(addButton);
+    await waitFor(() => {
+      const variableInputs = screen.getAllByLabelText('Variable name');
+      expect(variableInputs.length).toBe(2);
+      fireEvent.change(variableInputs[1], { target: { value: 'var ' } });
+    });
+
+    await waitFor(() => {
+      const errors = screen.getAllByText('Duplicate variable name');
+      expect(errors).toHaveLength(2);
+    });
+  });
+
+  describe('ID Generation', () => {
+    it('generates unique IDs even when multiple variables are created in the same millisecond', async () => {
+      const timestamp = Date.now();
+      const originalDateNow = Date.now;
+      Date.now = vi.fn(() => timestamp);
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          defaultTest: { vars: {} },
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(<DefaultTestVariables />);
+
+      const addButton = screen.getByText('Add Variable');
+      fireEvent.click(addButton);
+      fireEvent.click(addButton);
+      fireEvent.click(addButton);
+
+      await waitFor(
+        () => {
+          expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
+        },
+        { timeout: 500 },
+      );
+
+      Date.now = originalDateNow;
+
+      const vars = mockUpdateConfig.mock.calls[0][1].vars;
+      const ids = Object.keys(vars);
+
+      expect(ids[0]).not.toBe(ids[1]);
+      expect(ids[0]).not.toBe(ids[2]);
+      expect(ids[1]).not.toBe(ids[2]);
     });
   });
 

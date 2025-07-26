@@ -5,6 +5,7 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
@@ -379,7 +380,7 @@ export class WatsonXProvider implements ApiProvider {
       return {
         error: `API call error: ${String(err)}`,
         output: '',
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(),
       };
     }
   }

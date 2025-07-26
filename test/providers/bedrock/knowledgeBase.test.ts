@@ -1,4 +1,5 @@
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
+import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 
 const mockSend = jest.fn();
 const mockBedrockClient = {
@@ -214,7 +215,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(result).toEqual({
       output: 'This is the response from the knowledge base',
       metadata: { citations: mockResponse.citations },
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
     });
   });
 
@@ -354,7 +355,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
           },
         ],
       },
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
       cached: true,
     });
 

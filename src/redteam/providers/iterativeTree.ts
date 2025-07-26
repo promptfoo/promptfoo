@@ -14,24 +14,12 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
+import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
-import type { Environment } from 'nunjucks';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -44,7 +32,30 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+  accumulateGraderTokenUsage,
+} from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -81,6 +92,23 @@ const MAX_NO_IMPROVEMENT = 25;
 /** Constants for TAP parameters */
 export const MAX_WIDTH = 10; // w parameter from paper
 const BRANCHING_FACTOR = 4; // b parameter from paper
+
+/**
+ * Extracts defined session IDs from tree outputs
+ * @param outputs - Array of tree search outputs
+ * @returns Array of defined session IDs
+ */
+function extractSessionIds(outputs: TreeSearchOutput[]): string[] {
+  const sessionIds = outputs.map((t) => t.sessionId).filter((id): id is string => id !== undefined);
+
+  if (sessionIds.length < outputs.length) {
+    logger.debug(
+      `[TreeIterative] Filtered out ${outputs.length - sessionIds.length} undefined session IDs from tree outputs`,
+    );
+  }
+
+  return sessionIds;
+}
 
 /**
  * Renders system prompts for the red team, on-topic check, and judge.
@@ -423,6 +451,7 @@ export interface TreeSearchOutput {
   wasSelected: boolean;
   graderPassed?: boolean;
   guardrails?: GuardrailResponse;
+  sessionId?: string; // Session ID for this specific attempt
 }
 
 /**
@@ -435,6 +464,7 @@ interface TreeIterativeMetadata extends BaseRedteamMetadata {
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
+  sessionIds: string[]; // All session IDs from the tree exploration
 }
 
 /**
@@ -477,6 +507,9 @@ async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
 
+  // Store the original vars and transformVars config
+  const originalVars = { ...vars };
+  const transformVarsConfig = test?.options?.transformVars;
   // Generate goal-specific evaluation rubric
   const additionalRubric = getIterativeTreeGoalRubric(goal);
 
@@ -509,13 +542,7 @@ async function runRedteamConversation({
   let noImprovementCount = 0;
   let storedGraderResult: GradingResult | undefined = undefined;
 
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
   let bestResponse = '';
 
@@ -541,6 +568,15 @@ async function runRedteamConversation({
       );
 
       for (let i = 0; i < BRANCHING_FACTOR; i++) {
+        // Use the shared utility function to create iteration context
+        const { iterationVars, iterationContext } = await createIterationContext({
+          originalVars,
+          transformVarsConfig,
+          context,
+          iterationNumber: attempts + 1, // Using attempts + 1 as the iteration number
+          loggerTag: '[IterativeTree]',
+        });
+
         const {
           improvement,
           prompt: newInjectVar,
@@ -551,11 +587,7 @@ async function runRedteamConversation({
         ]);
 
         if (redteamTokenUsage) {
-          totalTokenUsage.total += redteamTokenUsage.total || 0;
-          totalTokenUsage.prompt += redteamTokenUsage.prompt || 0;
-          totalTokenUsage.completion += redteamTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += redteamTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += redteamTokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, redteamTokenUsage);
         }
 
         attempts++;
@@ -566,7 +598,7 @@ async function runRedteamConversation({
         const targetPrompt = await renderPrompt(
           prompt,
           {
-            ...vars,
+            ...iterationVars,
             [injectVar]: newInjectVar,
           },
           filters,
@@ -579,30 +611,20 @@ async function runRedteamConversation({
           targetPrompt,
         );
         if (isOnTopicTokenUsage) {
-          totalTokenUsage.total += isOnTopicTokenUsage.total || 0;
-          totalTokenUsage.prompt += isOnTopicTokenUsage.prompt || 0;
-          totalTokenUsage.completion += isOnTopicTokenUsage.completion || 0;
-          totalTokenUsage.cached += isOnTopicTokenUsage.cached || 0;
-          totalTokenUsage.numRequests += isOnTopicTokenUsage.numRequests ?? 1;
+          accumulateTokenUsage(totalTokenUsage, isOnTopicTokenUsage);
         }
 
         const targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
-          context,
+          iterationContext,
           options,
         );
         if (targetResponse.error) {
           throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
         }
         invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
-        if (targetResponse.tokenUsage) {
-          totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-          totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
@@ -655,10 +677,18 @@ async function runRedteamConversation({
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
+            // Create test object with iteration-specific vars
+            const iterationTest = test
+              ? {
+                  ...test,
+                  vars: iterationVars,
+                }
+              : { vars: iterationVars };
+
             const { grade } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
-              test,
+              iterationTest,
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
@@ -667,12 +697,7 @@ async function runRedteamConversation({
             graderPassed = grade.pass;
 
             if (grade.tokensUsed) {
-              totalTokenUsage.total += grade.tokensUsed.total || 0;
-              totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
-              totalTokenUsage.completion += grade.tokensUsed.completion || 0;
-              totalTokenUsage.cached += grade.tokensUsed.cached || 0;
-            } else {
-              totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+              accumulateGraderTokenUsage(totalTokenUsage, grade);
             }
           }
         }
@@ -709,6 +734,11 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
           });
           return {
             output: targetResponse.output,
@@ -720,6 +750,7 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -741,6 +772,11 @@ async function runRedteamConversation({
             parentId: node.id,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
           });
           return {
             output: bestResponse,
@@ -752,6 +788,7 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -774,6 +811,11 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
           });
           return {
             output: bestResponse,
@@ -785,6 +827,7 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -815,6 +858,11 @@ async function runRedteamConversation({
           score,
           wasSelected: true,
           guardrails: targetResponse.guardrails,
+          sessionId:
+            targetResponse.sessionId ||
+            (typeof iterationContext?.vars?.sessionId === 'string'
+              ? iterationContext.vars.sessionId
+              : undefined),
         });
       }
     }
@@ -847,11 +895,7 @@ async function runRedteamConversation({
     options,
   );
   if (finalTargetResponse.tokenUsage) {
-    totalTokenUsage.total += finalTargetResponse.tokenUsage.total || 0;
-    totalTokenUsage.prompt += finalTargetResponse.tokenUsage.prompt || 0;
-    totalTokenUsage.completion += finalTargetResponse.tokenUsage.completion || 0;
-    totalTokenUsage.numRequests += finalTargetResponse.tokenUsage.numRequests ?? 1;
-    totalTokenUsage.cached += finalTargetResponse.tokenUsage.cached || 0;
+    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
   }
 
   logger.debug(
@@ -869,6 +913,7 @@ async function runRedteamConversation({
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse.guardrails,
+    sessionId: finalTargetResponse.sessionId,
   });
   return {
     output: bestResponse,
@@ -880,6 +925,7 @@ async function runRedteamConversation({
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
       storedGraderResult,
+      sessionIds: extractSessionIds(treeOutputs),
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,

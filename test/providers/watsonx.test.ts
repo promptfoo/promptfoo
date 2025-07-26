@@ -8,6 +8,7 @@ import {
   generateConfigHash,
   WatsonXProvider,
 } from '../../src/providers/watsonx';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -385,7 +386,7 @@ describe('WatsonXProvider', () => {
       expect(response).toEqual({
         error: 'API call error: Error: API error',
         output: '',
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(),
       });
       expect(logger.error).toHaveBeenCalledWith('Watsonx: API call error: Error: API error');
     });
