@@ -1289,7 +1289,7 @@ export async function matchesSelectBest(
 
 export async function selectMaxScore(
   outputs: string[],
-  resultsWithGradingResults: any[], // Can be either EvaluateResult[] or EvalResult[]
+  resultsWithGradingResults: Array<{ gradingResult?: { componentResults?: any[] } }>,
   assertion: Assertion,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(

@@ -1,4 +1,6 @@
 ---
+title: Max-score assertion
+description: Configure the `max-score` assertion to deterministically pick the highest-scoring output based on other assertions' scores.
 sidebar_label: Max Score
 ---
 
@@ -213,7 +215,7 @@ tests:
 | Feature          | max-score                        | select-best         |
 | ---------------- | -------------------------------- | ------------------- |
 | Selection method | Aggregate scores from assertions | LLM judgment        |
-| API calls        | None (uses existing scores)      | One per evaluation  |
+| API calls        | None (uses existing scores)      | One per eval        |
 | Reproducibility  | Deterministic                    | May vary            |
 | Best for         | Objective criteria               | Subjective criteria |
 | Transparency     | Shows exact scores               | Shows LLM reasoning |

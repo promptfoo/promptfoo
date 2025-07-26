@@ -1,10 +1,9 @@
 import { selectMaxScore } from '../../src/matchers';
-import type { Assertion, EvalResult } from '../../src/types';
+import { ResultFailureReason } from '../../src/types';
+import type { Assertion, EvaluateResult } from '../../src/types';
 
 describe('selectMaxScore', () => {
-  const createMockResult = (score: number, testIdx: number): EvalResult => ({
-    id: `test-${testIdx}`,
-    evalId: 'eval-test',
+  const createMockResult = (score: number, testIdx: number): EvaluateResult => ({
     promptIdx: 0,
     testIdx,
     testCase: {
@@ -16,10 +15,14 @@ describe('selectMaxScore', () => {
     },
     prompt: { raw: 'test prompt', label: 'test' },
     promptId: 'prompt-test',
-    error: null,
-    score,
-    success: true,
+    provider: { id: 'test-provider' },
+    vars: {},
     response: { output: `Output ${testIdx}` },
+    error: null,
+    failureReason: ResultFailureReason.NONE,
+    success: true,
+    score,
+    latencyMs: 100,
     gradingResult: {
       pass: score > 0.5,
       score,
@@ -43,13 +46,8 @@ describe('selectMaxScore', () => {
       assertion: null,
     },
     namedScores: {},
-    provider: { id: () => 'test-provider' },
-    latencyMs: 100,
     cost: 0,
     metadata: {},
-    failureReason: undefined,
-    persisted: false,
-    pluginId: undefined,
   });
 
   const mockAssertion: Assertion = {

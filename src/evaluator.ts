@@ -15,6 +15,7 @@ import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
+import { selectMaxScore } from './matchers';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -1574,9 +1575,6 @@ class Evaluator {
         ) as Assertion;
 
         if (maxScoreAssertion) {
-          // Import selectMaxScore at the top of the file
-          const { selectMaxScore } = await import('./matchers');
-
           const outputs = resultsToCompare.map((r) => r.response?.output || '');
 
           // Pass the results with their grading results to selectMaxScore
@@ -1594,11 +1592,12 @@ class Evaluator {
               assertion: maxScoreAssertion,
             };
 
-            if (result.gradingResult) {
-              result.gradingResult = maxScoreGradingResult;
-            } else {
-              result.gradingResult = maxScoreGradingResult;
-            }
+            // Preserve existing componentResults and add max-score result
+            const existingComponentResults = result.gradingResult?.componentResults || [];
+            result.gradingResult = {
+              ...maxScoreGradingResult,
+              componentResults: [...existingComponentResults, maxScoreGradingResult],
+            };
 
             // Update pass/fail status based on max-score result
             result.success = maxScoreGradingResult.pass;
