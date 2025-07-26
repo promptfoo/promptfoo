@@ -21,6 +21,8 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm test
+      - name: Verify package integrity
+        run: node scripts/verify-package-integrity.js
 
   publish-npm:
     needs: build
