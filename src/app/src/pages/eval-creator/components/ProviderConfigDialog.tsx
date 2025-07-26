@@ -23,11 +23,19 @@ import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-yaml';
 import './ProviderConfigDialog.css';
 
+/**
+ * Dialog for configuring provider settings with both form and YAML editing modes
+ */
 interface ProviderConfigDialogProps {
+  /** Whether the dialog is open */
   open: boolean;
+  /** The ID of the provider being configured (e.g., 'openai:gpt-4') */
   providerId: string;
+  /** Current configuration object */
   config?: Record<string, any>;
+  /** Callback when dialog is closed */
   onClose: () => void;
+  /** Callback when configuration is saved */
   onSave: (providerId: string, config: Record<string, any>) => void;
 }
 
@@ -105,7 +113,20 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           configToSave = yaml.load(yamlConfig) as Record<string, any>;
         } catch (err) {
           if (!silent) {
-            setYamlError(`Invalid YAML: ${err instanceof Error ? err.message : String(err)}`);
+            let errorMessage = 'Invalid YAML syntax';
+            if (err instanceof Error) {
+              // Extract more helpful error messages from yaml parser
+              if (err.message.includes('duplicated mapping key')) {
+                errorMessage = 'Duplicate keys found in YAML';
+              } else if (err.message.includes('unexpected end')) {
+                errorMessage = 'Incomplete YAML - check for missing quotes or brackets';
+              } else if (err.message.includes('bad indentation')) {
+                errorMessage = 'Invalid indentation - YAML requires consistent spacing';
+              } else {
+                errorMessage = `YAML error: ${err.message}`;
+              }
+            }
+            setYamlError(errorMessage);
           }
           return;
         }
@@ -154,7 +175,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
       autoSaveTimerRef.current = setTimeout(() => {
         handleSave(true); // Silent save
-      }, 2000);
+      }, 5000); // Increased to 5 seconds to reduce API calls
     }
 
     return () => {
