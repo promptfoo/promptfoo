@@ -1,74 +1,83 @@
 ---
-title: 'Join Promptfoo at Hacker Summer Camp 2025'
-description: 'Promptfoo will be attending the AI Summit, Black Hat, and DEF CON. We would love to meet you.'
-image: /img/blog/gambling-panda.png
+title: 'Meet Promptfoo at Black Hat & DEF CON 2025: AI Security Demos & Party'
+description: 'Join Promptfoo at Black Hat USA & DEF CON 2025. Visit booth #4712, attend our CEO talk, get demos at Arsenal Labs, and RSVP for our open bar party.'
+image: /img/blog/hacker-summer-camp-hero.jpg
 keywords:
   [
     promptfoo,
-    DEF CON,
-    Black Hat,
+    DEF CON 2025,
+    Black Hat 2025,
     AI security,
     red teaming,
     LLM evaluation,
-    prompt engineering,
+    prompt injection,
     AI agents,
     enterprise security,
-    compliance,
+    Arsenal Labs,
     information security,
-    conferences,
+    Las Vegas conferences,
   ]
-date: 2025-07-24
+date: 2025-07-25
 authors: [vanessa]
-tags: [company-update, conferences, def-con]
+tags: [company-update, conferences, def-con, black-hat]
 ---
 
-# Join Promptfoo at Hacker Summer Camp 2025
+Promptfoo is exhibiting at Black Hat USA and DEF CON 2025. Visit our booth for live security demos, attend our CEO's talk on enterprise AI security, and join our community party.
 
-Black Hat + DEF CON USA 2025 will be here before we know it, and we would love to meet you.
+<!-- truncate -->
 
-## Meet Us at the AI Summit
+## AI Summit - Tuesday, August 5
 
-This one-day summit before Black Hat is the leading forum for discussing AI innovation. Meet us at the summit to learn how Fortune 500 companies automatically catch LLM vulnerabilities during development before they reach production environments.
+Join us at the premier AI security conference to see how Fortune 500 companies automatically detect LLM vulnerabilities during development.
 
-- **Location**: Mandalay Bay Convention Center, Las Vegas
-- **Dates**: Tuesday, August 5, 2025, 9:00 AM - 5:00 PM
+- **When**: Tuesday, August 5, 2025, 9:00 AM - 5:00 PM
+- **Where**: Mandalay Bay Convention Center, Las Vegas
 
-## Meet Us at the Black Hat Business Hall
+## Black Hat Business Hall - August 6-7
 
-We'll be in the Black Hat Business Hall on August 6th and 7th. You can also attend our CEO's talk on Wednesday, August 6th at 1:30 PM on the AI Stage, where Ian will showcase how leading enterprises are using Promptfoo to ship LLMs faster and more securely.
+Visit us at booth #4712 in the AI Zone Pavilion for hands-on demonstrations of our enterprise security platform.
 
-- **Location**: Mandalay Bay Convention Center, Las Vegas
-- **Booth**: AI Zone Pavilion, Booth #4712
-- **Dates**: Wednesday, August 6th and Thursday, August 7th
+### CEO Talk: Enterprise AI Security at Scale
 
-Want a deeper-dive demo? You can also book a 30-minute demo slot to see Promptfoo in action and learn how the platform can accelerate your AI security strategy.
+Hear from our CEO Ian Maurer about how organizations deploy LLMs securely in production.
+
+- **When**: Wednesday, August 6, 1:30 PM
+- **Where**: AI Stage, Business Hall
+
+### Book a Demo
+
+Get a personalized 30-minute walkthrough of Promptfoo's security capabilities:
 
 <iframe
   src="https://cal.com/team/promptfoo/promptfoo-at-blackhat?embed=true"
   width="100%"
   height="600px"
   frameBorder="0"
-  title="Book a meeting with Promptfoo"
+  title="Book a Black Hat demo with Promptfoo"
 />
 
-## Try the Tool at Arsenal Labs
+## Arsenal Labs Live Demonstrations
 
-Watch our security researchers perform demonstrations of prompt injection, jailbreaking, and data exfiltration attacks. See how Promptfoo automatically detects and prevents these threats across GPT-4, Claude, Llama, and other popular models.
+Watch our security researchers demonstrate real-world attacks and defenses:
 
-- **Location**: Mandalay Bay Convention Center, Las Vegas
-- **Booth**: Business Hall, Arsenal Lab Station 1
-- **Dates**: Wednesday, August 6th, 2:30 - 6:00 PM and Thursday, August 7th, 10:00 AM - 1:00 PM
+- Prompt injection techniques
+- Jailbreak prevention
+- Data exfiltration protection
+- Cross-model vulnerability testing (GPT-4, Claude, Llama)
 
-## Meet Us at the DEF CON Exhibitor Booth
+**Schedule**:
 
-We'll be at DEF CON all weekend. Join us at the Exhibitor Booth to meet the team and maybe even get a t-shirt.
+- Wednesday, August 6: 2:30 PM - 6:00 PM
+- Thursday, August 7: 10:00 AM - 1:00 PM
+- **Location**: Business Hall, Arsenal Lab Station 1
 
-- **Location**: Las Vegas Convention Center
-- **Dates**: August 8 - 10, 2025
+## DEF CON Exhibitor Booth - August 8-10
 
-## Have a Drink On Us at the Promptfoo Community Party
+Find us at the Las Vegas Convention Center throughout DEF CON 33. Get demos, meet the team, and grab exclusive Promptfoo swag.
 
-We're throwing an open bar party for our Promptfoo community members. Space is limited. RSVP now to secure your spot at the AI security party of DEF CON.
+## Promptfoo Community Party
+
+Join us for drinks and networking with the AI security community. Space is limited—RSVP now.
 
 <iframe
   src="https://lu.ma/embed/event/evt-68XHWgtMjY47tWT/simple"
@@ -78,11 +87,16 @@ We're throwing an open bar party for our Promptfoo community members. Space is l
   allow="fullscreen; payment"
   aria-hidden="false"
   tabindex="0"
+  title="RSVP for Promptfoo DEF CON party"
 ></iframe>
 
-## Explore Career Opportunities
+## We're Hiring
 
-We're also expanding the team! If you're looking for a new role as an AI red teamer, deployment engineer, or software engineer, we would love to talk with you.
+Looking for your next role in AI security? We're expanding our team with positions in:
+
+- AI Red Team Engineering
+- Deployment Engineering
+- Software Development
 
 <iframe
   src="https://jobs.ashbyhq.com/promptfoo/embed"
@@ -91,8 +105,5 @@ We're also expanding the team! If you're looking for a new role as an AI red tea
   frameborder="0"
   aria-hidden="false"
   tabindex="0"
+  title="View open positions at Promptfoo"
 ></iframe>
-
-## See You There
-
-Hacker Summer Camp is the ultimate playground for security professionals, and we're ready to bring the heat. Stop by and meet the team shaping the future of AI security. See you in Vegas!
