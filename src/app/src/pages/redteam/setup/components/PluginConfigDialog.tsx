@@ -23,7 +23,14 @@ import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
 
-// Dataset information for better UX
+/**
+ * Dataset information for plugins that support custom test case counts.
+ * These plugins support two configuration options:
+ * - numTests: Specify a custom number of test cases (1 to exactCount)
+ * - fullDataset: Use the entire dataset (ignores numTests)
+ *
+ * The exactCount is used for validation and UI feedback.
+ */
 const DATASET_INFO: Record<
   string,
   {
@@ -289,12 +296,35 @@ export default function PluginConfigDialog({
                   type="number"
                   variant="outlined"
                   value={numTests}
-                  onChange={(e) => setLocalConfig({ ...localConfig, numTests: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const parsed = Number.parseInt(value, 10);
+
+                    // Allow empty string for clearing the field
+                    if (value === '') {
+                      setLocalConfig({ ...localConfig, numTests: '' });
+                      return;
+                    }
+
+                    // Validate the number
+                    if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= datasetInfo.exactCount) {
+                      setLocalConfig({ ...localConfig, numTests: value });
+                    }
+                  }}
                   inputProps={{ min: 1, max: datasetInfo.exactCount }}
+                  error={
+                    numTests !== '' &&
+                    (Number.parseInt(numTests) < 1 ||
+                      Number.parseInt(numTests) > datasetInfo.exactCount)
+                  }
                   helperText={
-                    numTests && Number.parseInt(numTests) > 0
-                      ? `${numTests} test cases selected`
-                      : 'Recommended: 25-100 for development'
+                    numTests === ''
+                      ? 'Recommended: 25-100 for development'
+                      : Number.parseInt(numTests) < 1
+                        ? 'Must be at least 1'
+                        : Number.parseInt(numTests) > datasetInfo.exactCount
+                          ? `Maximum is ${datasetInfo.exactCount}`
+                          : `${numTests} test cases selected`
                   }
                 />
 
@@ -365,13 +395,36 @@ export default function PluginConfigDialog({
 
   const hasChanges = JSON.stringify(config) !== JSON.stringify(localConfig);
 
+  // Validate numTests for dataset plugins
+  const isValidConfig = () => {
+    if (!plugin || !DATASET_INFO[plugin]) {
+      return true;
+    }
+
+    const numTests = localConfig.numTests;
+    const isFullDataset = Boolean(localConfig.fullDataset);
+
+    // If full dataset is selected, it's valid
+    if (isFullDataset) {
+      return true;
+    }
+
+    // If custom number is selected, validate the number
+    if (numTests === '' || numTests === undefined) {
+      return false;
+    }
+
+    const parsed = Number.parseInt(numTests, 10);
+    return !Number.isNaN(parsed) && parsed >= 1 && parsed <= DATASET_INFO[plugin].exactCount;
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{getDialogTitle()}</DialogTitle>
       <DialogContent>{renderConfigInputs()}</DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained" disabled={!hasChanges}>
+        <Button onClick={handleSave} variant="contained" disabled={!hasChanges || !isValidConfig()}>
           {hasChanges ? 'Save Changes' : 'No Changes'}
         </Button>
       </DialogActions>

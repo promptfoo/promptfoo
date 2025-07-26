@@ -25,11 +25,14 @@ interface BeavertailsPluginConfig extends PluginConfig {
   fullDataset?: boolean;
 }
 
-export async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCase[]> {
+export async function fetchAllDatasets(limit?: number): Promise<BeaverTailsTestCase[]> {
   try {
     const allTestCases = await Promise.all(
       DATASETS.map((dataset) =>
-        fetchHuggingFaceDataset(dataset, limit * 5 /* leave room for filtering */),
+        fetchHuggingFaceDataset(
+          dataset,
+          limit ? limit * 5 /* leave room for filtering */ : undefined,
+        ),
       ),
     );
 
@@ -84,26 +87,44 @@ export class BeavertailsPlugin extends RedteamPluginBase {
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
     const cfg = this.config as BeavertailsPluginConfig;
-    const limit = cfg.fullDataset ? Number.MAX_SAFE_INTEGER : n;
-    const testCases = await fetchAllDatasets(limit);
 
-    const sliceLimit = cfg.fullDataset ? testCases.length : Math.min(n, testCases.length);
+    try {
+      // For full dataset, we don't limit the initial fetch
+      const limit = cfg.fullDataset ? undefined : n * 5; // Fetch extra to account for filtering
+      const testCases = await fetchAllDatasets(limit);
 
-    // Take n random test cases, or all if we have fewer than n
-    const selectedTests = testCases
-      .sort(() => Math.random() - 0.5)
-      .slice(0, sliceLimit)
-      .filter(
-        (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
-          typeof test.vars.prompt === 'string',
-      );
+      if (!testCases || testCases.length === 0) {
+        logger.warn(`No test cases fetched for BeaverTails plugin`);
+        return [];
+      }
 
-    return selectedTests.map((test) => ({
-      vars: {
-        [this.injectVar]: test.vars.prompt,
-      },
-      assert: this.getAssertions(test.vars.prompt),
-    }));
+      const sliceLimit = cfg.fullDataset ? testCases.length : Math.min(n, testCases.length);
+
+      // Take n random test cases, or all if we have fewer than n
+      const selectedTests = testCases
+        .sort(() => Math.random() - 0.5)
+        .slice(0, sliceLimit)
+        .filter(
+          (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
+            typeof test.vars.prompt === 'string',
+        );
+
+      if (selectedTests.length < n && !cfg.fullDataset) {
+        logger.warn(
+          `BeaverTails: Only ${selectedTests.length} valid test cases available out of ${n} requested`,
+        );
+      }
+
+      return selectedTests.map((test) => ({
+        vars: {
+          [this.injectVar]: test.vars.prompt,
+        },
+        assert: this.getAssertions(test.vars.prompt),
+      }));
+    } catch (error) {
+      logger.error(`Failed to generate BeaverTails tests: ${error}`);
+      return [];
+    }
   }
 }
 

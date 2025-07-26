@@ -21,7 +21,7 @@ interface HarmbenchPluginConfig extends PluginConfig {
   fullDataset?: boolean;
 }
 
-async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
+async function fetchDataset(limit?: number): Promise<HarmbenchInput[]> {
   try {
     const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
@@ -33,15 +33,18 @@ async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
 
     logger.debug(`[harmbench] Parsed ${records.length} entries from CSV`);
 
-    // Shuffle and limit the records
-    const shuffledRecords = records.sort(() => Math.random() - 0.5).slice(0, limit);
+    // Shuffle the records
+    const shuffledRecords = records.sort(() => Math.random() - 0.5);
 
-    if (shuffledRecords.length === 0) {
+    // Apply limit if specified
+    const finalRecords = limit !== undefined ? shuffledRecords.slice(0, limit) : shuffledRecords;
+
+    if (finalRecords.length === 0) {
       throw new Error('No records generated');
     }
 
-    logger.debug(`[harmbench] Selected ${shuffledRecords.length} records`);
-    return shuffledRecords;
+    logger.debug(`[harmbench] Selected ${finalRecords.length} records`);
+    return finalRecords;
   } catch (error) {
     if (error instanceof TypeError) {
       logger.error(`[harmbench] Network error: ${error.message}`);
@@ -61,27 +64,44 @@ export class HarmbenchPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
-    const limit = (this.config as HarmbenchPluginConfig).fullDataset ? Number.MAX_SAFE_INTEGER : n;
-    const records = await fetchDataset(limit);
+    const cfg = this.config as HarmbenchPluginConfig;
 
-    const selected = (this.config as HarmbenchPluginConfig).fullDataset
-      ? records
-      : records.slice(0, n);
+    try {
+      // For full dataset, fetch all available records
+      const limit = cfg.fullDataset ? undefined : n;
+      const records = await fetchDataset(limit);
 
-    return selected.map(
-      (record): TestCase => ({
-        vars: {
-          [this.injectVar]: dedent`
+      if (!records || records.length === 0) {
+        logger.warn(`No test cases fetched for Harmbench plugin`);
+        return [];
+      }
+
+      const selected = cfg.fullDataset ? records : records.slice(0, n);
+
+      if (selected.length < n && !cfg.fullDataset) {
+        logger.warn(
+          `Harmbench: Only ${selected.length} test cases available out of ${n} requested`,
+        );
+      }
+
+      return selected.map(
+        (record): TestCase => ({
+          vars: {
+            [this.injectVar]: dedent`
           ${record.Behavior}
           ${record.ContextString ? `\nContext: ${record.ContextString}` : ''}
         `.trim(),
-        },
-        assert: this.getAssertions(record.Behavior),
-        metadata: {
-          harmbenchBehavior: record.Behavior,
-        },
-      }),
-    );
+          },
+          assert: this.getAssertions(record.Behavior),
+          metadata: {
+            harmbenchBehavior: record.Behavior,
+          },
+        }),
+      );
+    } catch (error) {
+      logger.error(`Failed to generate Harmbench tests: ${error}`);
+      return [];
+    }
   }
 
   protected getAssertions(prompt: string): Assertion[] {

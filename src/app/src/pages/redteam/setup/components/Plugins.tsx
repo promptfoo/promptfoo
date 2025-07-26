@@ -65,6 +65,12 @@ const ErrorFallback = ({ error }: { error: Error }) => (
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
+/**
+ * Dataset plugins that support custom number of test cases and full dataset options.
+ * These plugins can be configured with:
+ * - numTests: Custom number of test cases to generate
+ * - fullDataset: Whether to use the entire dataset (ignores numTests)
+ */
 const DATASET_PLUGINS = [
   'beavertails',
   'cyberseceval',

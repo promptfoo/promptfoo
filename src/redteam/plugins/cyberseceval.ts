@@ -35,7 +35,7 @@ interface CyberSecEvalPluginConfig extends PluginConfig {
 }
 
 async function fetchDataset(
-  limit: number,
+  limit: number | undefined,
   isMultilingual: boolean,
 ): Promise<CyberSecEvalTestCase[]> {
   try {
@@ -62,15 +62,17 @@ async function fetchDataset(
           },
         }),
       )
-      .sort(() => Math.random() - 0.5) // Shuffle the array
-      .slice(0, limit); // Take the first n items after shuffling
+      .sort(() => Math.random() - 0.5); // Shuffle the array
 
-    logger.debug(`[CyberSecEval] Generated ${testCases.length} test cases`);
-    if (testCases.length === 0) {
+    // Apply limit if specified
+    const finalTestCases = limit !== undefined ? testCases.slice(0, limit) : testCases;
+
+    logger.debug(`[CyberSecEval] Generated ${finalTestCases.length} test cases`);
+    if (finalTestCases.length === 0) {
       throw new Error(`[CyberSecEval] No test cases generated`);
     }
 
-    return testCases;
+    return finalTestCases;
   } catch (error) {
     logger.error(`[CyberSecEval] Error fetching dataset: ${error}`);
     return [];
@@ -97,31 +99,49 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
     const cfg = this.config as CyberSecEvalPluginConfig;
-    const limit = cfg.fullDataset ? Number.MAX_SAFE_INTEGER : n;
-    const testCases = await fetchDataset(limit, cfg.multilingual as boolean);
 
-    const selected = cfg.fullDataset ? testCases : testCases.slice(0, n);
+    try {
+      // For full dataset, fetch all available records
+      const limit = cfg.fullDataset ? undefined : n;
+      const testCases = await fetchDataset(limit, cfg.multilingual as boolean);
 
-    return selected.map((test) => ({
-      vars: {
-        [this.injectVar]: JSON.stringify([
-          {
-            role: 'system',
-            content: test.vars.test_case_prompt,
-          },
-          {
-            role: 'user',
-            content: test.vars.user_input,
-          },
-        ]),
-      },
-      assert: [
-        {
-          metric: 'CyberSecEval',
-          type: 'llm-rubric',
-          value: `${test.vars.judge_question}. If yes, fail. Otherwise, pass.`,
+      if (!testCases || testCases.length === 0) {
+        logger.warn(`No test cases fetched for CyberSecEval plugin`);
+        return [];
+      }
+
+      const selected = cfg.fullDataset ? testCases : testCases.slice(0, n);
+
+      if (selected.length < n && !cfg.fullDataset) {
+        logger.warn(
+          `CyberSecEval: Only ${selected.length} test cases available out of ${n} requested`,
+        );
+      }
+
+      return selected.map((test) => ({
+        vars: {
+          [this.injectVar]: JSON.stringify([
+            {
+              role: 'system',
+              content: test.vars.test_case_prompt,
+            },
+            {
+              role: 'user',
+              content: test.vars.user_input,
+            },
+          ]),
         },
-      ],
-    }));
+        assert: [
+          {
+            metric: 'CyberSecEval',
+            type: 'llm-rubric',
+            value: `${test.vars.judge_question}. If yes, fail. Otherwise, pass.`,
+          },
+        ],
+      }));
+    } catch (error) {
+      logger.error(`Failed to generate CyberSecEval tests: ${error}`);
+      return [];
+    }
   }
 }
