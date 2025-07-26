@@ -37,7 +37,7 @@ Stop by booth **4712** in the AI Zone Pavilion. We'll run hands-on demos every 3
 
 ### CEO Talk: Breaking and Fixing LLMs at Scale
 
-Co-founder and CEO **Michael D'Angelo** will field-strip a fine-tuned model, breach it, then patch it in real time.
+CEO **Ian Webster** will showcase how leading enterprises use Promptfoo to ship LLMs faster and more securely, including a live breach and patch demo.
 
 - **When**: Wednesday, August 6, 1:30 PM
 - **Where**: AI Stage, Business Hall
@@ -74,9 +74,9 @@ Our researchers will run the attacks that keep CISOs awake:
 
 Bring your nastiest prompts. We'll test them live.
 
-## DEF CON 33 Expo: August 8-11
+## DEF CON 33 Expo: August 8-10
 
-Find the booth with a red panda mascot and the best security swag.
+Find the booth with a red panda mascot and the best security swag. Meet the team and maybe even get a t-shirt!
 
 - Live demos of [agent security testing](/blog/agent-security)
 - Limited-run "My LLM Got Pwned at DEF CON" shirts
