@@ -109,6 +109,7 @@ export function accumulateTokenUsage(
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
       };
     }
 
@@ -119,6 +120,10 @@ export function accumulateTokenUsage(
       update.assertions.completion,
     );
     target.assertions.cached = addNumbers(target.assertions.cached, update.assertions.cached);
+    target.assertions.numRequests = addNumbers(
+      target.assertions.numRequests,
+      update.assertions.numRequests,
+    );
 
     if (update.assertions.completionDetails) {
       target.assertions.completionDetails = accumulateCompletionDetails(
@@ -126,6 +131,37 @@ export function accumulateTokenUsage(
         update.assertions.completionDetails,
       );
     }
+  }
+}
+
+/**
+ * Accumulate token usage specifically for assertions.
+ * This function operates directly on an assertions object rather than a full TokenUsage object.
+ * @param target Assertions object to update
+ * @param update Partial token usage that may contain assertion-related fields
+ */
+export function accumulateAssertionTokenUsage(
+  target: NonNullable<TokenUsage['assertions']>,
+  update: Partial<TokenUsage> | undefined,
+): void {
+  if (!update) {
+    return;
+  }
+
+  // Accumulate basic token counts
+  target.total = addNumbers(target.total, update.total);
+  target.prompt = addNumbers(target.prompt, update.prompt);
+  target.completion = addNumbers(target.completion, update.completion);
+  target.cached = addNumbers(target.cached, update.cached);
+  // Note: We don't accumulate numRequests from the update for assertions
+  // to maintain separation between provider and assertion request counts
+
+  // Handle completion details
+  if (update.completionDetails) {
+    target.completionDetails = accumulateCompletionDetails(
+      target.completionDetails,
+      update.completionDetails,
+    );
   }
 }
 
@@ -141,6 +177,10 @@ export function accumulateResponseTokenUsage(
 ): void {
   if (response?.tokenUsage) {
     accumulateTokenUsage(target, response.tokenUsage);
+    // Increment numRequests if not already present in tokenUsage
+    if (response.tokenUsage.numRequests === undefined) {
+      target.numRequests = (target.numRequests ?? 0) + 1;
+    }
   } else if (response) {
     // Only increment numRequests if we got a response but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
@@ -159,6 +199,10 @@ export function accumulateGraderTokenUsage(
 ): void {
   if (graderResult?.tokensUsed) {
     accumulateTokenUsage(target, graderResult.tokensUsed);
+    // Increment numRequests if not already present in tokensUsed
+    if (graderResult.tokensUsed.numRequests === undefined) {
+      target.numRequests = (target.numRequests ?? 0) + 1;
+    }
   } else if (graderResult) {
     // Only increment numRequests if we got a grader result but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;

@@ -54,8 +54,8 @@ import {
   createEmptyTokenUsage,
   createEmptyAssertions,
   accumulateTokenUsage,
+  accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
 } from './util/tokenUsageUtils';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
@@ -315,8 +315,8 @@ function updateAssertionMetrics(
       metrics.tokenUsage.assertions = createEmptyAssertions();
     }
 
-    // Accumulate assertion tokens using the utility function
-    accumulateTokenUsage(metrics.tokenUsage.assertions as TokenUsage, assertionTokens);
+    // Accumulate assertion tokens using the specialized assertion function
+    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
   }
 }
 
@@ -633,12 +633,15 @@ export async function runEval({
       ret.success = checkResult.pass;
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
+      // Track assertion request count
+      if (!ret.tokenUsage.assertions) {
+        ret.tokenUsage.assertions = createEmptyAssertions();
+      }
+      ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
+      
+      // Track assertion token usage if provided
       if (checkResult.tokensUsed) {
-        // Track assertion tokens ONLY in the assertions field (not in main totals)
-        if (!ret.tokenUsage.assertions) {
-          ret.tokenUsage.assertions = createEmptyAssertions();
-        }
-        accumulateGraderTokenUsage(ret.tokenUsage.assertions as TokenUsage, checkResult);
+        accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
@@ -1186,8 +1189,8 @@ class Evaluator {
                 this.stats.tokenUsage.assertions = createEmptyAssertions();
               }
 
-              // Accumulate assertion tokens using the utility function
-              accumulateTokenUsage(this.stats.tokenUsage.assertions as TokenUsage, tokensUsed);
+              // Accumulate assertion tokens using the specialized assertion function
+              accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
 
               break;
             }
