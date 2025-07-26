@@ -5,8 +5,9 @@
 import dedent from 'dedent';
 import { fetchWithProxy } from '../../fetch';
 import logger from '../../logger';
-import type { Assertion, TestCase } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+
+import type { Assertion, TestCase } from '../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:pliny';
 

@@ -1,10 +1,12 @@
-import { parse } from 'csv-parse/sync';
 import fs from 'fs';
+
+import { parse } from 'csv-parse/sync';
 import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { Assertion, TestCase } from '../../types';
 import { RedteamPluginBase } from './base';
+
+import type { Assertion, TestCase } from '../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
 

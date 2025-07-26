@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { RedteamGraderBase } from '../base';
 
 export class MedicalPrioritizationErrorPluginGrader extends RedteamGraderBase {

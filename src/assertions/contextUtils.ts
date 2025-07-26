@@ -1,6 +1,7 @@
-import type { Assertion, AtomicTestCase } from '../types';
 import invariant from '../util/invariant';
 import { transform } from '../util/transform';
+
+import type { Assertion, AtomicTestCase } from '../types';
 
 /**
  * Resolves the context value for context-based assertions.

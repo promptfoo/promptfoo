@@ -1,8 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import React from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import { StrategySection } from './StrategySection';
+
 import type { StrategyCardData } from './types';
 
 describe('StrategySection', () => {

@@ -159,6 +159,15 @@ Add medical plugins to your promptfoo configuration:
 ```yaml
 redteam:
   plugins:
+    # Use the medical collection to include all medical plugins
+    - medical
+```
+
+Or specify individual medical plugins:
+
+```yaml
+redteam:
+  plugins:
     # Individual medical plugins
     - medical:hallucination
     - medical:anchoring-bias

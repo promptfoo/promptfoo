@@ -1,9 +1,11 @@
-import chalk from 'chalk';
-import dedent from 'dedent';
 import { createRequire } from 'node:module';
 import path from 'path';
+
+import chalk from 'chalk';
+import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
+
 import type { ApiProvider, ProviderOptions } from '../types';
 
 function getValue<T extends object, K extends string>(obj: T, path: K): any {

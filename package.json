@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.117.1",
+  "version": "0.117.3",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -206,7 +206,7 @@
     "@swc/core-win32-x64-msvc": "^1.12.14"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.56.0",
+    "@anthropic-ai/sdk": "^0.57.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^9.8.0",
     "@inquirer/checkbox": "^4.1.9",

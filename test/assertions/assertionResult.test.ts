@@ -1,4 +1,5 @@
 import { AssertionsResult } from '../../src/assertions/assertionsResult';
+
 import type { AssertionSet, GradingResult } from '../../src/types';
 
 describe('AssertionsResult', () => {
@@ -10,14 +11,14 @@ describe('AssertionsResult', () => {
     pass: true,
     score: 1,
     reason: 'The succeeding reason',
-    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
     assertion: null,
   };
   const failingResult = {
     pass: false,
     score: 0,
     reason: 'The failing reason',
-    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
     assertion: null,
   };
   const testResult = {
@@ -27,7 +28,7 @@ describe('AssertionsResult', () => {
     componentResults: [succeedingResult],
     namedScores: {},
     assertion: null,
-    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   let assertionsResult: AssertionsResult;
 
@@ -100,7 +101,7 @@ describe('AssertionsResult', () => {
     await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       componentResults: [resultWithoutTokensUsed],
-      tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
+      tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
     });
   });
 
@@ -207,7 +208,7 @@ describe('AssertionsResult', () => {
         pass: true,
         score: 1,
         reason: 'No assertions',
-        tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
+        tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
         assertion: null,
       });
     });
@@ -218,7 +219,7 @@ describe('AssertionsResult', () => {
       pass: false,
       score: 0,
       reason: 'Failed guardrail check',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       assertion: {
         type: 'guardrails' as const,
         config: {
@@ -242,7 +243,7 @@ describe('AssertionsResult', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       namedScores: {
         'metric-1': 0.8,
         'metric-2': 0.9,
@@ -300,7 +301,7 @@ describe('AssertionsResult', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       namedScores: {
         'metric-1': 0.8,
       } as Record<string, number>,
@@ -340,7 +341,7 @@ describe('AssertionsResult', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       namedScores: {
         'metric-1': 0.8,
       } as Record<string, number>,

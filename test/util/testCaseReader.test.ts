@@ -1,5 +1,6 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
+
+import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
@@ -7,14 +8,15 @@ import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
-  readTests,
   readTestFiles,
+  readTests,
 } from '../../src/util/testCaseReader';
+
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/fetch', () => ({
@@ -612,6 +614,118 @@ describe('readTest', () => {
       expect(result.provider).toBe(mockProvider);
     });
   });
+
+  it('should skip validation when isDefaultTest is true', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: {
+          embedding: {
+            id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+            config: {
+              region: 'us-east-1',
+            },
+          },
+        },
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options).toEqual(defaultTestInput.options);
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should skip validation for defaultTest with model-graded eval provider', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: 'openai:gpt-4.1-mini-0613',
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options?.provider).toBe('openai:gpt-4.1-mini-0613');
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should skip validation for defaultTest with text provider configuration', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: {
+          text: {
+            id: 'openai:gpt-4',
+            config: {
+              temperature: 0.7,
+            },
+          },
+        },
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options?.provider).toBeDefined();
+    expect(result.options?.provider).toEqual({
+      text: {
+        id: 'openai:gpt-4',
+        config: {
+          temperature: 0.7,
+        },
+      },
+    });
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should skip validation for defaultTest with provider object configuration', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: {
+          id: 'anthropic:claude-3-opus',
+          config: {
+            temperature: 0.5,
+            max_tokens: 1000,
+          },
+        },
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options?.provider).toEqual({
+      id: 'anthropic:claude-3-opus',
+      config: {
+        temperature: 0.5,
+        max_tokens: 1000,
+      },
+    });
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should throw when not a defaultTest and missing required properties', async () => {
+    // Create a test input that truly has no valid properties after loadTestWithVars
+    const invalidTestInput = {
+      someInvalidProperty: 'invalid',
+    } as any; // Cast to any to bypass type checking for invalid input
+
+    await expect(readTest(invalidTestInput, '', false)).rejects.toThrow(
+      'Test case must contain one of the following properties',
+    );
+  });
+
+  it('should read test from file', async () => {
+    const testPath = 'test1.yaml';
+    const testContent = {
+      description: 'Test 1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'value1' }],
+    };
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(testContent));
+
+    const result = await readTest(testPath);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(testContent);
+  });
 });
 
 describe('readTests', () => {
@@ -1094,7 +1208,7 @@ describe('readTests', () => {
     jest.mocked(globSync).mockReturnValue(['test.yaml']);
     jest
       .mocked(getEnvBool)
-      .mockImplementation((key) => (key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING' ? true : false));
+      .mockImplementation((key) => key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING');
 
     await readTests('test.yaml');
 

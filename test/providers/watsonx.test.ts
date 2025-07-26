@@ -1,13 +1,14 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
-import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
-import { getCache, isCacheEnabled, fetchWithCache } from '../../src/cache';
+import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
 import * as envarsModule from '../../src/envars';
 import logger from '../../src/logger';
 import {
-  WatsonXProvider,
-  generateConfigHash,
   clearModelSpecsCache,
+  generateConfigHash,
+  WatsonXProvider,
 } from '../../src/providers/watsonx';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -385,7 +386,7 @@ describe('WatsonXProvider', () => {
       expect(response).toEqual({
         error: 'API call error: Error: API error',
         output: '',
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(),
       });
       expect(logger.error).toHaveBeenCalledWith('Watsonx: API call error: Error: API error');
     });

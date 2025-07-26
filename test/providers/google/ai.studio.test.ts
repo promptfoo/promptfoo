@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+
 import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
@@ -207,7 +208,9 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain('Error: Expected one candidate in API response.');
+      expect(response.error).toContain(
+        'Error: Expected at least one candidate in AI Studio API response.',
+      );
     });
 
     it('should handle malformed API responses', async () => {

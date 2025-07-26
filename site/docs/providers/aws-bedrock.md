@@ -602,7 +602,7 @@ The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 For example:
 
 - `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
-- `bedrock:kb:eu.anthropic.claude-3-sonnet-20240229-v1:0` (EU region)
+- `bedrock:kb:eu.anthropic.claude-3-7-sonnet-20250219-v1:0` (EU region)
 
 Configuration options include:
 

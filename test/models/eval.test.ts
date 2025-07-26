@@ -2,8 +2,9 @@ import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
-import type { Prompt } from '../../src/types';
 import EvalFactory from '../factories/evalFactory';
+
+import type { Prompt } from '../../src/types';
 
 jest.mock('../../src/globalConfig/accounts', () => ({
   ...jest.requireActual('../../src/globalConfig/accounts'),
@@ -211,6 +212,12 @@ describe('evaluator', () => {
         prompt: 120,
         completion: 150,
         cached: 30,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       });
     });
 
@@ -237,6 +244,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       });
     });
 
@@ -281,6 +294,12 @@ describe('evaluator', () => {
         prompt: 40,
         completion: 50,
         cached: 10,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       });
     });
   });

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import React, { useEffect, useState } from 'react';
+
 import { useStore } from '@app/stores/evalConfig';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -11,13 +11,14 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
+import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import PromptsSection from './PromptsSection';
 import ProviderSelector from './ProviderSelector';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
+import type { ProviderOptions } from '@promptfoo/types';
 import './EvaluateTestSuiteCreator.css';
 
 function ErrorFallback({

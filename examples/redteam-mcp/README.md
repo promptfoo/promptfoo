@@ -58,7 +58,7 @@ This example evaluates an AI customer support agent implementing MCP with the fo
 
 ## Configuration
 
-This example is configured to test the Anthropic Claude 3 Sonnet model with MCP enabled. The MCP server is specified as:
+This example is configured to test the Anthropic Claude 4 Sonnet model with MCP enabled. The MCP server is specified as:
 
 ```
 https://customer-service-mcp-server-example.promptfoo.app/mcp

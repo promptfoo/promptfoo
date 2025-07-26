@@ -1,6 +1,6 @@
 import util from 'util';
-import type { AssertionParams } from '../types';
-import type { GradingResult } from '../types';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export const handleEquals = async ({
   assertion,
