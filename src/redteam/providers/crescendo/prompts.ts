@@ -82,6 +82,14 @@ export const CRESCENDO_SYSTEM_PROMPT = dedent`
 
   {% endif %}
 
+  {% if modifierSection %}
+    CRITICAL: Ensure all generated prompts strictly follow these requirements:
+    <Modifiers>
+    {{modifierSection}}
+    </Modifiers>
+    Rewrite ALL prompts to fully comply with the above modifiers.
+  {% endif %}
+
 `;
 
 export const REFUSAL_SYSTEM_PROMPT = dedent`

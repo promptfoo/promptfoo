@@ -230,6 +230,7 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
+            modifiers: context?.test?.metadata?.modifiers,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
           response = await fetch(getRemoteGenerationUrl(), {
@@ -263,6 +264,7 @@ export default class GoatProvider implements ApiProvider {
             this.config.excludeTargetOutputFromAgenticAttackGeneration,
           failureReason,
           purpose: context?.test?.metadata?.purpose,
+          modifiers: context?.test?.metadata?.modifiers,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
