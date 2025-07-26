@@ -1,6 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { screen, fireEvent, act, renderWithTheme } from '@app/test-utils';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import PromptDialog from './PromptDialog';
 
@@ -16,11 +15,6 @@ describe('PromptDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-
-  const renderWithTheme = (component: React.ReactNode) => {
-    const theme = createTheme();
-    return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-  };
 
   it("should render the dialog with the correct title, text, and buttons when 'open' is true", () => {
     renderWithTheme(<PromptDialog {...mockProps} />);

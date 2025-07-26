@@ -1,15 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, renderWithTheme } from '@app/test-utils';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Assertion, AssertionType } from '@promptfoo/types';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import userEvent from '@testing-library/user-event';
 import AssertsForm from './AssertsForm';
-
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 describe('AssertsForm', () => {
   let onAdd: ReturnType<typeof vi.fn>;

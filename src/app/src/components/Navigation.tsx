@@ -103,18 +103,13 @@ function CreateDropdown() {
             Eval
           </Link>
         </MenuItem>
-<<<<<<< HEAD
         <MenuItem onClick={handleClose}>
           <Link
             to="/redteam/setup"
             style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}
           >
-            Red team
+            Red Team
           </Link>
-=======
-        <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
-          Red Team
->>>>>>> main
         </MenuItem>
       </Menu>
     </>

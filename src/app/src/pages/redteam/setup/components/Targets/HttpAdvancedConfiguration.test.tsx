@@ -1,7 +1,6 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen, renderWithTheme } from '@app/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -37,11 +36,6 @@ vi.mock('../../utils/crypto', () => ({
 vi.mock('dedent', () => ({
   default: vi.fn((strings: TemplateStringsArray) => strings.join('')),
 }));
-
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
 
 describe('HttpAdvancedConfiguration', () => {
   let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
