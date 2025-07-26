@@ -109,7 +109,11 @@ Open bar, security talks, great networking. Space is limited, RSVP now.
 - **Security Engineer**: Build tools that secure AI deployments
 - **Developer Advocate**: Teach the world to hack responsibly
 
-Check out our open positions at [jobs.ashbyhq.com/promptfoo](https://jobs.ashbyhq.com/promptfoo).
+<div id="ashby_embed"></div>
+<script src="https://jobs.ashbyhq.com/promptfoo/embed" async></script>
+<noscript>
+  <a href="https://jobs.ashbyhq.com/promptfoo">View all open positions</a>
+</noscript>
 
 ## FAQ
 
