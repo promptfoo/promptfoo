@@ -183,15 +183,7 @@ section {
   box-shadow:
     0 20px 40px rgba(229, 58, 58, 0.2),
     0 10px 20px rgba(0, 0, 0, 0.1);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid rgba(255, 255, 255, 0.1);
-}
-
-.heroImage:hover {
-  transform: scale(1.02) translateY(-5px);
-  box-shadow:
-    0 30px 60px rgba(229, 58, 58, 0.25),
-    0 15px 30px rgba(0, 0, 0, 0.15);
 }
 
 .heroSection h2 {
