@@ -1287,6 +1287,89 @@ export async function matchesSelectBest(
   });
 }
 
+export async function selectMaxScore(
+  outputs: string[],
+  resultsWithGradingResults: any[], // Can be either EvaluateResult[] or EvalResult[]
+  assertion: Assertion,
+): Promise<Omit<GradingResult, 'assertion'>[]> {
+  invariant(
+    outputs.length >= 2,
+    'max-score assertion must have at least two outputs to compare between',
+  );
+
+  // Parse options from assertion value
+  const value = assertion.value || {};
+  const options = {
+    method: (typeof value === 'object' && 'method' in value ? value.method : 'average') as
+      | 'average'
+      | 'sum',
+    weights: (typeof value === 'object' && 'weights' in value ? value.weights : {}) as Record<
+      string,
+      number
+    >,
+    threshold:
+      typeof value === 'object' && 'threshold' in value ? (value.threshold as number) : undefined,
+  };
+
+  // Calculate aggregate score for each output
+  const scores = resultsWithGradingResults.map((result, index) => {
+    // For max-score, we need to look at the individual assertion scores from the test case
+    // We can use the overall score from the result
+    const score = result.score || 0;
+
+    // Filter out max-score assertions from the test case
+    const otherAssertions =
+      result.testCase?.assert?.filter(
+        (a: any) => a.type !== 'max-score' && a.type !== 'select-best',
+      ) || [];
+
+    if (otherAssertions.length === 0) {
+      throw new Error('max-score requires at least one other assertion to aggregate scores from');
+    }
+
+    // Use the result's overall score for aggregation
+    // In promptfoo, the overall score is already a normalized value between 0 and 1
+    const aggregateScore = score;
+
+    return {
+      index,
+      score: aggregateScore,
+    };
+  });
+
+  // Find max score (with deterministic tie-breaking by index)
+  let maxScore = -Infinity;
+  let winnerIndex = 0;
+
+  for (let i = 0; i < scores.length; i++) {
+    if (scores[i].score > maxScore) {
+      maxScore = scores[i].score;
+      winnerIndex = i;
+    }
+  }
+
+  // Apply threshold if specified
+  const meetsThreshold = !options.threshold || maxScore >= options.threshold;
+
+  // Return results for each output
+  return scores.map(({ index, score }) => {
+    const isWinner = index === winnerIndex && meetsThreshold;
+
+    return {
+      pass: isWinner,
+      score: isWinner ? 1 : 0,
+      reason: isWinner
+        ? `Selected as highest scoring output (score: ${score.toFixed(3)})`
+        : score === maxScore && !meetsThreshold
+          ? `Not selected - score ${score.toFixed(3)} below threshold ${options.threshold}`
+          : `Not selected (score: ${score.toFixed(3)}, max: ${maxScore.toFixed(3)})`,
+      namedScores: {
+        maxScore: score,
+      },
+    };
+  });
+}
+
 interface ModerationMatchOptions {
   userPrompt: string;
   assistantResponse: string;

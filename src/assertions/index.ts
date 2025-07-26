@@ -402,8 +402,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
         return;
       }
 

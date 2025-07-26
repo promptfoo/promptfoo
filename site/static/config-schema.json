@@ -580,7 +580,7 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": ["select-best", "human"]
+                                            "enum": ["select-best", "human", "max-score"]
                                           },
                                           {}
                                         ]

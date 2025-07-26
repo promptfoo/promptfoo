@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Simple max-score test
+
+prompts:
+  - 'Answer: {{answer}}'
+
+providers:
+  - id: echo
+  - id: echo  
+  - id: echo
+
+tests:
+  - vars:
+      answer: 'apple orange banana'
+    assert:
+      # Regular assertions
+      - type: contains
+        value: 'apple'
+      
+      - type: contains  
+        value: 'orange'
+      
+      - type: contains
+        value: 'banana'
+      
+      # Max-score assertion
+      - type: max-score
+        value:
+          method: average

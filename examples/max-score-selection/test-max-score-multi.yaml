@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test max-score with multiple prompts
+
+prompts:
+  - 'Answer A: {{answer}}'
+  - 'Answer B: {{answer}}'  
+  - 'Answer C: {{answer}}'
+
+providers:
+  - id: echo
+
+tests:
+  - vars:
+      answer: 'apple orange banana'
+    assert:
+      # Regular assertions
+      - type: contains
+        value: 'apple'
+      
+      - type: contains  
+        value: 'orange'
+      
+      - type: contains
+        value: 'banana'
+      
+      # Max-score assertion - should select prompt with all fruits
+      - type: max-score
+        value:
+          method: average
