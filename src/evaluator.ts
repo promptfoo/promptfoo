@@ -1744,13 +1744,9 @@ class Evaluator {
       hasAnyPass: this.stats.successes > 0,
 
       // Result counts
-      numSuccesses: this.stats.successes,
-      numFailures: this.stats.failures,
+      numPasses: this.stats.successes,
+      numFails: this.stats.failures,
       numErrors: this.stats.errors,
-      
-      // Backwards compatibility - deprecated field names
-      numPasses: this.stats.successes,  // @deprecated Use numSuccesses
-      numFails: this.stats.failures,    // @deprecated Use numFailures
 
       // Performance metrics
       totalEvalTimeMs,
