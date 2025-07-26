@@ -255,6 +255,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
+        numRequests: 0,
         completionDetails: undefined,
       },
     });
@@ -285,6 +286,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
+        numRequests: 0,
         completionDetails: undefined,
       },
     });
@@ -314,6 +316,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
+        numRequests: 0,
         completionDetails: undefined,
       },
     });
@@ -343,6 +346,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
+        numRequests: 0,
         completionDetails: undefined,
       },
     });
