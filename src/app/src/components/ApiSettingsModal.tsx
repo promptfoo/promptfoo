@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { useApiHealth, type ApiHealthStatus } from '@app/hooks/useApiHealth';
+import React, { useEffect, useState } from 'react';
+
+import { type ApiHealthStatus, useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
 import CircleIcon from '@mui/icons-material/Circle';
 import RefreshIcon from '@mui/icons-material/Refresh';

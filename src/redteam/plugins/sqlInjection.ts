@@ -1,8 +1,9 @@
 import dedent from 'dedent';
-import type { Assertion } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:sql-injection';
+import type { Assertion } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:sql-injection';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>

@@ -1,4 +1,4 @@
-import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
+import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 import type { TestCase } from '@promptfoo/types';
 
 export interface ApplicationDefinition {
@@ -29,9 +29,11 @@ export interface Config {
   prompts: string[];
   target: ProviderOptions;
   plugins: (RedteamPlugin | { id: string; config?: any })[];
+  testGenerationInstructions?: string;
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
+  maxConcurrency?: number;
   applicationDefinition: ApplicationDefinition;
   entities: string[];
   defaultTest?: TestCase;
@@ -72,7 +74,7 @@ export interface ProviderOptions {
   };
 }
 
-export interface BrowserStep {
+interface BrowserStep {
   action: 'navigate' | 'click' | 'type' | 'extract' | 'screenshot' | 'wait' | 'waitForNewChildren';
   args?: {
     url?: string;
@@ -89,36 +91,8 @@ export interface BrowserStep {
   name?: string;
 }
 
-export interface UpdateConfigFunction {
-  (section: keyof Config, value: any): void;
-}
-
-export interface RedTeamConfigHook {
-  config: Config;
-  updateConfig: UpdateConfigFunction;
-  resetConfig: () => void;
-}
-
-export interface ComponentProps {
-  config: Config;
-  updateConfig: UpdateConfigFunction;
-}
-
-export interface YamlPreviewProps {
-  config: Config;
-}
-
 export interface LocalPluginConfig {
-  [key: string]: {
-    indirectInjectionVar?: string;
-    intent?: string[];
-    policy?: string;
-    systemPrompt?: string;
-    targetIdentifiers?: string[];
-    targetSystems?: string[];
-    targetUrls?: string[];
-    [key: string]: string | string[] | undefined;
-  };
+  [key: string]: PluginConfig;
 }
 
 export interface RedteamUITarget {

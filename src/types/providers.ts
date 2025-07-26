@@ -1,8 +1,10 @@
 import type winston from 'winston';
+
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
+export type { TokenUsage } from './shared';
 export type ProviderId = string;
 export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
@@ -45,7 +47,6 @@ export interface ProviderOptions {
 }
 
 export interface CallApiContextParams {
-  fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
   logger?: winston.Logger;
@@ -56,6 +57,15 @@ export interface CallApiContextParams {
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
+  bustCache?: boolean;
+
+  // W3C Trace Context headers
+  traceparent?: string; // Format: version-trace-id-parent-id-trace-flags
+  tracestate?: string; // Optional vendor-specific trace state
+
+  // Evaluation metadata (for manual correlation if needed)
+  evaluationId?: string;
+  testCaseId?: string;
 }
 
 export interface CallApiOptionsParams {
@@ -105,6 +115,7 @@ export interface GuardrailResponse {
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
   flagged?: boolean;
+  reason?: string;
 }
 
 export interface ProviderResponse {
@@ -127,6 +138,7 @@ export interface ProviderResponse {
   isRefusal?: boolean;
   sessionId?: string;
   guardrails?: GuardrailResponse;
+  finishReason?: string;
   audio?: {
     id?: string;
     expiresAt?: number;

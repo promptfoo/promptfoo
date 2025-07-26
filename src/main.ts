@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import { Command } from 'commander';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
@@ -10,6 +11,7 @@ import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
+import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
@@ -28,6 +30,7 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
+import { simbaCommand } from './redteam/commands/simba';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
@@ -108,6 +111,7 @@ async function main() {
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
@@ -125,7 +129,7 @@ async function main() {
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
-
+  simbaCommand(redteamBaseCommand, defaultConfig);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 

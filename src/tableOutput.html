@@ -43,14 +43,14 @@
     <table>
       <thead>
         {% for header in table[0] %}
-        <th>{{ header }}</th>
+        <th>{{ header | escape }}</th>
         {% endfor %}
       </thead>
       <tbody>
         {% for row in table.slice(1) %}
         <tr>
           {% for cell in row %}
-          <td data-content="{{ cell | escape }}">{{ cell }}</td>
+          <td data-content="{{ cell | escape }}">{{ cell | escape }}</td>
           {% endfor %}
         </tr>
         {% endfor %}

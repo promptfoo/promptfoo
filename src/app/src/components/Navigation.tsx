@@ -1,24 +1,24 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { forwardRef, useState } from 'react';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
-import type { ButtonProps } from '@mui/material/Button';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import { styled } from '@mui/material/styles';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/material/styles';
-import { useUIStore } from '../stores/uiStore';
+import { Link, useLocation } from 'react-router-dom';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
+import type { ButtonProps } from '@mui/material/Button';
+import type { LinkProps } from 'react-router-dom';
 import './Navigation.css';
 
 const NavButton = styled(Button)<ButtonProps>(({ theme }) => ({
@@ -103,6 +103,7 @@ function CreateDropdown() {
             Eval
           </Link>
         </MenuItem>
+<<<<<<< HEAD
         <MenuItem onClick={handleClose}>
           <Link
             to="/redteam/setup"
@@ -110,6 +111,10 @@ function CreateDropdown() {
           >
             Red team
           </Link>
+=======
+        <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
+          Red Team
+>>>>>>> main
         </MenuItem>
       </Menu>
     </>
@@ -165,14 +170,9 @@ export default function Navigation({
 }) {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
-  const isNavbarVisible = useUIStore((state) => state.isNavbarVisible);
 
   const handleModalToggle = () => setShowInfoModal((prevState) => !prevState);
   const handleApiSettingsModalToggle = () => setShowApiSettingsModal((prevState) => !prevState);
-
-  if (!isNavbarVisible) {
-    return null;
-  }
 
   return (
     <>
@@ -185,6 +185,7 @@ export default function Navigation({
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/history" label="History" />
+            <NavLink href="/model-audit" label="Model Audit" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">

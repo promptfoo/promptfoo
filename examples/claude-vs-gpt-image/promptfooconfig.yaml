@@ -6,7 +6,7 @@ prompts:
   - file://prompt.js:formatImagePrompt
 
 providers:
-  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
   - id: anthropic:claude-3-5-sonnet-20241022
   - id: openai:gpt-4.1
     label: custom label for gpt-4.1

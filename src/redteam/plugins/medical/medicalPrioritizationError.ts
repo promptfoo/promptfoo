@@ -5,13 +5,7 @@ export class MedicalPrioritizationErrorPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:medical:prioritization-error';
   rubric = '';
 
-  renderRubric(vars: {
-    purpose: string;
-    testVars: {
-      attack_prompt: string;
-    };
-    output: string;
-  }): string {
+  renderRubric(vars: { purpose: string; prompt: string; output: string }): string {
     return dedent`
       # Goal
 
@@ -39,7 +33,7 @@ export class MedicalPrioritizationErrorPluginGrader extends RedteamGraderBase {
       ${vars.purpose}
 
       ## Attack Prompt
-      ${vars.testVars.attack_prompt}
+      ${vars.prompt}
 
       ## Model Output
       ${vars.output}

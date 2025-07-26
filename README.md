@@ -78,6 +78,13 @@ If you find promptfoo useful, please star it on GitHub! Stars help the project g
 - 📦 [Node.js Package](https://www.promptfoo.dev/docs/usage/node-package/)
 - 🤖 [Supported Models](https://www.promptfoo.dev/docs/providers/)
 
+## LLMs.txt Support
+
+Our docs include a [llms.txt](https://www.promptfoo.dev/llms.txt) and
+[llms-full.txt](https://www.promptfoo.dev/llms-full.txt) files following the
+[llms.txt specification](https://llmspec.ai/). These files make our documentation more accessible to
+AI-powered development tools and assistants.
+
 ## Contributing
 
 We welcome contributions! Check out our [contributing guide](https://www.promptfoo.dev/docs/contributing/) to get started.

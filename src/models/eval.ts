@@ -1,16 +1,18 @@
 import { randomUUID } from 'crypto';
+
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
+import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
+  evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
+  evalsToTagsTable,
   promptsTable,
   tagsTable,
-  evalsToTagsTable,
-  evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
@@ -18,23 +20,24 @@ import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import {
   type CompletedPrompt,
+  type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
-  type EvaluateSummaryV3,
   type EvaluateSummaryV2,
+  type EvaluateSummaryV3,
   type EvaluateTable,
-  ResultFailureReason,
+  type EvaluateTableRow,
   type Prompt,
+  ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-  type EvalSummary,
-  type EvaluateTableRow,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import EvalResult from './evalResult';
 
 interface FilteredCountRow {
@@ -157,7 +160,7 @@ export default class Eval {
     }
 
     // backfill vars
-    if (!eval_.vars) {
+    if (!eval_.vars || eval_.vars.length === 0) {
       const vars = await EvalQueries.getVarsFromEval(id);
       evalInstance.setVars(vars);
       await EvalQueries.setVars(id, vars);
@@ -196,6 +199,7 @@ export default class Eval {
       author?: string;
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
+      vars?: string[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -214,6 +218,7 @@ export default class Eval {
           description: config.description,
           config,
           results: {},
+          vars: opts?.vars || [],
         })
         .run();
 
@@ -390,6 +395,10 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
+    if (this.persisted) {
+      // Notify watchers that new results are available
+      updateSignalFile();
+    }
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
@@ -421,27 +430,59 @@ export default class Eval {
     limit?: number;
     filterMode?: string;
     searchQuery?: string;
-    metricFilter?: string;
+    filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
-    const filter = opts.filterMode ?? 'all';
+    const mode = opts.filterMode ?? 'all';
 
     // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
-    if (filter === 'errors') {
+    if (mode === 'errors') {
       conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
-    } else if (filter === 'failures') {
+    } else if (mode === 'failures') {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
-    } else if (filter === 'passes') {
+    } else if (mode === 'passes') {
       conditions.push(`success = 1`);
     }
 
-    // Add specific metric filter if provided
-    if (opts.metricFilter && opts.metricFilter.trim() !== '') {
-      const sanitizedMetric = opts.metricFilter.replace(/'/g, "''");
-      conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
+    // Add filters
+    if (opts.filters && opts.filters.length > 0) {
+      const filterConditions: string[] = [];
+      opts.filters.forEach((filter) => {
+        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        let condition: string | null = null;
+
+        if (type === 'metric' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
+          // in double quotes.
+          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+        } else if (type === 'metadata' && field) {
+          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedField = field.replace(/'/g, "''");
+
+          if (operator === 'equals') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
+          } else if (operator === 'contains') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
+          } else if (operator === 'not_contains') {
+            condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          }
+        }
+
+        if (condition) {
+          // Logic operator can only be applied if there are already conditions
+          filterConditions.push(
+            // Logic operator can only be applied if there are already conditions
+            filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
+          );
+        }
+      });
+      if (filterConditions.length > 0) {
+        conditions.push(`(${filterConditions.join(' ')})`);
+      }
     }
 
     // Add search condition if searchQuery is provided
@@ -499,7 +540,7 @@ export default class Eval {
     filterMode?: string;
     testIndices?: number[];
     searchQuery?: string;
-    metricFilter?: string;
+    filters?: string[];
   }): Promise<{
     head: { prompts: Prompt[]; vars: string[] };
     body: EvaluateTableRow[];
@@ -525,7 +566,7 @@ export default class Eval {
         limit: opts.limit,
         filterMode: opts.filterMode,
         searchQuery: opts.searchQuery,
-        metricFilter: opts.metricFilter,
+        filters: opts.filters,
       });
 
       testIndices = queryResult.testIndices;
@@ -623,51 +664,15 @@ export default class Eval {
       successes: 0,
       failures: 0,
       errors: 0,
-      tokenUsage: {
-        cached: 0,
-        completion: 0,
-        prompt: 0,
-        total: 0,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-        assertions: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-          cached: 0,
-        },
-      },
+      tokenUsage: createEmptyTokenUsage(),
     };
 
     for (const prompt of this.prompts) {
-      stats.successes += prompt.metrics?.testPassCount || 0;
-      stats.failures += prompt.metrics?.testFailCount || 0;
-      stats.errors += prompt.metrics?.testErrorCount || 0;
-      stats.tokenUsage.prompt += prompt.metrics?.tokenUsage.prompt || 0;
-      stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
-      stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
-      stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
-      stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
+      stats.successes += prompt.metrics?.testPassCount ?? 0;
+      stats.failures += prompt.metrics?.testFailCount ?? 0;
+      stats.errors += prompt.metrics?.testErrorCount ?? 0;
 
-      stats.tokenUsage.completionDetails.reasoning! +=
-        prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
-      stats.tokenUsage.completionDetails.acceptedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
-      stats.tokenUsage.completionDetails.rejectedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
-
-      // Add assertion token usage from prompt metrics
-      if (prompt.metrics?.tokenUsage.assertions) {
-        stats.tokenUsage.assertions.total! += prompt.metrics.tokenUsage.assertions.total || 0;
-        stats.tokenUsage.assertions.prompt! += prompt.metrics.tokenUsage.assertions.prompt || 0;
-        stats.tokenUsage.assertions.completion! +=
-          prompt.metrics.tokenUsage.assertions.completion || 0;
-        stats.tokenUsage.assertions.cached! += prompt.metrics.tokenUsage.assertions.cached || 0;
-      }
+      accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
     return stats;
@@ -766,9 +771,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
   return results.map((result) => {
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
-        // TODO(will): Verify whether prompt.metrics *should* be required.
-        invariant(!!prompt.metrics, 'Prompt metrics are required');
-        return memo + prompt.metrics!.testPassCount;
+        return memo + (prompt.metrics?.testPassCount ?? 0);
       }, 0) ?? 0;
 
     // All prompts should have the same number of test cases:
@@ -779,11 +782,6 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
         (p.metrics?.testErrorCount ?? 0)
       );
     }) ?? [0];
-
-    invariant(
-      testCounts.every((t) => t === testCounts[0]),
-      'All prompts must have the same number of test cases',
-    );
 
     // Derive the number of tests from the first prompt.
     const testCount = testCounts.length > 0 ? testCounts[0] : 0;

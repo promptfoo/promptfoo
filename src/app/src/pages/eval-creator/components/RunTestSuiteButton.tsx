@@ -1,22 +1,25 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import { useNavigate } from 'react-router-dom';
 
 const RunTestSuiteButton: React.FC = () => {
   const navigate = useNavigate();
+  const { config } = useStore();
   const {
     defaultTest,
+    derivedMetrics,
     description,
     env,
     evaluateOptions,
     prompts,
     providers,
     scenarios,
-    testCases,
-  } = useStore();
+    tests,
+  } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -25,13 +28,14 @@ const RunTestSuiteButton: React.FC = () => {
 
     const testSuite = {
       defaultTest,
+      derivedMetrics,
       description,
       env,
       evaluateOptions,
       prompts,
       providers,
       scenarios,
-      tests: testCases,
+      tests, // Note: This is 'tests' in the API, not 'testCases'
     };
 
     try {

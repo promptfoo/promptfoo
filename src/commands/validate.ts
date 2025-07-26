@@ -1,13 +1,14 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
 import { fromError } from 'zod-validation-error';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import type { UnifiedConfig } from '../types';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types';
 import { setupEnv } from '../util';
 import { resolveConfigs } from '../util/config/load';
+import type { Command } from 'commander';
+
+import type { UnifiedConfig } from '../types';
 
 interface ValidateOptions {
   config?: string[];
@@ -63,7 +64,6 @@ export function validateCommand(
     )
     .action(async (opts: ValidateOptions) => {
       telemetry.record('command_used', { name: 'validate' });
-      await telemetry.send();
       await doValidate(opts, defaultConfig, defaultConfigPath);
     });
 }

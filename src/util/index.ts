@@ -1,41 +1,40 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
-import * as fs from 'fs';
+import { XMLBuilder } from 'fast-xml-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
 import {
+  type CsvRow,
   type EvaluateResult,
   type EvaluateTableOutput,
-  type NunjucksFilterMap,
-  type ResultsFile,
-  type TestCase,
-  type OutputFile,
-  type CompletedPrompt,
-  type CsvRow,
   isApiProvider,
   isProviderOptions,
+  type NunjucksFilterMap,
+  type OutputFile,
   OutputFileExtension,
   ResultFailureReason,
+  type TestCase,
 } from '../types';
 import invariant from '../util/invariant';
-import { getConfigDirectoryPath } from './config/manage';
-import { sha256 } from './createHash';
 import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
+
+import type Eval from '../models/eval';
+import type EvalResult from '../models/evalResult';
+import type { Vars } from '../types';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -175,6 +174,22 @@ export async function writeOutput(
       const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
       fs.appendFileSync(outputPath, text);
     }
+  } else if (outputExtension === 'xml') {
+    const summary = await evalRecord.toEvaluateSummary();
+    const xmlBuilder = new XMLBuilder({
+      ignoreAttributes: false,
+      format: true,
+      indentBy: '  ',
+    });
+    const xmlData = xmlBuilder.build({
+      promptfoo: {
+        evalId: evalRecord.id,
+        results: summary,
+        config: evalRecord.config,
+        shareableUrl: shareableUrl || undefined,
+      },
+    });
+    fs.writeFileSync(outputPath, xmlData);
   }
 }
 
@@ -196,108 +211,6 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
       return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
     default:
       throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
-  }
-}
-
-/**
- * TODO(ian): Remove this
- * @deprecated Use readLatestResults directly instead.
- */
-export function getLatestResultsPath(): string {
-  return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
-}
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function listPreviousResultFilenames_fileSystem(): string[] {
-  const directory = path.join(getConfigDirectoryPath(), 'output');
-  if (!fs.existsSync(directory)) {
-    return [];
-  }
-  const files = fs.readdirSync(directory);
-  const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
-  return resultsFiles.sort((a, b) => {
-    const statA = fs.statSync(path.join(directory, a));
-    const statB = fs.statSync(path.join(directory, b));
-    return statA.birthtime.getTime() - statB.birthtime.getTime(); // sort in ascending order
-  });
-}
-
-const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function listPreviousResults_fileSystem(): { fileName: string; description?: string }[] {
-  const directory = path.join(getConfigDirectoryPath(), 'output');
-  if (!fs.existsSync(directory)) {
-    return [];
-  }
-  const sortedFiles = listPreviousResultFilenames_fileSystem();
-  return sortedFiles.map((fileName) => {
-    if (!resultsCache[fileName]) {
-      try {
-        const fileContents = fs.readFileSync(path.join(directory, fileName), 'utf8');
-        const data = yaml.load(fileContents) as ResultsFile;
-        resultsCache[fileName] = data;
-      } catch (error) {
-        logger.warn(`Failed to read results from ${fileName}:\n${error}`);
-      }
-    }
-    return {
-      fileName,
-      description: resultsCache[fileName]?.config.description,
-    };
-  });
-}
-
-export function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date;
-  /*
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-  */
-}
-
-export function dateToFilename(date: Date) {
-  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
-}
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function readResult_fileSystem(
-  name: string,
-): { id: string; result: ResultsFile; createdAt: Date } | undefined {
-  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const resultsPath = path.join(resultsDirectory, name);
-  try {
-    const result = JSON.parse(
-      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
-    ) as ResultsFile;
-    const createdAt = filenameToDate(name);
-    return {
-      id: sha256(JSON.stringify(result.config)),
-      result,
-      createdAt,
-    };
-  } catch (err) {
-    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 
@@ -333,26 +246,73 @@ export function setupEnv(envPath: string | undefined) {
   }
 }
 
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-  uuid: string;
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-};
-
-export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
-  if (isApiProvider(provider)) {
-    return provider.id();
-  } else if (isProviderOptions(provider)) {
-    return provider.id;
-  } else if (typeof provider === 'string') {
-    return provider;
+function canonicalizeProviderId(id: string): string {
+  // Handle file:// prefix
+  if (id.startsWith('file://')) {
+    const filePath = id.slice('file://'.length);
+    return path.isAbsolute(filePath) ? id : `file://${path.resolve(filePath)}`;
   }
+
+  // Handle other executable prefixes with file paths
+  const executablePrefixes = ['exec:', 'python:', 'golang:'];
+  for (const prefix of executablePrefixes) {
+    if (id.startsWith(prefix)) {
+      const filePath = id.slice(prefix.length);
+      if (filePath.includes('/') || filePath.includes('\\')) {
+        return `${prefix}${path.resolve(filePath)}`;
+      }
+      return id;
+    }
+  }
+
+  // For JavaScript/TypeScript files without file:// prefix
+  if (
+    (id.endsWith('.js') || id.endsWith('.ts') || id.endsWith('.mjs')) &&
+    (id.includes('/') || id.includes('\\'))
+  ) {
+    return `file://${path.resolve(id)}`;
+  }
+
+  return id;
+}
+
+function getProviderLabel(provider: any): string | undefined {
+  return provider?.label && typeof provider.label === 'string' ? provider.label : undefined;
+}
+
+export function providerToIdentifier(
+  provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
+): string | undefined {
+  if (!provider) {
+    return undefined;
+  }
+
+  if (typeof provider === 'string') {
+    return canonicalizeProviderId(provider);
+  }
+
+  // Check for label first on any provider type
+  const label = getProviderLabel(provider);
+  if (label) {
+    return label;
+  }
+
+  if (isApiProvider(provider)) {
+    return canonicalizeProviderId(provider.id());
+  }
+
+  if (isProviderOptions(provider)) {
+    if (provider.id) {
+      return canonicalizeProviderId(provider.id);
+    }
+    return undefined;
+  }
+
+  // Handle any other object with id property
+  if (typeof provider === 'object' && 'id' in provider && typeof provider.id === 'string') {
+    return canonicalizeProviderId(provider.id);
+  }
+
   return undefined;
 }
 

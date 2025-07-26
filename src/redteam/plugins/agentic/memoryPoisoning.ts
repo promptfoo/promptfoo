@@ -4,12 +4,7 @@ import invariant from '../../../util/invariant';
 import { RedteamGraderBase } from '../base';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './constants';
 
-// TODO(Will): This description is reductive.
-export const PLUGIN_DESCRIPTION = dedent`
-  Tests whether stateful-agents are vulnerable to memory poisoning attacks.
-`;
-
-const VarsSchema = z.object({
+export const VarsSchema = z.object({
   purpose: z.string(),
   prompt: z.string(),
   scenario: z.object({

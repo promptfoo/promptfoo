@@ -1,10 +1,11 @@
-import type { Command } from 'commander';
 import { getDefaultPort } from '../../constants';
+import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { setConfigDirectoryPath } from '../../util/config/manage';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
+import type { Command } from 'commander';
 
 export function redteamSetupCommand(program: Command) {
   program
@@ -27,10 +28,14 @@ export function redteamSetupCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'redteam setup',
         });
-        await telemetry.send();
 
         if (directory) {
           setConfigDirectoryPath(directory);
+        }
+        if (cmdObj.filterDescription) {
+          logger.warn(
+            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+          );
         }
 
         const isRunning = await checkServerRunning();
@@ -39,7 +44,7 @@ export function redteamSetupCommand(program: Command) {
         if (isRunning) {
           await openBrowser(browserBehavior);
         } else {
-          await startServer(cmdObj.port, browserBehavior, cmdObj.filterDescription);
+          await startServer(cmdObj.port, browserBehavior);
         }
       },
     );

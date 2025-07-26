@@ -1,11 +1,11 @@
 import OpenAI from 'openai';
-import type { TokenUsage } from '../../types';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { getAjv } from '../../util/json';
-import { safeJsonStringify } from '../../util/json';
-import type { ProviderConfig } from '../shared';
+import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
+
+import type { TokenUsage } from '../../types';
+import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
@@ -79,13 +79,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.4 / 1e6,
     },
   })),
-  ...['gpt-4.5-preview', 'gpt-4.5-preview-2025-02-27'].map((model) => ({
-    id: model,
-    cost: {
-      input: 75 / 1e6,
-      output: 150 / 1e6,
-    },
-  })),
+  // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
     id: model,
     cost: {
@@ -107,6 +101,20 @@ export const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
+  ...['o3', 'o3-2025-04-16'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6,
+      output: 8 / 1e6,
+    },
+  })),
+  ...['o3-pro', 'o3-pro-2025-06-10'].map((model) => ({
+    id: model,
+    cost: {
+      input: 20 / 1e6,
+      output: 80 / 1e6,
+    },
+  })),
   ...['o3-mini', 'o3-mini-2025-01-31'].map((model) => ({
     id: model,
     cost: {
@@ -118,6 +126,7 @@ export const OPENAI_CHAT_MODELS = [
     'gpt-4o-audio-preview',
     'gpt-4o-audio-preview-2024-12-17',
     'gpt-4o-audio-preview-2024-10-01',
+    'gpt-4o-audio-preview-2025-06-03',
   ].map((model) => ({
     id: model,
     cost: {
@@ -157,11 +166,18 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.6 / 1e6,
     },
   })),
-  ...['gpt-4', 'gpt-4-0613'].map((model) => ({
+  ...['gpt-4', 'gpt-4-0613', 'gpt-4-0314'].map((model) => ({
     id: model,
     cost: {
       input: 30 / 1e6,
       output: 60 / 1e6,
+    },
+  })),
+  ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 60 / 1e6,
+      output: 120 / 1e6,
     },
   })),
   ...[
@@ -171,6 +187,7 @@ export const OPENAI_CHAT_MODELS = [
     'gpt-4-0125-preview',
     'gpt-4-1106-preview',
     'gpt-4-1106-vision-preview',
+    'gpt-4-vision-preview',
   ].map((model) => ({
     id: model,
     cost: {
@@ -199,6 +216,20 @@ export const OPENAI_CHAT_MODELS = [
       output: 2 / 1e6,
     },
   },
+  ...['gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
+  ...['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 4 / 1e6,
+    },
+  })),
   ...['gpt-3.5-turbo-instruct'].map((model) => ({
     id: model,
     cost: {

@@ -1,8 +1,8 @@
 import fs from 'fs';
 import { rm } from 'fs/promises';
+
 import yaml from 'js-yaml';
-import { reportProviderAPIKeyWarnings } from '../src/onboarding';
-import { createDummyFiles } from '../src/onboarding';
+import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types';
 
 jest.mock('fs', () => ({
@@ -42,7 +42,7 @@ jest.mock('../src/database', () => ({
 }));
 
 jest.mock('../src/telemetry', () => ({
-  recordAndSend: jest.fn(),
+  record: jest.fn(),
 }));
 
 jest.mock('../src/fetch', () => ({
@@ -154,11 +154,10 @@ describe('createDummyFiles', () => {
 
     expect(validationResult.success).toBe(true);
 
-    if (!validationResult.success) {
-      throw new Error('Validation failed');
-    }
+    // Assert that validation was successful and config is defined
+    expect(validationResult.data).toBeDefined();
 
-    const config = validationResult.data;
+    const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
     expect(config.providers).toContain('openai:gpt-4o-mini');
@@ -189,21 +188,22 @@ describe('createDummyFiles', () => {
 
     expect(validationResult.success).toBe(true);
 
-    if (!validationResult.success) {
-      throw new Error('Validation failed');
-    }
+    // Assert that validation was successful and config is defined
+    expect(validationResult.data).toBeDefined();
 
-    const config = validationResult.data;
+    const config = validationResult.data!;
     expect(config.tests).toBeDefined();
     expect(Array.isArray(config.tests)).toBe(true);
-    expect(config.tests?.length).toBeGreaterThan(0);
 
-    const firstTest = config.tests?.[0];
+    const tests = config.tests as any[];
+    expect(tests.length).toBeGreaterThan(0);
+
+    const firstTest = tests[0];
     expect(firstTest).toBeTruthy();
     expect(typeof firstTest).toBe('object');
     expect(firstTest).toHaveProperty('vars');
 
-    const vars = (firstTest as any).vars;
+    const { vars } = firstTest;
     expect(typeof vars).toBe('object');
     expect(vars).toHaveProperty('inquiry');
     expect(vars).toHaveProperty('context');

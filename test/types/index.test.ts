@@ -1,20 +1,22 @@
 import fs from 'fs';
+import path from 'path';
+
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import path from 'path';
 import { z } from 'zod';
-import type { TestSuite } from '../../src/types';
 import {
   AssertionSchema,
   BaseAssertionTypesSchema,
-  isGradingResult,
-  VarsSchema,
-  TestCaseSchema,
   CommandLineOptionsSchema,
+  isGradingResult,
+  TestCaseSchema,
   TestSuiteConfigSchema,
-  UnifiedConfigSchema,
   TestSuiteSchema,
+  UnifiedConfigSchema,
+  VarsSchema,
 } from '../../src/types';
+
+import type { TestSuite } from '../../src/types';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -406,7 +408,9 @@ describe('CommandLineOptionsSchema', () => {
 
 describe('TestSuiteConfigSchema', () => {
   const rootDir = path.join(__dirname, '../..');
-  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`);
+  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`, {
+    windowsPathsNoEscape: true,
+  });
 
   it('should find configuration files', () => {
     expect(configFiles.length).toBeGreaterThan(0);
@@ -584,6 +588,74 @@ describe('TestSuiteConfigSchema', () => {
     });
   });
 
+  describe('defaultTest validation', () => {
+    it('should accept string defaultTest starting with file://', () => {
+      const validConfig = {
+        providers: ['openai:gpt-4'],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: 'file://path/to/defaultTest.yaml',
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      expect(result.data!.defaultTest).toBe('file://path/to/defaultTest.yaml');
+    });
+
+    it('should reject string defaultTest not starting with file://', () => {
+      const invalidConfig = {
+        providers: ['openai:gpt-4'],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: 'invalid/path.yaml',
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(invalidConfig);
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept partial TestCase object for defaultTest', () => {
+      const validConfig = {
+        providers: ['openai:gpt-4'],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: {
+          assert: [{ type: 'contains', value: 'test' }],
+          vars: { default: true },
+          threshold: 0.8,
+        },
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      expect(result.data!.defaultTest).toEqual({
+        assert: [{ type: 'contains', value: 'test' }],
+        vars: { default: true },
+        threshold: 0.8,
+      });
+    });
+
+    it('should accept defaultTest with description field (it will be stripped)', () => {
+      const configWithDescription = {
+        providers: ['openai:gpt-4'],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: {
+          description: 'This will be stripped by omit()',
+          assert: [{ type: 'equals', value: 'test' }],
+        },
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(configWithDescription);
+      expect(result.success).toBe(true);
+      // The description field should be stripped from the parsed result
+      expect(result.data!.defaultTest).toEqual({
+        assert: [{ type: 'equals', value: 'test' }],
+      });
+      expect((result.data!.defaultTest as any).description).toBeUndefined();
+    });
+  });
+
   for (const file of configFiles) {
     it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
@@ -749,6 +821,90 @@ describe('TestSuiteSchema', () => {
     it('should allow an empty array of extensions', () => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [] });
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('defaultTest validation', () => {
+    it('should accept string defaultTest starting with file://', () => {
+      const validConfig = {
+        providers: [
+          {
+            id: () => 'openai:gpt-4',
+            callApi: async () => ({ output: 'test' }),
+          },
+        ],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: 'file://path/to/defaultTest.yaml',
+      };
+
+      const result = TestSuiteSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      expect(result.data!.defaultTest).toBe('file://path/to/defaultTest.yaml');
+    });
+
+    it('should reject string defaultTest not starting with file://', () => {
+      const invalidConfig = {
+        providers: [
+          {
+            id: () => 'openai:gpt-4',
+            callApi: async () => ({ output: 'test' }),
+          },
+        ],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: 'invalid/path.yaml',
+      };
+
+      const result = TestSuiteSchema.safeParse(invalidConfig);
+      expect(result.success).toBe(false);
+      expect(result.error!.errors[0].message).toContain(
+        'defaultTest string must start with file://',
+      );
+    });
+
+    it('should accept object defaultTest', () => {
+      const validConfig = {
+        providers: [
+          {
+            id: () => 'openai:gpt-4',
+            callApi: async () => ({ output: 'test' }),
+          },
+        ],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: {
+          assert: [{ type: 'equals', value: 'test' }],
+          vars: { foo: 'bar' },
+          options: { provider: 'openai:gpt-4' },
+        },
+      };
+
+      const result = TestSuiteSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      expect(result.data!.defaultTest).toEqual(
+        expect.objectContaining({
+          assert: [{ type: 'equals', value: 'test' }],
+          vars: { foo: 'bar' },
+        }),
+      );
+    });
+
+    it('should accept undefined defaultTest', () => {
+      const validConfig = {
+        providers: [
+          {
+            id: () => 'openai:gpt-4',
+            callApi: async () => ({ output: 'test' }),
+          },
+        ],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [{ vars: { test: 'value' } }],
+      };
+
+      const result = TestSuiteSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
+      expect(result.data!.defaultTest).toBeUndefined();
     });
   });
 });

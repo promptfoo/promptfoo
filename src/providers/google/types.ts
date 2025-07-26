@@ -66,8 +66,6 @@ export interface FunctionDeclaration {
   response?: Schema;
 }
 
-export type FunctionParameters = Record<string, unknown>;
-
 interface GoogleSearchRetrieval {
   dynamicRetrievalConfig: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
@@ -175,7 +173,7 @@ export interface CompletionOptions {
    * If set, automatically call these functions when the assistant activates
    * these function tools.
    */
-  functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
+  functionToolCallbacks?: Record<string, ((arg: string) => Promise<any>) | string>;
 
   /**
    * If set, spawn a python process with the file and connect to its API
@@ -187,7 +185,7 @@ export interface CompletionOptions {
     pythonExecutable?: string;
   };
 
-  systemInstruction?: Content;
+  systemInstruction?: Content | string;
 
   /**
    * Model-specific configuration for Llama models

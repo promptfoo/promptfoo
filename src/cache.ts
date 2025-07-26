@@ -1,13 +1,14 @@
-import cacheManager from 'cache-manager';
-import type { Cache } from 'cache-manager';
-import fsStore from 'cache-manager-fs-hash';
 import fs from 'fs';
 import path from 'path';
-import { getEnvBool, getEnvString, getEnvInt } from './envars';
+
+import cacheManager from 'cache-manager';
+import fsStore from 'cache-manager-fs-hash';
+import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
+import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;
 

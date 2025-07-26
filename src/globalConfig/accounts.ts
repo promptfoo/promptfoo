@@ -1,13 +1,27 @@
+import { randomUUID } from 'crypto';
+
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { z } from 'zod';
-import type { GlobalConfig } from '../configTypes';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
-import telemetry from '../telemetry';
-import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
+import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
+
+import type { GlobalConfig } from '../configTypes';
+
+export function getUserId(): string {
+  let globalConfig = readGlobalConfig();
+  if (!globalConfig?.id) {
+    const newId = randomUUID();
+    globalConfig = { ...globalConfig, id: newId };
+    writeGlobalConfig(globalConfig);
+    return newId;
+  }
+
+  return globalConfig.id;
+}
 
 export function getUserEmail(): string | null {
   const globalConfig = readGlobalConfig();
@@ -28,7 +42,7 @@ export function isLoggedIntoCloud(): boolean {
   return !!userEmail && !isCI();
 }
 
-export interface EmailStatusResult {
+interface EmailStatusResult {
   status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'no_email';
   message?: string;
   email?: string;
@@ -81,6 +95,7 @@ export async function checkEmailStatus(): Promise<EmailStatusResult> {
 }
 
 export async function promptForEmailUnverified() {
+  const { default: telemetry } = await import('../telemetry');
   let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
   if (!email) {
     await telemetry.record('feature_used', {

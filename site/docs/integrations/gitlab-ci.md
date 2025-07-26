@@ -140,13 +140,11 @@ After the evaluation runs, you'll see:
 Common issues and solutions:
 
 1. **Cache not working:**
-
    - Verify the cache key and paths in your configuration
    - Check that the cache path exists
    - Ensure file permissions are correct
 
 2. **API key errors:**
-
    - Confirm variables are set in GitLab CI/CD settings
    - Check that variables are properly masked
    - Verify API key permissions

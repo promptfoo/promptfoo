@@ -1,8 +1,8 @@
-import type { Command } from 'commander';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { writeOutput } from '../util';
+import type { Command } from 'commander';
 
 export function exportCommand(program: Command) {
   program
@@ -36,7 +36,6 @@ export function exportCommand(program: Command) {
           name: 'export',
           evalId,
         });
-        await telemetry.send();
       } catch (error) {
         logger.error(`Failed to export eval: ${error}`);
         process.exit(1);

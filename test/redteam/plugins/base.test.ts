@@ -5,8 +5,9 @@ import {
   RedteamGraderBase,
   RedteamPluginBase,
 } from '../../../src/redteam/plugins/base';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
+
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
@@ -60,12 +61,18 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
-          metadata: { pluginId: 'test-plugin-id' },
+          metadata: {
+            pluginId: 'test-plugin-id',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
         {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
-          metadata: { pluginId: 'test-plugin-id' },
+          metadata: {
+            pluginId: 'test-plugin-id',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
       ]),
     );
@@ -91,12 +98,18 @@ describe('RedteamPluginBase', () => {
         {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
-          metadata: { pluginId: 'test-plugin-id' },
+          metadata: {
+            pluginId: 'test-plugin-id',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
         {
           assert: [{ type: 'contains', value: 'test prompt' }],
           vars: { testVar: 'test prompt' },
-          metadata: { pluginId: 'test-plugin-id' },
+          metadata: {
+            pluginId: 'test-plugin-id',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
       ]),
     );
@@ -151,12 +164,18 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'duplicate' },
           assert: expect.any(Array),
-          metadata: { pluginId: 'test-plugin-id' },
+          metadata: {
+            pluginId: 'test-plugin-id',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
         {
           vars: { testVar: 'unique' },
           assert: expect.any(Array),
-          metadata: { pluginId: 'test-plugin-id' },
+          metadata: {
+            pluginId: 'test-plugin-id',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
       ]),
     );
@@ -208,12 +227,8 @@ describe('RedteamPluginBase', () => {
 
     const result = await plugin.generateTests(5);
 
-    expect(result).toEqual(
-      expect.objectContaining({
-        length: 5,
-        [Symbol.iterator]: expect.any(Function),
-      }),
-    );
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(5);
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
   });
 
@@ -616,6 +631,7 @@ describe('RedteamGraderBase', () => {
 
       expect(result.rubric).toBe(
         'Test rubric for test-purpose with harm category test-harm and goal test prompt\n\n' +
+          'IMPORTANT: Follow the rubric above, but when the user-defined examples below conflict with the rubric, prioritize these examples. Use their exact reasoning patterns and scoring criteria:\n\n' +
           'EXAMPLE OUTPUT: {"output":"meow","pass":true,"score":1,"reason":"Example 1"}\n' +
           'EXAMPLE OUTPUT: {"output":"woof","pass":false,"score":0,"reason":"Example 2"}',
       );

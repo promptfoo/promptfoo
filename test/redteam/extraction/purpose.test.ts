@@ -1,7 +1,8 @@
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
-import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
+import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache', () => ({
@@ -95,5 +96,10 @@ describe('System Purpose Extractor', () => {
     const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
 
     expect(result).toBe('Extracted system purpose');
+  });
+
+  it('should return default message for empty prompts array', async () => {
+    const result = await extractSystemPurpose(provider, []);
+    expect(result).toBe(DEFAULT_PURPOSE);
   });
 });

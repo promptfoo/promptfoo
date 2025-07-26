@@ -1,11 +1,12 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import process from 'process';
+
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
-import process from 'process';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -18,7 +19,6 @@ import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import {
-  UnifiedConfigSchema,
   type CommandLineOptions,
   type Prompt,
   type ProviderOptions,
@@ -28,6 +28,7 @@ import {
   type TestCase,
   type TestSuite,
   type UnifiedConfig,
+  UnifiedConfigSchema,
 } from '../../types';
 import { isRunningUnderNpx, readFilters } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -35,6 +36,13 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
+
+/**
+ * Type guard to check if a test case has vars property
+ */
+function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
+  return typeof test === 'object' && test !== null && 'vars' in test;
+}
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -208,7 +216,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       // Check the array for `prompt` vars
       (Array.isArray(ret.tests) &&
         ret.tests.some(
-          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
+          (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
 
     if (!hasAnyPrompt) {
@@ -273,12 +281,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  for (const config of configs) {
+  for (let i = 0; i < configs.length; i++) {
+    const config = configs[i];
+    const configPath = configPaths[i];
     if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
+    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
+      // Handle TestGeneratorConfig object
+      const newTests = await readTests(config.tests, path.dirname(configPath));
+      tests.push(...newTests);
     }
   }
 
@@ -395,16 +409,31 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests,
     scenarios: configs.flatMap((config) => config.scenarios || []),
-    defaultTest: configs.reduce((prev: Partial<TestCase> | undefined, curr) => {
+    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+      // If any config has a string defaultTest (file reference), preserve it
+      if (typeof curr.defaultTest === 'string') {
+        return curr.defaultTest;
+      }
+      // If prev is already a string (file reference), keep it
+      if (typeof prev === 'string') {
+        return prev;
+      }
+      // If neither prev nor curr has defaultTest, return undefined
+      if (!prev && !curr.defaultTest) {
+        return undefined;
+      }
+      // Otherwise merge objects
+      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const prevObj = typeof prev === 'object' ? prev : {};
       return {
-        ...prev,
-        ...curr.defaultTest,
-        vars: { ...prev?.vars, ...curr.defaultTest?.vars },
-        assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
-        options: { ...prev?.options, ...curr.defaultTest?.options },
-        metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
+        ...prevObj,
+        ...currDefaultTest,
+        vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
+        assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
+        options: { ...prevObj?.options, ...currDefaultTest?.options },
+        metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
       };
-    }, {}),
+    }, undefined) as UnifiedConfig['defaultTest'],
     derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
       if (curr.derivedMetrics) {
         return [...(prev ?? []), ...curr.derivedMetrics];
@@ -436,6 +465,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
       return sharingConfig ? sharingConfig.sharing : true;
     })(),
+    tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
   return combinedConfig;
@@ -448,7 +478,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
-  type?: 'DatasetGeneration',
+  type?: 'DatasetGeneration' | 'AssertionGeneration',
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -460,7 +490,7 @@ export async function resolveConfigs(
   }
   // Standalone assertion mode
   if (cmdObj.assertions) {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'standalone assertions mode',
     });
     if (!cmdObj.modelOutputs) {
@@ -497,7 +527,22 @@ export async function resolveConfigs(
 
   cliState.basePath = basePath;
 
-  const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
+  // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
+  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
+
+  // Load defaultTest from file:// reference if needed
+  let processedDefaultTest: Partial<TestCase> | undefined;
+  if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
+    // Set basePath in cliState temporarily for file resolution
+    const originalBasePath = cliState.basePath;
+    cliState.basePath = basePath;
+    const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
+    cliState.basePath = originalBasePath;
+    processedDefaultTest = loaded as Partial<TestCase>;
+  } else if (defaultTestRaw) {
+    processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+  }
+
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
@@ -509,12 +554,13 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
-    defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
+    defaultTest: processedDefaultTest ? await readTest(processedDefaultTest, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
+    tracing: fileConfig.tracing || defaultConfig.tracing,
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
@@ -528,16 +574,15 @@ export async function resolveConfigs(
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
 
       ${chalk.white('Try running with:')}
-  
+
       ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
-  
+
       ${chalk.white('Or create a config with:')}
-  
+
       ${chalk.green(`${runCommand} init`)}
     `);
     process.exit(1);
   }
-
   if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
     process.exit(1);
@@ -546,6 +591,7 @@ export async function resolveConfigs(
   if (
     // Dataset configs don't require providers
     type !== 'DatasetGeneration' &&
+    type !== 'AssertionGeneration' &&
     !hasProviders
   ) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
@@ -565,8 +611,15 @@ export async function resolveConfigs(
   );
 
   // Parse testCases for each scenario
-  if (fileConfig.scenarios) {
+  if (
+    fileConfig.scenarios &&
+    (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
+  ) {
     fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+    // Flatten the scenarios array in case glob patterns were used
+    fileConfig.scenarios = fileConfig.scenarios.flat();
+    // Update config.scenarios with the flattened array
+    config.scenarios = fileConfig.scenarios;
   }
   if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
@@ -613,9 +666,9 @@ export async function resolveConfigs(
       suffix: cmdObj.promptSuffix,
       provider: cmdObj.grader,
       // rubricPrompt
-      ...(config.defaultTest?.options || {}),
+      ...(processedDefaultTest?.options || {}),
     },
-    ...config.defaultTest,
+    ...(processedDefaultTest || {}),
   };
 
   const testSuite: TestSuite = {
@@ -633,6 +686,7 @@ export async function resolveConfigs(
       basePath,
     ),
     extensions: config.extensions,
+    tracing: config.tracing,
   };
 
   if (testSuite.tests) {

@@ -1,8 +1,12 @@
 import * as fs from 'fs';
-import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
+import path from 'path';
+
 import { getCache, isCacheEnabled } from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Mock database
 jest.mock('better-sqlite3', () => {
@@ -54,6 +58,13 @@ jest.mock('../../../src/providers/google/util', () => ({
   ...jest.requireActual('../../../src/providers/google/util'),
   getGoogleClient: jest.fn(),
 }));
+
+jest.mock('../../../src/providers/google/util');
+jest.mock('../../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
+
+const mockImportModule = jest.mocked(importModule);
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
@@ -540,6 +551,418 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
   });
+
+  describe('External Function Callbacks', () => {
+    beforeEach(() => {
+      // Set cliState basePath for external function loading
+      cliState.basePath = '/test/base/path';
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+      cliState.basePath = undefined;
+    });
+
+    it('should load and execute external function callbacks from file', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'external_function',
+            args: '{"param":"test_value"}',
+          },
+        }),
+        tokenUsage: {
+          total: 15,
+          prompt: 10,
+          completion: 5,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      // Mock importModule to return our test function
+      const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+      mockImportModule.mockResolvedValue(mockExternalFunction);
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { param: { type: 'STRING' } },
+                    required: ['param'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            external_function: 'file://test/callbacks.js:testFunction',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Call external function');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'test/callbacks.js'),
+        'testFunction',
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
+      expect(result.output).toBe('External function result');
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+    });
+
+    it('should cache external functions and not reload them on subsequent calls', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'cached_function',
+            args: '{"value":123}',
+          },
+        }),
+        tokenUsage: {
+          total: 12,
+          prompt: 8,
+          completion: 4,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+      mockImportModule.mockResolvedValue(mockCachedFunction);
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'cached_function',
+                  description: 'A cached function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { value: { type: 'NUMBER' } },
+                    required: ['value'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            cached_function: 'file://callbacks/cache-test.js:cachedFunction',
+          },
+        },
+      });
+
+      // First call - should load the function
+      const result1 = await provider.callApi('First call');
+      expect(mockImportModule).toHaveBeenCalledTimes(1);
+      expect(mockCachedFunction).toHaveBeenCalledWith('{"value":123}');
+      expect(result1.output).toBe('Cached result');
+
+      // Second call - should use cached function, not reload
+      const result2 = await provider.callApi('Second call');
+      expect(mockImportModule).toHaveBeenCalledTimes(1); // Still only 1 call
+      expect(mockCachedFunction).toHaveBeenCalledTimes(2);
+      expect(result2.output).toBe('Cached result');
+    });
+
+    it('should handle errors in external function loading gracefully', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'error_function',
+            args: '{"test":"data"}',
+          },
+        }),
+        tokenUsage: {
+          total: 10,
+          prompt: 6,
+          completion: 4,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      // Mock import module to throw an error
+      mockImportModule.mockRejectedValue(new Error('Module not found'));
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'error_function',
+                  description: 'A function that errors during loading',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { test: { type: 'STRING' } },
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            error_function: 'file://nonexistent/module.js:errorFunction',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Call error function');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'nonexistent/module.js'),
+        'errorFunction',
+      );
+      // Should fall back to original function call object when loading fails
+      expect(result.output).toBe(
+        '{"functionCall":{"name":"error_function","args":"{\\"test\\":\\"data\\"}"}}',
+      );
+    });
+
+    it('should handle mixed inline and external function callbacks', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'external_function',
+            args: '{"external":"test"}',
+          },
+        }),
+        tokenUsage: {
+          total: 20,
+          prompt: 12,
+          completion: 8,
+        },
+      };
+
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
+      const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+      mockImportModule.mockResolvedValue(mockExternalFunction);
+
+      const provider = new VertexChatProvider('gemini', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'inline_function',
+                  description: 'An inline function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { inline: { type: 'STRING' } },
+                  },
+                },
+                {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { external: { type: 'STRING' } },
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            inline_function: mockInlineFunction,
+            external_function: 'file://mixed/callbacks.js:externalFunc',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Test mixed callbacks');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'mixed/callbacks.js'),
+        'externalFunc',
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"external":"test"}');
+      expect(result.output).toBe('External result');
+    });
+  });
+
+  describe('thinking token tracking', () => {
+    it('should track thinking tokens when present in response', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              thoughtsTokenCount: 50, // Thinking tokens
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        completionDetails: {
+          reasoning: 50,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+    });
+
+    it('should handle response without thinking tokens', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'response without thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              // No thoughtsTokenCount field
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        // No completionDetails field when thoughtsTokenCount is absent
+      });
+    });
+
+    it('should track thinking tokens with zero value', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'response with zero thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              thoughtsTokenCount: 0, // Zero thinking tokens
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+    });
+
+    it('should track thinking tokens in cached responses', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockCachedResponse = {
+        output: 'cached response with thinking',
+        tokenUsage: {
+          total: 80,
+          prompt: 10,
+          completion: 20,
+          thoughtsTokenCount: 50, // This would be stored in the cached response
+        },
+        cached: true,
+      };
+
+      // Mock the cache to return a response that includes thinking tokens
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      // The cached response should preserve the thinking tokens
+      // but due to how the caching logic works, it transforms the response
+      expect(response.cached).toBe(true);
+      expect(response.output).toBe('cached response with thinking');
+      // Note: The current implementation doesn't preserve completionDetails in cached responses
+      // This is a limitation that could be addressed in a future fix
+    });
+  });
 });
 
 describe('VertexChatProvider.callLlamaApi', () => {
@@ -758,6 +1181,60 @@ describe('VertexChatProvider.callLlamaApi', () => {
     expect(response.error).toContain('API call error:');
     expect(response.error).toContain('Invalid request');
   });
+
+  it('should load system instructions from file', async () => {
+    const mockSystemInstruction = 'You are a helpful assistant from a file.';
+
+    // Mock file system operations
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
+
+    provider = new VertexChatProvider('gemini-1.5-flash', {
+      config: {
+        systemInstruction: 'file://system-instruction.txt',
+      },
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+      ],
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    await provider.callGeminiApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          systemInstruction: {
+            parts: [{ text: mockSystemInstruction }],
+          },
+        }),
+      }),
+    );
+
+    // Verify file was read
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('system-instruction.txt'),
+      'utf8',
+    );
+  });
 });
 
 describe('VertexChatProvider.callClaudeApi parameter naming', () => {
@@ -781,7 +1258,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   });
 
   it('should accept anthropicVersion parameter', async () => {
-    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
         anthropicVersion: 'vertex-2023-10-16',
         maxOutputTokens: 500,
@@ -793,7 +1270,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         id: 'test-id',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-sonnet@20240229',
+        model: 'claude-3-5-sonnet-v2@20241022',
         content: [{ type: 'text', text: 'Response from Claude' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
@@ -828,7 +1305,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   });
 
   it('should accept anthropic_version parameter (alternative format)', async () => {
-    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
         anthropic_version: 'vertex-2023-10-16-alt',
         max_tokens: 600,
@@ -840,7 +1317,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         id: 'test-id',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-sonnet@20240229',
+        model: 'claude-3-5-sonnet-v2@20241022',
         content: [{ type: 'text', text: 'Response from Claude' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
@@ -875,7 +1352,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   });
 
   it('should accept both max_tokens and maxOutputTokens parameters', async () => {
-    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
         // When both are provided, max_tokens should take precedence
         max_tokens: 700,
@@ -890,7 +1367,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         id: 'test-id',
         type: 'message',
         role: 'assistant',
-        model: 'claude-3-sonnet@20240229',
+        model: 'claude-3-5-sonnet-v2@20241022',
         content: [{ type: 'text', text: 'Response from Claude' }],
         stop_reason: 'end_turn',
         stop_sequence: null,

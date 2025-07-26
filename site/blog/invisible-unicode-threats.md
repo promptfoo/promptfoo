@@ -4,6 +4,8 @@ title: 'The Invisible Threat: How Zero-Width Unicode Characters Can Silently Bac
 description: 'Explore how invisible Unicode characters can be used to manipulate AI coding assistants and LLMs, potentially leading to security vulnerabilities in your code.'
 image: /img/blog/unicode-threats/unicode.png
 date: 2025-04-10
+authors: [asmi]
+tags: [security-vulnerability, best-practices]
 ---
 
 import RevealButton from './unicode-threats/components/RevealButton';
@@ -114,13 +116,11 @@ Copy and paste any suspicious text, code, or configuration files above to check 
 ### Best Practices for Prevention
 
 1. **Input Validation**
-
    - Implement strict Unicode character filtering
    - Maintain a whitelist of allowed characters
    - Sanitize all text input before processing
 
 2. **File Review Guidelines**
-
    - Use tools that can display hidden Unicode characters
    - Review raw file contents, not just rendered text
    - Be especially careful with copied code or configuration

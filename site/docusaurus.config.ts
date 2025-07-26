@@ -1,16 +1,14 @@
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config } from '@docusaurus/types';
-import type { ConfigureWebpackResult } from '@docusaurus/types/src/plugin';
 import * as fs from 'fs';
 import * as path from 'path';
-import { sanitizeMarkdown } from './src/utils/markdown';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
 
 const config: Config = {
-  title: 'promptfoo',
+  title: 'Promptfoo',
   tagline: 'Test your prompts',
   favicon: '/favicon.ico',
 
@@ -79,6 +77,8 @@ const config: Config = {
           // Remove this to remove the "edit this page" links.
           editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
           sidebarCollapsed: false,
+          showLastUpdateAuthor: true,
+          showLastUpdateTime: true,
         },
         blog: {
           showReadingTime: false,
@@ -104,6 +104,11 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/thumbnail.png',
+    colorMode: {
+      defaultMode: 'light',
+      disableSwitch: true,
+      respectPrefersColorScheme: false,
+    },
     navbar: {
       title: 'promptfoo',
       logo: {
@@ -129,6 +134,10 @@ const config: Config = {
               label: 'Model Security',
             },
             {
+              to: '/mcp/',
+              label: 'MCP Proxy',
+            },
+            {
               to: '/docs/getting-started/',
               label: 'Evaluations',
             },
@@ -146,6 +155,10 @@ const config: Config = {
             {
               href: '/blog/',
               label: 'Blog',
+            },
+            {
+              to: '/docs/releases/',
+              label: 'Release Notes',
             },
             {
               href: '/press/',
@@ -171,7 +184,7 @@ const config: Config = {
               label: 'Docs',
             },
             {
-              to: 'https://www.promptfoo.dev/docs/api-reference/',
+              to: '/docs/api-reference/',
               label: 'API Reference',
             },
             {
@@ -240,6 +253,10 @@ const config: Config = {
               href: '/pricing/',
             },
             {
+              label: 'MCP Proxy',
+              to: '/mcp/',
+            },
+            {
               label: 'Status',
               href: 'https://status.promptfoo.dev',
             },
@@ -294,6 +311,10 @@ const config: Config = {
               to: '/blog/',
             },
             {
+              label: 'Release Notes',
+              to: '/docs/releases/',
+            },
+            {
               label: 'Press',
               to: '/press/',
             },
@@ -335,17 +356,22 @@ const config: Config = {
               to: '/terms-of-service/',
             },
             {
+              label: 'Trust Center',
+              href: 'https://trust.promptfoo.dev',
+            },
+            {
               html: `
-                <div style="position: relative; margin-top:8px">
-                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
-                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
+                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>
+                  <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:80px; height: auto"/>
+                  <img loading="lazy" src="/img/badges/hipaa.png" alt="HIPAA Compliant" style="width:80px; height: auto"/>
                 </div>
                 `,
             },
           ],
         },
       ],
-      copyright: `© ${new Date().getFullYear()} promptfoo`,
+      copyright: `© ${new Date().getFullYear()} Promptfoo, Inc.`,
     },
     prism: {
       theme: lightCodeTheme,
@@ -393,169 +419,13 @@ const config: Config = {
             from: '/docs',
             to: '/docs/intro',
           },
+          {
+            from: '/vegas-contact',
+            to: 'https://triangular-manchego-867.notion.site/2395ae153a138028a8bef35f6889f6e6?pvs=105',
+          },
         ],
       },
     ],
-    // Plugin to serve markdown files for CopyPageButton
-    function markdownServePlugin(context) {
-      return {
-        name: 'markdown-serve-plugin',
-        loadContent: async () => {
-          const { siteDir } = context;
-          const docsDir = path.join(siteDir, 'docs');
-          const mdFiles: { [path: string]: string } = {};
-
-          // Recursive function to get all mdx/md files with their paths
-          const getMdFiles = async (dir: string, basePath: string = ''): Promise<void> => {
-            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-
-            for (const entry of entries) {
-              const fullPath = path.join(dir, entry.name);
-              const relativePath = path.join(basePath, entry.name);
-
-              if (entry.isDirectory()) {
-                await getMdFiles(fullPath, relativePath);
-              } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
-                let content = await fs.promises.readFile(fullPath, 'utf8');
-
-                // Remove frontmatter (content between --- delimiters)
-                content = content.replace(/^---[\s\S]*?---\s*/m, '');
-
-                // If this is an index.md file, also store it with the directory path
-                // to make it accessible via the directory URL
-                if (entry.name === 'index.md' || entry.name === 'index.mdx') {
-                  if (basePath) {
-                    mdFiles[`${basePath}.md`] = content;
-                  }
-                } else {
-                  // Store the file using its relativePath
-                  mdFiles[relativePath] = content;
-                }
-              }
-            }
-          };
-
-          await getMdFiles(docsDir);
-          return { mdFiles };
-        },
-
-        // Configure webpack for dev server middleware
-        configureWebpack(config, isServer) {
-          if (isServer) {
-            return {};
-          }
-
-          // This is our fallback approach in case extendDevServer doesn't work
-          const { siteDir } = context;
-          const docsDir = path.join(siteDir, 'docs');
-
-          return {
-            devServer: {
-              setupMiddlewares: (middlewares, devServer) => {
-                if (!devServer) {
-                  throw new Error('webpack-dev-server is not defined');
-                }
-
-                devServer.app.get('/markdown/*', async (req, res) => {
-                  const requestPath = req.path.replace(/^\/markdown\//, '');
-
-                  // Try both with and without file extension
-                  let filePath = path.join(docsDir, requestPath);
-                  let foundFile = false;
-
-                  // Try direct match first
-                  try {
-                    const stat = await fs.promises.stat(filePath);
-                    if (stat.isFile()) {
-                      foundFile = true;
-                    }
-                  } catch (err) {
-                    // File doesn't exist, try with extensions
-                    const extensions = ['.md', '.mdx'];
-                    for (const ext of extensions) {
-                      try {
-                        const filePathWithExt = `${filePath}${ext}`;
-                        const stat = await fs.promises.stat(filePathWithExt);
-                        if (stat.isFile()) {
-                          filePath = filePathWithExt;
-                          foundFile = true;
-                          break;
-                        }
-                      } catch (err) {
-                        // Try index.md in the directory
-                        try {
-                          const indexPath = path.join(filePath.split('.')[0], `index${ext}`);
-                          const stat = await fs.promises.stat(indexPath);
-                          if (stat.isFile()) {
-                            filePath = indexPath;
-                            foundFile = true;
-                            break;
-                          }
-                        } catch (indexErr) {
-                          // Ignore errors for index files
-                        }
-                      }
-                    }
-                  }
-
-                  if (foundFile) {
-                    try {
-                      // Read the file directly from the filesystem
-                      const content = sanitizeMarkdown(
-                        await fs.promises.readFile(filePath, 'utf8'),
-                      );
-
-                      // Set appropriate headers for raw markdown content
-                      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-                      res.setHeader('Cache-Control', 'no-cache');
-                      res.setHeader('X-Content-Type-Options', 'nosniff');
-                      res.send(content);
-                    } catch (error) {
-                      res.status(500).send('Error reading markdown file');
-                    }
-                  } else {
-                    res.status(404).send('Markdown file not found');
-                  }
-                });
-
-                return middlewares;
-              },
-            },
-          } as ConfigureWebpackResult;
-        },
-
-        // Build process - generate static files for production
-        async postBuild({ content, outDir }) {
-          // Type assertion to handle TypeScript type checking
-          const pluginContent = content as { mdFiles: { [path: string]: string } };
-          const { mdFiles } = pluginContent;
-
-          // Create directory for markdown files
-          const mdOutDir = path.join(outDir, 'markdown');
-          try {
-            await fs.promises.mkdir(mdOutDir, { recursive: true });
-          } catch (err) {
-            console.error('Error creating markdown directory:', err);
-            throw err;
-          }
-
-          // Write each markdown file to the output directory
-          for (const [filePath, content] of Object.entries(mdFiles)) {
-            const outPath = path.join(mdOutDir, filePath);
-            const outDirname = path.dirname(outPath);
-
-            try {
-              // Create nested directories if needed
-              await fs.promises.mkdir(outDirname, { recursive: true });
-              const sanitized = sanitizeMarkdown(content);
-              await fs.promises.writeFile(outPath, sanitized);
-            } catch (err) {
-              console.error(`Error writing markdown file ${filePath}:`, err);
-            }
-          }
-        },
-      };
-    },
     // Define the llms.txt plugin inline similar to the Prisma example
     async function llmsTxtPlugin(context) {
       return {
@@ -625,6 +495,29 @@ const config: Config = {
         },
       };
     },
+    [
+      '@docusaurus/plugin-content-blog',
+      {
+        id: 'releases',
+        routeBasePath: 'releases',
+        path: './releases',
+        authorsMapPath: '../blog/authors.yml',
+        blogTitle: 'Release Notes',
+        blogDescription: 'promptfoo release notes and updates',
+        blogSidebarCount: 0,
+        blogSidebarTitle: 'Recent Releases',
+        postsPerPage: 10,
+        showReadingTime: false,
+        feedOptions: {
+          type: 'all',
+          title: 'promptfoo Release Notes',
+          description: 'Stay updated with the latest promptfoo releases',
+          copyright: `© ${new Date().getFullYear()} promptfoo`,
+          language: 'en',
+        },
+        editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+      },
+    ],
   ],
 
   // Mermaid diagram support

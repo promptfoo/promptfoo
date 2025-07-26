@@ -1,5 +1,6 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
+
+import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
@@ -7,14 +8,20 @@ import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
-  readTests,
   readTestFiles,
+  readTests,
 } from '../../src/util/testCaseReader';
+
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
+
+// Mock fetchWithTimeout before any imports that might use telemetry
+jest.mock('../../src/fetch', () => ({
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -25,7 +32,6 @@ jest.mock('glob', () => ({
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
-jest.mock('../../src/fetch');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -61,9 +67,79 @@ jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: jest.fn(),
 }));
 
+jest.mock('../../src/telemetry', () => {
+  const mockTelemetry = {
+    record: jest.fn().mockResolvedValue(undefined),
+    identify: jest.fn(),
+    saveConsent: jest.fn().mockResolvedValue(undefined),
+    disabled: false,
+  };
+  return {
+    __esModule: true,
+    default: mockTelemetry,
+    Telemetry: jest.fn().mockImplementation(() => mockTelemetry),
+  };
+});
+
+jest.mock('../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
+
+jest.mock('../../src/util/file', () => ({
+  maybeLoadConfigFromExternalFile: jest.fn((config) => {
+    // Mock implementation that handles file:// references
+    if (config && typeof config === 'object') {
+      const result = { ...config };
+      for (const [key, value] of Object.entries(config)) {
+        if (typeof value === 'string' && value.startsWith('file://')) {
+          // Extract the file path from the file:// URL
+          const filePath = value.slice('file://'.length);
+          // Get the mocked file content using the extracted path
+          const fs = jest.requireMock('fs');
+          const fileContent = fs.readFileSync(filePath, 'utf-8');
+          if (typeof fileContent === 'string') {
+            try {
+              result[key] = JSON.parse(fileContent);
+            } catch {
+              result[key] = fileContent;
+            }
+          }
+        }
+      }
+      return result;
+    }
+    return config;
+  }),
+}));
+
+// Helper to clear all mocks
+const clearAllMocks = () => {
+  jest.clearAllMocks();
+  jest.mocked(globSync).mockReset();
+  jest.mocked(fs.readFileSync).mockReset();
+  jest.mocked(getEnvBool).mockReset();
+  jest.mocked(getEnvString).mockReset();
+  jest.mocked(fetchCsvFromGoogleSheet).mockReset();
+  jest.mocked(loadApiProvider).mockReset();
+  const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+  mockRunPython.mockReset();
+  const mockImportModule = jest.requireMock('../../src/esm').importModule;
+  mockImportModule.mockReset();
+  const mockFetchHuggingFaceDataset = jest.requireMock(
+    '../../src/integrations/huggingfaceDatasets',
+  ).fetchHuggingFaceDataset;
+  mockFetchHuggingFaceDataset.mockReset();
+};
+
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    clearAllMocks();
+    // Reset getEnvString to default behavior
+    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue || '');
+  });
+
+  afterEach(() => {
+    clearAllMocks();
   });
 
   it('should read CSV file and return test cases', async () => {
@@ -212,24 +288,54 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read JS file and return test cases', async () => {
-    jest.mock(
-      '../../test.js',
-      () => [
-        { vars: { var1: 'value1', var2: 'value2' } },
-        { vars: { var1: 'value3', var2: 'value4' } },
-      ],
-      { virtual: true },
-    );
+    const mockTestCases = [
+      { vars: { var1: 'value1', var2: 'value2' } },
+      { vars: { var1: 'value3', var2: 'value4' } },
+    ];
+
+    jest.mocked(jest.requireMock('../../src/esm').importModule).mockResolvedValue(mockTestCases);
 
     const result = await readStandaloneTestsFile('test.js');
-    expect(result).toEqual([
-      {
-        vars: { var1: 'value1', var2: 'value2' },
-      },
-      {
-        vars: { var1: 'value3', var2: 'value4' },
-      },
-    ]);
+
+    expect(jest.requireMock('../../src/esm').importModule).toHaveBeenCalledWith(
+      expect.stringContaining('test.js'),
+      undefined,
+    );
+    expect(result).toEqual(mockTestCases);
+  });
+
+  it('should pass config to JS test generator function', async () => {
+    const mockFn = jest.fn().mockResolvedValue([{ vars: { a: 1 } }]);
+    jest.mocked(jest.requireMock('../../src/esm').importModule).mockResolvedValue(mockFn);
+
+    const config = { foo: 'bar' };
+    const result = await readStandaloneTestsFile('test_gen.js', '', config);
+
+    expect(jest.requireMock('../../src/esm').importModule).toHaveBeenCalledWith(
+      expect.stringContaining('test_gen.js'),
+      undefined,
+    );
+    expect(mockFn).toHaveBeenCalledWith(config);
+    expect(result).toEqual([{ vars: { a: 1 } }]);
+  });
+
+  it('should load file references in config for JS generator', async () => {
+    const mockResult = [{ vars: { a: 1 } }];
+    const mockFn = jest.fn().mockResolvedValue(mockResult);
+    jest.mocked(jest.requireMock('../../src/esm').importModule).mockResolvedValue(mockFn);
+
+    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');
+
+    const config = { data: 'file://config.json' };
+    const result = await readStandaloneTestsFile('test_config_gen.js', '', config);
+
+    expect(jest.requireMock('../../src/esm').importModule).toHaveBeenCalledWith(
+      expect.stringContaining('test_config_gen.js'),
+      undefined,
+    );
+    expect(mockFn).toHaveBeenCalledWith({ data: { foo: 'bar' } });
+    expect(result).toEqual(mockResult);
   });
 
   it('should handle file:// prefix in file path', async () => {
@@ -330,8 +436,42 @@ describe('readStandaloneTestsFile', () => {
     expect(result).toEqual(pythonResult);
   });
 
+  it('should pass config to Python generate_tests function', async () => {
+    const pythonResult = [{ vars: { a: 1 }, assert: [] }];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    const config = { dataset: 'demo' };
+    const result = await readStandaloneTestsFile('test.py', '', config);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [config],
+    );
+    expect(result).toEqual(pythonResult);
+  });
+
+  it('should load file references in config for Python generator', async () => {
+    const pythonResult = [{ vars: { a: 1 }, assert: [] }];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');
+    const config = { data: 'file://config.json' };
+    await readStandaloneTestsFile('test.py', '', config);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [{ data: { foo: 'bar' } }],
+    );
+  });
+
   it('should throw error when Python file returns non-array', async () => {
     const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
     mockRunPython.mockResolvedValueOnce({ not: 'an array' });
 
     await expect(readStandaloneTestsFile('test.py')).rejects.toThrow(
@@ -368,7 +508,11 @@ describe('readStandaloneTestsFile', () => {
 
 describe('readTest', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearAllMocks();
   });
 
   it('readTest with string input (path to test config)', async () => {
@@ -474,8 +618,12 @@ describe('readTest', () => {
 
 describe('readTests', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    clearAllMocks();
     jest.mocked(globSync).mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    clearAllMocks();
   });
 
   it('readTests with string input (CSV file path)', async () => {
@@ -844,6 +992,31 @@ describe('readTests', () => {
     expect(result).toEqual(pythonTests);
   });
 
+  it('should pass config to Python generator in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test 1',
+        vars: { a: '1' },
+        assert: [],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    const config = { foo: 'bar' };
+    const result = await readTests([{ path: 'test.py', config }]);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [config],
+    );
+    expect(result).toEqual(pythonTests);
+  });
+
   it('should handle Python files with invalid function name in readTests', async () => {
     await expect(readTests(['test.py:invalid:extra'])).rejects.toThrow(
       'Too many colons. Invalid test file script path: test.py:invalid:extra',
@@ -923,7 +1096,7 @@ describe('readTests', () => {
     jest.mocked(globSync).mockReturnValue(['test.yaml']);
     jest
       .mocked(getEnvBool)
-      .mockImplementation((key) => (key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING' ? true : false));
+      .mockImplementation((key) => key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING');
 
     await readTests('test.yaml');
 
@@ -991,6 +1164,14 @@ describe('testCaseFromCsvRow', () => {
 });
 
 describe('readVarsFiles', () => {
+  beforeEach(() => {
+    clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearAllMocks();
+  });
+
   it('should read variables from a single YAML file', async () => {
     const yamlContent = 'var1: value1\nvar2: value2';
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
@@ -1004,11 +1185,26 @@ describe('readVarsFiles', () => {
   it('should read variables from multiple YAML files', async () => {
     const yamlContent1 = 'var1: value1';
     const yamlContent2 = 'var2: value2';
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce(yamlContent1)
-      .mockReturnValueOnce(yamlContent2);
-    jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
+
+    // Mock globSync to return both file paths
+    jest.mocked(globSync).mockImplementation((pattern) => {
+      if (pattern.includes('vars1.yaml')) {
+        return ['vars1.yaml'];
+      } else if (pattern.includes('vars2.yaml')) {
+        return ['vars2.yaml'];
+      }
+      return [];
+    });
+
+    // Mock readFileSync to return different content for each file
+    jest.mocked(fs.readFileSync).mockImplementation((path) => {
+      if (path.toString().includes('vars1.yaml')) {
+        return yamlContent1;
+      } else if (path.toString().includes('vars2.yaml')) {
+        return yamlContent2;
+      }
+      return '';
+    });
 
     const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
 
@@ -1018,7 +1214,11 @@ describe('readVarsFiles', () => {
 
 describe('loadTestsFromGlob', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearAllMocks();
   });
 
   it('should handle Hugging Face dataset URLs', async () => {
@@ -1052,13 +1252,13 @@ describe('loadTestsFromGlob', () => {
 
 describe('CSV parsing with JSON fields', () => {
   beforeEach(() => {
+    clearAllMocks();
     jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
-    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue);
+    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue || '');
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
-    jest.resetModules();
+    clearAllMocks();
   });
 
   it('should parse CSV file containing properly escaped JSON fields in strict mode', async () => {
@@ -1119,22 +1319,23 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
   });
 
   it('should propagate non-quote-related CSV errors', async () => {
-    const mockParse = jest.fn().mockImplementation(() => {
-      const error = new Error('Some other CSV error');
-      (error as any).code = 'CSV_OTHER_ERROR';
-      throw error;
-    });
-
-    jest.mock('csv-parse/sync', () => ({
-      parse: mockParse,
-    }));
-
+    // Create CSV content with inconsistent column count to trigger "Invalid Record Length" error
     const csvContent = `label,query,expected_json_format,context
-my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
+my_test_label,What is the date?
+another_label,What is the time?,too,many,columns,here`;
 
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-    const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
-    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
+
+    // Use default settings (not strict mode) to get past quote checking
+    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
+    jest
+      .mocked(getEnvString)
+      .mockImplementation((key, defaultValue) =>
+        key === 'PROMPTFOO_CSV_DELIMITER' ? ',' : defaultValue || '',
+      );
+
+    // The CSV parser should throw an error about inconsistent column count
+    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Invalid Record Length');
 
     jest.mocked(fs.readFileSync).mockRestore();
   });

@@ -1,5 +1,7 @@
 ---
-sidebar_label: RAG Document Exfiltration Plugin
+title: RAG Document Exfiltration
+sidebar_label: RAG Document Exfiltration
+description: Test whether retrieval-augmented generation may leak entire documents and sensitive content
 ---
 
 # RAG Document Exfiltration Plugin

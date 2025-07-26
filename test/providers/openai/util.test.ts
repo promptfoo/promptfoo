@@ -2,10 +2,10 @@ import OpenAI from 'openai';
 import {
   calculateOpenAICost,
   failApiCall,
-  getTokenUsage,
-  validateFunctionCall,
   formatOpenAiError,
+  getTokenUsage,
   OPENAI_CHAT_MODELS,
+  validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -176,9 +176,9 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 60) / 1e6, 6);
   });
 
-  it('should calculate cost correctly for gpt-4.5-preview', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 75 + 500 * 150) / 1e6, 6);
+  it('should calculate cost correctly for gpt-4.1', () => {
+    const cost = calculateOpenAICost('gpt-4.1', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-3.5-turbo', () => {
@@ -233,9 +233,29 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 150 + 500 * 600) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for o3-pro', () => {
+    const cost = calculateOpenAICost('o3-pro', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 20 + 500 * 80) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for o1-pro-2025-03-19', () => {
     const cost = calculateOpenAICost('o1-pro-2025-03-19', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 150 + 500 * 600) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3', () => {
+    const cost = calculateOpenAICost('o3', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-2025-04-16', () => {
+    const cost = calculateOpenAICost('o3-2025-04-16', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-pro-2025-06-10', () => {
+    const cost = calculateOpenAICost('o3-pro-2025-06-10', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.06); // 20/1M * 1000 + 80/1M * 500
   });
 
   it('should calculate audio token costs for gpt-4o-realtime-preview-2024-12-17', () => {
@@ -258,23 +278,23 @@ describe('calculateOpenAICost', () => {
   });
 
   it('should return undefined for zero tokens', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 0, 0);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 0, 0);
     expect(cost).toBeUndefined();
   });
 
   it('should handle only prompt tokens', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000, 0);
-    expect(cost).toBeCloseTo((1000 * 75) / 1e6, 6);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 1000, 0);
+    expect(cost).toBeCloseTo((1000 * 2) / 1e6, 6);
   });
 
   it('should handle only completion tokens', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 0, 1000);
-    expect(cost).toBeCloseTo((1000 * 150) / 1e6, 6);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 0, 1000);
+    expect(cost).toBeCloseTo((1000 * 8) / 1e6, 6);
   });
 
   it('should handle large token counts', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo((1000000 * 75 + 1000000 * 150) / 1e6, 6);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 1000000, 1000000);
+    expect(cost).toBeCloseTo((1000000 * 2 + 1000000 * 8) / 1e6, 6);
   });
 
   it('should handle mixed undefined audio tokens', () => {
@@ -328,6 +348,49 @@ describe('calculateOpenAICost', () => {
 
     const cost = calculateOpenAICost(fakeModelName, {}, 1000, 500);
     expect(cost).toBeUndefined();
+  });
+
+  // Legacy GPT-4 model tests
+  it('should calculate cost correctly for gpt-4-0314', () => {
+    const cost = calculateOpenAICost('gpt-4-0314', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.06); // 30/1M * 1000 + 60/1M * 500
+  });
+
+  it('should calculate cost correctly for gpt-4-32k-0314', () => {
+    const cost = calculateOpenAICost('gpt-4-32k-0314', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.12); // 60/1M * 1000 + 120/1M * 500
+  });
+
+  it('should calculate cost correctly for gpt-4-32k-0613', () => {
+    const cost = calculateOpenAICost('gpt-4-32k-0613', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.12); // 60/1M * 1000 + 120/1M * 500
+  });
+
+  it('should calculate cost correctly for gpt-4-vision-preview', () => {
+    const cost = calculateOpenAICost('gpt-4-vision-preview', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.025); // 10/1M * 1000 + 30/1M * 500
+  });
+
+  // Legacy GPT-3.5 model tests
+  it('should calculate cost correctly for gpt-3.5-turbo-0301', () => {
+    const cost = calculateOpenAICost('gpt-3.5-turbo-0301', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.0025); // 1.5/1M * 1000 + 2/1M * 500
+  });
+
+  it('should calculate cost correctly for gpt-3.5-turbo-16k', () => {
+    const cost = calculateOpenAICost('gpt-3.5-turbo-16k', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.005); // 3/1M * 1000 + 4/1M * 500
+  });
+
+  it('should calculate cost correctly for gpt-3.5-turbo-16k-0613', () => {
+    const cost = calculateOpenAICost('gpt-3.5-turbo-16k-0613', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.005); // 3/1M * 1000 + 4/1M * 500
+  });
+
+  // Latest audio model test
+  it('should calculate cost correctly for gpt-4o-audio-preview-2025-06-03', () => {
+    const cost = calculateOpenAICost('gpt-4o-audio-preview-2025-06-03', {}, 1000, 500);
+    expect(cost).toBeCloseTo(0.0075); // 2.5/1M * 1000 + 10/1M * 500
   });
 });
 

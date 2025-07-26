@@ -1,4 +1,5 @@
-import { ContractPlugin, ContractsGrader, PLUGIN_ID } from '../../../src/redteam/plugins/contracts';
+import { ContractPlugin, ContractsGrader } from '../../../src/redteam/plugins/contracts';
+
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/fetch');
@@ -28,13 +29,19 @@ describe('ContractPlugin', () => {
       expect.arrayContaining([
         {
           vars: { test_var: 'Another test prompt' },
-          assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
-          metadata: { pluginId: 'contracts' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+          metadata: {
+            pluginId: 'contracts',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
         {
           vars: { test_var: 'Test prompt' },
-          assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
-          metadata: { pluginId: 'contracts' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+          metadata: {
+            pluginId: 'contracts',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
       ]),
     );
@@ -44,7 +51,9 @@ describe('ContractPlugin', () => {
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
 
-    expect(tests[0].assert).toEqual([{ type: PLUGIN_ID, metric: 'ContractualCommitment' }]);
+    expect(tests[0].assert).toEqual([
+      { type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' },
+    ]);
     expect(tests[0].assert?.[0].type).toBe('promptfoo:redteam:contracts');
   });
 
@@ -98,7 +107,7 @@ describe('ContractsGrader', () => {
   });
 
   it('should have correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:contracts');
     expect(grader.id).toBe('promptfoo:redteam:contracts');
   });
 });
