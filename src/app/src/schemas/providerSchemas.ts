@@ -30,9 +30,8 @@ const commonFields = {
     name: 'apiKey',
     type: 'string' as const,
     label: 'API Key',
-    description:
-      'Authentication key for the provider (can use OPENAI_API_KEY, ANTHROPIC_API_KEY, or AZURE_OPENAI_API_KEY env vars)',
-    required: false,
+    description: 'Authentication key for the provider',
+    required: true,
     sensitive: true,
   },
   apiBaseUrl: {
@@ -85,8 +84,8 @@ export const providerSchemas: Record<string, ProviderSchema> = {
         name: 'model',
         type: 'string',
         label: 'Model',
-        description: 'Model name (e.g., gpt-4) - can be specified in provider ID instead',
-        required: false,
+        description: 'Model name (e.g., gpt-4)',
+        required: true,
       },
     ],
   },
@@ -106,7 +105,7 @@ export const providerSchemas: Record<string, ProviderSchema> = {
         label: 'API Version',
         description: 'Azure OpenAI API version',
         defaultValue: '2024-02-01',
-        required: false,
+        required: true,
       },
       {
         name: 'endpoint',
@@ -156,9 +155,8 @@ export const providerSchemas: Record<string, ProviderSchema> = {
         name: 'model',
         type: 'string',
         label: 'Model',
-        description:
-          'Model name (e.g., claude-3-opus-20240229) - can be specified in provider ID instead',
-        required: false,
+        description: 'Model name (e.g., claude-3-opus-20240229)',
+        required: true,
       },
     ],
   },
@@ -189,20 +187,7 @@ export function validateProviderConfig(
 
     // Required field check
     if (field.required && (value === undefined || value === null || value === '')) {
-      let errorMsg = `${field.label} is required`;
-      // Add hint about environment variables for API key fields
-      if (field.name === 'apiKey') {
-        const providerType = providerId.split(':')[0];
-        const envVarMap: Record<string, string> = {
-          openai: 'OPENAI_API_KEY',
-          anthropic: 'ANTHROPIC_API_KEY',
-          azure: 'AZURE_OPENAI_API_KEY or AZURE_API_KEY',
-        };
-        if (envVarMap[providerType]) {
-          errorMsg += ` (or set ${envVarMap[providerType]} environment variable)`;
-        }
-      }
-      errors.push(errorMsg);
+      errors.push(`${field.label} is required`);
       return;
     }
 
