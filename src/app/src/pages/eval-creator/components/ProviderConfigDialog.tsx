@@ -1,7 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
-import { getProviderSchema, validateProviderConfig, type FieldSchema } from '@app/schemas/providerSchemas';
+import {
+  getProviderSchema,
+  validateProviderConfig,
+  type FieldSchema,
+} from '@app/schemas/providerSchemas';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import Alert from '@mui/material/Alert';
@@ -65,11 +69,11 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     if (!open) {
       return;
     }
-    
+
     // If we have a schema, initialize with defaults
     if (schema) {
       const initialConfig: Record<string, any> = {};
-      schema.fields.forEach(field => {
+      schema.fields.forEach((field) => {
         // Always include the field in config so it shows in the form
         const value = config[field.name] ?? field.defaultValue ?? '';
         initialConfig[field.name] = value;
@@ -82,7 +86,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       setLocalConfig(config);
       setValidationErrors([]);
     }
-    
+
     setJsonError(null);
     setTabValue(hasSchema ? 0 : 1); // Default to JSON tab if no schema
   }, [open, providerId, config, schema, hasSchema]);
@@ -91,7 +95,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   const handleFieldChange = (fieldName: string, value: any) => {
     const newConfig = { ...localConfig, [fieldName]: value };
     setLocalConfig(newConfig);
-    
+
     // Clear validation errors as user types
     if (validationErrors.length > 0) {
       validateConfig(newConfig);
@@ -101,19 +105,22 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   // Handle save
   const handleSave = () => {
     let configToSave = localConfig;
-    
+
     if (tabValue === 1) {
       // In JSON mode, localConfig is already the parsed JSON
       configToSave = localConfig;
     }
 
     // Clean up empty values
-    const cleanedConfig = Object.entries(configToSave).reduce((acc, [key, value]) => {
-      if (value !== '' && value !== undefined && value !== null) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {} as Record<string, any>);
+    const cleanedConfig = Object.entries(configToSave).reduce(
+      (acc, [key, value]) => {
+        if (value !== '' && value !== undefined && value !== null) {
+          acc[key] = value;
+        }
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
 
     // Validate before saving
     if (!validateConfig(cleanedConfig)) {
@@ -126,7 +133,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   // Toggle sensitive field visibility
   const toggleSensitiveVisibility = (fieldName: string) => {
-    setShowSensitive(prev => ({ ...prev, [fieldName]: !prev[fieldName] }));
+    setShowSensitive((prev) => ({ ...prev, [fieldName]: !prev[fieldName] }));
   };
 
   // Render field based on schema
@@ -134,22 +141,22 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     const rawValue = localConfig[field.name];
     // Ensure we have a controlled value
     const value = rawValue === undefined || rawValue === null ? '' : rawValue;
-    const error = validationErrors.find(err => err.includes(field.label));
+    const error = validationErrors.find((err) => err.includes(field.label));
 
     switch (field.type) {
       case 'boolean':
         return (
           <FormControlLabel
             control={
-              <Switch 
-                checked={!!value} 
-                onChange={(e) => handleFieldChange(field.name, e.target.checked)} 
+              <Switch
+                checked={!!value}
+                onChange={(e) => handleFieldChange(field.name, e.target.checked)}
               />
             }
             label={field.label}
           />
         );
-      
+
       case 'number':
         return (
           <TextField
@@ -157,7 +164,9 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             label={field.label}
             type="number"
             value={value}
-            onChange={(e) => handleFieldChange(field.name, e.target.value ? Number(e.target.value) : '')}
+            onChange={(e) =>
+              handleFieldChange(field.name, e.target.value ? Number(e.target.value) : '')
+            }
             error={!!error}
             helperText={error || field.description}
             required={field.required}
@@ -165,11 +174,11 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               inputProps: {
                 min: field.validation?.min,
                 max: field.validation?.max,
-              }
+              },
             }}
           />
         );
-      
+
       case 'object':
       case 'array':
         return (
@@ -184,7 +193,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             helperText={error || field.description}
           />
         );
-      
+
       default: // string
         return (
           <TextField
@@ -196,19 +205,23 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             helperText={error || field.description}
             required={field.required}
             type={field.sensitive && !showSensitive[field.name] ? 'password' : 'text'}
-            InputProps={field.sensitive ? {
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    onClick={() => toggleSensitiveVisibility(field.name)}
-                    edge="end"
-                    size="small"
-                  >
-                    {showSensitive[field.name] ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            } : undefined}
+            InputProps={
+              field.sensitive
+                ? {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => toggleSensitiveVisibility(field.name)}
+                          edge="end"
+                          size="small"
+                        >
+                          {showSensitive[field.name] ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }
+                : undefined
+            }
           />
         );
     }
@@ -224,7 +237,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           </Typography>
         </Box>
       </DialogTitle>
-      
+
       <DialogContent>
         {hasSchema && (
           <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
@@ -287,16 +300,16 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               minRows={15}
               maxRows={25}
               error={!!jsonError}
-              helperText={hasSchema ? undefined : "Enter your provider configuration as JSON"}
+              helperText={hasSchema ? undefined : 'Enter your provider configuration as JSON'}
             />
           </Box>
         )}
       </DialogContent>
-      
+
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button 
-          onClick={handleSave} 
+        <Button
+          onClick={handleSave}
           variant="contained"
           disabled={validationErrors.length > 0 || !!jsonError}
         >

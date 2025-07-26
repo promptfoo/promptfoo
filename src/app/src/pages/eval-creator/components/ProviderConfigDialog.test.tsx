@@ -7,7 +7,7 @@ import * as providerSchemas from '@app/schemas/providerSchemas';
 vi.mock('@app/schemas/providerSchemas', () => ({
   getProviderSchema: vi.fn(),
   validateProviderConfig: vi.fn(),
-  FieldSchema: {} // Add type export
+  FieldSchema: {}, // Add type export
 }));
 
 describe('ProviderConfigDialog', () => {
@@ -55,9 +55,9 @@ describe('ProviderConfigDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (providerSchemas.getProviderSchema as Mock).mockReturnValue(mockSchema);
-    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
-      valid: true, 
-      errors: [] 
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({
+      valid: true,
+      errors: [],
     });
   });
 
@@ -73,10 +73,10 @@ describe('ProviderConfigDialog', () => {
 
     expect(screen.getByRole('tab', { name: 'Form' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'JSON' })).toBeInTheDocument();
-    
+
     // Check that the schema mock was called
     expect(providerSchemas.getProviderSchema).toHaveBeenCalledWith('openai:gpt-4');
-    
+
     // Check for form fields - they should exist even with initial values
     expect(screen.getByLabelText('Temperature')).toBeInTheDocument();
     expect(screen.getByLabelText('Max Tokens')).toBeInTheDocument();
@@ -97,17 +97,18 @@ describe('ProviderConfigDialog', () => {
     // API Key should be a password field
     const passwordInputs = screen.getAllByDisplayValue('test-key');
     const apiKeyInput = passwordInputs[0] as HTMLInputElement;
-    
+
     expect(apiKeyInput).toBeInTheDocument();
     expect(apiKeyInput.type).toBe('password');
 
     // Find the visibility toggle button using a more specific selector
     const visibilityButtons = screen.getAllByRole('button');
-    const visibilityButton = visibilityButtons.find(btn => 
-      btn.querySelector('svg[data-testid="VisibilityIcon"]') || 
-      btn.querySelector('svg[data-testid="VisibilityOffIcon"]')
+    const visibilityButton = visibilityButtons.find(
+      (btn) =>
+        btn.querySelector('svg[data-testid="VisibilityIcon"]') ||
+        btn.querySelector('svg[data-testid="VisibilityOffIcon"]'),
     );
-    
+
     expect(visibilityButton).toBeInTheDocument();
     fireEvent.click(visibilityButton!);
 
@@ -120,19 +121,19 @@ describe('ProviderConfigDialog', () => {
       ...defaultProps,
       config: {},
     };
-    
-    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
-      valid: false, 
-      errors: ['API Key is required'] 
+
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({
+      valid: false,
+      errors: ['API Key is required'],
     });
 
     render(<ProviderConfigDialog {...propsWithEmptyConfig} />);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    
+
     // Save button should be disabled due to validation errors
     expect(saveButton).toBeDisabled();
-    
+
     // Check that error appears (use getAllByText since it appears in both alert and field)
     const errors = screen.getAllByText('API Key is required');
     expect(errors.length).toBeGreaterThan(0);
@@ -143,7 +144,7 @@ describe('ProviderConfigDialog', () => {
     (providerSchemas.validateProviderConfig as Mock)
       .mockReturnValueOnce({ valid: false, errors: ['API Key is required'] }) // Initial load
       .mockReturnValue({ valid: true, errors: [] }); // After change and save
-    
+
     render(<ProviderConfigDialog {...defaultProps} />);
 
     const temperatureInput = screen.getByLabelText('Temperature');
@@ -175,7 +176,7 @@ describe('ProviderConfigDialog', () => {
 
     // Should show JSON editor
     expect(screen.getByLabelText('Configuration JSON')).toBeInTheDocument();
-    
+
     // Form fields should not be visible
     expect(screen.queryByLabelText('Temperature')).not.toBeInTheDocument();
   });
@@ -194,9 +195,9 @@ describe('ProviderConfigDialog', () => {
     };
 
     (providerSchemas.getProviderSchema as Mock).mockReturnValue(azureSchema);
-    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
-      valid: false, 
-      errors: ['Deployment ID is required'] 
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({
+      valid: false,
+      errors: ['Deployment ID is required'],
     });
 
     const azureProps = {
@@ -210,11 +211,11 @@ describe('ProviderConfigDialog', () => {
     // Check for required field by looking for the input
     const inputs = screen.getAllByRole('textbox');
     expect(inputs.length).toBeGreaterThan(0);
-    
+
     // With validation errors shown, the save button should be disabled
     const errors = screen.getAllByText('Deployment ID is required');
     expect(errors.length).toBeGreaterThan(0);
-    
+
     const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).toBeDisabled();
   });
@@ -237,11 +238,11 @@ describe('ProviderConfigDialog', () => {
 
   it('cleans up empty values before saving', async () => {
     // Mock valid validation
-    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({ 
-      valid: true, 
-      errors: [] 
+    (providerSchemas.validateProviderConfig as Mock).mockReturnValue({
+      valid: true,
+      errors: [],
     });
-    
+
     render(<ProviderConfigDialog {...defaultProps} />);
 
     const maxTokensInput = screen.getByLabelText('Max Tokens');
@@ -259,7 +260,7 @@ describe('ProviderConfigDialog', () => {
           // max_tokens should not be present
         }),
       );
-      
+
       // Verify max_tokens was removed
       const savedConfig = defaultProps.onSave.mock.calls[0][1];
       expect(savedConfig).not.toHaveProperty('max_tokens');

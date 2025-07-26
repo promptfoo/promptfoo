@@ -14,14 +14,14 @@ const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, defaultValue, .
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = event.target.value;
     setValue(newValue);
-    
+
     try {
       const parsed = JSON.parse(newValue);
       setError(false);
       if (onChange) {
         onChange(parsed);
       }
-    } catch (err) {
+    } catch (_err) {
       setError(true);
       if (onChange) {
         onChange(null, 'Invalid JSON');
