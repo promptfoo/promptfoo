@@ -231,10 +231,10 @@ describe('Python Utils', () => {
 
         expect(result1).toBe('python');
         expect(result2).toBe('python');
-        
+
         // Only one exec call should be made
         expect(execAsync).toHaveBeenCalledTimes(1);
-        
+
         // After resolution, validation promise should be cleared
         expect(pythonUtils.state.validationPromise).toBeNull();
       });
@@ -251,9 +251,7 @@ describe('Python Utils', () => {
           },
         );
 
-        jest
-          .mocked(execAsync)
-          .mockReturnValueOnce(firstPromise as any);
+        jest.mocked(execAsync).mockReturnValueOnce(firstPromise as any);
 
         const promise1 = pythonUtils.validatePythonPath('python', false);
         const promise2 = pythonUtils.validatePythonPath('python', false);
@@ -272,10 +270,10 @@ describe('Python Utils', () => {
         // Both should get the same result
         expect(result1).toBe('python');
         expect(result2).toBe('python');
-        
+
         // Only one exec call should be made
         expect(execAsync).toHaveBeenCalledTimes(1);
-        
+
         // After resolution, validation promise should be cleared
         expect(pythonUtils.state.validationPromise).toBeNull();
       });

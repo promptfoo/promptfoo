@@ -36,7 +36,6 @@ jest.mock('../../src/util/templates', () => {
   };
 });
 
-const originalExit = process.exit;
 jest.spyOn(process, 'exit').mockImplementation(() => {
   return undefined as never;
 });

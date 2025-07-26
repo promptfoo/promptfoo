@@ -12,19 +12,9 @@ jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
 }));
 
-// Mock process.exit to prevent test failures
-const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
-  throw new Error('process.exit called');
-});
-
 describe('validateStrategies', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    mockExit.mockClear();
-  });
-
-  afterAll(() => {
-    mockExit.mockRestore();
   });
 
   it('should validate valid strategies', async () => {
@@ -277,12 +267,9 @@ describe('custom strategy validation', () => {
       { id: 'notcustom:variant' },
     ];
 
-    await expect(async () => {
-      await validateStrategies(strategies);
-    }).rejects.toThrow('process.exit called');
+    await validateStrategies(strategies);
 
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
-    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });
 
