@@ -39,7 +39,7 @@ describe('max-score assertion integration', () => {
 
     // Only contains and equals should be processed
     expect(result.componentResults).toHaveLength(2);
-    const processedTypes = result.componentResults!.map(cr => cr.assertion?.type);
+    const processedTypes = result.componentResults!.map((cr) => cr.assertion?.type);
     expect(processedTypes).toEqual(['contains', 'equals']);
   });
 });

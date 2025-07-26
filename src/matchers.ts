@@ -1313,27 +1313,47 @@ export async function selectMaxScore(
 
   // Calculate aggregate score for each output
   const scores = resultsWithGradingResults.map((result, index) => {
-    // For max-score, we need to look at the individual assertion scores from the test case
-    // We can use the overall score from the result
-    const score = result.score || 0;
+    // Get component results from gradingResult if available
+    const componentResults = result.gradingResult?.componentResults || [];
 
-    // Filter out max-score assertions from the test case
-    const otherAssertions =
-      result.testCase?.assert?.filter(
-        (a: any) => a.type !== 'max-score' && a.type !== 'select-best',
-      ) || [];
+    // Filter out max-score and select-best assertions
+    const relevantResults = componentResults.filter(
+      (r: any) =>
+        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+    );
 
-    if (otherAssertions.length === 0) {
+    if (relevantResults.length === 0) {
       throw new Error('max-score requires at least one other assertion to aggregate scores from');
     }
 
-    // Use the result's overall score for aggregation
-    // In promptfoo, the overall score is already a normalized value between 0 and 1
-    const aggregateScore = score;
+    // Calculate weighted scores for each assertion
+    let totalWeightedScore = 0;
+    let totalWeight = 0;
+
+    relevantResults.forEach((componentResult: any) => {
+      const assertionType = componentResult.assertion?.type || 'unknown';
+      const weight =
+        options.weights[assertionType] !== undefined ? options.weights[assertionType] : 1.0; // Default weight is 1
+
+      const score = componentResult.score || 0;
+      totalWeightedScore += score * weight;
+      totalWeight += weight;
+    });
+
+    // Calculate aggregate score based on method
+    let aggregateScore: number;
+    if (options.method === 'sum') {
+      aggregateScore = totalWeightedScore;
+    } else {
+      // Average method (default)
+      aggregateScore = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
+    }
 
     return {
       index,
       score: aggregateScore,
+      componentCount: relevantResults.length,
+      totalWeight,
     };
   });
 
@@ -1352,7 +1372,7 @@ export async function selectMaxScore(
   const meetsThreshold = !options.threshold || maxScore >= options.threshold;
 
   // Return results for each output
-  return scores.map(({ index, score }) => {
+  return scores.map(({ index, score, componentCount, totalWeight }) => {
     const isWinner = index === winnerIndex && meetsThreshold;
 
     return {
@@ -1365,6 +1385,8 @@ export async function selectMaxScore(
           : `Not selected (score: ${score.toFixed(3)}, max: ${maxScore.toFixed(3)})`,
       namedScores: {
         maxScore: score,
+        assertionCount: componentCount,
+        totalWeight,
       },
     };
   });

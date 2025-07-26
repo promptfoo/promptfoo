@@ -58,11 +58,7 @@ describe('selectMaxScore', () => {
 
   it('should select the output with the highest score', async () => {
     const outputs = ['Output 0', 'Output 1', 'Output 2'];
-    const results = [
-      createMockResult(0.5, 0),
-      createMockResult(1.0, 1),
-      createMockResult(0.75, 2),
-    ];
+    const results = [createMockResult(0.5, 0), createMockResult(1.0, 1), createMockResult(0.75, 2)];
 
     const gradingResults = await selectMaxScore(outputs, results, mockAssertion);
 
@@ -70,11 +66,11 @@ describe('selectMaxScore', () => {
     expect(gradingResults[0].pass).toBe(false);
     expect(gradingResults[0].score).toBe(0);
     expect(gradingResults[0].reason).toContain('Not selected');
-    
+
     expect(gradingResults[1].pass).toBe(true);
     expect(gradingResults[1].score).toBe(1);
     expect(gradingResults[1].reason).toContain('Selected as highest scoring output');
-    
+
     expect(gradingResults[2].pass).toBe(false);
     expect(gradingResults[2].score).toBe(0);
     expect(gradingResults[2].reason).toContain('Not selected');
@@ -82,29 +78,22 @@ describe('selectMaxScore', () => {
 
   it('should handle ties by selecting the first output', async () => {
     const outputs = ['Output 0', 'Output 1', 'Output 2'];
-    const results = [
-      createMockResult(1.0, 0),
-      createMockResult(1.0, 1),
-      createMockResult(0.5, 2),
-    ];
+    const results = [createMockResult(1.0, 0), createMockResult(1.0, 1), createMockResult(0.5, 2)];
 
     const gradingResults = await selectMaxScore(outputs, results, mockAssertion);
 
     expect(gradingResults[0].pass).toBe(true);
     expect(gradingResults[0].reason).toContain('Selected as highest scoring output');
-    
+
     expect(gradingResults[1].pass).toBe(false);
     expect(gradingResults[1].reason).toContain('Not selected (score: 1.000, max: 1.000)');
-    
+
     expect(gradingResults[2].pass).toBe(false);
   });
 
   it('should apply threshold when specified', async () => {
     const outputs = ['Output 0', 'Output 1'];
-    const results = [
-      createMockResult(0.6, 0),
-      createMockResult(0.4, 1),
-    ];
+    const results = [createMockResult(0.6, 0), createMockResult(0.4, 1)];
 
     const assertionWithThreshold: Assertion = {
       type: 'max-score',
@@ -117,7 +106,7 @@ describe('selectMaxScore', () => {
 
     expect(gradingResults[0].pass).toBe(false);
     expect(gradingResults[0].reason).toContain('below threshold');
-    
+
     expect(gradingResults[1].pass).toBe(false);
   });
 
@@ -126,7 +115,7 @@ describe('selectMaxScore', () => {
     const results = [createMockResult(1.0, 0)];
 
     await expect(selectMaxScore(outputs, results, mockAssertion)).rejects.toThrow(
-      'max-score assertion must have at least two outputs to compare between'
+      'max-score assertion must have at least two outputs to compare between',
     );
   });
 
@@ -138,17 +127,25 @@ describe('selectMaxScore', () => {
         testCase: {
           assert: [{ type: 'max-score' }],
         },
+        gradingResult: {
+          ...createMockResult(1.0, 0).gradingResult,
+          componentResults: [], // Empty component results
+        },
       },
       {
         ...createMockResult(0.5, 1),
         testCase: {
           assert: [{ type: 'max-score' }],
         },
+        gradingResult: {
+          ...createMockResult(0.5, 1).gradingResult,
+          componentResults: [], // Empty component results
+        },
       },
     ];
 
     await expect(selectMaxScore(outputs, results, mockAssertion)).rejects.toThrow(
-      'max-score requires at least one other assertion to aggregate scores from'
+      'max-score requires at least one other assertion to aggregate scores from',
     );
   });
 
@@ -178,7 +175,7 @@ describe('selectMaxScore', () => {
     ];
 
     const gradingResults = await selectMaxScore(outputs, results, mockAssertion);
-    
+
     expect(gradingResults).toHaveLength(2);
     expect(gradingResults[0].pass).toBe(true);
     expect(gradingResults[1].pass).toBe(false);
@@ -186,10 +183,68 @@ describe('selectMaxScore', () => {
 
   it('should handle results with zero scores', async () => {
     const outputs = ['Output 0', 'Output 1', 'Output 2'];
+    // Create results with different component scores
     const results = [
-      createMockResult(0, 0),
-      createMockResult(0, 1),
-      createMockResult(0.1, 2),
+      {
+        ...createMockResult(0, 0),
+        gradingResult: {
+          ...createMockResult(0, 0).gradingResult,
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'Does not contain apple',
+              assertion: { type: 'contains', value: 'apple' } as Assertion,
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'Does not contain orange',
+              assertion: { type: 'contains', value: 'orange' } as Assertion,
+            },
+          ],
+        },
+      },
+      {
+        ...createMockResult(0, 1),
+        gradingResult: {
+          ...createMockResult(0, 1).gradingResult,
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'Does not contain apple',
+              assertion: { type: 'contains', value: 'apple' } as Assertion,
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'Does not contain orange',
+              assertion: { type: 'contains', value: 'orange' } as Assertion,
+            },
+          ],
+        },
+      },
+      {
+        ...createMockResult(0.1, 2),
+        gradingResult: {
+          ...createMockResult(0.1, 2).gradingResult,
+          componentResults: [
+            {
+              pass: true,
+              score: 0.1,
+              reason: 'Partially contains apple',
+              assertion: { type: 'contains', value: 'apple' } as Assertion,
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'Does not contain orange',
+              assertion: { type: 'contains', value: 'orange' } as Assertion,
+            },
+          ],
+        },
+      },
     ];
 
     const gradingResults = await selectMaxScore(outputs, results, mockAssertion);
@@ -197,19 +252,21 @@ describe('selectMaxScore', () => {
     expect(gradingResults[0].pass).toBe(false);
     expect(gradingResults[1].pass).toBe(false);
     expect(gradingResults[2].pass).toBe(true);
-    expect(gradingResults[2].reason).toContain('Selected as highest scoring output (score: 0.100)');
+    expect(gradingResults[2].reason).toContain('Selected as highest scoring output (score: 0.050)');
   });
 
   it('should include score in namedScores', async () => {
     const outputs = ['Output 0', 'Output 1'];
-    const results = [
-      createMockResult(0.8, 0),
-      createMockResult(0.6, 1),
-    ];
+    const results = [createMockResult(0.8, 0), createMockResult(0.6, 1)];
 
     const gradingResults = await selectMaxScore(outputs, results, mockAssertion);
 
-    expect(gradingResults[0].namedScores?.maxScore).toBe(0.8);
-    expect(gradingResults[1].namedScores?.maxScore).toBe(0.6);
+    // Both results have the same componentResults scores (1 for apple, 0 for orange)
+    // So both have average score of 0.5
+    expect(gradingResults[0].namedScores?.maxScore).toBe(0.5);
+    expect(gradingResults[1].namedScores?.maxScore).toBe(0.5);
+    // The first one should be selected due to tie-breaking
+    expect(gradingResults[0].pass).toBe(true);
+    expect(gradingResults[1].pass).toBe(false);
   });
 });

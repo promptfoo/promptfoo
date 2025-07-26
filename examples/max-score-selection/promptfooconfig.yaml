@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing max-score vs select-best for objective criteria
+description: Max-score assertion for objective output selection
 
 prompts:
   - 'Generate a Python function to {{task}}'
@@ -7,9 +7,9 @@ prompts:
   - 'Create a well-documented Python function to {{task}}'
 
 providers:
-  - id: echo
-  - id: echo  
-  - id: echo
+  - openai:gpt-4o-mini
+  - openai:gpt-3.5-turbo
+  - anthropic:claude-3-haiku-20240307
 
 tests:
   - vars:
@@ -23,82 +23,47 @@ tests:
           list2 = [2, 4, 6, 8, 10]
           result = merge_sorted_lists(list1, list2)
           assert result == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], f"Expected [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], got {result}"
-          
+
           # Test with empty lists
           assert merge_sorted_lists([], [1, 2, 3]) == [1, 2, 3]
           assert merge_sorted_lists([1, 2, 3], []) == [1, 2, 3]
           assert merge_sorted_lists([], []) == []
-      
-      # Efficiency test
-      - type: llm-rubric
-        value: 'Code has O(n+m) time complexity where n and m are the lengths of the input lists'
-      
+
       # Documentation test
       - type: llm-rubric
         value: 'Code includes a clear docstring explaining parameters, return value, and complexity'
-      
+
       # Code quality test
       - type: contains
         value: 'def merge_sorted_lists'
-      
-      # Compare selection methods
+
+      # Max-score selects the best implementation objectively
       - type: max-score
         value:
           weights:
-            python: 3          # Correctness is most important
-            llm-rubric: 1      # Efficiency and docs are secondary
-            contains: 0.5      # Basic structure check
-            
-      - type: select-best
-        value: 'Select the implementation that best balances correctness, efficiency, and documentation'
+            python: 3 # Correctness is most important
+            llm-rubric: 1 # Documentation is secondary
+            contains: 0.5 # Basic structure check
 
   - vars:
-      task: 'calculate the nth Fibonacci number'
-    assert:
-      # Correctness test
-      - type: python
-        value: |
-          # Test fibonacci function
-          assert fibonacci(0) == 0
-          assert fibonacci(1) == 1
-          assert fibonacci(2) == 1
-          assert fibonacci(5) == 5
-          assert fibonacci(10) == 55
-          assert fibonacci(15) == 610
-      
-      # Efficiency test
-      - type: llm-rubric
-        value: 'Implementation is efficient (uses memoization, dynamic programming, or O(log n) matrix method)'
-      
-      # Edge case handling
-      - type: llm-rubric
-        value: 'Handles edge cases like negative numbers appropriately'
-      
-      # Max-score with different aggregation
-      - type: max-score
-        value:
-          method: average  # Use average instead of weighted sum
-          threshold: 0.6   # Require at least 60% average score
-
-  - vars:
-      task: 'check if a string is a palindrome'
+      task: 'check if a string is a palindrome (ignoring case and spaces)'
     assert:
       # Correctness
       - type: python
         value: |
           assert is_palindrome("racecar") == True
-          assert is_palindrome("hello") == False
           assert is_palindrome("A man a plan a canal Panama") == True
+          assert is_palindrome("race a car") == False
+          assert is_palindrome("hello") == False
           assert is_palindrome("") == True
-          assert is_palindrome("a") == True
-      
-      # Case handling
+
+      # Edge case handling
       - type: llm-rubric
-        value: 'Handles both uppercase and lowercase correctly, ignoring case differences'
-      
-      # Space handling
+        value: 'Handles edge cases like empty strings and single characters correctly'
+
+      # Efficiency
       - type: llm-rubric
-        value: 'Handles spaces and punctuation appropriately (either ignores them or documents the behavior)'
-      
+        value: 'Uses an efficient algorithm (O(n) time complexity)'
+
       # Simple max-score (all assertions equally weighted)
       - type: max-score

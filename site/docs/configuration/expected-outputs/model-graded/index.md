@@ -126,18 +126,18 @@ providers:
 
 tests:
   - vars:
-      article: "AI safety research is accelerating..."
+      article: 'AI safety research is accelerating...'
     assert:
       - type: contains
-        value: "AI safety"
+        value: 'AI safety'
       - type: contains
-        value: "research"
+        value: 'research'
       - type: llm-rubric
-        value: "Summary captures the main points accurately"
+        value: 'Summary captures the main points accurately'
       - type: max-score
         value:
-          method: average  # Use average of all assertion scores
-          threshold: 0.7   # Require at least 70% score to pass
+          method: average # Use average of all assertion scores
+          threshold: 0.7 # Require at least 70% score to pass
 ```
 
 ## Overriding the LLM grader

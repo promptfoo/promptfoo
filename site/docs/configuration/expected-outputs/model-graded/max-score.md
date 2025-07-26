@@ -9,6 +9,7 @@ The `max-score` assertion selects the output with the highest aggregate score fr
 ## When to use max-score
 
 Use `max-score` when you want to:
+
 - Select the best output based on objective, measurable criteria
 - Combine multiple metrics with different importance (weights)
 - Have transparent, reproducible selection without LLM API calls
@@ -58,23 +59,41 @@ Choose how scores are combined:
 assert:
   - type: max-score
     value:
-      method: average  # Default: average | sum
+      method: average # Default: average | sum
 ```
 
 ### Weighted scoring
 
-Give different importance to different assertions:
+Give different importance to different assertions by specifying weights per assertion type:
 
 ```yaml
 assert:
-  - type: python        # Test correctness
-  - type: llm-rubric    # Test quality
+  - type: python # Test correctness
+  - type: llm-rubric # Test quality
     value: 'Well documented'
   - type: max-score
     value:
       weights:
-        python: 3       # Correctness is 3x more important
-        llm-rubric: 1   # Documentation is 1x weight
+        python: 3 # Correctness is 3x more important
+        llm-rubric: 1 # Documentation is 1x weight
+```
+
+#### How weights work
+
+- Each assertion type can have a custom weight (default: 1.0)
+- For `method: average`, the final score is: `sum(score × weight) / sum(weights)`
+- For `method: sum`, the final score is: `sum(score × weight)`
+- Weights apply to all assertions of that type
+
+Example calculation with `method: average`:
+
+```
+Output A: python=1.0, llm-rubric=0.5, contains=1.0
+Weights:  python=3,   llm-rubric=1,   contains=1 (default)
+
+Score = (1.0×3 + 0.5×1 + 1.0×1) / (3 + 1 + 1)
+      = (3.0 + 0.5 + 1.0) / 5
+      = 0.9
 ```
 
 ### Minimum threshold
@@ -85,7 +104,7 @@ Require a minimum score for selection:
 assert:
   - type: max-score
     value:
-      threshold: 0.7  # Only select if average score >= 0.7
+      threshold: 0.7 # Only select if average score >= 0.7
 ```
 
 ## Scoring details
@@ -105,6 +124,9 @@ prompts:
   - 'Write an optimized Python function to {{task}}'
   - 'Write a documented Python function to {{task}}'
 
+providers:
+  - openai:gpt-4o-mini
+
 tests:
   - vars:
       task: 'merge two sorted lists'
@@ -115,18 +137,18 @@ tests:
           list2 = [2, 4, 6]
           result = merge_lists(list1, list2)
           assert result == [1, 2, 3, 4, 5, 6]
-      
+
       - type: llm-rubric
         value: 'Code has O(n+m) time complexity'
-      
+
       - type: llm-rubric
         value: 'Code is well documented with docstring'
-      
+
       - type: max-score
         value:
           weights:
-            python: 3        # Correctness most important
-            llm-rubric: 1    # Each quality metric has weight 1
+            python: 3 # Correctness most important
+            llm-rubric: 1 # Each quality metric has weight 1
 ```
 
 ### Example 2: Content generation selection
@@ -137,23 +159,25 @@ prompts:
   - 'Explain {{concept}} in detail'
   - 'Explain {{concept}} with examples'
 
+providers:
+  - anthropic:claude-3-haiku-20240307
+
 tests:
   - vars:
       concept: 'machine learning'
     assert:
       - type: llm-rubric
         value: 'Explanation is accurate'
-      
+
       - type: llm-rubric
         value: 'Explanation is clear and easy to understand'
-      
-      - type: word-count
-        min: 100
-        max: 300
-      
+
+      - type: contains
+        value: 'example'
+
       - type: max-score
         value:
-          method: average  # All criteria equally important
+          method: average # All criteria equally important
 ```
 
 ### Example 3: API response selection
@@ -164,36 +188,36 @@ tests:
       query: 'weather in Paris'
     assert:
       - type: is-json
-      
+
       - type: contains-json
         value:
           required: ['temperature', 'humidity', 'conditions']
-      
+
       - type: llm-rubric
         value: 'Response includes all requested weather data'
-      
+
       - type: latency
-        threshold: 1000  # Under 1 second
-      
+        threshold: 1000 # Under 1 second
+
       - type: max-score
         value:
           weights:
-            is-json: 2          # Must be valid JSON
-            contains-json: 2    # Must have required fields
-            llm-rubric: 1       # Quality check
-            latency: 1          # Performance matters
+            is-json: 2 # Must be valid JSON
+            contains-json: 2 # Must have required fields
+            llm-rubric: 1 # Quality check
+            latency: 1 # Performance matters
 ```
 
 ## Comparison with select-best
 
-| Feature | max-score | select-best |
-|---------|-----------|-------------|
-| Selection method | Aggregate scores from assertions | LLM judgment |
-| API calls | None (uses existing scores) | One per evaluation |
-| Reproducibility | Deterministic | May vary |
-| Best for | Objective criteria | Subjective criteria |
-| Transparency | Shows exact scores | Shows LLM reasoning |
-| Cost | Free (no API calls) | Costs per API call |
+| Feature          | max-score                        | select-best         |
+| ---------------- | -------------------------------- | ------------------- |
+| Selection method | Aggregate scores from assertions | LLM judgment        |
+| API calls        | None (uses existing scores)      | One per evaluation  |
+| Reproducibility  | Deterministic                    | May vary            |
+| Best for         | Objective criteria               | Subjective criteria |
+| Transparency     | Shows exact scores               | Shows LLM reasoning |
+| Cost             | Free (no API calls)              | Costs per API call  |
 
 ## Edge cases
 
