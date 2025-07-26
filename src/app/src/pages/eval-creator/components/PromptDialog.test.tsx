@@ -1,4 +1,3 @@
-
 import { screen, fireEvent, act, renderWithTheme } from '@app/test-utils';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import PromptDialog from './PromptDialog';

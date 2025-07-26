@@ -46,9 +46,12 @@ export default defineConfig({
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
-      'react': path.resolve(__dirname, '../../node_modules/react'),
+      react: path.resolve(__dirname, '../../node_modules/react'),
       'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
-      '@testing-library/react': path.resolve(__dirname, '../../node_modules/@testing-library/react'),
+      '@testing-library/react': path.resolve(
+        __dirname,
+        '../../node_modules/@testing-library/react',
+      ),
     },
   },
   test: {

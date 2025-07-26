@@ -1,5 +1,7 @@
 !(function (t) {
-  if (window.ko) { return; }
+  if (window.ko) {
+    return;
+  }
   (window.ko = []),
     ['identify', 'track', 'removeListeners', 'open', 'on', 'off', 'qualify', 'ready'].forEach(
       function (t) {
@@ -28,7 +30,9 @@
 
 !(function (e, r) {
   try {
-    if (e.vector) { return void console.log('Vector snippet included more than once.'); }
+    if (e.vector) {
+      return void console.log('Vector snippet included more than once.');
+    }
     var t = {};
     t.q = t.q || [];
     for (

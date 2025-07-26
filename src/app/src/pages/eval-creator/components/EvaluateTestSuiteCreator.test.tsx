@@ -1,7 +1,11 @@
-
-
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
-import { screen, waitFor, waitForElementToBeRemoved, within, renderWithTheme } from '@app/test-utils';
+import {
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+  within,
+  renderWithTheme,
+} from '@app/test-utils';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';

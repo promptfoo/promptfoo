@@ -54,7 +54,10 @@ export default defineConfig({
       'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
       'react-dom/client': path.resolve(__dirname, '../../node_modules/react-dom/client.js'),
       'react/jsx-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-runtime.js'),
-      'react/jsx-dev-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-dev-runtime.js'),
+      'react/jsx-dev-runtime': path.resolve(
+        __dirname,
+        '../../node_modules/react/jsx-dev-runtime.js',
+      ),
     },
   },
   optimizeDeps: {

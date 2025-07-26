@@ -1,4 +1,3 @@
-
 import clsx from 'clsx';
 import styles from './LogoContainer.module.css';
 

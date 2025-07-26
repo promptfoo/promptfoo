@@ -1,4 +1,3 @@
-
 import { DocProvider } from '@docusaurus/plugin-content-docs/client';
 import { HtmlClassNameProvider } from '@docusaurus/theme-common';
 import DocItemLayout from '@theme/DocItem/Layout';

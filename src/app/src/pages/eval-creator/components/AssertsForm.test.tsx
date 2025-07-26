@@ -1,4 +1,3 @@
-
 import { screen, fireEvent, renderWithTheme } from '@app/test-utils';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Assertion, AssertionType } from '@promptfoo/types';

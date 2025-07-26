@@ -1,5 +1,3 @@
-
-
 import { fireEvent, screen, renderWithTheme } from '@app/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
