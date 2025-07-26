@@ -53,6 +53,7 @@ import { TokenUsageTracker } from './util/tokenUsage';
 import {
   createEmptyTokenUsage,
   createEmptyAssertions,
+  accumulateTokenUsage,
   accumulateResponseTokenUsage,
   accumulateGraderTokenUsage,
 } from './util/tokenUsageUtils';
@@ -314,28 +315,8 @@ function updateAssertionMetrics(
       metrics.tokenUsage.assertions = createEmptyAssertions();
     }
 
-    const assertions = metrics.tokenUsage.assertions;
-
-    // Update basic token counts
-    assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
-    assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
-    assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
-    assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
-
-    // Update completion details if present
-    if (assertionTokens.completionDetails && assertions.completionDetails) {
-      assertions.completionDetails.reasoning =
-        (assertions.completionDetails.reasoning ?? 0) +
-        (assertionTokens.completionDetails.reasoning ?? 0);
-
-      assertions.completionDetails.acceptedPrediction =
-        (assertions.completionDetails.acceptedPrediction ?? 0) +
-        (assertionTokens.completionDetails.acceptedPrediction ?? 0);
-
-      assertions.completionDetails.rejectedPrediction =
-        (assertions.completionDetails.rejectedPrediction ?? 0) +
-        (assertionTokens.completionDetails.rejectedPrediction ?? 0);
-    }
+    // Accumulate assertion tokens using the utility function
+    accumulateTokenUsage(metrics.tokenUsage.assertions as TokenUsage, assertionTokens);
   }
 }
 
@@ -1205,11 +1186,8 @@ class Evaluator {
                 this.stats.tokenUsage.assertions = createEmptyAssertions();
               }
 
-              const assertions = this.stats.tokenUsage.assertions;
-              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
-              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
-              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
-              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
+              // Accumulate assertion tokens using the utility function
+              accumulateTokenUsage(this.stats.tokenUsage.assertions as TokenUsage, tokensUsed);
 
               break;
             }
