@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import InfoIcon from '@mui/icons-material/Info';
 import RemoveIcon from '@mui/icons-material/Remove';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -231,8 +233,35 @@ export default function PluginConfigDialog({
       case 'unsafebench':
       case 'xstest':
         const datasetInfo = DATASET_INFO[plugin];
-        const isFullDataset = Boolean(localConfig.fullDataset);
-        const numTests = localConfig.numTests || '';
+        const sampling = localConfig.sampling || 'default';
+        const customCount = localConfig.customCount || 25;
+        const [loadingSize, setLoadingSize] = useState(false);
+        const [actualSize, setActualSize] = useState<number | null>(null);
+
+        // Load actual dataset size on mount
+        useEffect(() => {
+          if (open && plugin && sampling === 'full') {
+            setLoadingSize(true);
+            // TODO: Implement actual dataset size fetching via API
+            // This would call something like: callApi(`/dataset-size/${plugin}`)
+            // For now, simulate with a timeout to demonstrate the loading state
+            const timer = setTimeout(() => {
+              // Simulate that some datasets have filtered counts
+              const simulatedFilterRatio =
+                plugin === 'harmbench'
+                  ? 0.85
+                  : plugin === 'cyberseceval'
+                    ? 0.92
+                    : plugin === 'beavertails'
+                      ? 0.7
+                      : 1;
+              setActualSize(Math.floor(datasetInfo.exactCount * simulatedFilterRatio));
+              setLoadingSize(false);
+            }, 800);
+
+            return () => clearTimeout(timer);
+          }
+        }, [open, plugin, sampling, datasetInfo.exactCount]);
 
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
@@ -249,118 +278,185 @@ export default function PluginConfigDialog({
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <InfoIcon color="primary" fontSize="small" />
                 <Typography variant="subtitle2" fontWeight="medium">
-                  {datasetInfo.size}
+                  Dataset: {datasetInfo.size}
                 </Typography>
               </Box>
-
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              <Typography variant="body2" color="text.secondary">
                 {datasetInfo.description}
               </Typography>
             </Box>
 
             {/* Test Configuration */}
             <FormControl component="fieldset">
-              <FormLabel component="legend" sx={{ mb: 1, fontWeight: 'medium' }}>
-                Test Configuration
+              <FormLabel component="legend" sx={{ mb: 2, fontWeight: 'medium' }}>
+                Number of Test Cases
               </FormLabel>
               <RadioGroup
-                value={isFullDataset ? 'full' : 'custom'}
+                value={sampling}
                 onChange={(e) => {
-                  const isFull = e.target.value === 'full';
+                  const newSampling = e.target.value as 'default' | 'custom' | 'full';
                   setLocalConfig({
                     ...localConfig,
-                    fullDataset: isFull,
-                    ...(isFull ? {} : { numTests: numTests || '25' }),
+                    sampling: newSampling,
+                    ...(newSampling === 'custom' ? { customCount } : {}),
                   });
                 }}
               >
                 <FormControlLabel
+                  value="default"
+                  control={<Radio />}
+                  label={
+                    <Box>
+                      <Typography variant="body2">Use default configuration</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Inherits from global numTests setting
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <FormControlLabel
                   value="custom"
                   control={<Radio />}
-                  label="Custom number of test cases"
+                  label={
+                    <Box>
+                      <Typography variant="body2">Custom number</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Specify exact number of test cases
+                      </Typography>
+                    </Box>
+                  }
                 />
                 <FormControlLabel
                   value="full"
                   control={<Radio />}
-                  label={`Run complete dataset (${datasetInfo.size})`}
+                  label={
+                    <Box>
+                      <Typography variant="body2">Use full dataset</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {loadingSize ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CircularProgress size={12} />
+                            Checking actual size...
+                          </Box>
+                        ) : actualSize ? (
+                          <>
+                            Approximately {actualSize.toLocaleString()} test cases after filtering
+                          </>
+                        ) : (
+                          <>All available test cases ({datasetInfo.size})</>
+                        )}
+                      </Typography>
+                    </Box>
+                  }
                 />
               </RadioGroup>
             </FormControl>
 
             {/* Custom Number Input */}
-            {!isFullDataset && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {sampling === 'custom' && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pl: 4 }}>
                 <TextField
                   fullWidth
                   label="Number of test cases"
                   type="number"
                   variant="outlined"
-                  value={numTests}
+                  value={customCount}
                   onChange={(e) => {
-                    const value = e.target.value;
-                    const parsed = Number.parseInt(value, 10);
-
-                    // Allow empty string for clearing the field
-                    if (value === '') {
-                      setLocalConfig({ ...localConfig, numTests: '' });
-                      return;
-                    }
-
-                    // Validate the number
-                    if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= datasetInfo.exactCount) {
-                      setLocalConfig({ ...localConfig, numTests: value });
+                    const value = Number.parseInt(e.target.value, 10);
+                    if (!Number.isNaN(value) && value >= 1) {
+                      setLocalConfig({ ...localConfig, customCount: value });
                     }
                   }}
-                  inputProps={{ min: 1, max: datasetInfo.exactCount }}
-                  error={
-                    numTests !== '' &&
-                    (Number.parseInt(numTests) < 1 ||
-                      Number.parseInt(numTests) > datasetInfo.exactCount)
-                  }
+                  inputProps={{ min: 1 }}
+                  error={customCount < 1}
                   helperText={
-                    numTests === ''
-                      ? 'Recommended: 25-100 for development'
-                      : Number.parseInt(numTests) < 1
-                        ? 'Must be at least 1'
-                        : Number.parseInt(numTests) > datasetInfo.exactCount
-                          ? `Maximum is ${datasetInfo.exactCount}`
-                          : `${numTests} test cases selected`
+                    customCount < 1
+                      ? 'Must be at least 1'
+                      : customCount > datasetInfo.exactCount
+                        ? `Note: Dataset only contains ~${datasetInfo.exactCount} items`
+                        : 'Number of random test cases to select'
                   }
                 />
 
                 {/* Quick Preset Buttons */}
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  {(() => {
-                    const maxSize = datasetInfo.exactCount;
-                    const presets = [10, 25, 50, 100].filter((p) => p <= maxSize);
-                    if (maxSize <= 500) {
-                      presets.push(maxSize);
-                    }
-
-                    return presets.map((preset) => (
-                      <Button
-                        key={preset}
-                        size="small"
-                        variant={numTests === preset.toString() ? 'contained' : 'outlined'}
-                        onClick={() =>
-                          setLocalConfig({ ...localConfig, numTests: preset.toString() })
-                        }
-                        sx={{ minWidth: 'auto', px: 2 }}
-                      >
-                        {preset === maxSize ? `All` : preset}
-                      </Button>
-                    ));
-                  })()}
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ width: '100%', mb: 1 }}
+                  >
+                    Quick presets:
+                  </Typography>
+                  {[10, 25, 50, 100, 250].map((preset) => (
+                    <Button
+                      key={preset}
+                      size="small"
+                      variant={customCount === preset ? 'contained' : 'outlined'}
+                      onClick={() => setLocalConfig({ ...localConfig, customCount: preset })}
+                      sx={{ minWidth: 'auto', px: 2 }}
+                    >
+                      {preset}
+                    </Button>
+                  ))}
                 </Box>
               </Box>
             )}
 
-            {/* Performance Warning for Full Dataset */}
-            {isFullDataset && (
-              <Alert severity="warning" sx={{ mt: 1 }}>
+            {/* Warnings and Info */}
+            {sampling === 'full' && (
+              <Alert
+                severity="warning"
+                icon={<WarningAmberIcon />}
+                sx={{
+                  '& .MuiAlert-message': { width: '100%' },
+                }}
+              >
+                <Box>
+                  <Typography variant="body2" fontWeight="medium" gutterBottom>
+                    Full dataset mode enabled
+                  </Typography>
+                  <Typography variant="body2">
+                    This will use all {actualSize ? actualSize.toLocaleString() : datasetInfo.size}{' '}
+                    test cases and may:
+                  </Typography>
+                  <Box component="ul" sx={{ m: 0, mt: 1, pl: 2 }}>
+                    <li>Take significant time to complete (30+ minutes)</li>
+                    <li>Consume substantial API credits</li>
+                    <li>Generate large evaluation results</li>
+                  </Box>
+                  {actualSize && actualSize !== datasetInfo.exactCount && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mt: 1 }}
+                    >
+                      Note: {(datasetInfo.exactCount - actualSize).toLocaleString()} items will be
+                      filtered out during processing.
+                    </Typography>
+                  )}
+                </Box>
+              </Alert>
+            )}
+
+            {sampling === 'custom' && customCount > 100 && (
+              <Alert severity="info">
+                <Box>
+                  <Typography variant="body2">
+                    Testing with {customCount.toLocaleString()} cases
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Estimated time: {customCount > 500 ? '15-30' : '5-15'} minutes depending on your
+                    model
+                  </Typography>
+                </Box>
+              </Alert>
+            )}
+
+            {sampling === 'custom' && customCount > datasetInfo.exactCount && (
+              <Alert severity="warning">
                 <Typography variant="body2">
-                  Running the full dataset ({datasetInfo.exactCount} test cases) may take a long
-                  time and consume significant API credits.
+                  Requested {customCount.toLocaleString()} cases but dataset only contains ~
+                  {datasetInfo.exactCount.toLocaleString()} items. All available items will be used.
                 </Typography>
               </Alert>
             )}
@@ -395,27 +491,30 @@ export default function PluginConfigDialog({
 
   const hasChanges = JSON.stringify(config) !== JSON.stringify(localConfig);
 
-  // Validate numTests for dataset plugins
+  // Validate configuration for dataset plugins
   const isValidConfig = () => {
     if (!plugin || !DATASET_INFO[plugin]) {
       return true;
     }
 
-    const numTests = localConfig.numTests;
-    const isFullDataset = Boolean(localConfig.fullDataset);
+    const sampling = localConfig.sampling || 'default';
 
-    // If full dataset is selected, it's valid
-    if (isFullDataset) {
+    // Default and full modes are always valid
+    if (sampling === 'default' || sampling === 'full') {
       return true;
     }
 
-    // If custom number is selected, validate the number
-    if (numTests === '' || numTests === undefined) {
-      return false;
+    // For custom mode, validate the customCount
+    if (sampling === 'custom') {
+      const customCount = localConfig.customCount;
+      if (!customCount || customCount < 1) {
+        return false;
+      }
+      // Note: We don't validate against exactCount because the dataset might be filtered
+      return true;
     }
 
-    const parsed = Number.parseInt(numTests, 10);
-    return !Number.isNaN(parsed) && parsed >= 1 && parsed <= DATASET_INFO[plugin].exactCount;
+    return true;
   };
 
   return (

@@ -124,28 +124,38 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             }
 
             const config = pluginConfig[plugin] || {};
-            const { numTests, fullDataset, ...rest } = config;
 
-            const result: { id: string; numTests?: number; config?: any } = { id: plugin };
+            // Handle dataset plugins with new structure
+            if (DATASET_PLUGINS.includes(plugin as any)) {
+              const { sampling, customCount, ...rest } = config;
 
-            if (typeof numTests === 'string' && numTests.trim() !== '') {
-              const parsed = Number.parseInt(numTests, 10);
-              if (!Number.isNaN(parsed)) {
-                result.numTests = parsed;
+              // Build result based on sampling mode
+              const result: { id: string; numTests?: number; config?: any } = { id: plugin };
+
+              if (sampling === 'custom' && customCount) {
+                result.numTests = customCount;
+              } else if (sampling === 'full') {
+                result.config = { fullDataset: true, ...rest };
+                return result;
+              } else if (sampling === 'default' || !sampling) {
+                // Use default - don't set numTests
+                if (Object.keys(rest).length > 0) {
+                  result.config = rest;
+                  return result;
+                }
+                return plugin; // Just return string if no other config
               }
+
+              if (Object.keys(rest).length > 0) {
+                result.config = rest;
+              }
+
+              return result.numTests || result.config ? result : plugin;
             }
 
-            const finalConfig: Record<string, any> = { ...rest };
-            if (fullDataset) {
-              finalConfig.fullDataset = true;
-            }
-
-            if (Object.keys(finalConfig).length > 0) {
-              result.config = finalConfig;
-            }
-
-            if (result.numTests || result.config) {
-              return result;
+            // Handle other plugins normally
+            if (config && Object.keys(config).length > 0) {
+              return { id: plugin, config };
             }
 
             return plugin;

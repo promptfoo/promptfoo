@@ -100,9 +100,10 @@ export interface LocalPluginConfig {
     targetIdentifiers?: string[];
     targetSystems?: string[];
     targetUrls?: string[];
-    numTests?: string;
-    fullDataset?: boolean;
-    [key: string]: string | string[] | boolean | undefined;
+    // Dataset configuration
+    sampling?: 'default' | 'custom' | 'full';
+    customCount?: number;
+    [key: string]: string | string[] | boolean | number | undefined;
   };
 }
 
