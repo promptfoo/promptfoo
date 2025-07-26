@@ -3,6 +3,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
 import type { Cache } from 'cache-manager';
 import type Replicate from 'replicate';
@@ -167,7 +168,7 @@ export class ReplicateProvider implements ApiProvider {
 
       const result = {
         output: formattedOutput,
-        tokenUsage: {}, // TODO: add token usage once Replicate API supports it
+        tokenUsage: createEmptyTokenUsage(), // TODO: add token usage once Replicate API supports it
       };
       if (cache && cacheKey) {
         await cache.set(cacheKey, JSON.stringify(result));

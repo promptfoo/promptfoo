@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider } from './generic';
 
 import type { ProviderResponse } from '../../types';
@@ -67,7 +68,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
           output: JSON.parse(cachedResponse as string),
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(),
         };
       }
     }
@@ -91,7 +92,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     try {
       return {
         output: response.completion,
-        tokenUsage: {}, // TODO: add token usage once Anthropic API supports it
+        tokenUsage: createEmptyTokenUsage(), // TODO: add token usage once Anthropic API supports it
       };
     } catch (err) {
       return {

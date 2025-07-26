@@ -4,6 +4,7 @@ import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { normalizeFinishReason } from '../../util/finishReason';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { AnthropicGenericProvider } from './generic';
@@ -149,7 +150,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,
-            tokenUsage: {},
+            tokenUsage: createEmptyTokenUsage(),
           };
         }
       }

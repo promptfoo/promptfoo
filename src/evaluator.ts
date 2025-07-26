@@ -436,7 +436,7 @@ export async function runEval({
     const startTime = Date.now();
     let response: ProviderResponse = {
       output: '',
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
       cost: 0,
       cached: false,
     };
