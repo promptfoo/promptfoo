@@ -146,27 +146,3 @@ Your worst prompts, your best questions, and a healthy skepticism about AI secur
 ---
 
 P.S. Can't attend? [Download our LLM Security Checklist](https://promptfoo.dev/docs/red-team/quickstart) and start breaking things from home. No plane ticket required.
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Event",
-  "name": "Promptfoo at Black Hat USA 2025",
-  "startDate": "2025-08-05T09:00",
-  "endDate": "2025-08-07T18:00",
-  "location": {
-    "@type": "Place",
-    "name": "Mandalay Bay Convention Center",
-    "address": {
-      "@type": "PostalAddress",
-      "addressLocality": "Las Vegas",
-      "addressRegion": "NV"
-    }
-  },
-  "organizer": {
-    "@type": "Organization",
-    "name": "Promptfoo",
-    "url": "https://promptfoo.dev"
-  }
-}
-</script>
