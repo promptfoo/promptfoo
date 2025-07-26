@@ -7,7 +7,7 @@ interface BlogPostCardProps {
   post: PropBlogPostContent;
 }
 
-export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
+export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactElement {
   const { metadata } = post;
   const { title, date, permalink, tags, description } = metadata;
   const author = metadata.authors[0];

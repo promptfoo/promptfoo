@@ -10,7 +10,7 @@ import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './blackhat-2025.module.css';
 
-export default function BlackHat2025(): JSX.Element {
+export default function BlackHat2025(): React.ReactElement {
   useEffect(() => {
     // Force dark theme for this page
     document.documentElement.setAttribute('data-theme', 'dark');
