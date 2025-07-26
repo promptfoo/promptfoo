@@ -80,7 +80,7 @@ Find the booth with a red panda mascot and the best security swag.
 
 - Live demos of [agent security testing](/blog/agent-security)
 - Limited-run "My LLM Got Pwned at DEF CON" shirts
-- Stickers that make your laptop *feel* 73% safer
+- Stickers that make your laptop _feel_ 73% safer
 
 ## Promptfoo Pool-Side Party
 
@@ -142,5 +142,3 @@ No. Just bring your toughest prompts and questions.
 Curiosity, challenging prompts, and an open mind about AI risk.
 
 </details>
-
-
