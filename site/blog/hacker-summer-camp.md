@@ -25,7 +25,7 @@ We're packing up our prompts and heading to hacker summer camp. Join us at Black
 
 ## Black Hat AI Summit: Tuesday, August 5
 
-Join us at the Black Hat pre-conference summit to watch us auto-red-team GPT-4o in under 30 seconds. You'll see how Fortune 500 companies catch LLM vulnerabilities before production.
+Join us at the Black Hat pre-conference summit to watch us auto-red-team GPT-4.1 in under 30 seconds. You'll see how Fortune 500 companies catch LLM vulnerabilities before production.
 
 - **When**: Tuesday, August 5, 2025, 9:00 AM - 5:00 PM
 - **Where**: Mandalay Bay Convention Center, Las Vegas
@@ -64,7 +64,7 @@ Our security researchers will demonstrate real attacks that keep CISOs awake at 
 - Prompt injection techniques that actually work
 - Jailbreak methods beyond "ignore previous instructions"
 - Data exfiltration through model outputs
-- Cross-model fuzzing across GPT-4o, Claude 3.5, Llama 3.1
+- Cross-model fuzzing across GPT-4.1, Claude 4, Llama 3.3
 
 **Schedule**:
 
