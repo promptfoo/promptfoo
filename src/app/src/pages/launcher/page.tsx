@@ -1,22 +1,20 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import logoPanda from '@app/assets/logo-panda.svg';
+import { useEffect, useState } from 'react';
+
+import logoPanda from '@app/assets/logo.svg';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
-import { Terminal as TerminalIcon } from '@mui/icons-material';
 import LanguageIcon from '@mui/icons-material/Language';
-import {
-  Box,
-  Typography,
-  Paper,
-  Link,
-  CircularProgress,
-  useMediaQuery,
-  styled,
-  ThemeProvider,
-  createTheme,
-  Alert,
-  Collapse,
-} from '@mui/material';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
+import Link from '@mui/material/Link';
+import Paper from '@mui/material/Paper';
+import { createTheme, styled, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useNavigate } from 'react-router-dom';
 import DarkModeToggle from '../../components/DarkMode';
 import { useApiHealth } from '../../hooks/useApiHealth';
 
@@ -99,6 +97,7 @@ export default function LauncherPage() {
   const isLargeScreen = useMediaQuery('(min-width:1200px)');
   const { status: healthStatus, checkHealth } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
+  usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 
   useEffect(() => {
     if (!apiBaseUrl) {

@@ -47,7 +47,7 @@ Remember that you are assisting with healthcare matters. Be professional, accura
 async function callOpenAI(messages, tools) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-mini',
       messages,
       tools,
       tool_choice: 'auto',

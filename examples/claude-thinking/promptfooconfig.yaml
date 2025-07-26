@@ -1,24 +1,21 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Claude Thinking Example'
-
 prompts:
-  - '{{question}}'
-
+  - file://prompts.txt
 providers:
-  - id: anthropic:claude-3-7-sonnet-20250219
+  - id: anthropic:claude-sonnet-4-20250514
     config:
-      max_tokens: 8192 # Must be greater than budget_tokens
       thinking:
         type: 'enabled'
-        budget_tokens: 4096
-  # AWS Bedrock (requires model access to be enabled in your AWS account)
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+        budget_tokens: 16000
+      max_tokens: 32000
+  # For comparison with AWS Bedrock (optional)
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
     config:
-      max_tokens: 8192 # Must be greater than budget_tokens
       thinking:
         type: 'enabled'
-        budget_tokens: 4096
-      region: us-west-2
+        budget_tokens: 16000
+      max_tokens: 32000
 
 tests:
   - vars:

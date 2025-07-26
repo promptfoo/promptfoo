@@ -1,5 +1,6 @@
 import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
+import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 
 export function getRemoteGenerationUrl(): string {
@@ -22,10 +23,9 @@ export function neverGenerateRemote(): boolean {
 }
 
 /**
- * Gets the URL for checking remote API health based on configuration.
- * @returns The health check URL, or null if remote generation is disabled.
+ * Builds a remote URL with a substituted pathname, honoring env vars / cloud config.
  */
-export function getRemoteHealthUrl(): string | null {
+function buildRemoteUrl(pathname: string, fallback: string): string | null {
   if (neverGenerateRemote()) {
     return null;
   }
@@ -34,24 +34,50 @@ export function getRemoteHealthUrl(): string | null {
   if (envUrl) {
     try {
       const url = new URL(envUrl);
-      url.pathname = '/health';
+      url.pathname = pathname;
       return url.toString();
     } catch {
-      return 'https://api.promptfoo.app/health';
+      return fallback;
     }
   }
 
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
-    return `${cloudConfig.getApiHost()}/health`;
+    return `${cloudConfig.getApiHost()}${pathname}`;
   }
 
-  return 'https://api.promptfoo.app/health';
+  return fallback;
+}
+
+/**
+ * Gets the URL for checking remote API health based on configuration.
+ * @returns The health check URL, or null if remote generation is disabled.
+ */
+export function getRemoteHealthUrl(): string | null {
+  return buildRemoteUrl('/health', 'https://api.promptfoo.app/health');
+}
+
+/**
+ * Gets the URL for checking remote API version based on configuration.
+ * @returns The version check URL, or null if remote generation is disabled.
+ */
+export function getRemoteVersionUrl(): string | null {
+  return buildRemoteUrl('/version', 'https://api.promptfoo.app/version');
 }
 
 export function shouldGenerateRemote(): boolean {
+  // If remote generation is explicitly disabled, respect that even for cloud users
+  if (neverGenerateRemote()) {
+    return false;
+  }
+
+  // If logged into cloud, prefer remote generation
+  if (isLoggedIntoCloud()) {
+    return true;
+  }
+
   // Generate remotely when the user has not disabled it and does not have an OpenAI key.
-  return (!neverGenerateRemote() && !getEnvString('OPENAI_API_KEY')) || (cliState.remote ?? false);
+  return !getEnvString('OPENAI_API_KEY') || (cliState.remote ?? false);
 }
 
 export function getRemoteGenerationUrlForUnaligned(): string {

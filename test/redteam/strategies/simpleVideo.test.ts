@@ -4,13 +4,15 @@
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
 import fs from 'fs';
+
 import logger from '../../../src/logger';
 import {
   addVideoToBase64,
-  getFallbackBase64,
   createProgressBar,
+  getFallbackBase64,
   writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
+
 import type { TestCase } from '../../../src/types';
 
 // Mock for dummy video data
@@ -144,6 +146,7 @@ describe('simpleVideo strategy', () => {
       expect(result[0].vars?.prompt).toBe(DUMMY_VIDEO_BASE64);
       expect(result[0].vars?.video_text).toBe('test prompt');
       expect(result[0].metadata?.strategyId).toBe('video');
+      expect(result[0].metadata?.originalText).toBe('test prompt');
       expect(result[0].assert?.[0].metric).toBe('test/Video-Encoded');
 
       // Verify the mock generator was called

@@ -26,12 +26,13 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
+| `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Latest Claude 4 Sonnet model     |
 | `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Latest Claude 3.7 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model |
 | `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    |
 | `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus model              |
-| `anthropic:messages:claude-3-sonnet-20240229`                              | Claude 3 Sonnet model            |
 | `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku model             |
 
 ### Cross-Platform Model Availability
@@ -40,11 +41,12 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | AWS Bedrock ([documentation](/docs/providers/aws-bedrock)) | GCP Vertex AI ([documentation](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | anthropic.claude-opus-4-20250514-v1:0                      | claude-opus-4@20250514                                  |
+| Claude 4 Sonnet   | claude-sonnet-4-20250514 (claude-sonnet-4-latest)     | anthropic.claude-sonnet-4-20250514-v1:0                    | claude-sonnet-4@20250514                                |
 | Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | anthropic.claude-3-7-sonnet-20250219-v1:0                  | claude-3-7-sonnet@20250219                              |
 | Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0                  | claude-3-5-sonnet-v2@20241022                           |
 | Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | anthropic.claude-3-5-haiku-20241022-v1:0                   | claude-3-5-haiku@20241022                               |
 | Claude 3 Opus     | claude-3-opus-20240229 (claude-3-opus-latest)         | anthropic.claude-3-opus-20240229-v1:0                      | claude-3-opus@20240229                                  |
-| Claude 3 Sonnet   | claude-3-sonnet-20240229                              | anthropic.claude-3-sonnet-20240229-v1:0                    | claude-3-sonnet@20240229                                |
 | Claude 3 Haiku    | claude-3-haiku-20240307                               | anthropic.claude-3-haiku-20240307-v1:0                     | claude-3-haiku@20240307                                 |
 
 ### Supported Parameters
@@ -103,7 +105,7 @@ Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - id: anthropic:messages:claude-sonnet-4-20250514
     config:
       temperature: 0.0
       max_tokens: 512
@@ -119,7 +121,7 @@ The Anthropic provider supports tool use (or function calling). Here's an exampl
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - id: anthropic:messages:claude-sonnet-4-20250514
     config:
       tools:
         - name: get_weather
@@ -156,11 +158,11 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 Claude supports prompt caching to optimize API usage and reduce costs for repetitive tasks. This feature caches portions of your prompts to avoid reprocessing identical content in subsequent requests.
 
-Supported on all Claude 3 and 3.5 models. Basic example:
+Supported on all Claude 3, 3.5, and 4 models. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - id: anthropic:messages:claude-sonnet-4-20250514
 prompts:
   - file://prompts.yaml
 ```
@@ -195,7 +197,7 @@ Claude can provide detailed citations when answering questions about documents. 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - id: anthropic:messages:claude-sonnet-4-20250514
 prompts:
   - file://prompts.yaml
 ```
@@ -222,7 +224,7 @@ Claude supports an extended thinking capability that allows you to see the model
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:messages:claude-sonnet-4-20250514
     config:
       max_tokens: 20000
       thinking:
@@ -281,7 +283,7 @@ By default, thinking content is included in the response output. You can control
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:messages:claude-sonnet-4-20250514
     config:
       thinking:
         type: 'enabled'
@@ -312,20 +314,21 @@ Sometimes Claude's internal reasoning may be flagged by safety systems. When thi
 
 Redacted thinking blocks are automatically decrypted when passed back to the API, allowing Claude to maintain context without compromising safety guardrails.
 
-#### Extended Output with Thinking (Beta)
+#### Extended Output with Thinking
 
-Claude 3.7 Sonnet supports up to 128K output tokens when using the `output-128k-2025-02-19` beta feature. To enable this:
+Claude 4 models provide enhanced output capabilities and extended thinking support:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:messages:claude-sonnet-4-20250514
     config:
-      max_tokens: 128000
+      max_tokens: 64000 # Claude 4 Sonnet supports up to 64K output tokens
       thinking:
         type: 'enabled'
         budget_tokens: 32000
-      beta: ['output-128k-2025-02-19']
 ```
+
+Note: The `output-128k-2025-02-19` beta feature is specific to Claude 3.7 Sonnet and is not needed for Claude 4 models, which have improved output capabilities built-in.
 
 When using extended output:
 
@@ -350,7 +353,7 @@ You can override the grading provider in several ways:
 ```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
-    provider: anthropic:messages:claude-3-5-sonnet-20241022
+    provider: anthropic:messages:claude-sonnet-4-20250514
 ```
 
 2. For individual assertions:
@@ -360,7 +363,7 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: anthropic:messages:claude-3-5-sonnet-20241022
+      id: anthropic:messages:claude-sonnet-4-20250514
       config:
         temperature: 0.0
 ```
@@ -373,7 +376,7 @@ tests:
       question: What is the capital of France?
     options:
       provider:
-        id: anthropic:messages:claude-3-5-sonnet-20241022
+        id: anthropic:messages:claude-sonnet-4-20250514
     assert:
       - type: llm-rubric
         value: Answer should mention Paris

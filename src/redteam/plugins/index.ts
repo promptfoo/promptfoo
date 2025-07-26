@@ -4,10 +4,9 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
-import type { HarmPlugin } from '../constants';
 import {
+  BIAS_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
@@ -18,7 +17,7 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
-import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
+import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -45,9 +44,12 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
-import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
+import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
+
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;
@@ -67,7 +69,7 @@ async function fetchRemoteTestCases(
   purpose: string,
   injectVar: string,
   n: number,
-  config?: PluginConfig,
+  config: PluginConfig,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -121,7 +123,7 @@ function createPluginFactory<T extends PluginConfig>(
         logger.debug(`Using local redteam generation for ${key}`);
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
-      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -170,8 +172,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(XSTestPlugin, 'xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
-  createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
+  createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
+  createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
@@ -216,6 +219,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.purpose,
         params.injectVar,
         params.n,
+        params.config ?? {},
       );
       return testCases.map((testCase) => ({
         ...testCase,
@@ -237,6 +241,30 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   },
 }));
 
+const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
+  key: category,
+  action: async (params: PluginActionParams) => {
+    if (neverGenerateRemote()) {
+      throw new Error(`${category} plugin requires remote generation to be enabled`);
+    }
+
+    const testCases = await fetchRemoteTestCases(
+      category,
+      params.purpose,
+      params.injectVar,
+      params.n,
+      params.config ?? {},
+    );
+    return testCases.map((testCase) => ({
+      ...testCase,
+      metadata: {
+        ...testCase.metadata,
+        pluginId: getShortPluginId(category),
+      },
+    }));
+  },
+}));
+
 function createRemotePlugin<T extends PluginConfig>(
   key: string,
   validate?: (config: T) => void,
@@ -248,7 +276,13 @@ function createRemotePlugin<T extends PluginConfig>(
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
-      const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases: TestCase[] = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        config ?? {},
+      );
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -268,7 +302,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
-  MEMORY_POISONING_PLUGIN_ID,
+  'agentic:memory-poisoning',
   'ascii-smuggling',
   'bfla',
   'bola',
@@ -277,13 +311,24 @@ const remotePlugins: PluginFactory[] = [
   'harmful:misinformation-disinformation',
   'harmful:specialized-advice',
   'hijacking',
+  'mcp',
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:prioritization-error',
+  'medical:sycophancy',
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
+  'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
   'reasoning-dos',
   'religion',
   'ssrf',
   'system-prompt-override',
-  'mcp',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
@@ -297,4 +342,9 @@ remotePlugins.push(
   ),
 );
 
-export const Plugins: PluginFactory[] = [...pluginFactories, ...piiPlugins, ...remotePlugins];
+export const Plugins: PluginFactory[] = [
+  ...pluginFactories,
+  ...piiPlugins,
+  ...biasPlugins,
+  ...remotePlugins,
+];

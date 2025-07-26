@@ -1,18 +1,20 @@
+import { URL } from 'url';
+
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { URL } from 'url';
-import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
-import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
+import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
+import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
-import type Eval from './models/eval';
-import type EvalResult from './models/evalResult';
 import { makeRequest as makeCloudRequest } from './util/cloud';
 
-export interface ShareDomainResult {
+import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
+
+interface ShareDomainResult {
   domain: string;
   isPublicShare: boolean;
 }
@@ -99,7 +101,9 @@ async function sendEvalRecord(
 
   const responseJson = await response.json();
   if (!responseJson.id) {
-    throw new Error(`Failed to send initial eval data to ${url}: ${response.statusText}`);
+    throw new Error(
+      `Failed to send initial eval data to ${url}: ${response.statusText} ${responseJson}`,
+    );
   }
 
   return responseJson.id;
@@ -185,6 +189,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   const progressBar = new cliProgress.SingleBar(
     {
       format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
+      gracefulExit: true,
     },
     cliProgress.Presets.shades_classic,
   );
@@ -216,7 +221,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
     return evalId;
   } catch (e) {
-    logger.error(`Upload failed: ${e}`);
+    logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
 
     if (evalId) {
       logger.info(`Upload failed, rolling back...`);
@@ -275,7 +280,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
   if (cloudConfig.isEnabled()) {
     const apiBaseUrl = cloudConfig.getApiHost();
     return {
-      url: `${apiBaseUrl}/results`,
+      url: `${apiBaseUrl}/api/v1/results`,
     };
   }
 
@@ -283,8 +288,8 @@ async function getApiConfig(evalRecord: Eval): Promise<{
     typeof evalRecord.config.sharing === 'object'
       ? evalRecord.config.sharing.apiBaseUrl || getShareApiBaseUrl()
       : getShareApiBaseUrl();
-
   return {
+    // This is going to a self-hosted instance so the api should match the Open Source API
     url: `${apiBaseUrl}/api/eval`,
   };
 }
@@ -297,6 +302,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
  */
 export async function getShareableUrl(
   eval_: Eval,
+  remoteEvalId: string,
   showAuth: boolean = false,
 ): Promise<string | null> {
   const { domain } = determineShareDomain(eval_);
@@ -306,10 +312,10 @@ export async function getShareableUrl(
   const finalDomain = customDomain || domain;
 
   const fullUrl = cloudConfig.isEnabled()
-    ? `${finalDomain}/eval/${eval_.id}`
+    ? `${finalDomain}/eval/${remoteEvalId}`
     : getShareViewBaseUrl() === getDefaultShareViewBaseUrl() && !customDomain
-      ? `${finalDomain}/eval/${eval_.id}`
-      : `${finalDomain}/eval/?evalId=${eval_.id}`;
+      ? `${finalDomain}/eval/${remoteEvalId}`
+      : `${finalDomain}/eval/?evalId=${remoteEvalId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
@@ -343,13 +349,7 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  // Note: Eval ID will differ on self-hosted instance because self-hosted doesn't implement
-  // sharing idempotency.
-  if (evalId !== evalRecord.id) {
-    evalRecord.id = evalId;
-  }
-
-  return getShareableUrl(evalRecord, showAuth);
+  return getShareableUrl(evalRecord, evalId, showAuth);
 }
 
 /**

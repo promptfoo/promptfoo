@@ -1,11 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Code generation with sandboxed verification
+description: 'Generate code with Claude in a Docker sandbox'
 
-prompts: code_generation_prompt.txt
+prompts:
+  - file://code_generation_prompt.txt
 
 providers:
-  - openai:gpt-4o
-  - anthropic:claude-3-7-sonnet-20250219
+  - anthropic:claude-sonnet-4-20250514
+  # - openai:gpt-4.1
 
 tests:
   - vars:

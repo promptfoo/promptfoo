@@ -1,6 +1,7 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Example showing how to override scoring functions
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 prompts:
   - 'Translate the following text to {{language}}: {{text}}'
@@ -19,7 +20,7 @@ defaultTest:
       metric: grammar
   options:
     provider:
-      text: openai:gpt-4o-mini
+      text: openai:gpt-4.1-mini
       embedding: openai:embedding:text-embedding-3-small
 
 tests:

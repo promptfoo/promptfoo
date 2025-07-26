@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: OpenAI MCP tool integration
+
+prompts:
+  - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
+  - 'Can you search for information about {{topic}} in the {{repo}} repository and summarize the key points?'
+  - 'What are the main features of {{repo}}? Please provide a detailed overview.'
+
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+          allowed_tools: ['ask_question', 'read_wiki_structure']
+      max_output_tokens: 1500
+      temperature: 0.3
+      instructions: 'You are a helpful research assistant. Use the available MCP tools to search for accurate information about repositories and provide comprehensive answers.'
+
+tests:
+  - vars:
+      repo: modelcontextprotocol/modelcontextprotocol
+      topic: transport protocols
+    assert:
+      # Validate MCP tool execution was successful
+      - type: is-valid-openai-tools-call
+        weight: 0.3
+      # Check for specific content in the response
+      - type: contains
+        value: 'transport'
+        weight: 0.2
+      - type: contains
+        value: 'protocol'
+        weight: 0.2
+      # Ensure MCP tool was actually used (check for tool result)
+      - type: contains
+        value: 'MCP Tool Result'
+        weight: 0.1
+      # Validate the quality of the response
+      - type: llm-rubric
+        value: 'The response mentions transport protocols or MCP specification details'
+        weight: 0.2
+
+  - vars:
+      repo: facebook/react
+      topic: hooks
+    assert:
+      # Comprehensive MCP validation
+      - type: is-valid-openai-tools-call
+      - type: contains
+        value: 'React'
+      # Verify MCP integration worked
+      - type: contains
+        value: 'MCP Tool Result'
+      - type: llm-rubric
+        value: 'The response explains React functionality or features'
+
+  - vars:
+      repo: microsoft/typescript
+      topic: type system
+    assert:
+      # Test both success and content validation
+      - type: is-valid-openai-tools-call
+      - type: contains-any
+        value: ['TypeScript', 'type']
+      # Ensure no MCP errors occurred
+      - type: not-contains
+        value: 'MCP Tool Error'
+      - type: llm-rubric
+        value: 'The response describes TypeScript features or type system'
+
+  - vars:
+      repo: openai/openai-python
+      topic: API client
+    assert:
+      # Multi-layered validation approach
+      - type: is-valid-openai-tools-call
+        metric: mcp_tool_success
+      - type: contains-any
+        value: ['API', 'client', 'Python']
+      # Check that MCP tools were discovered and used
+      - type: contains
+        value: 'MCP Tool Result'
+        metric: mcp_tool_used
+        weight: 0
+      - type: llm-rubric
+        value: 'The response describes the OpenAI Python client library or API features'

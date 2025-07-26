@@ -1,16 +1,25 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import Code from '@app/components/Code';
+import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
+import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -25,17 +34,19 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import type { RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
+import DefaultTestVariables from './DefaultTestVariables';
+import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
+import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job } from '@promptfoo/types';
 
 interface PolicyPlugin {
   id: 'policy';
@@ -55,16 +66,31 @@ export default function Review() {
   const { recordEvent } = useTelemetry();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
-  const [delay, setDelay] = React.useState('0');
+  const [maxConcurrency, setMaxConcurrency] = React.useState(
+    String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
+  );
+  const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
+  const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
+  const { checkEmailStatus } = useEmailVerification();
+  const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
+  const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
+
+  // Auto-expand advanced config if there are existing test variables
+  const hasTestVariables =
+    config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
+  const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -73,6 +99,11 @@ export default function Review() {
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
+
+  // Sync local maxConcurrency state with config
+  useEffect(() => {
+    setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
+  }, [config.maxConcurrency]);
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -169,6 +200,30 @@ export default function Review() {
 
   const handleRunWithSettings = async () => {
     setIsRunSettingsDialogOpen(false);
+
+    // Check email verification first
+    const emailResult = await checkEmailStatus();
+
+    if (!emailResult.canProceed) {
+      if (emailResult.needsEmail) {
+        setEmailVerificationMessage(
+          emailResult.status?.message ||
+            'Redteam evals require email verification. Please enter your work email:',
+        );
+        setIsEmailDialogOpen(true);
+        return;
+      } else if (emailResult.error) {
+        setEmailVerificationError(emailResult.error);
+        showToast(emailResult.error, 'error');
+        return;
+      }
+    }
+
+    // Show usage warning if present
+    if (emailResult.status?.status === 'show_usage_warning' && emailResult.status.message) {
+      showToast(emailResult.status.message, 'warning');
+    }
+
     const { hasRunningJob } = await checkForRunningJob();
 
     if (hasRunningJob) {
@@ -188,6 +243,22 @@ export default function Review() {
       targetType: config.target.id,
     });
 
+    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
+      // Track report export
+      recordEvent('webui_action', {
+        action: 'redteam_run_with_example',
+      });
+    }
+    // Track funnel milestone - evaluation started
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_evaluation_started',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
     setIsRunning(true);
     setLogs([]);
     setEvalId(null);
@@ -202,7 +273,8 @@ export default function Review() {
           config: getUnifiedConfig(config),
           force: forceRegeneration,
           verbose: debugMode,
-          delay,
+          maxConcurrency,
+          delayMs,
         }),
       });
 
@@ -223,6 +295,14 @@ export default function Review() {
 
           if (status.status === 'complete' && status.result && status.evalId) {
             setEvalId(status.evalId);
+
+            // Track funnel milestone - evaluation completed
+            recordEvent('funnel', {
+              type: 'redteam',
+              step: 'webui_evaluation_completed',
+              source: 'webui',
+              evalId: status.evalId,
+            });
           } else if (status.status === 'complete') {
             console.warn('No evaluation result was generated');
             showToast(
@@ -304,6 +384,7 @@ export default function Review() {
         onChange={handleDescriptionChange}
         variant="outlined"
         sx={{ mb: 4 }}
+        autoFocus
       />
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
@@ -515,16 +596,122 @@ export default function Review() {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                <Typography
+                  variant="body2"
+                  onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    padding: 1,
+                    borderRadius: 1,
+                    backgroundColor: 'background.paper',
+                    cursor: 'pointer',
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
+                >
                   {config.purpose || 'Not specified'}
                 </Typography>
+                {config.purpose && config.purpose.split('\n').length > 6 && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'primary.main',
+                      cursor: 'pointer',
+                      mt: 0.5,
+                      display: 'block',
+                    }}
+                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                  >
+                    {isPurposeExpanded ? 'Show less' : 'Show more'}
+                  </Typography>
+                )}
               </Grid>
+              {config.testGenerationInstructions && (
+                <Grid item xs={12} sm={12}>
+                  <Typography variant="subtitle2">Test Generation Instructions</Typography>
+                  <Typography
+                    variant="body2"
+                    onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                    sx={{
+                      whiteSpace: 'pre-wrap',
+                      padding: 1,
+                      borderRadius: 1,
+                      backgroundColor: 'background.paper',
+                      cursor: 'pointer',
+                      display: '-webkit-box',
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                      },
+                    }}
+                  >
+                    {config.testGenerationInstructions}
+                  </Typography>
+                  {config.testGenerationInstructions &&
+                    config.testGenerationInstructions.split('\n').length > 6 && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          mt: 0.5,
+                          display: 'block',
+                        }}
+                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                      >
+                        {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                      </Typography>
+                    )}
+                </Grid>
+              )}
             </Grid>
           </Paper>
         </Grid>
       </Grid>
 
       <Divider sx={{ my: 4 }} />
+
+      <Accordion
+        expanded={isAdvancedConfigExpanded}
+        onChange={(e, expanded) => {
+          setIsAdvancedConfigExpanded(expanded);
+        }}
+        sx={{
+          mb: 4,
+          '&:before': { display: 'none' },
+          boxShadow: theme.shadows[1],
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{
+            '& .MuiAccordionSummary-content': {
+              alignItems: 'center',
+              gap: 2,
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TuneIcon fontSize="small" color="action" />
+            <Typography variant="h6">Advanced Configuration</Typography>
+            <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ pt: 0 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Configure advanced options that apply to all test cases. These settings are for power
+            users who need fine-grained control over their red team evaluation.
+          </Typography>
+          <DefaultTestVariables />
+        </AccordionDetails>
+      </Accordion>
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
         Running Your Configuration
@@ -539,19 +726,7 @@ export default function Review() {
             Save your configuration and run it from the command line. Full control over the
             evaluation process, good for larger scans:
           </Typography>
-          <Box
-            component="pre"
-            sx={{
-              p: 2,
-              mb: 2,
-              backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-              borderRadius: 1,
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-            }}
-          >
-            promptfoo redteam run
-          </Box>
+          <Code>promptfoo redteam run</Code>
           <Stack spacing={2}>
             <Box>
               <Button
@@ -725,31 +900,97 @@ export default function Review() {
               />
             </Box>
             <Box>
-              <TextField
-                fullWidth
-                type="number"
-                label="Delay between API calls (ms)"
-                value={delay}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Ensure non-negative numbers only
-                  if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
-                    setDelay(value);
-                  }
-                }}
-                disabled={isRunning}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">ms</Typography>,
-                }}
-                helperText="Add a delay between API calls to avoid rate limits"
-              />
+              <Tooltip
+                title={
+                  Number(maxConcurrency) > 1
+                    ? 'Disabled because max concurrency is greater than 1'
+                    : ''
+                }
+                placement="top"
+              >
+                <span>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Delay between API calls (ms)"
+                    value={delayMs}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Ensure non-negative numbers only
+                      if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                        setDelayMs(value);
+                        // If delay is set, disable concurrency by setting it to 1
+                        if (Number(value) > 0) {
+                          setMaxConcurrency('1');
+                        }
+                      }
+                    }}
+                    disabled={isRunning || Number(maxConcurrency) > 1}
+                    inputProps={{ min: 0, step: 1 }}
+                    InputProps={{
+                      endAdornment: <Typography variant="caption">ms</Typography>,
+                    }}
+                    helperText="Add a delay between API calls to avoid rate limits"
+                  />
+                </span>
+              </Tooltip>
             </Box>
+            <Box>
+              <Tooltip
+                title={Number(delayMs) > 0 ? 'Disabled because delay is set' : ''}
+                placement="top"
+              >
+                <span>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Max concurrency"
+                    value={maxConcurrency}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Ensure non-negative numbers only
+                      if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                        setMaxConcurrency(value);
+                        updateConfig('maxConcurrency', Number(value));
+                        // If concurrency > 1, disable delay by setting it to 0
+                        if (Number(value) > 1) {
+                          setDelayMs('0');
+                        }
+                      }
+                    }}
+                    disabled={isRunning || Number(delayMs) > 0}
+                    inputProps={{ min: 1, step: 1 }}
+                    InputProps={{
+                      endAdornment: <Typography variant="caption">instances</Typography>,
+                    }}
+                    helperText="Maximum number of concurrent evaluations"
+                  />
+                </span>
+              </Tooltip>
+            </Box>
+
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
             </Box>
           </Stack>
         </DialogContent>
       </Dialog>
+
+      {emailVerificationError && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {emailVerificationError}
+        </Alert>
+      )}
+
+      <EmailVerificationDialog
+        open={isEmailDialogOpen}
+        onClose={() => setIsEmailDialogOpen(false)}
+        onSuccess={() => {
+          setIsEmailDialogOpen(false);
+          handleRunWithSettings();
+        }}
+        message={emailVerificationMessage}
+      />
     </Box>
   );
 }

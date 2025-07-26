@@ -1,6 +1,11 @@
 import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
+import invariant from '../../../util/invariant';
+import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
+import { getRemoteGenerationUrl } from '../../remoteGeneration';
+import { messagesToRedteamHistory } from '../shared';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -8,10 +13,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../../types/providers';
-import invariant from '../../../util/invariant';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
-import { getRemoteGenerationUrl } from '../../remoteGeneration';
-import { messagesToRedteamHistory } from '../shared';
 
 export class MemoryPoisoningProvider implements ApiProvider {
   constructor(readonly config: ProviderOptions) {}
@@ -42,7 +43,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
       const targetProvider: ApiProvider | undefined = context?.originalProvider;
       const purpose = context?.test?.metadata?.purpose;
       invariant(targetProvider, 'Expected originalProvider to be set');
-      invariant(context?.vars, 'Expected vars to be set');
+      invariant(context?.test, 'Expected test to be set');
       invariant(purpose, 'Expected purpose to be set');
 
       // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
@@ -62,8 +63,10 @@ export class MemoryPoisoningProvider implements ApiProvider {
         throw new Error(`Failed to generate scenario: ${scenarioRes.statusText}`);
       }
 
+      // Scope the scenario to the test case to ensure its passed to the grader:
       const scenario = await scenarioRes.json();
-      context.vars.scenario = scenario;
+      context!.test!.metadata ??= {};
+      context!.test!.metadata['scenario'] = scenario;
 
       // Send the memory message to the provider.
       const memoryResponse = await targetProvider.callApi(scenario.memory, context);

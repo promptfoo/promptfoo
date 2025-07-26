@@ -1,0 +1,26 @@
+{
+  "name": "simple-mcp-example",
+  "version": "1.0.0",
+  "description": "Example MCP server for testing the promptfoo MCP provider",
+  "type": "module",
+  "main": "example-server.js",
+  "scripts": {
+    "start": "node example-server.js",
+    "test": "promptfoo eval"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.1"
+  },
+  "devDependencies": {
+    "promptfoo": "*"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "promptfoo",
+    "security-testing",
+    "red-team"
+  ],
+  "author": "promptfoo",
+  "license": "MIT"
+}

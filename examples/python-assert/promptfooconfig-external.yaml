@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: External Python assertion files for output validation
+
+prompts:
+  - 'Tell me about {{topic}} in three words'
+providers:
+  - openai:gpt-4.1-mini
+
+tests:
+  - vars:
+      topic: yellow fruits
+    assert:
+      - type: python
+        # Optionally specify a function name. Defaults to `get_assert` if not provided.
+        value: file://assert.py:get_assert
+  - vars:
+      topic: fruits high in potassium
+    assert:
+      - type: python
+        value: file://assert.py
+  - vars:
+      topic: fruits that are long and skinny
+    assert:
+      - type: python
+        value: file://assert.py
+  - vars:
+      topic: fruits that smell bad
+    assert:
+      - type: python
+        value: file://assert.py
+  - vars:
+      topic: fruits that originated in south america such as passion fruit, banana, pineapple and guava
+    assert:
+      - type: python
+        value: file://assert_with_config.py
+        config:
+          fruitList:
+            - passion fruit
+            - pineapple
+            - guava
+            - papaya
+            - açaí
+            - strawberry
+      - type: python
+        value: file://assert_with_config.py
+        config:
+          fruitList:
+            - banana

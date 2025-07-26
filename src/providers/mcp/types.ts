@@ -12,7 +12,7 @@ export interface MCPServerConfig {
   headers?: Record<string, string>; // Additional HTTP headers for URL-based servers
 }
 
-export interface MCPServerAuth {
+interface MCPServerAuth {
   type: 'bearer' | 'api_key';
   token?: string;
   api_key?: string;
@@ -29,10 +29,16 @@ export interface MCPConfig {
   verbose?: boolean;
 }
 
+export interface MCPToolInputSchema {
+  properties?: Record<string, any>;
+  required?: string[];
+  [key: string]: any;
+}
+
 export interface MCPTool {
   name: string;
   description: string;
-  inputSchema: Record<string, unknown>;
+  inputSchema: MCPToolInputSchema;
 }
 
 export interface MCPToolResult {

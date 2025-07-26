@@ -1,3 +1,9 @@
+---
+title: RAG Document Exfiltration
+sidebar_label: RAG Document Exfiltration
+description: Test whether retrieval-augmented generation may leak entire documents and sensitive content
+---
+
 # RAG Document Exfiltration Plugin
 
 The RAG Document Exfiltration plugin is designed to identify vulnerabilities where an AI model might inadvertently expose entire documents during retrieval-augmented generation processes. RAGs often contain internal documents, and it is crucial to ensure these are not exposed without proper authorization, as they may contain sensitive or proprietary information.

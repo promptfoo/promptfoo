@@ -19,7 +19,6 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
    ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:
-
    - IAM roles on EC2
    - `~/.aws/credentials`
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
@@ -30,7 +29,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -72,7 +71,7 @@ Specify direct access keys in your config:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
     config:
       accessKeyId: 'YOUR_ACCESS_KEY_ID'
       secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
@@ -88,7 +87,7 @@ Use a profile from your AWS configuration:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
     config:
       profile: 'YOUR_SSO_PROFILE'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -100,7 +99,7 @@ Rely on the AWS default credential chain:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
     config:
       region: 'us-east-1' # Only region specified
 ```
@@ -137,7 +136,17 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20240229-v1:0
+  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -245,7 +254,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -534,13 +543,13 @@ This usually means you need to use the region-specific model ID. Update your pro
 ```yaml
 providers:
   # Instead of this:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
   # Use this:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0 # US region
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0 # US region
   # or
-  - id: bedrock:eu.anthropic.claude-3-5-sonnet-20241022-v2:0 # EU region
+  - id: bedrock:eu.anthropic.claude-sonnet-4-20250514-v1:0 # EU region
   # or
-  - id: bedrock:apac.anthropic.claude-3-5-sonnet-20241022-v2:0 # APAC region
+  - id: bedrock:apac.anthropic.claude-sonnet-4-20250514-v1:0 # APAC region
 ```
 
 Make sure to:
@@ -593,7 +602,7 @@ The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 For example:
 
 - `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
-- `bedrock:kb:eu.anthropic.claude-3-sonnet-20240229-v1:0` (EU region)
+- `bedrock:kb:eu.anthropic.claude-3-7-sonnet-20250219-v1:0` (EU region)
 
 Configuration options include:
 
@@ -652,10 +661,47 @@ When using the Knowledge Base provider, the response will include:
    - `retrievedReferences`: References to source documents that informed the response
    - `generatedResponsePart`: Parts of the response that correspond to specific citations
 
+### Context Evaluation with contextTransform
+
+The Knowledge Base provider supports extracting context from citations for evaluation using the `contextTransform` feature:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - vars:
+      query: 'What is promptfoo?'
+    assert:
+      # Extract context from all citations
+      - type: context-faithfulness
+        contextTransform: |
+          if (!metadata?.citations) return '';
+          return metadata.citations
+            .flatMap(citation => citation.retrievedReferences || [])
+            .map(ref => ref.content?.text || '')
+            .filter(text => text.length > 0)
+            .join('\n\n');
+        threshold: 0.7
+
+      # Extract context from first citation only
+      - type: context-relevance
+        contextTransform: 'metadata?.citations?.[0]?.retrievedReferences?.[0]?.content?.text || ""'
+        threshold: 0.6
+```
+
+This approach allows you to:
+
+- **Evaluate real retrieval**: Test against the actual context retrieved by your Knowledge Base
+- **Measure faithfulness**: Verify responses don't hallucinate beyond the retrieved content
+- **Assess relevance**: Check if retrieved context is relevant to the query
+- **Validate recall**: Ensure important information appears in retrieved context
+
+See the [Knowledge Base contextTransform example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for complete configuration examples.
+
 ## See Also
 
 - [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
-- [Configuration Reference](../configuration/reference.md) - Complete configuration options for promptfoo
+- [RAG Evaluation Guide](../guides/evaluate-rag.md) - Complete guide to evaluating RAG systems with context-based assertions
+- [Context-based Assertions](../configuration/expected-outputs/model-graded/index.md) - Documentation on context-faithfulness, context-relevance, and context-recall
+- [Configuration Reference](../configuration/reference.md) - Complete configuration options including contextTransform
 - [Command Line Interface](../usage/command-line.md) - How to use promptfoo from the command line
 - [Provider Options](../providers/index.md) - Overview of all supported providers
-- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Runnable examples of Bedrock integration, including Knowledge Base examples
+- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Runnable examples of Bedrock integration, including Knowledge Base and contextTransform examples

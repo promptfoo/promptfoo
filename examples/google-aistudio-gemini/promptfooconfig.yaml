@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google AI Studio Gemini model evaluation
 
 prompts:
   - |
@@ -6,32 +7,51 @@ prompts:
     Please solve this step by step, showing your reasoning process.
 
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-pro
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingBudget: 2048 # Enhanced thinking for complex reasoning
+
+  - id: google:gemini-2.5-flash
     config:
       generationConfig:
         temperature: 0.7
         maxOutputTokens: 2048
         thinkingConfig:
-          thinkingBudget: 1024
+          thinkingBudget: 1024 # Enhanced reasoning and thinking capabilities
+
+  - id: google:gemini-2.5-flash-lite
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        thinkingConfig:
+          thinkingBudget: 512 # Most cost-efficient and fastest 2.5 model
 
   - google:gemini-2.0-flash-exp
 
   - google:gemini-2.0-flash-thinking-exp
 
-  - id: google:gemini-2.5-pro-exp-03-25
-    config:
-      temperature: 0.7
-      maxOutputTokens: 2048
-
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       temperature: 0.7
       maxOutputTokens: 1024
       topP: 0.9
       topK: 40
 
+  # System instruction from file example
+  - id: google:gemini-2.5-pro
+    label: gemini-with-system-instruction-file
+    config:
+      temperature: 0.3
+      maxOutputTokens: 1024
+      systemInstruction: file://system-instruction.txt
+
   # Structured output example
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0
@@ -52,7 +72,7 @@ providers:
           required: ['answer', 'confidence', 'method_used']
 
   # Function calling example
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       tools:
         function_declarations:
@@ -75,7 +95,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: google:gemini-2.0-flash-exp
+        id: google:gemini-2.5-flash
       embedding:
         id: google:embedding:text-embedding-004
 tests:

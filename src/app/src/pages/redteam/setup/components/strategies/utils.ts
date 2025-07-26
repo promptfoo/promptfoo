@@ -1,18 +1,21 @@
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
+
 import type { Config } from '../../types';
 
 export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
 }
 
-export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
+const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   audio: 1,
   base64: 1,
   basic: 1,
   'best-of-n': 1,
+  camelcase: 1,
   citation: 1,
   crescendo: 10,
+  custom: 10,
   default: 1,
   gcg: 1,
   goat: 5,
@@ -25,9 +28,11 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:tree': 150,
   leetspeak: 1,
   'math-prompt': 1,
+  'mischievous-user': 5,
   morse: 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
   'other-encodings': 1,
+  emoji: 1,
   pandamonium: 5,
   piglatin: 1,
   'prompt-injection': 1,

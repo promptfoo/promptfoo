@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import InfoIcon from '@mui/icons-material/Info';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -18,6 +19,8 @@ import RadioGroup from '@mui/material/RadioGroup';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { Plugin } from '@promptfoo/redteam/constants';
+import type { PluginConfig } from '@promptfoo/redteam/types';
+
 import type { LocalPluginConfig } from '../types';
 
 // Dataset information for better UX
@@ -93,7 +96,9 @@ export default function PluginConfigDialog({
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
-      const currentArray = Array.isArray(prev[key]) ? [...(prev[key] as string[])] : [''];
+      const currentArray = Array.isArray(prev[key as keyof PluginConfig])
+        ? [...(prev[key as keyof PluginConfig] as string[])]
+        : [''];
       currentArray[index] = value;
       return {
         ...prev,
@@ -105,13 +110,20 @@ export default function PluginConfigDialog({
   const addArrayItem = (key: string) => {
     setLocalConfig((prev) => ({
       ...prev,
-      [key]: [...(Array.isArray(prev[key]) ? (prev[key] as string[]) : []), ''],
+      [key]: [
+        ...(Array.isArray(prev[key as keyof PluginConfig])
+          ? (prev[key as keyof PluginConfig] as string[])
+          : []),
+        '',
+      ],
     }));
   };
 
   const removeArrayItem = (key: string, index: number) => {
     setLocalConfig((prev) => {
-      const currentArray = Array.isArray(prev[key]) ? [...(prev[key] as string[])] : [''];
+      const currentArray = Array.isArray(prev[key as keyof PluginConfig])
+        ? [...(prev[key as keyof PluginConfig] as string[])]
+        : [''];
       currentArray.splice(index, 1);
       if (currentArray.length === 0) {
         currentArray.push('');

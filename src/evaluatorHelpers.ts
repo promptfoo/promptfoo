@@ -1,6 +1,7 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as path from 'path';
+
+import yaml from 'js-yaml';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -11,12 +12,24 @@ import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
-import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
+import {
+  type ApiProvider,
+  type CompletedPrompt,
+  type EvaluateResult,
+  type NunjucksFilterMap,
+  type Prompt,
+  type TestCase,
+  type TestSuite,
+} from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
+import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+
+import type EvalResult from './models/evalResult';
+
+type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
@@ -79,6 +92,44 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   return prompt;
 }
 
+/**
+ * Collects metadata about file variables in the vars object.
+ * @param vars The variables object containing potential file references
+ * @returns An object mapping variable names to their file metadata
+ */
+export function collectFileMetadata(vars: Record<string, string | object>): FileMetadata {
+  const fileMetadata: FileMetadata = {};
+
+  for (const [varName, value] of Object.entries(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
+      const fileExtension = filePath.split('.').pop() || '';
+
+      if (isImageFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value, // Keep the original file:// notation
+          type: 'image',
+          format: fileExtension,
+        };
+      } else if (isVideoFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value,
+          type: 'video',
+          format: fileExtension,
+        };
+      } else if (isAudioFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value,
+          type: 'audio',
+          format: fileExtension,
+        };
+      }
+    }
+  }
+
+  return fileMetadata;
+}
+
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
@@ -135,7 +186,7 @@ export async function renderPrompt(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: 'extract_text_from_pdf',
         });
         vars[varName] = await extractTextFromPDF(filePath);
@@ -149,7 +200,7 @@ export async function renderPrompt(
             ? 'video'
             : 'audio';
 
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: `load_${fileType}_as_base64`,
         });
 
@@ -227,17 +278,59 @@ export async function renderPrompt(
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
-    // we default to "text" type.
-    const [helper, version, promptType = 'text'] = langfusePrompt.split(':');
+    let helper: string;
+    let version: string | undefined;
+    let label: string | undefined;
+    let promptType: 'text' | 'chat' | undefined = 'text';
+
+    // More robust parsing that handles @ in prompt IDs
+    // Look for the last @ that's followed by a label pattern
+    const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
+    const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
+
+    if (labelMatch) {
+      // Label-based syntax: prompt-id@label or prompt-id@label:type
+      helper = labelMatch[1];
+      label = labelMatch[2];
+      if (labelMatch[3]) {
+        promptType = labelMatch[3] as 'text' | 'chat';
+      }
+    } else if (versionMatch) {
+      // Version/label syntax: prompt-id:version-or-label or prompt-id:version-or-label:type
+      helper = versionMatch[1];
+      const versionOrLabel = versionMatch[2];
+
+      // Auto-detect if it's a version (numeric) or label (string)
+      if (/^\d+$/.test(versionOrLabel)) {
+        // It's a numeric version
+        version = versionOrLabel;
+      } else {
+        // It's a string, treat as label
+        label = versionOrLabel;
+        if (label === 'latest') {
+          // 'latest' is always treated as a label, even though it could be ambiguous
+          version = undefined;
+        }
+      }
+
+      if (versionMatch[3]) {
+        promptType = versionMatch[3] as 'text' | 'chat';
+      }
+    } else {
+      // Simple prompt-id only
+      helper = langfusePrompt;
+    }
+
     if (promptType !== 'text' && promptType !== 'chat') {
-      throw new Error('Unknown promptfoo prompt type');
+      throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
     }
 
     const langfuseResult = await getLangfusePrompt(
       helper,
       vars,
       promptType,
-      version === 'latest' ? undefined : Number(version),
+      version === undefined || version === 'latest' ? undefined : Number(version),
+      label,
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
@@ -284,29 +377,99 @@ export async function renderPrompt(
   }
 }
 
+// ================================
+// Extension Hooks
+// ================================
+
+type BeforeAllExtensionHookContext = {
+  suite: TestSuite;
+};
+
+type BeforeEachExtensionHookContext = {
+  test: TestCase;
+};
+
+type AfterEachExtensionHookContext = {
+  test: TestCase;
+  result: EvaluateResult;
+};
+
+type AfterAllExtensionHookContext = {
+  suite: TestSuite;
+  results: EvalResult[];
+  prompts: CompletedPrompt[];
+};
+
+// Maps hook names to their context types.
+type HookContextMap = {
+  beforeAll: BeforeAllExtensionHookContext;
+  beforeEach: BeforeEachExtensionHookContext;
+  afterEach: AfterEachExtensionHookContext;
+  afterAll: AfterAllExtensionHookContext;
+};
+
 /**
- * Runs extension hooks for the given hook name and context.
+ * Runs extension hooks for the given hook name and context. The hook will be called with the context object,
+ * and can update the context object to persist data into provider calls.
  * @param extensions - An array of extension paths, or null.
  * @param hookName - The name of the hook to run.
- * @param context - The context object to pass to the hook.
- * @returns A Promise that resolves when all hooks have been run.
+ * @param context - The context object to pass to the hook. T depends on the type of the hook.
+ * @returns A Promise that resolves with one of the following:
+ *  - The original context object, if no extensions are provided OR if the returned context is not valid.
+ *  - The updated context object, if the extension hook returns a valid context object. The updated context,
+ *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
-export async function runExtensionHook(
+export async function runExtensionHook<HookName extends keyof HookContextMap>(
   extensions: string[] | null | undefined,
-  hookName: string,
-  context: any,
-) {
+  hookName: HookName,
+  context: HookContextMap[HookName],
+): Promise<HookContextMap[HookName]> {
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
-    return;
+    return context;
   }
 
-  telemetry.recordOnce('feature_used', {
+  telemetry.record('feature_used', {
     feature: 'extension_hook',
   });
+
+  let updatedContext: HookContextMap[HookName] = { ...context };
 
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-    await transform(extension, hookName, context, false);
+
+    const extensionReturnValue = await transform(extension, hookName, context, false);
+
+    // If the extension hook returns a value, update the context with the value's mutable fields.
+    // This also provides backwards compatibility for extension hooks that do not return a value.
+    if (extensionReturnValue) {
+      switch (hookName) {
+        case 'beforeAll': {
+          (updatedContext as BeforeAllExtensionHookContext) = {
+            suite: {
+              ...(context as BeforeAllExtensionHookContext).suite,
+              // Mutable properties:
+              prompts: extensionReturnValue.suite.prompts,
+              providerPromptMap: extensionReturnValue.suite.providerPromptMap,
+              tests: extensionReturnValue.suite.tests,
+              scenarios: extensionReturnValue.suite.scenarios,
+              defaultTest: extensionReturnValue.suite.defaultTest,
+              nunjucksFilters: extensionReturnValue.suite.nunjucksFilters,
+              derivedMetrics: extensionReturnValue.suite.derivedMetrics,
+              redteam: extensionReturnValue.suite.redteam,
+            },
+          };
+          break;
+        }
+        case 'beforeEach': {
+          (updatedContext as BeforeEachExtensionHookContext) = {
+            test: extensionReturnValue.test,
+          };
+          break;
+        }
+      }
+    }
   }
+
+  return updatedContext;
 }

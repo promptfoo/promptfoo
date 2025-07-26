@@ -1,15 +1,17 @@
 import { Severity } from '../../src/redteam/constants';
+
 import type {
-  RedteamPluginObject,
-  RedteamPlugin,
-  RedteamStrategyObject,
+  BaseRedteamMetadata,
   PluginActionParams,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
-  SynthesizeOptions,
+  RedteamGenerateOptions,
+  RedteamPlugin,
+  RedteamPluginObject,
   RedteamRunOptions,
+  RedteamStrategyObject,
   SavedRedteamConfig,
-  BaseRedteamMetadata,
+  SynthesizeOptions,
 } from '../../src/redteam/types';
 import type { ApiProvider } from '../../src/types/providers';
 
@@ -108,13 +110,9 @@ describe('redteam types', () => {
   });
 
   it('should create valid RedteamFileConfig', () => {
-    // Use a valid Plugin key for severity, e.g. 'agentic' which is part of AgenticPlugin
-    // To avoid TS error, use a type assertion for the key
     const pluginKey = 'agentic' as keyof NonNullable<RedteamFileConfig['severity']>;
     const config: RedteamFileConfig = {
       entities: ['entity1', 'entity2'],
-      // Use a known Plugin type string for the key
-      // For this repo, 'agentic' is a valid key (from AgenticPlugin in constants.ts)
       severity: {
         [pluginKey]: Severity.High,
       } as Record<string, Severity>,
@@ -177,15 +175,45 @@ describe('redteam types', () => {
       plugins: ['plugin1', { id: 'plugin2' }],
       strategies: ['strategy1'],
       entities: ['entity1'],
+      maxConcurrency: 5,
       applicationDefinition: {
         purpose: 'test purpose',
+        features: 'key app features',
+        hasAccessTo: 'allowed data and systems',
+        doesNotHaveAccessTo: 'restricted data',
+        userTypes: 'admin, regular users',
+        securityRequirements: 'security controls',
+        exampleIdentifiers: 'sample IDs',
+        industry: 'healthcare',
+        sensitiveDataTypes: 'PHI, PII',
+        criticalActions: 'data deletion',
+        forbiddenTopics: 'restricted topics',
+        competitors: 'competitor list',
         systemPrompt: 'test prompt',
+        redteamUser: 'test user',
+        accessToData: 'accessible data',
+        forbiddenData: 'restricted data',
+        accessToActions: 'allowed actions',
+        forbiddenActions: 'restricted actions',
+        connectedSystems: 'integrated systems',
       },
     };
 
     expect(config.description).toBe('Test config');
     expect(config.prompts).toHaveLength(2);
     expect(config.plugins).toHaveLength(2);
+    expect(config.maxConcurrency).toBe(5);
+    expect(config.applicationDefinition.features).toBe('key app features');
+    expect(config.applicationDefinition.hasAccessTo).toBe('allowed data and systems');
+    expect(config.applicationDefinition.doesNotHaveAccessTo).toBe('restricted data');
+    expect(config.applicationDefinition.userTypes).toBe('admin, regular users');
+    expect(config.applicationDefinition.securityRequirements).toBe('security controls');
+    expect(config.applicationDefinition.exampleIdentifiers).toBe('sample IDs');
+    expect(config.applicationDefinition.industry).toBe('healthcare');
+    expect(config.applicationDefinition.sensitiveDataTypes).toBe('PHI, PII');
+    expect(config.applicationDefinition.criticalActions).toBe('data deletion');
+    expect(config.applicationDefinition.forbiddenTopics).toBe('restricted topics');
+    expect(config.applicationDefinition.competitors).toBe('competitor list');
   });
 
   it('should create valid BaseRedteamMetadata', () => {
@@ -199,5 +227,34 @@ describe('redteam types', () => {
     expect(metadata.redteamFinalPrompt).toBe('final prompt');
     expect(metadata.messages).toHaveLength(1);
     expect(metadata.stopReason).toBe('complete');
+  });
+
+  it('should create valid RedteamGenerateOptions', () => {
+    const emptyOptions: RedteamGenerateOptions = {};
+    const partialOptions: RedteamGenerateOptions = {
+      cache: true,
+      plugins: [
+        {
+          id: 'test-plugin',
+          numTests: 5,
+        },
+      ],
+      maxConcurrency: 3,
+      injectVar: 'test_var',
+      language: 'en',
+      purpose: 'test purpose',
+      remote: false,
+      sharing: true,
+      testGenerationInstructions: 'test instructions',
+    };
+
+    expect(emptyOptions).toBeDefined();
+    expect(partialOptions.cache).toBe(true);
+    expect(partialOptions.plugins?.length).toBe(1);
+    expect(partialOptions.maxConcurrency).toBe(3);
+    expect(partialOptions.language).toBe('en');
+    expect(partialOptions.remote).toBe(false);
+    expect(partialOptions.sharing).toBe(true);
+    expect(partialOptions.testGenerationInstructions).toBe('test instructions');
   });
 });

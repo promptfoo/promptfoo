@@ -17,7 +17,6 @@ jest.mock('../../../src/util/config/manage', () => ({
 }));
 jest.mock('../../../src/telemetry', () => ({
   record: jest.fn(),
-  send: jest.fn(),
 }));
 
 describe('redteamSetupCommand', () => {
@@ -47,11 +46,7 @@ describe('redteamSetupCommand', () => {
     expect(telemetry.record).toHaveBeenCalledWith('command_used', {
       name: 'redteam setup',
     });
-    expect(startServer).toHaveBeenCalledWith(
-      '3000',
-      BrowserBehavior.OPEN_TO_REDTEAM_CREATE,
-      undefined,
-    );
+    expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
   });
 
   it('should handle setup command with directory', async () => {
@@ -61,11 +56,7 @@ describe('redteamSetupCommand', () => {
     await program.parseAsync(['node', 'test', 'setup', 'test-dir', '--port', '3000']);
 
     expect(setConfigDirectoryPath).toHaveBeenCalledWith('test-dir');
-    expect(startServer).toHaveBeenCalledWith(
-      '3000',
-      BrowserBehavior.OPEN_TO_REDTEAM_CREATE,
-      undefined,
-    );
+    expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
   });
 
   it('should open browser if server is already running', async () => {
@@ -78,7 +69,7 @@ describe('redteamSetupCommand', () => {
     expect(startServer).not.toHaveBeenCalled();
   });
 
-  it('should handle setup command with filter description', async () => {
+  it('should ignore filter description option', async () => {
     jest.mocked(checkServerRunning).mockResolvedValue(false);
     redteamSetupCommand(program);
 
@@ -87,7 +78,6 @@ describe('redteamSetupCommand', () => {
     expect(startServer).toHaveBeenCalledWith(
       getDefaultPort().toString(),
       BrowserBehavior.OPEN_TO_REDTEAM_CREATE,
-      'test.*',
     );
   });
 

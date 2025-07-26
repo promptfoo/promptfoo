@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Different prompts configured per model provider
+
 prompts:
   - id: file://prompt1.txt
     label: My first prompt
@@ -6,7 +8,7 @@ prompts:
     label: My second prompt
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     prompts:
       - My first prompt
       - My second prompt

@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -13,8 +14,8 @@ import {
 } from '@promptfoo/redteam/constants';
 import FrameworkCard from './FrameworkCard';
 import {
-  expandPluginCollections,
   categorizePlugins,
+  expandPluginCollections,
   getProgressColor,
 } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
@@ -187,7 +188,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   );
 
   return (
-    <Box>
+    <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
@@ -223,7 +224,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
             }}
           />
           <Grid container spacing={3} className="framework-grid">
-            {FRAMEWORK_COMPLIANCE_IDS.map((framework) => {
+            {FRAMEWORK_COMPLIANCE_IDS.map((framework, idx) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
               const isCompliant = frameworkCompliance[framework];
               const frameworkSeverity = getFrameworkSeverity(framework);
@@ -239,6 +240,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                     nonCompliantPlugins={nonCompliantPlugins}
                     sortedNonCompliantPlugins={sortedNonCompliantPlugins}
                     getPluginPassRate={getPluginPassRate}
+                    idx={idx}
                   />
                 </Grid>
               );

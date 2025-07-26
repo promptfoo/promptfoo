@@ -79,19 +79,23 @@ export function toHomoglyphs(text: string): string {
  * Add homoglyph encoding to test cases
  */
 export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCase[] {
-  return testCases.map((testCase) => ({
-    ...testCase,
-    assert: testCase.assert?.map((assertion) => ({
-      ...assertion,
-      metric: `${assertion.metric}/Homoglyph`,
-    })),
-    vars: {
-      ...testCase.vars,
-      [injectVar]: toHomoglyphs(String(testCase.vars![injectVar])),
-    },
-    metadata: {
-      ...testCase.metadata,
-      strategyId: 'homoglyph',
-    },
-  }));
+  return testCases.map((testCase) => {
+    const originalText = String(testCase.vars![injectVar]);
+    return {
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: `${assertion.metric}/Homoglyph`,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: toHomoglyphs(originalText),
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'homoglyph',
+        originalText,
+      },
+    };
+  });
 }

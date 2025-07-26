@@ -1,9 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Custom provider implementation with embedding similarity
+
 prompts:
   - 'Translate this to French: {{message}}'
 
 providers:
-  - openai:chat:gpt-4o-mini
+  - openai:chat:gpt-4.1-mini
 
 tests:
   - vars:

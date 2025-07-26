@@ -5,7 +5,7 @@ prompts:
   - "You are a helpful and concise assistant.\n\nUser query: {{prompt}}\n"
 
 targets:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: test
 
 # Other redteam settings

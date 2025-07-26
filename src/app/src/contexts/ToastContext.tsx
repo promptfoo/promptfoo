@@ -1,24 +1,27 @@
-import React, { useState, type ReactNode } from 'react';
-import { Snackbar, Alert, type AlertColor } from '@mui/material';
-import { ToastContext } from './ToastContextDef';
+import React, { useCallback, useState } from 'react';
 
-export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+import Alert from '@mui/material/Alert';
+import Snackbar from '@mui/material/Snackbar';
+import { ToastContext, type ToastProviderProps } from './ToastContextDef';
+import type { AlertColor } from '@mui/material/Alert';
+
+export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [severity, setSeverity] = useState<AlertColor>('info');
 
-  const showToast = (message: string, severity: AlertColor = 'info') => {
+  const showToast = useCallback((message: string, severity: AlertColor = 'info') => {
     setMessage(message);
     setSeverity(severity);
     setOpen(true);
-  };
+  }, []);
 
-  const handleClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+  const handleClose = useCallback((event?: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
       return;
     }
     setOpen(false);
-  };
+  }, []);
 
   return (
     <ToastContext.Provider value={{ showToast }}>

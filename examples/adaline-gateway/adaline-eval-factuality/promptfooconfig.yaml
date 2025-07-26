@@ -2,7 +2,7 @@
 description: 'Adaline Gateway Model Grading Example'
 
 providers:
-  - id: adaline:openai:chat:gpt-4o-mini
+  - id: adaline:openai:chat:gpt-4.1-mini
     config:
       maxTokens: 120
       responseFormat: text
@@ -15,7 +15,7 @@ defaultTest:
   # Uses adaline as the grading provider
   options:
     provider:
-      id: adaline:openai:chat:gpt-4o-mini
+      id: adaline:openai:chat:gpt-4.1-mini
 
 tests:
   - vars:

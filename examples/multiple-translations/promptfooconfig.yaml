@@ -1,22 +1,30 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Array-based multi-language translation testing
+
 prompts:
-  - 'file://prompts.txt'
+  - file://prompts.txt
+
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
+  - anthropic:claude-sonnet-4-20250514
+
 tests:
   - vars:
       language:
         - French
         - German
         - Spanish
+        - Italian
+        - Portuguese
       input:
         - 'Hello world'
         - 'Good morning'
         - 'How are you?'
-      # You can also import vars from file. For example:
-      # input: 'file://vars/*.txt'
+        - 'Thank you very much'
+        - 'See you later'
     assert:
-      - type: similar
-        value: 'Hello world'
-        threshold: 0.8
+      - type: llm-rubric
+        value: 'Is this a correct translation of "{{input}}" into {{language}}? Score 1-5 where 5 is perfect.'
+        threshold: 0.7

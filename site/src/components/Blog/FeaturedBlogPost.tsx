@@ -1,7 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
-import { scrollToTop } from '../../utils/navigation';
 import styles from './FeaturedBlogPost.module.css';
 
 interface FeaturedBlogPostProps {
@@ -14,12 +13,12 @@ export default function FeaturedBlogPost({ post }: FeaturedBlogPostProps): JSX.E
   const author = metadata.authors[0];
 
   return (
-    <Link to={permalink} className={styles.featuredPostLink} onClick={scrollToTop}>
+    <Link to={permalink} className={styles.featuredPostLink}>
       <div className={styles.featuredPost}>
         <div className={styles.featuredBadge}>Featured</div>
         <div className={styles.featuredPostContent}>
           <div className={styles.featuredPostHeader}>
-            {tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>}
+            {/*tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>*/}
             <h2 className={styles.title}>{title}</h2>
           </div>
           <div className={styles.featuredPostMeta}>

@@ -1,14 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type {
-  ApiProvider,
-  ProviderResponse,
-  CallApiContextParams,
-  GuardrailResponse,
-  ProviderEmbeddingResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
@@ -16,13 +8,21 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
-import type { CompletionOptions } from './types';
 import {
-  loadFile,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  loadFile,
 } from './util';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  GuardrailResponse,
+  ProviderResponse,
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -52,6 +52,11 @@ class AIStudioGenericProvider implements ApiProvider {
     return `[Google AI Studio Provider ${this.modelName}]`;
   }
 
+  getApiUrlDefault(): string {
+    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
+    return `https://${renderedHost}`;
+  }
+
   getApiHost(): string | undefined {
     const apiHost =
       this.config.apiHost ||
@@ -60,17 +65,38 @@ class AIStudioGenericProvider implements ApiProvider {
       getEnvString('GOOGLE_API_HOST') ||
       getEnvString('PALM_API_HOST') ||
       DEFAULT_API_HOST;
+    return getNunjucksEngine().renderString(apiHost, {});
+  }
+
+  getApiUrl(): string {
+    // Check for apiHost first (most specific override)
+    const apiHost =
+      this.config.apiHost ||
+      this.env?.GOOGLE_API_HOST ||
+      this.env?.PALM_API_HOST ||
+      getEnvString('GOOGLE_API_HOST') ||
+      getEnvString('PALM_API_HOST');
     if (apiHost) {
-      return getNunjucksEngine().renderString(apiHost, {});
+      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
+      return `https://${renderedHost}`;
     }
-    return undefined;
+
+    // Check for apiBaseUrl (less specific override)
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.GOOGLE_API_BASE_URL ||
+      getEnvString('GOOGLE_API_BASE_URL') ||
+      this.getApiUrlDefault()
+    );
   }
 
   getApiKey(): string | undefined {
     const apiKey =
       this.config.apiKey ||
+      this.env?.GEMINI_API_KEY ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.PALM_API_KEY ||
+      getEnvString('GEMINI_API_KEY') ||
       getEnvString('GOOGLE_API_KEY') ||
       getEnvString('PALM_API_KEY');
     if (apiKey) {
@@ -113,7 +139,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
     if (!this.getApiKey()) {
       throw new Error(
-        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
@@ -141,19 +167,20 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta3/models/${
+        `${this.getApiUrl()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be passed
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -171,20 +198,36 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     try {
       const output = data.candidates[0].content;
+      const tokenUsage = cached
+        ? {
+            cached: data.usageMetadata?.totalTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 0,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          }
+        : {
+            prompt: data.usageMetadata?.promptTokenCount,
+            completion: data.usageMetadata?.candidatesTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
+
       return {
         output,
-        tokenUsage: cached
-          ? {
-              cached: data.usageMetadata?.totalTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 0,
-            }
-          : {
-              prompt: data.usageMetadata?.promptTokenCount,
-              completion: data.usageMetadata?.candidatesTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 1,
-            },
+        tokenUsage,
         raw: data,
         cached,
       };
@@ -257,13 +300,14 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/${apiVersion}/models/${
+        `${this.getApiUrl()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be set
           },
           body: JSON.stringify(body),
         },
@@ -308,20 +352,36 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         };
       }
 
+      const tokenUsage = cached
+        ? {
+            cached: data.usageMetadata?.totalTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 0,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          }
+        : {
+            prompt: data.usageMetadata?.promptTokenCount,
+            completion: data.usageMetadata?.candidatesTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
+
       return {
         output,
-        tokenUsage: cached
-          ? {
-              cached: data.usageMetadata?.totalTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 0,
-            }
-          : {
-              prompt: data.usageMetadata?.promptTokenCount,
-              completion: data.usageMetadata?.candidatesTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 1,
-            },
+        tokenUsage,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
@@ -344,85 +404,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
-    }
-  }
-}
-
-export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
-  constructor(
-    modelName: string,
-    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    super(modelName, options);
-  }
-
-  async callApi(): Promise<ProviderResponse> {
-    throw new Error('Embedding provider does not support callApi. Use callEmbeddingApi instead.');
-  }
-
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.getApiKey()) {
-      throw new Error('Google API key is not set for embedding');
-    }
-
-    // Format request body according to the API spec
-    const body = {
-      model: `models/${this.modelName}`,
-      content: {
-        parts: [
-          {
-            text,
-          },
-        ],
-      },
-    };
-
-    // Use embedContent endpoint
-    const endpoint = 'embedContent';
-    const url = `https://${this.getApiHost()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
-
-    logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
-
-    let data,
-      _cached = false;
-    try {
-      ({ data, cached: _cached } = await fetchWithCache(
-        url,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-        false,
-      ));
-    } catch (err) {
-      logger.error(`Google Embedding API call error: ${err}`);
-      throw err;
-    }
-
-    logger.debug(`Google Embedding API response: ${JSON.stringify(data)}`);
-
-    try {
-      // The embedding is returned in data.embedding.values
-      const embedding = data.embedding?.values;
-      if (!embedding) {
-        throw new Error('No embedding values found in Google Embedding API response');
-      }
-
-      return {
-        embedding,
-        tokenUsage: {
-          prompt: 0,
-          completion: 0,
-          total: 0,
-          numRequests: 1,
-        },
-      };
-    } catch (err) {
-      logger.error(`Error processing Google Embedding API response: ${JSON.stringify(data)}`);
-      throw err;
     }
   }
 }

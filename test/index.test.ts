@@ -4,7 +4,9 @@ import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
-import { writeOutput, writeMultipleOutputs } from '../src/util';
+import * as providers from '../src/providers';
+import { writeMultipleOutputs, writeOutput } from '../src/util';
+import * as fileUtils from '../src/util/file';
 
 jest.mock('../src/cache');
 jest.mock('../src/database', () => ({
@@ -16,7 +18,36 @@ jest.mock('../src/evaluator', () => {
   const originalModule = jest.requireActual('../src/evaluator');
   return {
     ...originalModule,
-    evaluate: jest.fn().mockResolvedValue({ results: [] }),
+    evaluate: jest.fn().mockImplementation(async (testSuite) => {
+      // Return a mock evaluation result that includes the test cases
+      const results = (testSuite.tests || []).map((test: any, idx: number) => {
+        // Merge defaultTest with test case
+        const mergedTest = { ...testSuite.defaultTest, ...test };
+        if (testSuite.defaultTest?.assert && test.assert) {
+          mergedTest.assert = [...(testSuite.defaultTest.assert || []), ...(test.assert || [])];
+        }
+        if (testSuite.defaultTest?.vars && test.vars) {
+          mergedTest.vars = { ...testSuite.defaultTest.vars, ...test.vars };
+        }
+
+        return {
+          testCase: mergedTest,
+          test: mergedTest,
+          vars: mergedTest.vars || {},
+          promptIdx: 0,
+          testIdx: idx,
+          success: true,
+          score: 1,
+          latencyMs: 100,
+          namedScores: {},
+          failureReason: 0,
+        };
+      });
+      return {
+        results,
+        toEvaluateSummary: async () => ({ results }),
+      };
+    }),
   };
 });
 jest.mock('../src/migrate');
@@ -27,8 +58,17 @@ jest.mock('../src/prompts', () => {
     readProviderPromptMap: jest.fn().mockReturnValue({}),
   };
 });
+jest.mock('../src/providers', () => {
+  const originalModule = jest.requireActual('../src/providers');
+  return {
+    ...originalModule,
+    loadApiProvider: jest.fn(),
+    loadApiProviders: jest.fn(),
+  };
+});
 jest.mock('../src/telemetry');
 jest.mock('../src/util');
+jest.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -64,9 +104,9 @@ describe('index.ts exports', () => {
     'TestCasesWithMetadataPromptSchema',
     'TestCasesWithMetadataSchema',
     'TestCaseWithVarsFileSchema',
+    'TestGeneratorConfigSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
-    'TokenUsageSchema',
     'UnifiedConfigSchema',
     'VarsSchema',
   ];
@@ -98,11 +138,14 @@ describe('index.ts exports', () => {
       },
       Extractors: {
         extractEntities: expect.any(Function),
+        extractMcpToolsInfo: expect.any(Function),
         extractSystemPurpose: expect.any(Function),
       },
       Graders: expect.any(Object),
       Plugins: expect.any(Object),
       Strategies: expect.any(Object),
+      generate: expect.any(Function),
+      run: expect.any(Function),
     });
   });
 
@@ -128,6 +171,25 @@ describe('index.ts exports', () => {
 });
 
 describe('evaluate function', () => {
+  let loadApiProvidersSpy: jest.SpyInstance;
+  let loadApiProviderSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Set up spies for provider functions
+    loadApiProvidersSpy = jest.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
+    loadApiProviderSpy = jest.spyOn(providers, 'loadApiProvider').mockResolvedValue({
+      id: () => 'mock-provider',
+      callApi: jest.fn(),
+    });
+  });
+
+  afterEach(() => {
+    loadApiProvidersSpy.mockRestore();
+    loadApiProviderSpy.mockRestore();
+  });
+
   it('should handle function prompts correctly', async () => {
     const mockPromptFunction = function testPrompt() {
       return 'Test prompt';
@@ -194,7 +256,7 @@ describe('evaluate function', () => {
     const testSuite = {
       prompts: ['test prompt'],
       providers: [],
-      tests: [{ options: { provider: 'test-provider' } }],
+      tests: [{ options: { provider: 'openai:gpt-3.5-turbo' } }],
     };
     await evaluate(testSuite);
     expect(doEvaluate).toHaveBeenCalledWith(
@@ -359,5 +421,534 @@ describe('evaluate function', () => {
       expect.any(Eval),
       null,
     );
+  });
+
+  describe('providerMap functionality', () => {
+    it('should resolve assertion provider by ID from providerMap', async () => {
+      const mockProvider1 = {
+        id: () => 'provider-1',
+        label: 'Provider One',
+        callApi: jest.fn(),
+      };
+      const mockProvider2 = {
+        id: () => 'provider-2',
+        callApi: jest.fn(),
+      };
+
+      // Mock loadApiProviders to return our test providers
+      loadApiProvidersSpy.mockResolvedValueOnce([mockProvider1, mockProvider2]);
+
+      const testSuite = {
+        prompts: ['test'],
+        providers: ['provider-1', 'provider-2'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals' as const,
+                value: 'expected',
+                provider: 'provider-1', // Should resolve from providerMap by ID
+              },
+            ],
+          },
+        ],
+      };
+
+      await evaluate(testSuite);
+
+      // Verify doEvaluate was called with the resolved provider
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: mockProvider1, // Should be resolved to the actual provider object
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should resolve assertion provider by label from providerMap', async () => {
+      const mockProvider = {
+        id: () => 'azure:chat:gpt-4',
+        label: 'GPT-4',
+        callApi: jest.fn(),
+      };
+
+      // Mock loadApiProviders to return our test provider
+      loadApiProvidersSpy.mockResolvedValueOnce([mockProvider]);
+
+      const testSuite = {
+        prompts: ['test'],
+        providers: ['azure:chat:gpt-4'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals' as const,
+                value: 'expected',
+                provider: 'GPT-4', // Should resolve by label from providerMap
+              },
+            ],
+          },
+        ],
+      };
+
+      await evaluate(testSuite);
+
+      // Verify the provider was resolved by label
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: mockProvider,
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should fall back to loadApiProvider when provider not found in providerMap', async () => {
+      const mockExistingProvider = {
+        id: () => 'existing-provider',
+        callApi: jest.fn(),
+      };
+
+      // Mock loadApiProviders to return existing provider
+      loadApiProvidersSpy.mockResolvedValueOnce([mockExistingProvider]);
+
+      const testSuite = {
+        prompts: ['test'],
+        providers: ['existing-provider'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals' as const,
+                value: 'expected',
+                provider: 'existing-provider', // Should resolve by ID
+              },
+            ],
+          },
+        ],
+      };
+
+      await evaluate(testSuite);
+
+      // Verify the evaluation completed successfully using the fallback provider
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: mockExistingProvider,
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should handle providers without labels in providerMap', async () => {
+      const mockProvider = {
+        id: () => 'provider-without-label',
+        callApi: jest.fn(),
+        // No label property
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockProvider]);
+
+      const testSuite = {
+        prompts: ['test'],
+        providers: ['provider-without-label'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals' as const,
+                value: 'expected',
+                provider: 'provider-without-label', // Should resolve by ID only
+              },
+            ],
+          },
+        ],
+      };
+
+      await evaluate(testSuite);
+
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: mockProvider,
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    // Test cases for GitHub issue #4111: Model-graded assertions with provider resolution
+    describe('Model-graded assertions with provider resolution', () => {
+      it('should resolve model-graded assertions using providers from main array', async () => {
+        const mockLiteLLMProvider = {
+          id: () => 'litellm:gemini-pro',
+          callApi: jest.fn(),
+          config: {
+            apiBaseUrl: 'http://localhost:4000',
+            apiKey: 'test-key',
+            temperature: 0.1,
+            max_tokens: 8096,
+          },
+        };
+
+        // Mock loadApiProviders to return the LiteLLM provider
+        loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
+
+        const testSuite = {
+          prompts: ['What is the capital of France?'],
+          providers: [
+            {
+              id: 'litellm:gemini-pro',
+              config: {
+                apiBaseUrl: 'http://localhost:4000',
+                apiKey: 'test-key',
+                temperature: 0.1,
+                max_tokens: 8096,
+              },
+            },
+          ],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate if the response correctly identifies Paris as the capital',
+                  threshold: 0.8,
+                  provider: 'litellm:gemini-pro', // String ID that should resolve from providerMap
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        // Verify the g-eval assertion was resolved with the correct provider
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tests: expect.arrayContaining([
+              expect.objectContaining({
+                assert: expect.arrayContaining([
+                  expect.objectContaining({
+                    type: 'g-eval',
+                    provider: mockLiteLLMProvider, // Should be resolved to the provider object
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('should resolve different providers for response and model-graded assertions', async () => {
+        const mockResponseProvider = {
+          id: () => 'litellm:gpt-4',
+          callApi: jest.fn(),
+        };
+
+        const mockGevalProvider = {
+          id: () => 'litellm:gemini-pro',
+          callApi: jest.fn(),
+        };
+
+        // Mock loadApiProviders to return both providers
+        loadApiProvidersSpy.mockResolvedValueOnce([mockResponseProvider, mockGevalProvider]);
+
+        const testSuite = {
+          prompts: ['What is the capital of France?'],
+          providers: ['litellm:gpt-4', 'litellm:gemini-pro'], // Both providers in main array
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate correctness',
+                  provider: 'litellm:gemini-pro', // Different provider for g-eval
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        // Verify g-eval uses the gemini provider while main response uses gpt-4
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providers: expect.arrayContaining([mockResponseProvider, mockGevalProvider]),
+            tests: expect.arrayContaining([
+              expect.objectContaining({
+                assert: expect.arrayContaining([
+                  expect.objectContaining({
+                    provider: mockGevalProvider, // G-eval should use gemini provider
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('should handle multiple model-graded assertions with same provider', async () => {
+        const mockLiteLLMProvider = {
+          id: () => 'litellm:claude-3',
+          callApi: jest.fn(),
+        };
+
+        loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
+
+        const testSuite = {
+          prompts: ['Explain quantum physics'],
+          providers: ['litellm:claude-3'],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate scientific accuracy',
+                  provider: 'litellm:claude-3',
+                },
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate clarity of explanation',
+                  provider: 'litellm:claude-3',
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        // Both g-eval assertions should resolve to the same provider object
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tests: expect.arrayContaining([
+              expect.objectContaining({
+                assert: expect.arrayContaining([
+                  expect.objectContaining({
+                    type: 'g-eval',
+                    provider: mockLiteLLMProvider,
+                  }),
+                  expect.objectContaining({
+                    type: 'g-eval',
+                    provider: mockLiteLLMProvider,
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
+        const mockMainProvider = {
+          id: () => 'litellm:gpt-4',
+          callApi: jest.fn(),
+        };
+
+        // Mock main providers array (only has gpt-4)
+        loadApiProvidersSpy.mockResolvedValueOnce([mockMainProvider]);
+
+        const testSuite = {
+          prompts: ['Test prompt'],
+          providers: ['litellm:gpt-4'], // Only gpt-4 in main providers
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'g-eval' as const,
+                  value: 'Evaluate response',
+                  provider: 'litellm:gpt-4', // Use existing provider from main array
+                },
+              ],
+            },
+          ],
+        };
+
+        await evaluate(testSuite);
+
+        // Verify the evaluation completed successfully using the fallback provider
+        expect(doEvaluate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tests: expect.arrayContaining([
+              expect.objectContaining({
+                assert: expect.arrayContaining([
+                  expect.objectContaining({
+                    type: 'g-eval',
+                    provider: mockMainProvider,
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+    });
+  });
+});
+
+describe('evaluate with external defaultTest', () => {
+  let loadApiProvidersSpy: jest.SpyInstance;
+  let loadApiProviderSpy: jest.SpyInstance;
+  let maybeLoadFromExternalFileSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Set up spies for provider functions
+    loadApiProvidersSpy = jest.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
+    loadApiProviderSpy = jest.spyOn(providers, 'loadApiProvider').mockResolvedValue({
+      id: () => 'mock-provider',
+      callApi: jest.fn(),
+    });
+
+    maybeLoadFromExternalFileSpy = jest.mocked(fileUtils.maybeLoadFromExternalFile);
+  });
+
+  afterEach(() => {
+    loadApiProvidersSpy.mockRestore();
+    loadApiProviderSpy.mockRestore();
+  });
+
+  it('should load defaultTest from external file when using file:// syntax', async () => {
+    const externalDefaultTest = {
+      assert: [{ type: 'equals' as const, value: 'test' }],
+      vars: { foo: 'bar' },
+      options: { provider: 'openai:gpt-4' },
+    };
+
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+    maybeLoadFromExternalFileSpy.mockResolvedValueOnce(externalDefaultTest);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: 'file://path/to/defaultTest.yaml',
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(fileUtils.maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      'file://path/to/defaultTest.yaml',
+    );
+    const result = summary.results[0] as any;
+    expect(result.testCase.assert).toEqual(externalDefaultTest.assert);
+  });
+
+  it('should handle inline defaultTest objects', async () => {
+    const inlineDefaultTest = {
+      assert: [{ type: 'contains' as const, value: 'inline' }],
+      vars: { inline: true },
+    };
+
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: inlineDefaultTest,
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    const result = summary.results[0] as any;
+    expect(result.test.assert).toEqual(inlineDefaultTest.assert);
+    expect(result.test.vars).toMatchObject(inlineDefaultTest.vars);
+  });
+
+  it('should handle missing external defaultTest file gracefully', async () => {
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: 'file://nonexistent.yaml',
+    };
+
+    maybeLoadFromExternalFileSpy.mockRejectedValueOnce(
+      new Error('File does not exist: /Users/mdangelo/projects/pf-codium/nonexistent.yaml'),
+    );
+
+    await expect(evaluate(testSuite, {})).rejects.toThrow('File does not exist');
+  });
+
+  it('should not load external file when defaultTest is not a file:// string', async () => {
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: undefined,
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(fileUtils.maybeLoadFromExternalFile).not.toHaveBeenCalled();
+    expect(summary.results).toHaveLength(1);
   });
 });

@@ -1,15 +1,16 @@
-import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
 import logger from '../logger';
+import { maybeLoadFromExternalFile } from '../util/file';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
+import { getNunjucksEngine } from '../util/templates';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { maybeLoadFromExternalFile } from '../util/file';
-import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
-import { getNunjucksEngine } from '../util/templates';
 
 const nunjucks = getNunjucksEngine();
 
@@ -38,7 +39,7 @@ interface BrowserProviderConfig {
   responseParser?: string | Function;
 }
 
-function createTransformResponse(
+export function createTransformResponse(
   parser: any,
 ): (extracted: Record<string, any>, finalHtml: string) => ProviderResponse {
   if (typeof parser === 'function') {
@@ -288,11 +289,17 @@ export class BrowserProvider implements ApiProvider {
 
     const initialChildCount = await page.$$eval(
       `${parentSelector} > *`,
-      (elements) => elements.length,
+      (elements: any[]) => elements.length,
     );
 
     await page.waitForFunction(
-      ({ parentSelector, initialChildCount }) => {
+      ({
+        parentSelector,
+        initialChildCount,
+      }: {
+        parentSelector: string;
+        initialChildCount: number;
+      }) => {
         const currentCount = document.querySelectorAll(`${parentSelector} > *`).length;
         return currentCount > initialChildCount;
       },

@@ -1,5 +1,5 @@
 import { fetchWithProxy } from '../../src/fetch';
-import { CloudConfig, cloudConfig, API_HOST } from '../../src/globalConfig/cloud';
+import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 
@@ -13,6 +13,7 @@ describe('CloudConfig', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(readGlobalConfig).mockReturnValue({
+      id: 'test-id',
       cloud: {
         appUrl: 'https://test.app',
         apiHost: 'https://test.api',
@@ -24,7 +25,9 @@ describe('CloudConfig', () => {
 
   describe('constructor', () => {
     it('should initialize with default values when no saved config exists', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       const config = new CloudConfig();
       expect(config.getAppUrl()).toBe('https://www.promptfoo.app');
       expect(config.getApiHost()).toBe(API_HOST);
@@ -44,7 +47,9 @@ describe('CloudConfig', () => {
     });
 
     it('should return false when apiKey does not exist', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       const config = new CloudConfig();
       expect(config.isEnabled()).toBe(false);
     });

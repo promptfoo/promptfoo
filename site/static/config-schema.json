@@ -66,6 +66,9 @@
                             "AI21_API_KEY": {
                               "type": "string"
                             },
+                            "AIML_API_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
@@ -150,10 +153,19 @@
                             "FAL_KEY": {
                               "type": "string"
                             },
+                            "GITHUB_TOKEN": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
+                            "GOOGLE_API_BASE_URL": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GEMINI_API_KEY": {
                               "type": "string"
                             },
                             "GROQ_API_KEY": {
@@ -166,6 +178,9 @@
                               "type": "string"
                             },
                             "HF_TOKEN": {
+                              "type": "string"
+                            },
+                            "HYPERBOLIC_API_KEY": {
                               "type": "string"
                             },
                             "HUGGING_FACE_HUB_TOKEN": {
@@ -235,6 +250,21 @@
                               "type": "string"
                             },
                             "PROMPTFOO_CA_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_ALIAS": {
                               "type": "string"
                             },
                             "PROMPTFOO_INSECURE_SSL": {
@@ -355,9 +385,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   },
                   {
@@ -377,10 +405,7 @@
                       },
                       "config": {}
                     },
-                    "required": [
-                      "raw",
-                      "label"
-                    ],
+                    "required": ["raw", "label"],
                     "additionalProperties": false
                   }
                 ]
@@ -428,11 +453,7 @@
                             {
                               "type": "array",
                               "items": {
-                                "type": [
-                                  "string",
-                                  "number",
-                                  "boolean"
-                                ]
+                                "type": ["string", "number", "boolean"]
                               }
                             },
                             {
@@ -518,6 +539,7 @@
                                               "cost",
                                               "equals",
                                               "factuality",
+                                              "finish-reason",
                                               "g-eval",
                                               "gleu",
                                               "guardrails",
@@ -547,6 +569,9 @@
                                               "rouge-n",
                                               "similar",
                                               "starts-with",
+                                              "trace-error-spans",
+                                              "trace-span-count",
+                                              "trace-span-duration",
                                               "webhook"
                                             ]
                                           },
@@ -555,10 +580,7 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": [
-                                              "select-best",
-                                              "human"
-                                            ]
+                                            "enum": ["select-best", "human"]
                                           },
                                           {}
                                         ]
@@ -581,6 +603,9 @@
                                       },
                                       "transform": {
                                         "type": "string"
+                                      },
+                                      "contextTransform": {
+                                        "type": "string"
                                       }
                                     },
                                     "additionalProperties": false
@@ -600,10 +625,7 @@
                                   "additionalProperties": {}
                                 }
                               },
-                              "required": [
-                                "type",
-                                "assert"
-                              ],
+                              "required": ["type", "assert"],
                               "additionalProperties": false
                             },
                             {
@@ -677,10 +699,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "role",
-                                        "content"
-                                      ],
+                                      "required": ["role", "content"],
                                       "additionalProperties": false
                                     }
                                   }
@@ -771,9 +790,49 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "config": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": ["string", "number", "boolean"]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {}
+                          ]
+                        }
+                      }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
                   }
                 ]
               }
+            },
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/2"
             }
           ]
         },
@@ -833,44 +892,48 @@
                     }
                   }
                 },
-                "required": [
-                  "config",
-                  "tests"
-                ],
+                "required": ["config", "tests"],
                 "additionalProperties": false
               }
             ]
           }
         },
         "defaultTest": {
-          "type": "object",
-          "properties": {
-            "vars": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "provider": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
-            },
-            "providerOutput": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
-            },
-            "assert": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
-            },
-            "assertScoringFunction": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
-            },
-            "options": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
-            },
-            "threshold": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
-            },
-            "metadata": {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+            {
+              "type": "object",
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
+                },
+                "provider": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
+                },
+                "providerOutput": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
+                },
+                "assert": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+                },
+                "assertScoringFunction": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                },
+                "options": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
+                },
+                "threshold": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
+                },
+                "metadata": {
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+                }
+              },
+              "additionalProperties": false
             }
-          },
-          "additionalProperties": false
+          ]
         },
         "outputPath": {
           "anyOf": [
@@ -949,10 +1012,7 @@
                 ]
               }
             },
-            "required": [
-              "name",
-              "value"
-            ],
+            "required": ["name", "value"],
             "additionalProperties": false
           }
         },
@@ -982,6 +1042,10 @@
             "purpose": {
               "type": "string",
               "description": "Purpose override string - describes the prompt templates"
+            },
+            "testGenerationInstructions": {
+              "type": "string",
+              "description": "Additional instructions for test generation applied to each plugin"
             },
             "provider": {
               "anyOf": [
@@ -1022,12 +1086,16 @@
                       {
                         "type": "string",
                         "enum": [
+                          "aegis",
                           "agentic:memory-poisoning",
                           "ascii-smuggling",
                           "beavertails",
                           "bfla",
                           "bias",
+                          "bias:age",
+                          "bias:disability",
                           "bias:gender",
+                          "bias:race",
                           "bola",
                           "cca",
                           "competitors",
@@ -1054,7 +1122,13 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "financial:calculation-error",
+                          "financial:compliance-violation",
+                          "financial:data-leakage",
+                          "financial:hallucination",
+                          "financial:sycophancy",
                           "foundation",
+                          "guardrails-eval",
                           "hallucination",
                           "harmbench",
                           "harmful",
@@ -1090,6 +1164,12 @@
                           "indirect-prompt-injection",
                           "intent",
                           "mcp",
+                          "medical",
+                          "medical:anchoring-bias",
+                          "medical:hallucination",
+                          "medical:incorrect-knowledge",
+                          "medical:prioritization-error",
+                          "medical:sycophancy",
                           "misinformation",
                           "mitre:atlas",
                           "mitre:atlas:exfiltration",
@@ -1121,6 +1201,7 @@
                           "nist:ai:measure:4.1",
                           "nist:ai:measure:4.2",
                           "nist:ai:measure:4.3",
+                          "off-topic",
                           "overreliance",
                           "owasp:agentic:t01",
                           "owasp:api",
@@ -1170,14 +1251,14 @@
                           "system-prompt-override",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
+                          "toxic-chat",
                           "toxicity",
                           "unsafebench",
                           "xstest"
                         ]
                       },
                       {
-                        "type": "string",
-                        "pattern": "^file\\:\\/\\/"
+                        "type": "string"
                       }
                     ],
                     "description": "Name of the plugin or path to custom plugin"
@@ -1190,12 +1271,16 @@
                           {
                             "type": "string",
                             "enum": [
+                              "aegis",
                               "agentic:memory-poisoning",
                               "ascii-smuggling",
                               "beavertails",
                               "bfla",
                               "bias",
+                              "bias:age",
+                              "bias:disability",
                               "bias:gender",
+                              "bias:race",
                               "bola",
                               "cca",
                               "competitors",
@@ -1222,7 +1307,13 @@
                               "eu:ai-act:art5:social-scoring",
                               "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "financial:calculation-error",
+                              "financial:compliance-violation",
+                              "financial:data-leakage",
+                              "financial:hallucination",
+                              "financial:sycophancy",
                               "foundation",
+                              "guardrails-eval",
                               "hallucination",
                               "harmbench",
                               "harmful",
@@ -1258,6 +1349,12 @@
                               "indirect-prompt-injection",
                               "intent",
                               "mcp",
+                              "medical",
+                              "medical:anchoring-bias",
+                              "medical:hallucination",
+                              "medical:incorrect-knowledge",
+                              "medical:prioritization-error",
+                              "medical:sycophancy",
                               "misinformation",
                               "mitre:atlas",
                               "mitre:atlas:exfiltration",
@@ -1289,6 +1386,7 @@
                               "nist:ai:measure:4.1",
                               "nist:ai:measure:4.2",
                               "nist:ai:measure:4.3",
+                              "off-topic",
                               "overreliance",
                               "owasp:agentic:t01",
                               "owasp:api",
@@ -1338,14 +1436,14 @@
                               "system-prompt-override",
                               "tool-discovery",
                               "tool-discovery:multi-turn",
+                              "toxic-chat",
                               "toxicity",
                               "unsafebench",
                               "xstest"
                             ]
                           },
                           {
-                            "type": "string",
-                            "pattern": "^file\\:\\/\\/"
+                            "type": "string"
                           }
                         ],
                         "description": "Name of the plugin"
@@ -1360,19 +1458,20 @@
                         "type": "object",
                         "additionalProperties": {},
                         "description": "Plugin-specific configuration"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["critical", "high", "medium", "low"],
+                        "description": "Severity level for this plugin"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
               },
               "description": "Plugins to use for redteam generation",
-              "default": [
-                "default"
-              ]
+              "default": ["default"]
             },
             "strategies": {
               "type": "array",
@@ -1387,9 +1486,12 @@
                           "base64",
                           "basic",
                           "best-of-n",
+                          "camelcase",
                           "citation",
                           "crescendo",
+                          "custom",
                           "default",
+                          "emoji",
                           "gcg",
                           "goat",
                           "hex",
@@ -1401,6 +1503,7 @@
                           "jailbreak:tree",
                           "leetspeak",
                           "math-prompt",
+                          "mischievous-user",
                           "morse",
                           "multilingual",
                           "other-encodings",
@@ -1414,9 +1517,11 @@
                       },
                       {
                         "type": "string"
+                      },
+                      {
+                        "type": "string"
                       }
-                    ],
-                    "description": "Name of the strategy"
+                    ]
                   },
                   {
                     "type": "object",
@@ -1430,17 +1535,13 @@
                         "description": "Strategy-specific configuration"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
-              "default": [
-                "default"
-              ]
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
+              "default": ["default"]
             },
             "maxConcurrency": {
               "type": "integer",
@@ -1461,6 +1562,97 @@
         },
         "writeLatestResults": {
           "type": "boolean"
+        },
+        "tracing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "otlp": {
+              "type": "object",
+              "properties": {
+                "http": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4318
+                    },
+                    "host": {
+                      "type": "string",
+                      "default": "0.0.0.0"
+                    },
+                    "acceptFormats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["protobuf", "json"]
+                      },
+                      "default": ["json"]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "grpc": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4317
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["sqlite"],
+                  "default": "sqlite"
+                },
+                "retentionDays": {
+                  "type": "number",
+                  "default": 30
+                }
+              },
+              "additionalProperties": false
+            },
+            "forwarding": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["endpoint"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         },
         "evaluateOptions": {
           "type": "object",
@@ -1491,6 +1683,12 @@
             },
             "timeoutMs": {
               "type": "number"
+            },
+            "maxEvalTimeMs": {
+              "type": "number"
+            },
+            "isRedteam": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
@@ -1629,9 +1827,7 @@
           "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
         }
       },
-      "required": [
-        "prompts"
-      ],
+      "required": ["prompts"],
       "additionalProperties": false
     }
   },

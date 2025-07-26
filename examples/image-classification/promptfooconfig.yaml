@@ -2,7 +2,7 @@
 description: Image Classification Example of Fashion MNIST dataset
 providers:
   - openai:chat:gpt-4o
-  - openai:chat:gpt-4o-mini
+  - openai:chat:gpt-4.1-mini
 prompts:
   - label: Image Classification
     raw: file://prompt.js

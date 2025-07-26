@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+
 import {
+  ADDITIONAL_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
+  BIAS_PLUGINS,
   CONFIG_REQUIRED_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
@@ -114,7 +116,6 @@ describe('Plugin IDs', () => {
     uniqueIds.forEach((id) => {
       if (id === 'policy') {
         // This is a special case where the ID is not prefixed in the code
-        console.log("Note: Found 'policy' ID without prefix - this is a special case");
       }
     });
 
@@ -140,7 +141,9 @@ describe('Plugin IDs', () => {
             ...ADDITIONAL_PLUGINS,
             ...CONFIG_REQUIRED_PLUGINS,
             ...PII_PLUGINS,
+            ...BIAS_PLUGINS,
             'pii', // Add the general pii plugin
+            'bias', // Add the general bias plugin
             'harmful', // Add the general harmful plugin
             ...Object.keys(HARM_PLUGINS),
           ];

@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Function calling and tool use with Mistral models'
+
+providers:
+  - id: mistral:mistral-large-latest
+    config:
+      temperature: 0.1
+      tools:
+        - type: function
+          function:
+            name: calculate
+            description: Perform basic mathematical calculations
+            parameters:
+              type: object
+              properties:
+                operation:
+                  type: string
+                  enum: ['add', 'subtract', 'multiply', 'divide']
+                  description: The mathematical operation to perform
+                a:
+                  type: number
+                  description: First number
+                b:
+                  type: number
+                  description: Second number
+              required: ['operation', 'a', 'b']
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'What is 15 multiplied by 8?'
+    assert:
+      - type: contains
+        value: 'calculate'
+      - type: contains
+        value: 'multiply'
+      - type: cost
+        threshold: 0.05
+
+  - vars:
+      question: 'Calculate 100 divided by 4'
+    assert:
+      - type: contains
+        value: 'calculate'
+      - type: contains
+        value: 'divide'
+      - type: cost
+        threshold: 0.05

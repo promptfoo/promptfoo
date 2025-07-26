@@ -1,9 +1,9 @@
 import React from 'react';
+
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import IconButton from '@mui/material/IconButton';
-import { useTheme } from '@mui/material/styles';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
 
 const StyledIconButton = styled(IconButton)(({ theme }) => ({
   padding: 8,

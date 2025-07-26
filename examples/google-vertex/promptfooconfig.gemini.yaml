@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'Evaluation of Gemini 2.0 models with function calling capabilities'
+description: 'Evaluation of Gemini 2.5 models with function calling capabilities'
 
 prompts:
   - label: 'Direct Question'
@@ -14,7 +14,7 @@ prompts:
       2. Some recommended places to eat, focusing on {{cuisine}} restaurants
 
 providers:
-  - id: vertex:gemini-2.5-pro-preview-03-25
+  - id: vertex:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0.7
@@ -47,11 +47,44 @@ providers:
                     enum: ['restaurant', 'hotel', 'attraction']
                 required: ['query']
 
-  - id: vertex:gemini-2.0-flash-001
+  - id: vertex:gemini-2.5-flash
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+      toolConfig:
+        functionCallingConfig:
+          mode: 'AUTO'
+      tools:
+        - functionDeclarations:
+            - name: 'get_weather'
+              description: 'Get weather information for a location'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  location:
+                    type: 'STRING'
+                    description: 'City name'
+                required: ['location']
+            - name: 'search_places'
+              description: 'Search for places of interest'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  query:
+                    type: 'STRING'
+                    description: 'Search query'
+                  type:
+                    type: 'STRING'
+                    description: 'Type of place'
+                    enum: ['restaurant', 'hotel', 'attraction']
+                required: ['query']
+
+  - id: vertex:gemini-2.5-flash-lite
     config:
       generationConfig:
         temperature: 0
-        maxOutputTokens: 2048
+        maxOutputTokens: 1024
       toolConfig:
         functionCallingConfig:
           mode: 'AUTO'

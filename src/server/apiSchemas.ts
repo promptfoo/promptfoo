@@ -9,6 +9,11 @@ export const ApiSchemas = {
         email: EmailSchema.nullable(),
       }),
     },
+    GetId: {
+      Response: z.object({
+        id: z.string(),
+      }),
+    },
     Update: {
       Request: z.object({
         email: EmailSchema,
@@ -16,6 +21,14 @@ export const ApiSchemas = {
       Response: z.object({
         success: z.boolean(),
         message: z.string(),
+      }),
+    },
+    EmailStatus: {
+      Response: z.object({
+        hasEmail: z.boolean(),
+        email: EmailSchema.optional(),
+        status: z.enum(['ok', 'exceeded_limit', 'show_usage_warning', 'no_email']),
+        message: z.string().optional(),
       }),
     },
   },

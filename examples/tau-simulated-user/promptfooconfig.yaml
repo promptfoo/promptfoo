@@ -1,12 +1,54 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'TAU Simulated User'
+description: 'Airline Agent Testing with 31 Customer Personas'
 
 prompts:
-  - file://agent_policy.txt
+  - |
+    You are an airline booking agent. The current time is 2024-05-15 15:00:00 EST.
+
+    You can help users book, modify, or cancel flight reservations using the available functions.
+
+    **Important Rules:**
+    - Before taking any actions that update the booking database, you must list the action details and obtain explicit user confirmation (yes) to proceed
+    - Only make one function call at a time
+    - Do not provide information not available through the functions
+    - Transfer to human agent if request cannot be handled within scope of available functions
+
+    **Booking Process:**
+    1. Get user profile first using their user ID
+    2. Search for flights based on their requirements
+    3. Collect passenger details and payment preferences
+    4. Book the flight after confirming all details
+
+    **Pricing Rules:**
+    - Basic Economy: 0/1/2 free bags for regular/silver/gold members
+    - Economy: 1/2/3 free bags for regular/silver/gold members  
+    - Business: 2/3/3 free bags for regular/silver/gold members
+    - Extra bags: $50 each
+    - Travel insurance: $30 per passenger (enables full refund for health/weather cancellations)
 
 providers:
-  - 'openai:gpt-4o-mini'
+  - id: openai:gpt-4.1-mini
+    config:
+      max_tokens: 2000
+      temperature: 0.1
+      tools:
+        - file://functions/get_user_profile.json
+        - file://functions/search_flights.json
+        - file://functions/book_flight.json
+        - file://functions/get_reservation.json
+        - file://functions/modify_reservation.json
+        - file://functions/cancel_reservation.json
+        - file://functions/offer_compensation.json
+      tool_choice: 'auto'
+      functionToolCallbacks:
+        get_user_profile: file://callbacks/airline-functions.js:getUserProfile
+        search_flights: file://callbacks/airline-functions.js:searchFlights
+        book_flight: file://callbacks/airline-functions.js:bookFlight
+        get_reservation: file://callbacks/airline-functions.js:getReservation
+        modify_reservation: file://callbacks/airline-functions.js:modifyReservation
+        cancel_reservation: file://callbacks/airline-functions.js:cancelReservation
+        offer_compensation: file://callbacks/airline-functions.js:offerCompensation
 
 defaultTest:
   provider:
@@ -15,31 +57,73 @@ defaultTest:
       maxTurns: 10
 
 tests:
-  # 1
-  - vars:
+  - description: 'Budget traveler booking flight'
+    vars:
       instructions: >-
         You are mia_li_3668. You want to fly from New York to Seattle on May 20
-        (one way). You do not want to fly before 11am est. You want to fly in
-        economy. You prefer direct flights but one stopover also fine. If there
+        (one way). You do not want to fly before 11am EST. You want to fly in
+        economy. You prefer direct flights but one stopover is also fine. If there
         are multiple options, you prefer the one with the lowest price. You have
-        3 baggages. You do not want insurance. You want to use your two
+        3 bags. You do not want insurance. You want to use your two
         certificates to pay. If only one certificate can be used, you prefer
         using the larger one, and pay the rest with your 7447 card. You are
         reactive to the agent and will not say anything that is not asked. Your
         birthday is in your user profile so you do not prefer to provide it.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the budget traveler get what they wanted?
+          Pass if: Got economy flight under $350 and used certificates for payment
+          Fail if: Failed to book economy or got expensive flight over $400
 
-  # 2
-  - vars:
+  - description: 'Business traveler booking urgently'
+    vars:
+      instructions: >-
+        You are tony_plus_5980. You want to fly from Paris to Rome on May 18 (one way).
+        You need to arrive by 2pm local time. You want to fly in business. You prefer direct
+        flights but one stopover is fine. You don't care about price. You have 2 checked bags.
+        You want insurance. You want to pay with card ending in 9321. You are in a hurry and
+        want to book quickly. You are impatient if the agent is slow.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the urgent business traveler get fast service?
+          Pass if: Booked business class and met the 2pm arrival requirement
+          Fail if: Failed to book business class or couldn't meet time constraints
+
+  - description: 'Traveler with accessibility needs'
+    vars:
+      instructions: >-
+        You are traveler_id_100. You want to fly from London to Sydney on June 15
+        (round trip returning June 25). You need wheelchair assistance. You want to fly
+        in economy. You prefer flights with shorter layovers due to mobility concerns.
+        You have 1 checked bag. You don't want insurance. You want to pay with your
+        credit card. You are polite and patient.
+    assert:
+      - type: llm-rubric
+        value: |
+          Were accessibility needs properly handled?
+          Pass if: Wheelchair assistance arranged and shorter layovers mentioned
+          Fail if: Accessibility needs ignored or not addressed
+
+  - description: 'Last-minute business traveler needing flexibility'
+    vars:
       instructions: >-
         You are "tony_plus_5980," an extremely busy single parent who needs to
         book a last-minute flight from Paris to Rome this evening. You insist on
         a business class seat, no matter the cost, because you need to work in
         flight. You have one small carry-on, no checked bags. You want flexible
         booking in case you need to change your flight time. If the agent asks,
-        you’ll pay with your personal Visa credit card ending in 4432.
+        you'll pay with your personal Visa credit card ending in 4432.
+    assert:
+      - type: llm-rubric
+        value: |
+          Was the conversation efficient for an urgent booking?
+          Pass if: Conversation completed in under 10 turns
+          Fail if: Took more than 12 turns to complete booking
 
-  # 3
-  - vars:
+  - description: 'Traveler with back pain needing special seating'
+    vars:
       instructions: >-
         You are traveler_id_100. You want a flight from London to Sydney next
         January. You're flexible with dates, but you prefer the shortest layovers
@@ -48,6 +132,12 @@ tests:
         large suitcases. You don't trust giving out personal information like
         your birthdate unless it's absolutely necessary. Payment method: Master
         Card ending 1122.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent maintain a polite, professional tone?
+          Pass if: Agent was consistently polite and respectful throughout
+          Fail if: Agent was rude or unprofessional at any point
 
   # 4
   - vars:
@@ -58,9 +148,15 @@ tests:
         You don't care about flight times or the cost otherwise; you'll pay
         anything to avoid extra bag fees. You will answer only direct questions
         from the agent. Payment is with your corporate travel account.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent help avoid baggage fees?
+          Pass if: Found flight with 2 free checked bags or explained baggage policies
+          Fail if: Ignored baggage concerns or charged unnecessary fees
 
-  # 5
-  - vars:
+  - description: 'International traveler with routing restrictions'
+    vars:
       instructions: >-
         You are "satellite_dreams_777". You want to book a flight from Berlin to
         Miami, departing July 3rd, returning July 22nd. You do not want any
@@ -68,15 +164,27 @@ tests:
         Lufthansa or its partners. You have one carry-on, no other baggage.
         Provide only the information the agent requests. You will pay in cash if
         the airline allows it; otherwise you will use your PayPal account.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent explain airline routing policies?
+          Pass if: Mentioned layover restrictions or routing rules for international travel
+          Fail if: Made no mention of relevant airline policies or routing constraints
 
-  # 6
-  - vars:
+  - description: 'Vegetarian traveler avoiding red-eye flights'
+    vars:
       instructions: >-
         You are "sara_punctual_990". You need a flight from Madrid to Mexico City
         in early November. You refuse to take red-eye flights because you can't
         sleep on planes. You only want vegetarian meal options on board. If the
         price is above $800, you will ask for cheaper alternatives. Use your
         debit card ending 8745.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent acknowledge special dietary needs?
+          Pass if: Specifically mentioned vegetarian meal options or asked about dietary preferences
+          Fail if: Completely ignored dietary requirements or meal preferences
 
   # 7
   - vars:
@@ -84,7 +192,7 @@ tests:
         You are "the_birthday_girl_0505." You want a flight from San Francisco to
         Chicago for your birthday trip next month. You'd like to be asked for a
         special meal (vegan) and special note on the seat. You have a dog, but
-        you’re leaving it at home—so no pet seats needed. If there's an upgrade
+        you're leaving it at home—so no pet seats needed. If there's an upgrade
         to premium economy under $100 more, you'll take it. Pay with gift
         vouchers if possible; otherwise your credit card.
 
@@ -105,7 +213,7 @@ tests:
         need extra baggage. You prefer an aisle seat to stretch your legs. You do
         not want connecting flights longer than 3 hours. If the agent forgets to
         ask about baggage needs, you will remind them politely. Payment via your
-        US bank’s travel points.
+        US bank's travel points.
 
   # 10
   - vars:
@@ -123,7 +231,7 @@ tests:
         Shanghai to Los Angeles next month. Absolutely no more than 1 layover.
         You specifically want seats near the front so you can exit the plane
         quickly. If it's not possible, you'll ask for the next best option. You
-        only have one small bag. Payment with your father’s credit card info you
+        only have one small bag. Payment with your father's credit card info you
         have on file.
 
   # 12
@@ -161,12 +269,12 @@ tests:
         in late March. You specifically request seats in the 'quiet section' if
         available. You also want an in-flight meal with no fish or eggs. You
         require wheelchair assistance but only inside the airport. Payment with
-        your mother’s loyalty points.
+        your mother's loyalty points.
 
   # 16
   - vars:
       instructions: >-
-        You are "vip_request_999". You’re booking a flight from Hong Kong to
+        You are "vip_request_999". You're booking a flight from Hong Kong to
         London. Money is no object. You want first-class with a fully reclining
         seat, premium champagne, private lounge access, and an in-flight shower
         if the airline offers it. You have 3 suitcases. You won't provide any
@@ -188,7 +296,7 @@ tests:
         You are "budget_buster_808". You want a flight from Tokyo to Seoul for a
         weekend getaway, leaving Friday after 5pm, returning Sunday evening. You
         want the absolutely cheapest option, no matter how many stops. One small
-        carry-on. If the agent tries to upsell you, you’ll refuse politely.
+        carry-on. If the agent tries to upsell you, you'll refuse politely.
         Payment: local travel pass or credit card if needed.
 
   # 19
@@ -224,7 +332,7 @@ tests:
         Johannesburg to Cairo, leaving in two months. You are extremely chatty
         and love sharing personal stories, but will only do so if asked direct
         questions. You prefer vegetarian meals but won't specify unless asked.
-        Payment method is your father’s credit card ending in 9999.
+        Payment method is your father's credit card ending in 9999.
 
   # 23
   - vars:
@@ -256,7 +364,7 @@ tests:
   # 26
   - vars:
       instructions: >-
-        You are "sudden_inspiration_241". You’re an artist who decided on a whim
+        You are "sudden_inspiration_241". You're an artist who decided on a whim
         to fly from Paris to Bangkok next Monday. You prefer a direct flight if
         possible. If not, you want no more than one short layover. You have heavy
         paint supplies. You'll only provide ID if the agent explicitly asks.
@@ -268,7 +376,7 @@ tests:
         You are "triple_stop_333". You need to book a flight from Kuala Lumpur to
         Toronto, and you don't care if it has multiple stops because you plan to
         sightsee during long layovers. No baggage. You only care that the price
-        stays under $600. Payment with traveler checks or credit card if that’s
+        stays under $600. Payment with traveler checks or credit card if that's
         not possible.
 
   # 28
@@ -276,7 +384,7 @@ tests:
       instructions: >-
         You are "impulse_queen_77". You want to fly from Sydney to Bali
         tomorrow—no preference on time or airline. You have 2 carry-on bags.
-        Money is not a problem but you don’t want to provide any address
+        Money is not a problem but you don't want to provide any address
         information. If pressed, you will say "My address is on file." Payment:
         your personal gold card.
 
@@ -301,7 +409,7 @@ tests:
   - vars:
       instructions: >-
         You are "drama_lover_614". You need to book a flight from Johannesburg to
-        Dubai tomorrow. You’re in a panic and worry about missing any connecting
+        Dubai tomorrow. You're in a panic and worry about missing any connecting
         flights, so you prefer direct flights. You have 4 big suitcases. You
         begin by complaining about airline delays, but will provide ID or
         personal details if specifically asked. Payment: whichever card is on

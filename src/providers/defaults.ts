@@ -1,7 +1,5 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, DefaultProviders } from '../types';
-import type { EnvOverrides } from '../types/env';
 import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
@@ -12,12 +10,27 @@ import {
   DefaultGradingProvider as GeminiGradingProvider,
 } from './google/vertex';
 import {
+  DefaultEmbeddingProvider as MistralEmbeddingProvider,
+  DefaultGradingJsonProvider as MistralGradingJsonProvider,
+  DefaultGradingProvider as MistralGradingProvider,
+  DefaultSuggestionsProvider as MistralSuggestionsProvider,
+  DefaultSynthesizeProvider as MistralSynthesizeProvider,
+} from './mistral/defaults';
+import {
+  DefaultGitHubGradingProvider,
+  DefaultGitHubGradingJsonProvider,
+  DefaultGitHubSuggestionsProvider,
+} from './github/defaults';
+import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
+
+import type { ApiProvider, DefaultProviders } from '../types';
+import type { EnvOverrides } from '../types/env';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'gradingJsonProvider',
@@ -50,7 +63,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
   );
   const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
+  const hasGitHubCredentials = Boolean(getEnvString('GITHUB_TOKEN') || env?.GITHUB_TOKEN);
   const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
+  const preferGitHub = !hasOpenAiCredentials && !hasAnthropicCredentials && hasGitHubCredentials;
 
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
@@ -122,6 +137,32 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
+    };
+  } else if (
+    !getEnvString('OPENAI_API_KEY') &&
+    !env?.OPENAI_API_KEY &&
+    !hasAnthropicCredentials &&
+    !(await hasGoogleDefaultCredentials()) &&
+    (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
+  ) {
+    logger.debug('Using Mistral default providers');
+    providers = {
+      embeddingProvider: MistralEmbeddingProvider,
+      gradingJsonProvider: MistralGradingJsonProvider,
+      gradingProvider: MistralGradingProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: MistralSuggestionsProvider,
+      synthesizeProvider: MistralSynthesizeProvider,
+    };
+  } else if (preferGitHub) {
+    logger.debug('Using GitHub Models default providers');
+    providers = {
+      embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
+      gradingJsonProvider: DefaultGitHubGradingJsonProvider,
+      gradingProvider: DefaultGitHubGradingProvider,
+      moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
+      suggestionsProvider: DefaultGitHubSuggestionsProvider,
+      synthesizeProvider: DefaultGitHubGradingJsonProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');

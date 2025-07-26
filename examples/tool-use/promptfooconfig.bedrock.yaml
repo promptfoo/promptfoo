@@ -1,10 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Bedrock Tool Use'
+description: Bedrock Tool Use
 prompts:
   - Tell me about the weather in {{city}}.
 providers:
-  - id: bedrock:anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude 4 Sonnet
     config:
+      region: us-east-2
       # optional block to force specific tool to be used
       tool_choice:
         type: tool

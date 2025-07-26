@@ -5,21 +5,29 @@ import cliProgress from 'cli-progress';
 import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
-import readline from 'readline';
 import type winston from 'winston';
+
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
-import { fetchWithCache, getCache } from './cache';
+import { getCache } from './cache';
 import cliState from './cliState';
+import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { isPromptfooSampleTarget } from './providers/shared';
 import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import {
+  generateTraceContextIfNeeded,
+  isOtlpReceiverStarted,
+  startOtlpReceiverIfNeeded,
+  stopOtlpReceiverIfNeeded,
+} from './tracing/evaluatorTracing';
 import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
@@ -38,55 +46,276 @@ import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
-import { safeJsonStringify } from './util/json';
+import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
+import { TokenUsageTracker } from './util/tokenUsage';
+import {
+  createEmptyTokenUsage,
+  createEmptyAssertions,
+  accumulateAssertionTokenUsage,
+  accumulateResponseTokenUsage,
+} from './util/tokenUsageUtils';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
+
+/**
+ * Manages progress bars for different execution phases of the evaluation
+ */
+class ProgressBarManager {
+  private multibar: MultiBar | undefined;
+  private serialBar: SingleBar | undefined;
+  private concurrentBars: SingleBar[] = [];
+  private comparisonBar: SingleBar | undefined;
+  private isWebUI: boolean;
+
+  // Track work distribution
+  private serialCount: number = 0;
+  private concurrentCount: number = 0;
+  private comparisonCount: number = 0;
+
+  // Track completion
+  private serialCompleted: number = 0;
+  private concurrentCompleted: number = 0;
+  private comparisonCompleted: number = 0;
+
+  // Map original indices to execution context
+  private indexToContext: Map<number, { phase: 'serial' | 'concurrent'; barIndex: number }> =
+    new Map();
+
+  constructor(isWebUI: boolean) {
+    this.isWebUI = isWebUI;
+  }
+
+  /**
+   * Initialize progress bars based on work distribution
+   */
+  async initialize(
+    runEvalOptions: RunEvalOptions[],
+    concurrency: number,
+    compareRowsCount: number,
+  ): Promise<void> {
+    if (this.isWebUI) {
+      return;
+    }
+
+    // Calculate work distribution
+    const maxConcurrentBars = Math.min(concurrency, 20);
+
+    for (let i = 0; i < runEvalOptions.length; i++) {
+      const evalOption = runEvalOptions[i];
+      if (evalOption.test.options?.runSerially) {
+        this.serialCount++;
+        this.indexToContext.set(i, { phase: 'serial', barIndex: 0 });
+      } else {
+        this.indexToContext.set(i, {
+          phase: 'concurrent',
+          barIndex: this.concurrentCount % maxConcurrentBars,
+        });
+        this.concurrentCount++;
+      }
+    }
+    this.comparisonCount = compareRowsCount;
+
+    // Create multibar
+    this.multibar = new cliProgress.MultiBar(
+      {
+        format:
+          '{phase} [{bar}] {percentage}% | {value}/{total} | {status} | {provider} "{prompt}" {vars}',
+        hideCursor: true,
+        gracefulExit: true,
+      },
+      cliProgress.Presets.shades_classic,
+    );
+
+    // Create serial progress bar if needed
+    if (this.serialCount > 0) {
+      this.serialBar = this.multibar.create(this.serialCount, 0, {
+        phase: 'Serial (1 thread)',
+        status: 'Running',
+        provider: '',
+        prompt: '',
+        vars: '',
+      });
+    }
+
+    // Create concurrent progress bars
+    const numConcurrentBars = Math.min(concurrency, 20, this.concurrentCount);
+    const concurrentPerBar = Math.floor(this.concurrentCount / numConcurrentBars);
+    const concurrentRemainder = this.concurrentCount % numConcurrentBars;
+
+    for (let i = 0; i < numConcurrentBars; i++) {
+      const totalSteps = i < concurrentRemainder ? concurrentPerBar + 1 : concurrentPerBar;
+      if (totalSteps > 0) {
+        const bar = this.multibar.create(totalSteps, 0, {
+          phase: `Group ${i + 1}/${numConcurrentBars}`,
+          status: `${calculateThreadsPerBar(concurrency, numConcurrentBars, i)} threads`,
+          provider: '',
+          prompt: '',
+          vars: '',
+        });
+        this.concurrentBars.push(bar);
+      }
+    }
+
+    // Create comparison progress bar if needed
+    if (this.comparisonCount > 0) {
+      this.comparisonBar = this.multibar.create(this.comparisonCount, 0, {
+        phase: 'select-best',
+        status: 'Pending',
+        provider: 'Grading',
+        prompt: '',
+        vars: '',
+      });
+    }
+  }
+
+  /**
+   * Update progress for a specific evaluation
+   */
+  updateProgress(
+    index: number,
+    evalStep: RunEvalOptions | undefined,
+    phase: 'serial' | 'concurrent' = 'concurrent',
+  ): void {
+    if (this.isWebUI || !evalStep) {
+      return;
+    }
+
+    const context = this.indexToContext.get(index);
+    if (!context) {
+      logger.warn(`No context found for index ${index}`);
+      return;
+    }
+
+    const provider = evalStep.provider.label || evalStep.provider.id();
+    const prompt = evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ');
+    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+
+    switch (context.phase) {
+      case 'serial':
+        this.serialCompleted++;
+        this.serialBar?.increment({
+          status: `Running (${this.serialCompleted}/${this.serialCount})`,
+          provider,
+          prompt,
+          vars,
+        });
+        break;
+
+      case 'concurrent':
+        this.concurrentCompleted++;
+        if (context.barIndex >= 0 && context.barIndex < this.concurrentBars.length) {
+          const bar = this.concurrentBars[context.barIndex];
+          bar.increment({
+            status: 'Running',
+            provider,
+            prompt,
+            vars,
+          });
+        } else {
+          logger.warn(`Invalid bar index ${context.barIndex} for concurrent progress update`);
+        }
+        break;
+    }
+  }
+
+  /**
+   * Update comparison progress
+   */
+  updateComparisonProgress(prompt: string): void {
+    if (this.isWebUI || !this.comparisonBar) {
+      return;
+    }
+
+    // Validate we don't exceed the total
+    if (this.comparisonCompleted >= this.comparisonCount) {
+      logger.warn(
+        `Comparison progress already at maximum (${this.comparisonCompleted}/${this.comparisonCount})`,
+      );
+      return;
+    }
+
+    this.comparisonCompleted++;
+    this.comparisonBar.increment({
+      phase: 'select-best',
+      status: `Running (${this.comparisonCompleted}/${this.comparisonCount})`,
+      provider: 'Grading',
+      prompt: prompt.slice(0, 10).replace(/\n/g, ' '),
+      vars: '',
+    });
+  }
+
+  /**
+   * Create comparison progress bar dynamically when we know the actual count
+   */
+  createComparisonBar(comparisonCount: number): void {
+    if (this.isWebUI || !this.multibar || comparisonCount <= 0) {
+      return;
+    }
+
+    this.comparisonCount = comparisonCount;
+    this.comparisonBar = this.multibar.create(comparisonCount, 0, {
+      phase: 'select-best',
+      status: 'Running',
+      provider: 'Grading',
+      prompt: '',
+      vars: '',
+    });
+  }
+
+  /**
+   * Mark a phase as complete
+   */
+  completePhase(phase: 'serial' | 'concurrent' | 'comparison'): void {
+    if (this.isWebUI) {
+      return;
+    }
+
+    switch (phase) {
+      case 'serial':
+        if (this.serialBar) {
+          this.serialBar.update(this.serialCount, { status: 'Complete' });
+        }
+        break;
+      case 'concurrent':
+        this.concurrentBars.forEach((bar) => {
+          bar.update(bar.getTotal(), { status: 'Complete' });
+        });
+        break;
+      case 'comparison':
+        if (this.comparisonBar) {
+          this.comparisonBar.update(this.comparisonCount, { status: 'Complete' });
+        }
+        break;
+    }
+  }
+
+  /**
+   * Stop all progress bars
+   */
+  stop(): void {
+    if (this.multibar) {
+      this.multibar.stop();
+    }
+  }
+}
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
+/**
+ * Update token usage metrics with assertion token usage
+ */
 function updateAssertionMetrics(
   metrics: { tokenUsage: Partial<TokenUsage> },
   assertionTokens: Partial<TokenUsage>,
 ): void {
-  if (!metrics.tokenUsage.assertions) {
-    metrics.tokenUsage.assertions = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-    };
-  }
-
-  const assertions = metrics.tokenUsage.assertions;
-  assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
-  assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
-  assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
-  assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
-
-  if (assertionTokens.numRequests) {
-    assertions.numRequests = (assertions.numRequests ?? 0) + assertionTokens.numRequests;
-  }
-
-  if (assertionTokens.completionDetails) {
-    if (!assertions.completionDetails) {
-      assertions.completionDetails = {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      };
+  if (metrics.tokenUsage && assertionTokens) {
+    if (!metrics.tokenUsage.assertions) {
+      metrics.tokenUsage.assertions = createEmptyAssertions();
     }
 
-    assertions.completionDetails.reasoning =
-      (assertions.completionDetails.reasoning ?? 0) +
-      (assertionTokens.completionDetails.reasoning ?? 0);
-
-    assertions.completionDetails.acceptedPrediction =
-      (assertions.completionDetails.acceptedPrediction ?? 0) +
-      (assertionTokens.completionDetails.acceptedPrediction ?? 0);
-
-    assertions.completionDetails.rejectedPrediction =
-      (assertions.completionDetails.rejectedPrediction ?? 0) +
-      (assertionTokens.completionDetails.rejectedPrediction ?? 0);
+    // Accumulate assertion tokens using the specialized assertion function
+    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
   }
 }
 
@@ -113,32 +342,6 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
     allowedPrompts.includes(prompt.label) ||
     allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
   );
-}
-
-export function newTokenUsage(): Required<TokenUsage> {
-  return {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-    assertions: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    },
-  };
 }
 
 /**
@@ -186,6 +389,10 @@ export async function runEval({
 
   // Set up the special _conversation variable
   const vars = test.vars || {};
+
+  // Collect file metadata for the test case before rendering the prompt.
+  const fileMetadata = collectFileMetadata(test.vars || vars);
+
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
@@ -214,6 +421,7 @@ export async function runEval({
     vars,
   };
   let latencyMs = 0;
+  let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> = null;
 
   try {
     // Render the prompt
@@ -227,7 +435,7 @@ export async function runEval({
     const startTime = Date.now();
     let response: ProviderResponse = {
       output: '',
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
       cost: 0,
       cached: false,
     };
@@ -248,23 +456,34 @@ export async function runEval({
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
+      // Generate trace context if tracing is enabled
+      traceContext = await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx);
+
+      const callApiContext: any = {
+        // Always included
+        vars,
+
+        // Part of these may be removed in python and script providers, but every Javascript provider gets them
+        prompt,
+        filters,
+        originalProvider: provider,
+        test,
+
+        // All of these are removed in python and script providers, but every Javascript provider gets them
+        logger: logger as unknown as winston.Logger,
+        getCache,
+      };
+
+      // Only add trace context properties if tracing is enabled
+      if (traceContext) {
+        callApiContext.traceparent = traceContext.traceparent;
+        callApiContext.evaluationId = traceContext.evaluationId;
+        callApiContext.testCaseId = traceContext.testCaseId;
+      }
+
       response = await activeProvider.callApi(
         renderedPrompt,
-        {
-          // Always included
-          vars,
-
-          // Part of these may be removed in python and script providers, but every Javascript provider gets them
-          prompt,
-          filters,
-          originalProvider: provider,
-          test,
-
-          // All of these are removed in python and script providers, but every Javascript provider gets them
-          logger: logger as unknown as winston.Logger,
-          fetchWithCache,
-          getCache,
-        },
+        callApiContext,
         abortSignal ? { abortSignal } : undefined,
       );
 
@@ -314,15 +533,45 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
+        [FILE_METADATA_KEY]: fileMetadata,
+        // Add session information to metadata
+        ...(() => {
+          // If sessionIds array exists from iterative providers, use it
+          if (test.metadata?.sessionIds) {
+            return { sessionIds: test.metadata.sessionIds };
+          }
+
+          // Otherwise, use single sessionId (prioritize response over vars)
+          if (response.sessionId) {
+            return { sessionId: response.sessionId };
+          }
+
+          // Check if vars.sessionId is a valid string
+          const varsSessionId = vars.sessionId;
+          if (typeof varsSessionId === 'string' && varsSessionId.trim() !== '') {
+            return { sessionId: varsSessionId };
+          }
+
+          return {};
+        })(),
       },
       promptIdx,
       testIdx,
       testCase: test,
       promptId: prompt.id || '',
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
+
+    // Track token usage at the provider level
+    if (response.tokenUsage) {
+      const providerId = provider.id();
+      const trackingId = provider.constructor?.name
+        ? `${providerId} (${provider.constructor.name})`
+        : providerId;
+      TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+    }
 
     if (response.error) {
       ret.error = response.error;
@@ -355,6 +604,17 @@ export async function runEval({
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Extract traceId from traceparent if available
+      let traceId: string | undefined;
+      if (traceContext?.traceparent) {
+        // traceparent format: version-traceId-spanId-flags
+        const parts = traceContext.traceparent.split('-');
+        if (parts.length >= 3) {
+          traceId = parts[1];
+        }
+      }
+
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
@@ -362,6 +622,7 @@ export async function runEval({
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+        traceId,
       });
 
       if (!checkResult.pass) {
@@ -371,20 +632,15 @@ export async function runEval({
       ret.success = checkResult.pass;
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
+      // Track assertion request count
+      if (!ret.tokenUsage.assertions) {
+        ret.tokenUsage.assertions = createEmptyAssertions();
+      }
+      ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
+
+      // Track assertion token usage if provided
       if (checkResult.tokensUsed) {
-        ret.tokenUsage.total += checkResult.tokensUsed.total || 0;
-        ret.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
-        ret.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
-        ret.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
-        ret.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
-        if (checkResult.tokensUsed.completionDetails) {
-          ret.tokenUsage.completionDetails.reasoning! +=
-            checkResult.tokensUsed.completionDetails.reasoning || 0;
-          ret.tokenUsage.completionDetails.acceptedPrediction! +=
-            checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
-          ret.tokenUsage.completionDetails.rejectedPrediction! +=
-            checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
-        }
+        accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
@@ -392,19 +648,7 @@ export async function runEval({
 
     // Update token usage stats
     if (response.tokenUsage) {
-      ret.tokenUsage.total += response.tokenUsage.total || 0;
-      ret.tokenUsage.prompt += response.tokenUsage.prompt || 0;
-      ret.tokenUsage.completion += response.tokenUsage.completion || 0;
-      ret.tokenUsage.cached += response.tokenUsage.cached || 0;
-      ret.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
-      if (response.tokenUsage.completionDetails) {
-        ret.tokenUsage.completionDetails.reasoning! +=
-          response.tokenUsage.completionDetails.reasoning || 0;
-        ret.tokenUsage.completionDetails.acceptedPrediction! +=
-          response.tokenUsage.completionDetails.acceptedPrediction || 0;
-        ret.tokenUsage.completionDetails.rejectedPrediction! +=
-          response.tokenUsage.completionDetails.rejectedPrediction || 0;
-      }
+      accumulateResponseTokenUsage(ret.tokenUsage, response);
     }
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
@@ -444,9 +688,44 @@ export function calculateThreadsPerBar(
   numProgressBars: number,
   barIndex: number,
 ): number {
-  const minThreadsPerBar = Math.floor(concurrency / numProgressBars);
+  const threadsPerBar = Math.floor(concurrency / numProgressBars);
   const extraThreads = concurrency % numProgressBars;
-  return barIndex < extraThreads ? minThreadsPerBar + 1 : minThreadsPerBar;
+  return barIndex < extraThreads ? threadsPerBar + 1 : threadsPerBar;
+}
+
+/**
+ * Safely formats variables for display in progress bars and logs.
+ * Handles extremely large variables that could cause RangeError crashes.
+ *
+ * @param vars - Variables to format
+ * @param maxLength - Maximum length of the final formatted string
+ * @returns Formatted variables string or fallback message
+ */
+export function formatVarsForDisplay(
+  vars: Record<string, any> | undefined,
+  maxLength: number,
+): string {
+  if (!vars || Object.keys(vars).length === 0) {
+    return '';
+  }
+
+  try {
+    // Simple approach: limit individual values, then truncate the whole result
+    const formatted = Object.entries(vars)
+      .map(([key, value]) => {
+        // Prevent memory issues by limiting individual values first
+        const valueStr = String(value).slice(0, 100);
+        return `${key}=${valueStr}`;
+      })
+      .join(' ')
+      .replace(/\n/g, ' ')
+      .slice(0, maxLength);
+
+    return formatted;
+  } catch {
+    // Any error - return safe fallback
+    return '[vars unavailable]';
+  }
 }
 
 export function generateVarCombinations(
@@ -461,7 +740,10 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      const filePaths =
+        globSync(resolvedPath.replace(/\\/g, '/'), {
+          windowsPathsNoEscape: true,
+        }) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
@@ -498,6 +780,7 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
@@ -506,7 +789,7 @@ class Evaluator {
       successes: 0,
       failures: 0,
       errors: 0,
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
     this.conversations = {};
     this.registers = {};
@@ -520,14 +803,36 @@ class Evaluator {
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
-  async evaluate(): Promise<Eval> {
-    const { testSuite, options } = this;
+  private async _runEvaluation(): Promise<Eval> {
+    const { options } = this;
+    let { testSuite } = this;
+
+    const startTime = Date.now();
+    const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+    let evalTimedOut = false;
+    let globalTimeout: NodeJS.Timeout | undefined;
+    let globalAbortController: AbortController | undefined;
+    const processedIndices = new Set<number>();
+
+    if (maxEvalTimeMs > 0) {
+      globalAbortController = new AbortController();
+      options.abortSignal = options.abortSignal
+        ? AbortSignal.any([options.abortSignal, globalAbortController.signal])
+        : globalAbortController.signal;
+      globalTimeout = setTimeout(() => {
+        evalTimedOut = true;
+        globalAbortController?.abort();
+      }, maxEvalTimeMs);
+    }
+
     const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
       }
     };
+
+    logger.info(`Starting evaluation ${this.evalRecord.id}`);
 
     // Add abort checks at key points
     checkAbort();
@@ -536,7 +841,10 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
+      suite: testSuite,
+    });
+    testSuite = beforeAllOut.suite;
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -554,25 +862,13 @@ class Evaluator {
         logger.info('--------------------------------------------------------');
 
         // Ask the user if they want to continue
-        await new Promise((resolve) => {
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-          rl.question(
-            `${chalk.blue('Do you want to test this prompt?')} (y/N): `,
-            async (answer) => {
-              rl.close();
-              if (answer.toLowerCase().startsWith('y')) {
-                testSuite.prompts.push({ raw: prompt, label: prompt });
-                numAdded++;
-              } else {
-                logger.info('Skipping this prompt.');
-              }
-              resolve(true);
-            },
-          );
-        });
+        const shouldTest = await promptYesNo('Do you want to test this prompt?', false);
+        if (shouldTest) {
+          testSuite.prompts.push({ raw: prompt, label: prompt });
+          numAdded++;
+        } else {
+          logger.info('Skipping this prompt.');
+        }
       }
 
       if (numAdded < 1) {
@@ -604,13 +900,7 @@ class Evaluator {
             assertPassCount: 0,
             assertFailCount: 0,
             totalLatencyMs: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-            },
+            tokenUsage: createEmptyTokenUsage(),
             namedScores: {},
             namedScoresCount: {},
             cost: 0,
@@ -619,6 +909,8 @@ class Evaluator {
         prompts.push(completedPrompt);
       }
     }
+
+    this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -634,7 +926,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.recordAndSendOnce('feature_used', {
+      telemetry.record('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {
@@ -648,16 +940,18 @@ class Evaluator {
             ]
           ).map((test) => {
             return {
-              ...testSuite.defaultTest,
+              ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {}),
               ...data,
               ...test,
               vars: {
-                ...testSuite.defaultTest?.vars,
+                ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
                 ...data.vars,
                 ...test.vars,
               },
               options: {
-                ...testSuite.defaultTest?.options,
+                ...(typeof testSuite.defaultTest === 'object'
+                  ? testSuite.defaultTest?.options
+                  : {}),
                 ...test.options,
               },
               assert: [
@@ -666,7 +960,9 @@ class Evaluator {
                 ...(test.assert || []),
               ],
               metadata: {
-                ...testSuite.defaultTest?.metadata,
+                ...(typeof testSuite.defaultTest === 'object'
+                  ? testSuite.defaultTest?.metadata
+                  : {}),
                 ...data.metadata,
                 ...test.metadata,
               },
@@ -683,9 +979,15 @@ class Evaluator {
     // Prepare vars
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Vars[] = [];
-    const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
+    const inputTransformDefault =
+      typeof testSuite?.defaultTest === 'object'
+        ? testSuite?.defaultTest?.options?.transformVars
+        : undefined;
     for (const testCase of tests) {
-      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
+      testCase.vars = {
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
+        ...testCase?.vars,
+      };
 
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
@@ -724,7 +1026,8 @@ class Evaluator {
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
-        Array.isArray(testSuite.defaultTest?.assert || []),
+        typeof testSuite.defaultTest !== 'object' ||
+          Array.isArray(testSuite.defaultTest?.assert || []),
         `defaultTest.assert is not an array in test case #${index + 1}`,
       );
       invariant(
@@ -732,13 +1035,29 @@ class Evaluator {
         `testCase.assert is not an array in test case #${index + 1}`,
       );
       // Handle default properties
-      testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
-      testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
-      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
-      testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
-      testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assert = [
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.assert || [] : []),
+        ...(testCase.assert || []),
+      ];
+      testCase.threshold =
+        testCase.threshold ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.threshold : undefined);
+      testCase.options = {
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.options : {}),
+        ...testCase.options,
+      };
+      testCase.metadata = {
+        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
+        ...testCase.metadata,
+      };
+      testCase.provider =
+        testCase.provider ||
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.provider : undefined);
       testCase.assertScoringFunction =
-        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
+        testCase.assertScoringFunction ||
+        (typeof testSuite.defaultTest === 'object'
+          ? testSuite.defaultTest?.assertScoringFunction
+          : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -750,13 +1069,17 @@ class Evaluator {
         });
       }
       const prependToPrompt =
-        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
+        testCase.options?.prefix ||
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.options?.prefix : '') ||
+        '';
       const appendToPrompt =
-        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+        testCase.options?.suffix ||
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.options?.suffix : '') ||
+        '';
 
       // Finalize test case eval
       const varCombinations =
-        getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options.disableVarExpansion
+        getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
           ? [testCase.vars]
           : generateVarCombinations(testCase.vars || {});
 
@@ -778,7 +1101,29 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
-                test: { ...testCase, vars, options: testCase.options },
+                test: (() => {
+                  const baseTest = {
+                    ...testCase,
+                    vars,
+                    options: testCase.options,
+                  };
+                  // Only add tracing metadata fields if tracing is actually enabled
+                  const tracingEnabled =
+                    testCase.metadata?.tracingEnabled === true ||
+                    testSuite.tracing?.enabled === true;
+
+                  if (tracingEnabled) {
+                    return {
+                      ...baseTest,
+                      metadata: {
+                        ...testCase.metadata,
+                        tracingEnabled: true,
+                        evaluationId: this.evalRecord.id,
+                      },
+                    };
+                  }
+                  return baseTest;
+                })(),
                 nunjucksFilters: testSuite.nunjucksFilters,
                 testIdx,
                 promptIdx,
@@ -786,7 +1131,7 @@ class Evaluator {
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
-                isRedteam: this.testSuite.redteam != null,
+                isRedteam: testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
@@ -822,9 +1167,10 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(testSuite.extensions, 'beforeEach', {
+      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+      evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
 
@@ -839,19 +1185,11 @@ class Evaluator {
               const tokensUsed = row.gradingResult.tokensUsed;
 
               if (!this.stats.tokenUsage.assertions) {
-                this.stats.tokenUsage.assertions = {
-                  total: 0,
-                  prompt: 0,
-                  completion: 0,
-                  cached: 0,
-                };
+                this.stats.tokenUsage.assertions = createEmptyAssertions();
               }
 
-              const assertions = this.stats.tokenUsage.assertions;
-              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
-              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
-              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
-              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
+              // Accumulate assertion tokens using the specialized assertion function
+              accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
 
               break;
             }
@@ -868,19 +1206,7 @@ class Evaluator {
         }
 
         if (row.tokenUsage) {
-          this.stats.tokenUsage.total += row.tokenUsage.total || 0;
-          this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
-          this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
-          this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
-          this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
-          if (row.tokenUsage.completionDetails) {
-            this.stats.tokenUsage.completionDetails.reasoning! +=
-              row.tokenUsage.completionDetails.reasoning || 0;
-            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
-              row.tokenUsage.completionDetails.acceptedPrediction || 0;
-            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
-              row.tokenUsage.completionDetails.rejectedPrediction || 0;
-          }
+          accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
         }
 
         if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
@@ -897,7 +1223,8 @@ class Evaluator {
         try {
           await this.evalRecord.addResult(row);
         } catch (error) {
-          logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
+          const resultSummary = summarizeEvaluateResultForLogging(row);
+          logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
         }
 
         for (const writer of this.fileWriters) {
@@ -957,27 +1284,7 @@ class Evaluator {
         metrics.assertFailCount +=
           row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
         metrics.totalLatencyMs += row.latencyMs || 0;
-        metrics.tokenUsage.cached =
-          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-        metrics.tokenUsage.completion =
-          (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
-        metrics.tokenUsage.prompt =
-          (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
-        metrics.tokenUsage.total =
-          (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
-        metrics.tokenUsage.numRequests =
-          (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
-        metrics.tokenUsage.completionDetails = {
-          reasoning:
-            (metrics.tokenUsage.completionDetails?.reasoning || 0) +
-            (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
-          acceptedPrediction:
-            (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
-            (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-          rejectedPrediction:
-            (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
-            (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-        };
+        accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 
         // Add assertion token usage to the metrics
         if (row.gradingResult?.tokensUsed) {
@@ -1074,8 +1381,7 @@ class Evaluator {
         this.stats.errors++;
 
         // Update prompt metrics
-        const { promptIdx } = timeoutResult;
-        const metrics = prompts[promptIdx].metrics;
+        const { metrics } = prompts[evalStep.promptIdx];
         if (metrics) {
           metrics.testErrorCount += 1;
           metrics.totalLatencyMs += timeoutMs;
@@ -1112,11 +1418,16 @@ class Evaluator {
       }
     };
 
-    // Set up main progress bars
-    let multibar: MultiBar | undefined;
-    let multiProgressBars: SingleBar[] = [];
+    // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
+    const progressBarManager = new ProgressBarManager(isWebUI);
+
+    // Initialize progress bar manager if needed
+    if (this.options.showProgressBar) {
+      // We'll create the comparison bar dynamically later when we know the actual count
+      await progressBarManager.initialize(runEvalOptions, concurrency, 0);
+    }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1125,92 +1436,16 @@ class Evaluator {
 
       if (isWebUI) {
         const provider = evalStep.provider.label || evalStep.provider.id();
-        const vars = Object.entries(evalStep.test.vars || {})
-          .map(([k, v]) => `${k}=${v}`)
-          .join(' ')
-          .slice(0, 50)
-          .replace(/\n/g, ' ');
+        const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (multibar && evalStep) {
-        const numProgressBars = Math.min(concurrency, 20);
-
-        // Calculate which progress bar to use
-        const progressBarIndex = index % numProgressBars;
-        const progressbar = multiProgressBars[progressBarIndex];
-
-        // Calculate how many threads are assigned to this progress bar
-        const threadsForThisBar = calculateThreadsPerBar(
-          concurrency,
-          numProgressBars,
-          progressBarIndex,
-        );
-
-        progressbar.increment({
-          provider: evalStep.provider.label || evalStep.provider.id(),
-          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-          vars: Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 10)
-            .replace(/\n/g, ' '),
-          activeThreads: threadsForThisBar,
-        });
+      } else if (this.options.showProgressBar) {
+        // Progress bar update is handled by the manager
+        const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
+        progressBarManager.updateProgress(index, evalStep, phase);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
     };
-
-    const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
-      // Only create progress bars if not in web UI mode
-      if (isWebUI) {
-        return;
-      }
-
-      const numProgressBars = Math.min(concurrency, 20);
-
-      const showThreadCounts = concurrency > numProgressBars;
-
-      multibar = new cliProgress.MultiBar(
-        {
-          format: showThreadCounts
-            ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
-            : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
-          hideCursor: true,
-        },
-        cliProgress.Presets.shades_classic,
-      );
-
-      if (!multibar) {
-        return;
-      }
-
-      const stepsPerProgressBar = Math.floor(evalOptions.length / numProgressBars);
-      const remainingSteps = evalOptions.length % numProgressBars;
-      multiProgressBars = [];
-
-      for (let i = 0; i < numProgressBars; i++) {
-        const totalSteps = i < remainingSteps ? stepsPerProgressBar + 1 : stepsPerProgressBar;
-        if (totalSteps > 0) {
-          // Calculate how many threads are assigned to this progress bar
-          const threadsForThisBar = calculateThreadsPerBar(concurrency, numProgressBars, i);
-
-          const progressbar = multibar.create(totalSteps, 0, {
-            groupId: `${i + 1}/${numProgressBars}`,
-            provider: '',
-            prompt: '',
-            vars: '',
-            activeThreads: 0,
-            maxThreads: threadsForThisBar,
-          });
-          multiProgressBars.push(progressbar);
-        }
-      }
-    };
-
-    // Run the evals
-    if (this.options.showProgressBar) {
-      await createMultiBars(runEvalOptions);
-    }
 
     // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
@@ -1224,45 +1459,62 @@ class Evaluator {
       }
     }
 
-    if (serialRunEvalOptions.length > 0) {
-      // Run serial evaluations first
-      logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
-      for (const evalStep of serialRunEvalOptions) {
-        if (isWebUI) {
-          const provider = evalStep.provider.label || evalStep.provider.id();
-          const vars = Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 50)
-            .replace(/\n/g, ' ');
-          logger.info(
-            `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
-          );
+    try {
+      if (serialRunEvalOptions.length > 0) {
+        // Run serial evaluations first
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+        for (const evalStep of serialRunEvalOptions) {
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
+            logger.info(
+              `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+            );
+          }
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
         }
-        await processEvalStepWithTimeout(evalStep, serialRunEvalOptions.indexOf(evalStep));
+
+        // Mark serial phase as complete
+        if (this.options.showProgressBar) {
+          progressBarManager.completePhase('serial');
+        }
+      }
+
+      // Then run concurrent evaluations
+      logger.info(
+        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+      );
+      await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
+        checkAbort();
+        const idx = runEvalOptions.indexOf(evalStep);
+        await processEvalStepWithTimeout(evalStep, idx);
+        processedIndices.add(idx);
+        await this.evalRecord.addPrompts(prompts);
+      });
+    } catch (err) {
+      if (options.abortSignal?.aborted) {
+        evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
+        logger.warn(`Evaluation aborted: ${String(err)}`);
+      } else {
+        throw err;
       }
     }
-
-    // Then run concurrent evaluations
-    logger.info(
-      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
-    );
-    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
-      checkAbort();
-      await processEvalStepWithTimeout(evalStep, index);
-    });
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
 
-    let progressBar;
-    if (compareRowsCount > 0 && multibar && !isWebUI) {
-      progressBar = multibar.create(compareRowsCount, 0, {
-        provider: 'Running model-graded comparisons',
-        prompt: '',
-        vars: '',
-      });
+    // Mark concurrent phase as complete
+    if (this.options.showProgressBar) {
+      progressBarManager.completePhase('concurrent');
+
+      // Create comparison progress bar now that we know the actual count
+      if (compareRowsCount > 0) {
+        progressBarManager.createComparisonBar(compareRowsCount);
+      }
     }
+
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
@@ -1347,10 +1599,8 @@ class Evaluator {
             await result.save();
           }
         }
-        if (progressBar) {
-          progressBar.increment({
-            prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
-          });
+        if (this.options.showProgressBar) {
+          progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
@@ -1360,14 +1610,55 @@ class Evaluator {
     await this.evalRecord.addPrompts(prompts);
 
     // Finish up
-    if (multibar) {
-      multibar.stop();
-    }
-    if (progressBar) {
-      progressBar.stop();
+    if (this.options.showProgressBar) {
+      progressBarManager.completePhase('comparison');
+      progressBarManager.stop();
     }
 
-    this.evalRecord.setVars(vars);
+    if (globalTimeout) {
+      clearTimeout(globalTimeout);
+    }
+
+    if (evalTimedOut) {
+      for (let i = 0; i < runEvalOptions.length; i++) {
+        if (!processedIndices.has(i)) {
+          const evalStep = runEvalOptions[i];
+          const timeoutResult = {
+            provider: {
+              id: evalStep.provider.id(),
+              label: evalStep.provider.label,
+              config: evalStep.provider.config,
+            },
+            prompt: {
+              raw: evalStep.prompt.raw,
+              label: evalStep.prompt.label,
+              config: evalStep.prompt.config,
+            },
+            vars: evalStep.test.vars || {},
+            error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            score: 0,
+            namedScores: {},
+            latencyMs: Date.now() - startTime,
+            promptIdx: evalStep.promptIdx,
+            testIdx: evalStep.testIdx,
+            testCase: evalStep.test,
+            promptId: evalStep.prompt.id || '',
+          } as EvaluateResult;
+
+          await this.evalRecord.addResult(timeoutResult);
+          this.stats.errors++;
+          const { metrics } = prompts[evalStep.promptIdx];
+          if (metrics) {
+            metrics.testErrorCount += 1;
+            metrics.totalLatencyMs += timeoutResult.latencyMs;
+          }
+        }
+      }
+    }
+
+    this.evalRecord.setVars(Array.from(vars));
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
@@ -1375,41 +1666,134 @@ class Evaluator {
       suite: testSuite,
     });
 
-    telemetry.record('eval_ran', {
-      numPrompts: prompts.length,
-      numTests: prompts.reduce(
-        (acc, p) =>
-          acc +
-          (p.metrics?.testPassCount || 0) +
-          (p.metrics?.testFailCount || 0) +
-          (p.metrics?.testErrorCount || 0),
-        0,
+    // Calculate additional metrics for telemetry
+    const endTime = Date.now();
+    const totalEvalTimeMs = endTime - startTime;
+
+    // Calculate aggregated metrics
+    const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
+    const totalRequests = this.stats.tokenUsage.numRequests;
+
+    // Calculate efficiency metrics
+    const totalTokens = this.stats.tokenUsage.total;
+    const cachedTokens = this.stats.tokenUsage.cached;
+
+    // Calculate correct average latency by summing individual request latencies
+    const totalLatencyMs = this.evalRecord.results.reduce(
+      (sum, result) => sum + (result.latencyMs || 0),
+      0,
+    );
+    const avgLatencyMs =
+      this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
+
+    // Detect key feature usage patterns
+    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+    const usesTransforms = Boolean(
+      tests.some((t) => t.options?.transform || t.options?.postprocess) ||
+        testSuite.providers.some((p) => Boolean(p.transform)),
+    );
+    const usesScenarios = Boolean(testSuite.scenarios && testSuite.scenarios.length > 0);
+
+    // Detect if using any promptfoo.app example provider
+    const usesExampleProvider = testSuite.providers.some((provider) => {
+      const url = typeof provider.config?.url === 'string' ? provider.config.url : '';
+      const label = provider.label || '';
+      return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
+    });
+
+    // Calculate assertion metrics
+    const totalAssertions = prompts.reduce(
+      (acc, p) => acc + (p.metrics?.assertPassCount || 0) + (p.metrics?.assertFailCount || 0),
+      0,
+    );
+    const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
+
+    // Count model-graded vs other assertion types
+    const modelGradedCount = Array.from(assertionTypes).filter((type) =>
+      MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
+    ).length;
+
+    // Calculate provider distribution (maintain exact compatibility)
+    const providerPrefixes = Array.from(
+      new Set(
+        testSuite.providers.map((p) => {
+          const idParts = p.id().split(':');
+          return idParts.length > 1 ? idParts[0] : 'unknown';
+        }),
       ),
+    );
+
+    // Detect timeout occurrences (more robust than string matching)
+    const timeoutOccurred =
+      evalTimedOut ||
+      this.evalRecord.results.some(
+        (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
+      );
+
+    telemetry.record('eval_ran', {
+      // Basic metrics
+      numPrompts: prompts.length,
+      numTests: this.stats.successes + this.stats.failures + this.stats.errors,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
-      providerPrefixes: Array.from(
-        new Set(
-          testSuite.providers.map((p) => {
-            const idParts = p.id().split(':');
-            return idParts.length > 1 ? idParts[0] : 'unknown';
-          }),
-        ),
-      ).sort(),
+      providerPrefixes: providerPrefixes.sort(),
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.evalRecord.prompts.some(
-        (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
-      ),
-      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
-      // isRedteam: Boolean(testSuite.redteam),
+      hasAnyPass: this.stats.successes > 0,
+
+      // Result counts
+      numPasses: this.stats.successes,
+      numFails: this.stats.failures,
+      numErrors: this.stats.errors,
+
+      // Performance metrics
+      totalEvalTimeMs,
+      avgLatencyMs: Math.round(avgLatencyMs),
+      concurrencyUsed: concurrency,
+      timeoutOccurred,
+
+      // Token and cost metrics
+      totalTokens,
+      cachedTokens,
+      totalCost,
+      totalRequests,
+
+      // Assertion metrics
+      numAssertions: totalAssertions,
+      passedAssertions,
+      modelGradedAssertions: modelGradedCount,
+      assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
+
+      // Feature usage
+      usesConversationVar,
+      usesTransforms,
+      usesScenarios,
+      usesExampleProvider,
+      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+      isRedteam: Boolean(options.isRedteam),
     });
 
     // Update database signal file after all results are written
     updateSignalFile();
 
     return this.evalRecord;
+  }
+
+  async evaluate(): Promise<Eval> {
+    await startOtlpReceiverIfNeeded(this.testSuite);
+
+    try {
+      return await this._runEvaluation();
+    } finally {
+      if (isOtlpReceiverStarted()) {
+        // Add a delay to allow providers to finish exporting spans
+        logger.debug('[Evaluator] Waiting for span exports to complete...');
+        await sleep(1000);
+      }
+      await stopOtlpReceiverIfNeeded();
+    }
   }
 }
 

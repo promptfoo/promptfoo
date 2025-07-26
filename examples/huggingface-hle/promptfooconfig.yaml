@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: HLE benchmark evaluation
+
+prompts:
+  - file://prompt.py:create_hle_prompt
+
+providers:
+  - id: anthropic:claude-sonnet-4-20250514
+    config:
+      thinking:
+        type: enabled
+        budget_tokens: 3000
+      max_tokens: 4000
+  - id: openai:o4-mini
+    config:
+      max_completion_tokens: 4000
+  # - deepseek:deepseek-reasoner
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: |
+        Evaluate whether the response correctly answers the question.
+
+        Question: {{ question }}
+        Model Response: {{ output }}
+        Correct Answer: {{ answer }}
+
+        Grade the response on accuracy (0.0 to 1.0 scale):
+        - 1.0: Response matches the correct answer exactly or is mathematically/logically equivalent
+        - 0.8-0.9: Response is mostly correct with minor differences that don't affect correctness
+        - 0.5-0.7: Response is partially correct but has significant errors
+        - 0.0-0.4: Response is incorrect or doesn't address the question
+
+        The response should pass if it demonstrates correct understanding and provides the right answer, even if the explanation differs from the expected format.
+
+tests:
+  - huggingface://datasets/cais/hle?split=test&limit=50

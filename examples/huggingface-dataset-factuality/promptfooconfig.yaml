@@ -13,7 +13,7 @@ providers:
   - anthropic:messages:claude-3-7-sonnet-20250219
   # Uncomment to add more providers
   # - bedrock:us.meta.llama3-2-1b-instruct-v1:0
-  # - openai:gpt-4o-mini
+  # - openai:gpt-4.1-mini
   # - google:gemini-2.0-flash
 
 defaultTest:
@@ -21,7 +21,7 @@ defaultTest:
     # Uncomment one to change the grading provider.
     # provider: anthropic:messages:claude-3-7-sonnet-20250219
     # provider: bedrock:us.meta.llama3-2-1b-instruct-v1:0
-    # provider: openai:gpt-4o-mini
+    # provider: openai:gpt-4.1-mini
     # provider: google:gemini-2.0-flash
 
     # Optional: Custom scoring weights for different factuality categories
@@ -34,4 +34,8 @@ defaultTest:
       differButFactual: 0.7 # Score for category E (differences don't affect factuality)
 
 # Grabs TruthfulQA dataset from HuggingFace and formats it for promptfoo
-tests: file://dataset_loader.ts:generate_tests
+tests:
+  path: file://dataset_loader.ts:generate_tests
+  config:
+    dataset: EleutherAI/truthful_qa_mc
+    split: validation

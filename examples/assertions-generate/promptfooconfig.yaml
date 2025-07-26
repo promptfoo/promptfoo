@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Example base config that can be used to generate additional assertions
+providers:
+  - openai:gpt-4.1-mini
+
+prompts:
+  - 'Translate the following text to {{language}}: {{text}}.  IMPORTANT: Ensure the response is less than 100 characters'
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: Rate the accuracy of the translation of {{text}} from English to {{language}}
+      metric: accuracy
+    - type: llm-rubric
+      value: Rate the fluency of the translation of {{text}} from English to {{language}}
+      metric: fluency
+    - type: llm-rubric
+      value: Rate the grammar of the translation of {{text}} from English to {{language}}
+      metric: grammar
+  options:
+    provider:
+      text: openai:gpt-4.1-mini
+      embedding: openai:embedding:text-embedding-3-small
+
+tests:
+  - description: Default scoring function (geometric mean)
+    vars:
+      language: Spanish
+      text: Hello, how are you today?
+    assert:
+      - type: similar
+        value: Como estas?
+        metric: similar

@@ -1,4 +1,5 @@
 import { addCrescendo } from '../../../src/redteam/strategies/crescendo';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addCrescendo', () => {
@@ -17,7 +18,7 @@ describe('addCrescendo', () => {
       },
     ];
 
-    const injectVar = 'injectedVar';
+    const injectVar = 'input';
     const config = { someConfig: 'value' };
 
     const result = addCrescendo(testCases, injectVar, config);
@@ -29,12 +30,13 @@ describe('addCrescendo', () => {
       provider: {
         id: 'promptfoo:redteam:crescendo',
         config: {
-          injectVar: 'injectedVar',
+          injectVar: 'input',
           someConfig: 'value',
         },
       },
       metadata: {
         strategyId: 'crescendo',
+        originalText: 'test input',
       },
       assert: [
         {
@@ -54,18 +56,19 @@ describe('addCrescendo', () => {
       },
     ];
 
-    const result = addCrescendo(testCases, 'inject', {});
+    const result = addCrescendo(testCases, 'input', {});
 
     expect(result).toHaveLength(1);
     expect(result[0].assert).toBeUndefined();
     expect(result[0].provider).toEqual({
       id: 'promptfoo:redteam:crescendo',
       config: {
-        injectVar: 'inject',
+        injectVar: 'input',
       },
     });
     expect(result[0].metadata).toEqual({
       strategyId: 'crescendo',
+      originalText: 'test input',
     });
   });
 
@@ -85,7 +88,7 @@ describe('addCrescendo', () => {
       } as TestCase & { otherProp: string },
     ];
 
-    const result = addCrescendo(testCases, 'inject', {});
+    const result = addCrescendo(testCases, 'input', {});
 
     expect(result[0]).toMatchObject({
       description: 'Test case',
@@ -94,11 +97,12 @@ describe('addCrescendo', () => {
       provider: {
         id: 'promptfoo:redteam:crescendo',
         config: {
-          injectVar: 'inject',
+          injectVar: 'input',
         },
       },
       metadata: {
         strategyId: 'crescendo',
+        originalText: 'test',
       },
     });
   });

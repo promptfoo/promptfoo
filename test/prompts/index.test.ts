@@ -1,9 +1,11 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
+
+import dedent from 'dedent';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
-import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
+import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts';
 import { maybeFilePath } from '../../src/prompts/utils';
+
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
 
 jest.mock('proxy-agent', () => ({
@@ -48,6 +50,9 @@ jest.mock('../../src/prompts/utils', () => {
 });
 
 describe('readPrompts', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
     jest.mocked(fs.readFileSync).mockReset();
@@ -622,6 +627,7 @@ describe('readProviderPromptMap', () => {
   let parsedPrompts: Prompt[];
 
   beforeEach(() => {
+    jest.clearAllMocks();
     parsedPrompts = [
       { label: 'prompt1', raw: 'prompt1' },
       { label: 'prompt2', raw: 'prompt2' },

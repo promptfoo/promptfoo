@@ -1,4 +1,4 @@
-import { clearCache, disableCache } from '../../../src/cache';
+import { clearCache, disableCache, enableCache } from '../../../src/cache';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 
 jest.mock('proxy-agent', () => ({
@@ -9,6 +9,7 @@ describe('AnthropicCompletionProvider', () => {
   afterEach(async () => {
     jest.clearAllMocks();
     await clearCache();
+    enableCache();
   });
 
   describe('callApi', () => {
