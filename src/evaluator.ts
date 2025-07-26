@@ -50,6 +50,12 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
+import {
+  createEmptyTokenUsage,
+  createEmptyAssertions,
+  accumulateAssertionTokenUsage,
+  accumulateResponseTokenUsage,
+} from './util/tokenUsageUtils';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 /**
@@ -305,41 +311,11 @@ function updateAssertionMetrics(
 ): void {
   if (metrics.tokenUsage && assertionTokens) {
     if (!metrics.tokenUsage.assertions) {
-      metrics.tokenUsage.assertions = {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      };
+      metrics.tokenUsage.assertions = createEmptyAssertions();
     }
 
-    const assertions = metrics.tokenUsage.assertions;
-
-    // Update basic token counts
-    assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
-    assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
-    assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
-    assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
-
-    // Update completion details if present
-    if (assertionTokens.completionDetails && assertions.completionDetails) {
-      assertions.completionDetails.reasoning =
-        (assertions.completionDetails.reasoning ?? 0) +
-        (assertionTokens.completionDetails.reasoning ?? 0);
-
-      assertions.completionDetails.acceptedPrediction =
-        (assertions.completionDetails.acceptedPrediction ?? 0) +
-        (assertionTokens.completionDetails.acceptedPrediction ?? 0);
-
-      assertions.completionDetails.rejectedPrediction =
-        (assertions.completionDetails.rejectedPrediction ?? 0) +
-        (assertionTokens.completionDetails.rejectedPrediction ?? 0);
-    }
+    // Accumulate assertion tokens using the specialized assertion function
+    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
   }
 }
 
@@ -366,32 +342,6 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
     allowedPrompts.includes(prompt.label) ||
     allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
   );
-}
-
-export function newTokenUsage(): Required<TokenUsage> {
-  return {
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    total: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-    assertions: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    },
-  };
 }
 
 /**
@@ -485,7 +435,7 @@ export async function runEval({
     const startTime = Date.now();
     let response: ProviderResponse = {
       output: '',
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
       cost: 0,
       cached: false,
     };
@@ -609,7 +559,7 @@ export async function runEval({
       testIdx,
       testCase: test,
       promptId: prompt.id || '',
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
@@ -682,20 +632,15 @@ export async function runEval({
       ret.success = checkResult.pass;
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
+      // Track assertion request count
+      if (!ret.tokenUsage.assertions) {
+        ret.tokenUsage.assertions = createEmptyAssertions();
+      }
+      ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
+
+      // Track assertion token usage if provided
       if (checkResult.tokensUsed) {
-        ret.tokenUsage.total += checkResult.tokensUsed.total || 0;
-        ret.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
-        ret.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
-        ret.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
-        ret.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
-        if (checkResult.tokensUsed.completionDetails) {
-          ret.tokenUsage.completionDetails.reasoning! +=
-            checkResult.tokensUsed.completionDetails.reasoning || 0;
-          ret.tokenUsage.completionDetails.acceptedPrediction! +=
-            checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
-          ret.tokenUsage.completionDetails.rejectedPrediction! +=
-            checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
-        }
+        accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
@@ -703,20 +648,7 @@ export async function runEval({
 
     // Update token usage stats
     if (response.tokenUsage) {
-      ret.tokenUsage.total += response.tokenUsage.total || 0;
-      ret.tokenUsage.prompt += response.tokenUsage.prompt || 0;
-      ret.tokenUsage.completion += response.tokenUsage.completion || 0;
-      ret.tokenUsage.cached += response.tokenUsage.cached || 0;
-      ret.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
-
-      if (response.tokenUsage.completionDetails) {
-        ret.tokenUsage.completionDetails.reasoning! +=
-          response.tokenUsage.completionDetails.reasoning || 0;
-        ret.tokenUsage.completionDetails.acceptedPrediction! +=
-          response.tokenUsage.completionDetails.acceptedPrediction || 0;
-        ret.tokenUsage.completionDetails.rejectedPrediction! +=
-          response.tokenUsage.completionDetails.rejectedPrediction || 0;
-      }
+      accumulateResponseTokenUsage(ret.tokenUsage, response);
     }
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
@@ -857,7 +789,7 @@ class Evaluator {
       successes: 0,
       failures: 0,
       errors: 0,
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
     this.conversations = {};
     this.registers = {};
@@ -968,24 +900,7 @@ class Evaluator {
             assertPassCount: 0,
             assertFailCount: 0,
             totalLatencyMs: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: {
-                reasoning: 0,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-              assertions: {
-                total: 0,
-                prompt: 0,
-                completion: 0,
-                cached: 0,
-              },
-            },
+            tokenUsage: createEmptyTokenUsage(),
             namedScores: {},
             namedScoresCount: {},
             cost: 0,
@@ -1270,19 +1185,11 @@ class Evaluator {
               const tokensUsed = row.gradingResult.tokensUsed;
 
               if (!this.stats.tokenUsage.assertions) {
-                this.stats.tokenUsage.assertions = {
-                  total: 0,
-                  prompt: 0,
-                  completion: 0,
-                  cached: 0,
-                };
+                this.stats.tokenUsage.assertions = createEmptyAssertions();
               }
 
-              const assertions = this.stats.tokenUsage.assertions;
-              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
-              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
-              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
-              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
+              // Accumulate assertion tokens using the specialized assertion function
+              accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
 
               break;
             }
@@ -1299,19 +1206,7 @@ class Evaluator {
         }
 
         if (row.tokenUsage) {
-          this.stats.tokenUsage.total += row.tokenUsage.total || 0;
-          this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
-          this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
-          this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
-          this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
-          if (row.tokenUsage.completionDetails) {
-            this.stats.tokenUsage.completionDetails.reasoning! +=
-              row.tokenUsage.completionDetails.reasoning || 0;
-            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
-              row.tokenUsage.completionDetails.acceptedPrediction || 0;
-            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
-              row.tokenUsage.completionDetails.rejectedPrediction || 0;
-          }
+          accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
         }
 
         if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
@@ -1389,27 +1284,7 @@ class Evaluator {
         metrics.assertFailCount +=
           row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
         metrics.totalLatencyMs += row.latencyMs || 0;
-        metrics.tokenUsage.cached =
-          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-        metrics.tokenUsage.completion =
-          (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
-        metrics.tokenUsage.prompt =
-          (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
-        metrics.tokenUsage.total =
-          (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
-        metrics.tokenUsage.numRequests =
-          (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
-        metrics.tokenUsage.completionDetails = {
-          reasoning:
-            (metrics.tokenUsage.completionDetails?.reasoning || 0) +
-            (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
-          acceptedPrediction:
-            (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
-            (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-          rejectedPrediction:
-            (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
-            (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-        };
+        accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 
         // Add assertion token usage to the metrics
         if (row.gradingResult?.tokensUsed) {

@@ -9,7 +9,6 @@ import {
   formatVarsForDisplay,
   generateVarCombinations,
   isAllowedPrompt,
-  newTokenUsage,
   runEval,
 } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
@@ -19,6 +18,7 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
+import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
 jest.mock('../src/util/transform', () => ({
   TransformInputType: {
@@ -310,6 +310,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -350,6 +356,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
@@ -390,6 +402,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -486,6 +504,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -526,6 +550,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -566,6 +596,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -601,6 +637,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -636,6 +678,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -671,6 +719,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -1174,6 +1228,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
@@ -2353,7 +2413,7 @@ describe('evaluator', () => {
           successes: 0,
           failures: 0,
           errors: 1,
-          tokenUsage: newTokenUsage(),
+          tokenUsage: createEmptyTokenUsage(),
         },
       }),
       save: jest.fn().mockResolvedValue(undefined),
@@ -2437,7 +2497,7 @@ describe('evaluator', () => {
           successes: 0,
           failures: 0,
           errors: 2,
-          tokenUsage: newTokenUsage(),
+          tokenUsage: createEmptyTokenUsage(),
         },
       }),
       save: jest.fn().mockResolvedValue(undefined),
@@ -2495,21 +2555,22 @@ describe('evaluator', () => {
     });
 
     expect(results[0].tokenUsage).toEqual({
-      total: 20, // 10 from provider + 10 from assertion
-      prompt: 10, // 5 from provider + 5 from assertion
-      completion: 10, // 5 from provider + 5 from assertion
+      total: 10, // Only provider tokens, NOT assertion tokens
+      prompt: 5, // Only provider tokens
+      completion: 5, // Only provider tokens
       cached: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
-      numRequests: 2, // 1 from provider + 1 from assertion
+      numRequests: 1, // Only provider requests
       assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
+        total: 10, // Assertion tokens tracked separately
+        prompt: 5,
+        completion: 5,
         cached: 0,
+        numRequests: 1, // Assertion requests tracked separately
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -2517,6 +2578,96 @@ describe('evaluator', () => {
         },
       },
     });
+  });
+
+  it('should NOT include assertion tokens in main token totals', async () => {
+    // Mock provider that returns fixed token usage
+    const providerWithTokens: ApiProvider = {
+      id: jest.fn().mockReturnValue('provider-with-tokens'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          cached: 10,
+          numRequests: 1,
+        },
+      }),
+    };
+
+    // Mock grading provider that also returns token usage
+    const gradingProviderWithTokens: ApiProvider = {
+      id: jest.fn().mockReturnValue('grading-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: JSON.stringify({
+          pass: true,
+          score: 1,
+          reason: 'Test passed',
+        }),
+        tokenUsage: {
+          total: 50,
+          prompt: 30,
+          completion: 20,
+          cached: 5,
+          numRequests: 1,
+        },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [providerWithTokens],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output should be valid',
+              provider: gradingProviderWithTokens,
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Verify main totals only include provider tokens, NOT assertion tokens
+    expect(summary.stats.tokenUsage).toEqual({
+      total: 100, // Only provider tokens
+      prompt: 60,
+      completion: 40,
+      cached: 10,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 50, // Assertion tokens tracked separately
+        prompt: 30,
+        completion: 20,
+        cached: 5,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
+    });
+
+    // Also verify at the result level - the result should pass
+    const result = summary.results[0];
+    expect(result).toHaveProperty('success', true);
+    expect(result).toHaveProperty('score', 1);
+
+    // The main verification is at the stats level (already done above)
+    // Individual results may not always have tokenUsage populated in the summary
   });
 
   it('should include sessionId in metadata for afterEach hook', async () => {
@@ -3070,21 +3221,22 @@ describe('runEval', () => {
     });
 
     expect(results[0].tokenUsage).toEqual({
-      total: 20, // 10 from provider + 10 from assertion
-      prompt: 10, // 5 from provider + 5 from assertion
-      completion: 10, // 5 from provider + 5 from assertion
+      total: 10, // Only provider tokens, NOT assertion tokens
+      prompt: 5, // Only provider tokens
+      completion: 5, // Only provider tokens
       cached: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
-      numRequests: 2, // 1 from provider + 1 from assertion
+      numRequests: 1, // Only provider requests
       assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
+        total: 10, // Assertion tokens tracked separately
+        prompt: 5,
+        completion: 5,
         cached: 0,
+        numRequests: 1, // Assertion requests tracked separately
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,

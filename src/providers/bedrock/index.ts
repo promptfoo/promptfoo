@@ -7,6 +7,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { maybeLoadToolsFromExternalFile } from '../../util';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -1560,7 +1561,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
           output: model.output(this.config, JSON.parse(cachedResponse as string)),
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(),
         };
       }
     }
