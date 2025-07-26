@@ -65,7 +65,29 @@ const ErrorFallback = ({ error }: { error: Error }) => (
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
-const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
+/**
+ * Dataset plugins that support custom number of test cases and full dataset options.
+ * These plugins can be configured with:
+ * - numTests: Custom number of test cases to generate
+ * - fullDataset: Whether to use the entire dataset (ignores numTests)
+ */
+const DATASET_PLUGINS = [
+  'beavertails',
+  'cyberseceval',
+  'donotanswer',
+  'harmbench',
+  'pliny',
+  'unsafebench',
+  'xstest',
+] as const;
+
+const PLUGINS_SUPPORTING_CONFIG = [
+  'bfla',
+  'bola',
+  'ssrf',
+  ...DATASET_PLUGINS,
+  ...PLUGINS_REQUIRING_CONFIG,
+];
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
@@ -96,18 +118,52 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     useMemo(
       () =>
         Array.from(selectedPlugins)
-          .map((plugin): string | { id: string; config: any } | null => {
+          .map((plugin): string | { id: string; numTests?: number; config?: any } | null => {
             if (plugin === 'policy') {
               return null;
             }
 
-            const config = pluginConfig[plugin];
+            const config = pluginConfig[plugin] || {};
+
+            // Handle dataset plugins with new structure
+            if (DATASET_PLUGINS.includes(plugin as any)) {
+              const { sampling, customCount, ...rest } = config;
+
+              // Build result based on sampling mode
+              const result: { id: string; numTests?: number; config?: any } = { id: plugin };
+
+              if (sampling === 'custom' && customCount) {
+                result.numTests = customCount;
+              } else if (sampling === 'full') {
+                result.config = { fullDataset: true, ...rest };
+                return result;
+              } else if (sampling === 'default' || !sampling) {
+                // Use default - don't set numTests
+                if (Object.keys(rest).length > 0) {
+                  result.config = rest;
+                  return result;
+                }
+                return plugin; // Just return string if no other config
+              }
+
+              if (Object.keys(rest).length > 0) {
+                result.config = rest;
+              }
+
+              return result.numTests || result.config ? result : plugin;
+            }
+
+            // Handle other plugins normally
             if (config && Object.keys(config).length > 0) {
               return { id: plugin, config };
             }
+
             return plugin;
           })
-          .filter((plugin): plugin is string | { id: string; config: any } => plugin !== null),
+          .filter(
+            (plugin): plugin is string | { id: string; numTests?: number; config?: any } =>
+              plugin !== null,
+          ),
       [selectedPlugins, pluginConfig],
     ),
     1000,

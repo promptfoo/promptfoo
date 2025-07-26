@@ -1,4 +1,4 @@
-import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
+import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 import type { TestCase } from '@promptfoo/types';
 
 export interface ApplicationDefinition {
@@ -28,7 +28,7 @@ export interface Config {
   description: string;
   prompts: string[];
   target: ProviderOptions;
-  plugins: (RedteamPlugin | { id: string; config?: any })[];
+  plugins: (RedteamPlugin | { id: string; numTests?: number; config?: any })[];
   testGenerationInstructions?: string;
   strategies: RedteamStrategy[];
   purpose?: string;
@@ -92,7 +92,19 @@ interface BrowserStep {
 }
 
 export interface LocalPluginConfig {
-  [key: string]: PluginConfig;
+  [key: string]: {
+    indirectInjectionVar?: string;
+    intent?: string[];
+    policy?: string;
+    systemPrompt?: string;
+    targetIdentifiers?: string[];
+    targetSystems?: string[];
+    targetUrls?: string[];
+    // Dataset configuration
+    sampling?: 'default' | 'custom' | 'full';
+    customCount?: number;
+    [key: string]: string | string[] | boolean | number | undefined;
+  };
 }
 
 export interface RedteamUITarget {

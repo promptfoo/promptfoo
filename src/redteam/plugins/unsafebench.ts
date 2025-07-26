@@ -34,6 +34,7 @@ interface UnsafeBenchInput {
 
 interface UnsafeBenchPluginConfig extends PluginConfig {
   categories?: UnsafeBenchCategory[];
+  fullDataset?: boolean;
 }
 
 /**
@@ -91,7 +92,7 @@ class UnsafeBenchDatasetManager {
    * Get records filtered by category, fetching dataset if needed
    */
   async getFilteredRecords(
-    limit: number,
+    limit: number | undefined,
     config?: UnsafeBenchPluginConfig,
   ): Promise<UnsafeBenchInput[]> {
     await this.ensureDatasetLoaded();
@@ -147,7 +148,8 @@ class UnsafeBenchDatasetManager {
       }
 
       // Calculate how many records per category
-      const perCategory = Math.floor(limit / config.categories.length);
+      const perCategory =
+        limit !== undefined ? Math.floor(limit / config.categories.length) : undefined;
       const result: UnsafeBenchInput[] = [];
 
       // Take an equal number from each category
@@ -157,22 +159,22 @@ class UnsafeBenchDatasetManager {
 
         // Shuffle and take up to perCategory records
         const shuffled = categoryRecords.sort(() => Math.random() - 0.5);
-        result.push(...shuffled.slice(0, perCategory));
+        const toTake = perCategory !== undefined ? shuffled.slice(0, perCategory) : shuffled;
+        result.push(...toTake);
 
-        logger.debug(
-          `[unsafebench] Selected ${Math.min(perCategory, shuffled.length)} records for category ${category}`,
-        );
+        logger.debug(`[unsafebench] Selected ${toTake.length} records for category ${category}`);
       }
 
-      // Return the results, limiting to the requested total
-      return result.slice(0, limit);
+      // Return the results, limiting to the requested total if specified
+      return limit !== undefined ? result.slice(0, limit) : result;
     }
 
     // If no categories specified, just shuffle and return the requested number
-    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
-    logger.debug(`[unsafebench] Selected ${shuffledRecords.length} random unsafe records`);
+    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5);
+    const finalRecords = limit !== undefined ? shuffledRecords.slice(0, limit) : shuffledRecords;
+    logger.debug(`[unsafebench] Selected ${finalRecords.length} random unsafe records`);
 
-    return shuffledRecords;
+    return finalRecords;
   }
 
   /**
@@ -348,23 +350,31 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
       // Determine how many images to fetch per category
       const categories = this.pluginConfig?.categories || [];
 
-      let limit = n;
-      if (categories.length > 0) {
+      const cfg = this.pluginConfig as UnsafeBenchPluginConfig | undefined;
+      // Calculate limit based on configuration
+      let limit: number | undefined;
+      if (cfg?.fullDataset) {
+        limit = undefined; // Fetch all available
+      } else if (categories.length > 0) {
         // If categories are specified, we want n images per category
         limit = n * categories.length;
+      } else {
+        limit = n;
       }
 
       // Fetch and filter records
       const records = await this.datasetManager.getFilteredRecords(limit, this.pluginConfig);
 
-      if (records.length < limit) {
+      const selected = cfg?.fullDataset ? records : records.slice(0, n);
+
+      if (limit !== undefined && records.length < limit) {
         logger.warn(
           `[unsafebench] Requested ${limit} tests but only ${records.length} records were found`,
         );
       }
 
       // Map records to test cases
-      return records.map(
+      return selected.map(
         (record): TestCase => ({
           vars: { [this.injectVar]: record.image },
           assert: this.getAssertions(record.category),

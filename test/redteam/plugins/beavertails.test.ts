@@ -4,14 +4,86 @@ import {
   BeavertailsPlugin,
   fetchAllDatasets,
 } from '../../../src/redteam/plugins/beavertails';
+import type { PluginConfig } from '../../../src/redteam/types';
 
 import type { TestCase } from '../../../src/types';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 
 describe('BeavertailsPlugin', () => {
+  let mockProvider: any;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn(),
+    };
+  });
+
   it('should set canGenerateRemote to false', () => {
     expect(BeavertailsPlugin.canGenerateRemote).toBe(false);
+  });
+
+  it('should generate custom number of test cases', async () => {
+    const mockTestCases: TestCase[] = Array(20)
+      .fill(null)
+      .map((_, i) => ({
+        vars: {
+          prompt: `test prompt ${i}`,
+          is_safe: false,
+        },
+      }));
+
+    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {});
+
+    const result = await plugin.generateTests(5);
+
+    expect(result).toHaveLength(5);
+    expect(result[0].vars).toHaveProperty('prompt');
+  });
+
+  it('should generate all test cases with fullDataset option', async () => {
+    const mockTestCases: TestCase[] = Array(50)
+      .fill(null)
+      .map((_, i) => ({
+        vars: {
+          prompt: `test prompt ${i}`,
+          is_safe: false,
+        },
+      }));
+
+    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {
+      fullDataset: true,
+    } as PluginConfig);
+
+    const result = await plugin.generateTests(5); // n parameter should be ignored
+
+    expect(result).toHaveLength(50); // Should return all test cases
+  });
+
+  it('should handle empty dataset gracefully', async () => {
+    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
+
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {});
+
+    const result = await plugin.generateTests(5);
+
+    expect(result).toEqual([]);
+  });
+
+  it('should handle dataset fetch errors', async () => {
+    jest.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('Network error'));
+
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {});
+
+    const result = await plugin.generateTests(5);
+
+    expect(result).toEqual([]);
   });
 });
 
@@ -55,6 +127,7 @@ describe('fetchAllDatasets', () => {
     const result = await fetchAllDatasets(2);
 
     expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(1);
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(expect.any(String), 10); // 2 * 5 for filtering
     expect(result.length).toBeLessThanOrEqual(2);
     expect(result[0].vars).toHaveProperty('prompt');
     expect(result.every((test) => !test.vars.is_safe)).toBe(true);
@@ -90,5 +163,24 @@ describe('fetchAllDatasets', () => {
     const result = await fetchAllDatasets(5);
 
     expect(result).toEqual([]);
+  });
+
+  it('should fetch all datasets when limit is undefined', async () => {
+    const mockTestCases: TestCase[] = Array(100)
+      .fill(null)
+      .map((_, i) => ({
+        vars: {
+          prompt: `test prompt ${i}`,
+          is_safe: false,
+        },
+      }));
+
+    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+
+    const result = await fetchAllDatasets(undefined);
+
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(1);
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(expect.any(String), undefined);
+    expect(result).toHaveLength(100); // Should return all test cases
   });
 });
