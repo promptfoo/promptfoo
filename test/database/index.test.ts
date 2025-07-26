@@ -20,8 +20,6 @@ describe('database', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     closeDb();
-
-    // Set up mocks
     jest.mocked(getConfigDirectoryPath).mockReturnValue('/test/config/path');
     jest.mocked(getEnvBool).mockImplementation((key) => {
       if (key === 'IS_TESTING') {
