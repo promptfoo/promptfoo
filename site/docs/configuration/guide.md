@@ -803,6 +803,14 @@ def get_transform(vars, context):
 
 For detailed information on the config structure, see [Configuration Reference](/docs/configuration/reference).
 
+### Advanced features
+
+As you become more comfortable with promptfoo, you may want to explore advanced features like:
+
+- [Named metrics](/docs/configuration/expected-outputs#defining-named-metrics) for grouping related assertions
+- [Derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics) for calculating composite scores from multiple metrics
+- [Custom scoring functions](/docs/configuration/expected-outputs#custom-assertion-scoring) for implementing complex evaluation logic
+
 If you have multiple sets of tests, it helps to split them into multiple config files. Use the `--config` or `-c` parameter to run each individual config:
 
 ```
