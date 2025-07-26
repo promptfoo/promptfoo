@@ -4,14 +4,21 @@ import {
   BeavertailsPlugin,
   fetchAllDatasets,
 } from '../../../src/redteam/plugins/beavertails';
+import type { PluginConfig } from '../../../src/redteam/types';
 
 import type { TestCase } from '../../../src/types';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 
 describe('BeavertailsPlugin', () => {
+  let mockProvider: any;
+
   beforeEach(() => {
     jest.resetAllMocks();
+    mockProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn(),
+    };
   });
 
   it('should set canGenerateRemote to false', () => {
@@ -30,9 +37,7 @@ describe('BeavertailsPlugin', () => {
 
     jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
-    const plugin = new BeavertailsPlugin({ id: 'test-provider' }, 'test purpose', 'prompt', {
-      numTests: 5,
-    });
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {});
 
     const result = await plugin.generateTests(5);
 
@@ -52,9 +57,9 @@ describe('BeavertailsPlugin', () => {
 
     jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
-    const plugin = new BeavertailsPlugin({ id: 'test-provider' }, 'test purpose', 'prompt', {
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {
       fullDataset: true,
-    });
+    } as PluginConfig);
 
     const result = await plugin.generateTests(5); // n parameter should be ignored
 
@@ -64,7 +69,7 @@ describe('BeavertailsPlugin', () => {
   it('should handle empty dataset gracefully', async () => {
     jest.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
 
-    const plugin = new BeavertailsPlugin({ id: 'test-provider' }, 'test purpose', 'prompt', {});
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {});
 
     const result = await plugin.generateTests(5);
 
@@ -74,7 +79,7 @@ describe('BeavertailsPlugin', () => {
   it('should handle dataset fetch errors', async () => {
     jest.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('Network error'));
 
-    const plugin = new BeavertailsPlugin({ id: 'test-provider' }, 'test purpose', 'prompt', {});
+    const plugin = new BeavertailsPlugin(mockProvider, 'test purpose', 'prompt', {});
 
     const result = await plugin.generateTests(5);
 

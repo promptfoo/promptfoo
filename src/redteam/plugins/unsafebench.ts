@@ -367,7 +367,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
 
       const selected = cfg?.fullDataset ? records : records.slice(0, n);
 
-      if (records.length < limit) {
+      if (limit !== undefined && records.length < limit) {
         logger.warn(
           `[unsafebench] Requested ${limit} tests but only ${records.length} records were found`,
         );
