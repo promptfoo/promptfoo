@@ -1736,6 +1736,7 @@ class Evaluator {
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
+      numRepeat: options.repeat || 1,
       providerPrefixes: providerPrefixes.sort(),
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
