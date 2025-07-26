@@ -41,7 +41,7 @@ with gr.Blocks() as demo:
             label="Title", placeholder="Enter book title..."
         )  # Input box for title
         model_selector = gr.Dropdown(
-            choices=["gpt-4o", "gpt-3.5-turbo"], value="gpt-4o", label="Model"
+            choices=["gpt-4o"], value="gpt-4o", label="Model"
         )  # Model dropdown
 
     output_text = gr.Textbox(
