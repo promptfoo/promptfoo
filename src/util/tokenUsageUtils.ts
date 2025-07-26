@@ -3,11 +3,24 @@ import type { TokenUsage, CompletionTokenDetails } from '../types/shared';
 /**
  * Helper to create empty completion details
  */
-function createEmptyCompletionDetails(): Required<CompletionTokenDetails> {
+export function createEmptyCompletionDetails(): Required<CompletionTokenDetails> {
   return {
     reasoning: 0,
     acceptedPrediction: 0,
     rejectedPrediction: 0,
+  };
+}
+
+/**
+ * Create an empty assertions token usage object.
+ */
+export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
+  return {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    cached: 0,
+    completionDetails: createEmptyCompletionDetails(),
   };
 }
 
@@ -22,13 +35,7 @@ export function createEmptyTokenUsage(): Required<TokenUsage> {
     total: 0,
     numRequests: 0,
     completionDetails: createEmptyCompletionDetails(),
-    assertions: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      completionDetails: createEmptyCompletionDetails(),
-    },
+    assertions: createEmptyAssertions(),
   };
 }
 

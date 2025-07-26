@@ -52,6 +52,7 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   createEmptyTokenUsage,
+  createEmptyAssertions,
   accumulateResponseTokenUsage,
   accumulateGraderTokenUsage,
 } from './util/tokenUsageUtils';
@@ -310,17 +311,7 @@ function updateAssertionMetrics(
 ): void {
   if (metrics.tokenUsage && assertionTokens) {
     if (!metrics.tokenUsage.assertions) {
-      metrics.tokenUsage.assertions = {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      };
+      metrics.tokenUsage.assertions = createEmptyAssertions();
     }
 
     const assertions = metrics.tokenUsage.assertions;
@@ -664,17 +655,7 @@ export async function runEval({
       if (checkResult.tokensUsed) {
         // Track assertion tokens ONLY in the assertions field (not in main totals)
         if (!ret.tokenUsage.assertions) {
-          ret.tokenUsage.assertions = {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-            completionDetails: {
-              reasoning: 0,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-          };
+          ret.tokenUsage.assertions = createEmptyAssertions();
         }
         accumulateGraderTokenUsage(ret.tokenUsage.assertions as TokenUsage, checkResult);
       }
@@ -936,24 +917,7 @@ class Evaluator {
             assertPassCount: 0,
             assertFailCount: 0,
             totalLatencyMs: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: {
-                reasoning: 0,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-              assertions: {
-                total: 0,
-                prompt: 0,
-                completion: 0,
-                cached: 0,
-              },
-            },
+            tokenUsage: createEmptyTokenUsage(),
             namedScores: {},
             namedScoresCount: {},
             cost: 0,
@@ -1238,17 +1202,7 @@ class Evaluator {
               const tokensUsed = row.gradingResult.tokensUsed;
 
               if (!this.stats.tokenUsage.assertions) {
-                this.stats.tokenUsage.assertions = {
-                  total: 0,
-                  prompt: 0,
-                  completion: 0,
-                  cached: 0,
-                  completionDetails: {
-                    reasoning: 0,
-                    acceptedPrediction: 0,
-                    rejectedPrediction: 0,
-                  },
-                };
+                this.stats.tokenUsage.assertions = createEmptyAssertions();
               }
 
               const assertions = this.stats.tokenUsage.assertions;
