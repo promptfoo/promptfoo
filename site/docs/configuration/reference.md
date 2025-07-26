@@ -303,16 +303,16 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 
 #### beforeAll
 
-| Property                          | Type                       | Description                            |
-| --------------------------------- | -------------------------- | -------------------------------------- |
-| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.           |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.      |
-| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.        |
-| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.         |
-| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated. |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.             |
-| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of derived metrics.              |
-| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.          |
+| Property                          | Type                       | Description                                                                                |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.                                                               |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.                                                          |
+| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.                                                            |
+| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.                                                             |
+| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated.                                                     |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.                                                                 |
+| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
+| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.                                                              |
 
 #### beforeEach
 

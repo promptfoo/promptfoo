@@ -12,11 +12,13 @@ import type {
   Prompt,
   ProviderResponse,
   RedteamFileConfig,
+  TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../../util/tokenUsageUtils';
 import {
   createIterationContext,
   getTargetResponse,
@@ -250,13 +252,7 @@ async function runRedteamConversation({
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
 
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
   let targetPrompt: string | null = null;
 
@@ -281,16 +277,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      if (redteamResp.tokenUsage) {
-        totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
-        totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
-        totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
-        totalTokenUsage.numRequests =
-          (totalTokenUsage.numRequests || 0) + (redteamResp.tokenUsage.numRequests || 1);
-        totalTokenUsage.cached += redteamResp.tokenUsage.cached || 0;
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, redteamResp);
 
       if (redteamResp.error) {
         logger.warn(`Iteration ${i + 1}: Redteam provider error: ${redteamResp.error}`);
@@ -339,16 +326,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      if (isOnTopicResp.tokenUsage) {
-        totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
-        totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
-        totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
-        totalTokenUsage.numRequests =
-          (totalTokenUsage.numRequests || 0) + (isOnTopicResp.tokenUsage.numRequests || 1);
-        totalTokenUsage.cached += isOnTopicResp.tokenUsage.cached || 0;
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, isOnTopicResp);
 
       let isOnTopic = false;
       try {
@@ -371,16 +349,7 @@ async function runRedteamConversation({
         continue;
       }
 
-      if (targetResponse.tokenUsage) {
-        totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-        totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-        totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-        totalTokenUsage.numRequests =
-          (totalTokenUsage.numRequests || 0) + (targetResponse.tokenUsage.numRequests || 1);
-        totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
       const urlRegex = /(https?:\/\/[^\s)]+)/g;
       const url = targetResponse.output.match(urlRegex);
@@ -417,16 +386,7 @@ async function runRedteamConversation({
             await sleep(visionProvider.delay);
           }
 
-          if (visionResponse.tokenUsage) {
-            totalTokenUsage.total += visionResponse.tokenUsage.total || 0;
-            totalTokenUsage.prompt += visionResponse.tokenUsage.prompt || 0;
-            totalTokenUsage.completion += visionResponse.tokenUsage.completion || 0;
-            totalTokenUsage.numRequests =
-              (totalTokenUsage.numRequests || 0) + (visionResponse.tokenUsage.numRequests || 1);
-            totalTokenUsage.cached += visionResponse.tokenUsage.cached || 0;
-          } else {
-            totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-          }
+          accumulateResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionResponse.error) {
             logger.warn(`Iteration ${i + 1}: Vision API error: ${visionResponse.error}`);
@@ -482,16 +442,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      if (judgeResp.tokenUsage) {
-        totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
-        totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
-        totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
-        totalTokenUsage.numRequests =
-          (totalTokenUsage.numRequests || 0) + (judgeResp.tokenUsage.numRequests || 1);
-        totalTokenUsage.cached += judgeResp.tokenUsage.cached || 0;
-      } else {
-        totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-      }
+      accumulateResponseTokenUsage(totalTokenUsage, judgeResp);
 
       let score: number;
       let scoreComponents: JudgeResponse['currentResponse']['components'];
