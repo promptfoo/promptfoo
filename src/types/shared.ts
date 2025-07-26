@@ -32,6 +32,7 @@ export const BaseTokenUsageSchema = z.object({
       prompt: z.number().optional(),
       completion: z.number().optional(),
       cached: z.number().optional(),
+      numRequests: z.number().optional(),
       completionDetails: CompletionTokenDetailsSchema.optional(),
     })
     .optional(),

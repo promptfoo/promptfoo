@@ -27,6 +27,7 @@ describe('tokenUsageUtils', () => {
           prompt: 0,
           completion: 0,
           cached: 0,
+          numRequests: 0,
           completionDetails: {
             reasoning: 0,
             acceptedPrediction: 0,

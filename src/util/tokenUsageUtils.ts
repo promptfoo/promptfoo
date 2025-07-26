@@ -20,6 +20,7 @@ export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: createEmptyCompletionDetails(),
   };
 }

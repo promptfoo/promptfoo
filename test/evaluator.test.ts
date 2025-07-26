@@ -310,6 +310,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -355,6 +356,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -400,6 +402,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -501,6 +504,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -546,6 +550,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -591,6 +596,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -631,6 +637,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -671,6 +678,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -711,6 +719,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -1219,6 +1228,7 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -2642,6 +2652,7 @@ describe('evaluator', () => {
         prompt: 30,
         completion: 20,
         cached: 5,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,

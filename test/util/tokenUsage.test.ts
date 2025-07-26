@@ -41,6 +41,7 @@ describe('TokenUsageTracker', () => {
       ...usage,
       assertions: {
         ...usage.assertions,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -114,6 +115,7 @@ describe('TokenUsageTracker', () => {
         prompt: 30,
         completion: 45,
         cached: 15,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -185,6 +187,7 @@ describe('TokenUsageTracker', () => {
         prompt: 30,
         completion: 45,
         cached: 15,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
