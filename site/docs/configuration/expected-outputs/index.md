@@ -173,6 +173,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval    |
 | [pi](/docs/configuration/expected-outputs/model-graded/pi)                            | Alternative scoring approach that uses a dedicated model for evaluating criteria |
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                   |
+| [max-score](/docs/configuration/expected-outputs/model-graded/max-score)              | Select output with highest aggregate score from other assertions                 |
 
 ## Weighted assertions
 
