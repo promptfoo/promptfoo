@@ -53,7 +53,6 @@ import { TokenUsageTracker } from './util/tokenUsage';
 import {
   createEmptyTokenUsage,
   createEmptyAssertions,
-  accumulateTokenUsage,
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
 } from './util/tokenUsageUtils';
