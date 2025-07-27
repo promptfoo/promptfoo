@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -16,37 +16,40 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
+import { alpha } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { alpha } from '@mui/material/styles';
 import {
+  AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,
+  categoryAliases,
+  DATASET_EXEMPT_PLUGINS,
   DEFAULT_PLUGINS,
+  displayNameOverrides,
+  EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
-  OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
+  OWASP_LLM_RED_TEAM_MAPPING,
+  OWASP_LLM_TOP_10_MAPPING,
   PLUGIN_PRESET_DESCRIPTIONS,
-  displayNameOverrides,
-  subCategoryDescriptions,
-  categoryAliases,
   type Plugin,
   riskCategories,
-  OWASP_LLM_RED_TEAM_MAPPING,
-  EU_AI_ACT_MAPPING,
-  AGENTIC_EXEMPT_PLUGINS,
-  DATASET_EXEMPT_PLUGINS,
+  subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { PluginConfig } from '@promptfoo/redteam/types';
+import { ErrorBoundary } from 'react-error-boundary';
 import { useDebounce } from 'use-debounce';
-import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
-import type { LocalPluginConfig } from '../types';
+import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import CustomIntentSection from './CustomIntentPluginSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
+import type { PluginConfig } from '@promptfoo/redteam/types';
+
+import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
   onNext: () => void;
@@ -217,6 +220,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'Foundation',
       plugins: new Set(FOUNDATION_PLUGINS),
+    },
+    {
+      name: 'Guardrails Evaluation',
+      plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
     },
     {
       name: 'Harmful',

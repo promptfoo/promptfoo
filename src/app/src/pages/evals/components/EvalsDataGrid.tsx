@@ -1,18 +1,25 @@
-import React, { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+
 import { callApi } from '@app/utils/api';
-import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Link from '@mui/material/Link';
+import Paper from '@mui/material/Paper';
+import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
   DataGrid,
+  type GridCellParams,
   type GridColDef,
-  GridToolbarContainer,
-  GridToolbarColumnsButton,
-  GridToolbarFilterButton,
-  GridToolbarDensitySelector,
-  GridToolbarQuickFilter,
-  type GridRowSelectionModel,
-  type GridRenderCellParams,
-  GridToolbarExportContainer,
   GridCsvExportMenuItem,
+  type GridRenderCellParams,
+  type GridRowSelectionModel,
+  GridToolbarColumnsButton,
+  GridToolbarContainer,
+  GridToolbarDensitySelector,
+  GridToolbarExportContainer,
+  GridToolbarFilterButton,
+  GridToolbarQuickFilter,
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
@@ -168,7 +175,7 @@ export default function EvalsDataGrid({
     return rows_;
   }, [evals, filterByDatasetId, focusedEvalId]);
 
-  const handleCellClick = (params: any) => onEvalSelected(params.row.evalId);
+  const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
@@ -176,7 +183,8 @@ export default function EvalsDataGrid({
         {
           field: 'evalId',
           headerName: 'ID',
-          flex: 1,
+          flex: 0.5,
+          minWidth: 120,
           renderCell: (params: GridRenderCellParams<Eval>) =>
             params.row.evalId === focusedEvalId ? (
               params.row.evalId
@@ -200,7 +208,7 @@ export default function EvalsDataGrid({
         {
           field: 'createdAt',
           headerName: 'Created',
-          flex: 1,
+          flex: 0.9,
           valueGetter: (value: Eval['createdAt'], row: Eval) => {
             return new Date(value);
           },
@@ -209,7 +217,7 @@ export default function EvalsDataGrid({
         {
           field: 'description',
           headerName: 'Description',
-          flex: 1,
+          flex: 2,
           valueGetter: (value: Eval['description'], row: Eval) => value ?? row.label,
         },
         {
@@ -248,7 +256,7 @@ export default function EvalsDataGrid({
           flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [],
+    [focusedEvalId, onEvalSelected],
   );
 
   return (
@@ -366,7 +374,7 @@ export default function EvalsDataGrid({
             sortModel: [{ field: 'createdAt', sort: 'desc' }],
           },
           pagination: {
-            paginationModel: { pageSize: 25 },
+            paginationModel: { pageSize: 50 },
           },
         }}
         pageSizeOptions={[10, 25, 50, 100]}

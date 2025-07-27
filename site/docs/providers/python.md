@@ -146,7 +146,7 @@ def call_api(prompt, options, context):
 
 #### The `options` Parameter
 
-Contains your provider configuration:
+Contains your provider configuration and metadata:
 
 ```python
 {
@@ -155,7 +155,10 @@ Contains your provider configuration:
         # Your custom configuration from promptfooconfig.yaml
         "model_name": "gpt-3.5-turbo",
         "temperature": 0.7,
-        "max_tokens": 100
+        "max_tokens": 100,
+
+        # Automatically added by promptfoo:
+        "basePath": "/absolute/path/to/config"  # Directory containing your config (promptfooconfig.yaml)
     }
 }
 ```
@@ -562,6 +565,23 @@ def call_api(prompt, options, context):
    )
    print(result)
    ```
+
+4. **Use Python debugger (pdb) for interactive debugging:**
+
+   ```bash
+   export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
+   ```
+
+   With this environment variable set, you can use `import pdb; pdb.set_trace()` in your Python code to set breakpoints:
+
+   ```python
+   def call_api(prompt, options, context):
+       import pdb; pdb.set_trace()  # Execution will pause here
+       # Your provider logic
+       return {"output": result}
+   ```
+
+   This allows interactive debugging directly in your terminal during evaluation runs.
 
 ### Performance Optimization
 

@@ -1,23 +1,23 @@
 import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
 import { getDefaultShareViewBaseUrl } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
+import { createShareableUrl, getShareableUrl, hasEvalBeenShared, isSharingEnabled } from '../share';
 import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
+import type { Command } from 'commander';
 
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = getDefaultShareViewBaseUrl();
   const welcomeUrl = `${cloudUrl}/welcome`;
 
   logger.info(dedent`
-    
+
     » You need to have a cloud account to securely share your results.
-    
+
     1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or log in.
     2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.
     3. Run ${chalk.greenBright.bold('promptfoo share')}
@@ -62,7 +62,6 @@ export function shareCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'share',
         });
-        await telemetry.send();
 
         let eval_: Eval | undefined | null = null;
         if (evalId) {

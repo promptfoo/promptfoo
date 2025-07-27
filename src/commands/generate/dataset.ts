@@ -1,6 +1,6 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
 import * as fs from 'fs';
+
+import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
 import { serializeObjectArrayAsCSV } from '../../csv';
@@ -10,6 +10,7 @@ import { synthesizeFromTestSuite } from '../../testCase/synthesis';
 import { type TestSuite, type UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
+import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
   cache: boolean;
@@ -53,7 +54,6 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
   });
-  await telemetry.send();
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
@@ -114,7 +114,6 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numTestsGenerated: results.length,
     provider: options.provider || 'default',
   });
-  await telemetry.send();
 }
 
 export function generateDatasetCommand(

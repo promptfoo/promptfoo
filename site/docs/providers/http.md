@@ -806,16 +806,17 @@ providers:
 
 ## Digital Signature Authentication
 
-The HTTP provider supports digital signature authentication. This feature allows you to:
+The HTTP provider supports digital signature authentication with multiple certificate formats. This feature allows you to:
 
 - Automatically generate cryptographic signatures for requests
 - Manage signature expiration and refresh
 - Customize header names and signature formats
 - Configure different signature algorithms
+- Support for PEM, JKS (Java KeyStore), and PFX (Personal Information Exchange) certificate formats
 
 The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to Promptfoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
 
-### Basic Usage
+### Basic Usage (PEM)
 
 ```yaml
 providers:
@@ -827,8 +828,45 @@ providers:
         'x-signature': '{{signature}}'
         'x-timestamp': '{{signatureTimestamp}}'
       signatureAuth:
+        type: 'pem'
         privateKeyPath: '/path/to/private.key'
         clientId: 'your-client-id'
+```
+
+### Certificate Format Support
+
+The HTTP provider supports three certificate formats:
+
+#### PEM Certificates
+
+```yaml
+signatureAuth:
+  type: 'pem'
+  privateKeyPath: '/path/to/private.key' # Path to PEM private key file
+  # OR
+  privateKey: '-----BEGIN PRIVATE KEY-----\n...' # Direct key string
+```
+
+#### JKS (Java KeyStore) Certificates
+
+```yaml
+signatureAuth:
+  type: 'jks'
+  keystorePath: '/path/to/keystore.jks'
+  keystorePassword: 'your-keystore-password' # Optional: can use PROMPTFOO_JKS_PASSWORD env var
+  keyAlias: 'your-key-alias' # Optional: uses first available alias if not specified
+```
+
+#### PFX (Personal Information Exchange) Certificates
+
+```yaml
+signatureAuth:
+  type: 'pfx'
+  pfxPath: '/path/to/certificate.pfx'
+  pfxPassword: 'your-pfx-password' # Optional: can use PROMPTFOO_PFX_PASSWORD env var
+  # OR use separate certificate and key files
+  certPath: '/path/to/certificate.crt'
+  keyPath: '/path/to/private.key'
 ```
 
 ### Full Configuration
@@ -843,9 +881,24 @@ providers:
         'x-timestamp': '{{signatureTimestamp}}'
         'x-client-id': 'your-client-id'
       signatureAuth:
-        # Required fields - provide either privateKeyPath or privateKey
+        # Certificate type (pem, jks, or pfx)
+        type: 'pem'
+
+        # PEM options
         privateKeyPath: '/path/to/private.key' # Path to key file
         # privateKey: '-----BEGIN PRIVATE KEY-----\n...'  # Or direct key string
+
+        # JKS options
+        # keystorePath: '/path/to/keystore.jks'
+        # keystorePassword: 'password'  # Optional: can use PROMPTFOO_JKS_PASSWORD
+        # keyAlias: 'alias'  # Optional: uses first available if not specified
+
+        # PFX options
+        # pfxPath: '/path/to/certificate.pfx'
+        # pfxPassword: 'password'  # Optional: can use PROMPTFOO_PFX_PASSWORD
+        # certPath: '/path/to/certificate.crt'  # Alternative to pfxPath
+        # keyPath: '/path/to/private.key'       # Alternative to pfxPath
+
         clientId: 'your-client-id'
 
         # Optional fields with defaults shown
@@ -859,6 +912,12 @@ providers:
 You can use environment variables throughout your HTTP provider configuration using the `{{env.VARIABLE_NAME}}` syntax.
 :::
 
+:::info Dependencies
+
+- **JKS support** requires the `jks-js` package: `npm install jks-js`
+- **PFX support** requires the `pem` package: `npm install pem`
+  :::
+
 When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
 
 - `signature`: The generated signature string (base64 encoded)
@@ -868,15 +927,27 @@ When signature authentication is enabled, the following variables are available 
 
 | Option                   | Type   | Required | Default                             | Description                                                                                                           |
 | ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
-| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
+| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
+| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
+| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
+| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
+| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
+| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
+| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
+| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
+| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
 | clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
 | signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
 | signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
 | signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
 | signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
 
-\* Either `privateKeyPath` or `privateKey` must be provided
+\* Requirements depend on certificate type:
+
+- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
+- **JKS**: `keystorePath` must be provided
+- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
 
 ## Request Retries
 
@@ -919,15 +990,27 @@ Supported config options:
 
 | Option                   | Type   | Required | Default                             | Description                                                                                                           |
 | ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
-| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
+| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
+| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
+| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
+| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
+| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
+| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
+| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
+| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
+| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
 | clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
 | signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
 | signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
 | signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
 | signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
 
-\* Either `privateKeyPath` or `privateKey` must be provided
+\* Requirements depend on certificate type:
+
+- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
+- **JKS**: `keystorePath` must be provided
+- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 

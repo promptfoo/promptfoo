@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
@@ -8,7 +7,9 @@ import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
+import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>

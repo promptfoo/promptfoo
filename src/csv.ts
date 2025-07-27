@@ -1,9 +1,10 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
-import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
 import { BaseAssertionTypesSchema } from './types';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
+
+import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -201,6 +202,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           metadata[metadataKey] = value;
         }
       }
+    } else if (key === '__metadata' && !uniqueErrorMessages.has(key)) {
+      uniqueErrorMessages.add(key);
+      logger.warn(
+        'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
+      );
     } else {
       vars[key] = value;
     }

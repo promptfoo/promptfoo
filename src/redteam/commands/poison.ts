@@ -1,13 +1,14 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as path from 'path';
+
+import chalk from 'chalk';
+import yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+import type { Command } from 'commander';
 
 interface PoisonOptions {
   documents: string[];
@@ -188,7 +189,6 @@ export function poisonCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam poison',
       });
-      await telemetry.send();
 
       try {
         await doPoisonDocuments({

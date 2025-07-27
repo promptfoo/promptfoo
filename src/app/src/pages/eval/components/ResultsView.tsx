@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
@@ -23,14 +23,13 @@ import InputAdornment from '@mui/material/InputAdornment';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/material/styles';
 import invariant from '@promptfoo/util/invariant';
-import type { VisibilityState } from '@tanstack/table-core';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -41,14 +40,23 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
-import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
+import FiltersButton from './ResultsFilters/FiltersButton';
+import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useTableStore, useResultsViewSettingsStore } from './store';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import type { StackProps } from '@mui/material/Stack';
+import type { VisibilityState } from '@tanstack/table-core';
+
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
+
+import BarChartIcon from '@mui/icons-material/BarChart';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -158,8 +166,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-
   const [searchParams, setSearchParams] = useSearchParams();
+
   const {
     author,
     table,
@@ -171,6 +179,8 @@ export default function ResultsView({
     filteredResultsCount,
     totalResultsCount,
     highlightedResultsCount,
+    filters,
+    removeFilter,
   } = useTableStore();
 
   const {
@@ -184,7 +194,7 @@ export default function ResultsView({
     setComparisonEvalIds,
   } = useResultsViewSettingsStore();
 
-  const { setStateFromConfig } = useMainStore();
+  const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
@@ -195,7 +205,7 @@ export default function ResultsView({
       setSearchParams((prev) => ({ ...prev, search: text }));
       setSearchText(text);
     },
-    [searchParams],
+    [setSearchParams],
   );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
@@ -225,6 +235,9 @@ export default function ResultsView({
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
+
+  const [filtersFormOpen, setFiltersFormOpen] = React.useState(false);
+  const filtersButtonRef = React.useRef<HTMLButtonElement>(null);
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -458,287 +471,375 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Add state for metric filter and available metrics
-  const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
+  // Handle metric parameter from URL
+  React.useEffect(() => {
+    const metricParam = searchParams.get('metric');
+    if (metricParam) {
+      const { addFilter, resetFilters } = useTableStore.getState();
 
-  const availableMetrics = React.useMemo(() => {
-    if (table && table.head?.prompts) {
-      const metrics = new Set<string>();
-      table.head.prompts.forEach((prompt) => {
-        if (prompt.metrics?.namedScores) {
-          Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
-        }
+      resetFilters();
+
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value: metricParam,
       });
-      return Array.from(metrics).sort();
-    }
-    return [];
-  }, [table]);
 
-  // Make the function a callback that can be passed to CustomMetrics
-  const handleMetricFilterChange = React.useCallback((metric: string | null) => {
-    setSelectedMetric(metric);
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        newParams.delete('metric');
+        return newParams;
+      });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
+  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
+
+  const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
+
+  /**
+   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
+   * (and the rendering of duplicative, useless scrollbars).
+   */
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
   }, []);
 
   return (
-    <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
-      <ResponsiveStack
-        direction="row"
-        mb={3}
-        spacing={1}
-        alignItems="center"
-        className="eval-header"
+    <>
+      <Box
+        id="results-view-container"
+        px={2}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        ref={(el: HTMLDivElement | null) => {
+          const top = el?.getBoundingClientRect().top;
+          if (top) {
+            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
+            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
+            el.style.height = `calc(100vh - ${top}px)`;
+          }
+        }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
-          <TextField
-            variant="outlined"
-            size="small"
-            fullWidth
-            value={config?.description || evalId || ''}
-            slotProps={{
-              input: {
-                readOnly: true,
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <ArrowDropDownIcon />
-                  </InputAdornment>
-                ),
-              },
-            }}
-            onClick={() => setEvalSelectorDialogOpen(true)}
-            placeholder="Search or select an eval..."
-            sx={{ cursor: 'pointer' }}
-          />
-          <EvalSelectorDialog
-            open={evalSelectorDialogOpen}
-            onClose={() => setEvalSelectorDialogOpen(false)}
-            onEvalSelected={(evalId) => {
-              setEvalSelectorDialogOpen(false);
-              onRecentEvalSelected(evalId);
-            }}
-            title="Select an Eval"
-            focusedEvalId={evalId ?? undefined}
-          />
-        </Box>
-        {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
-        <AuthorChip
-          author={author}
-          onEditAuthor={handleEditAuthor}
-          currentUserEmail={currentUserEmail}
-          editable
-        />
-        {Object.keys(config?.tags || {}).map((tag) => (
-          <Chip
-            key={tag}
-            size="small"
-            label={`${tag}: ${config?.tags?.[tag]}`}
-            sx={{ opacity: 0.7 }}
-          />
-        ))}
-      </ResponsiveStack>
-      <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
-          <FilterModeSelector
-            filterMode={filterMode}
-            onChange={handleFilterModeChange}
-            showDifferentOption={visiblePromptCount > 1}
-          />
-        </Box>
-        <Box>
-          <SearchInputField
-            value={searchText}
-            onChange={handleSearchTextChange}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Text or regex"
-          />
-        </Box>
-        <MetricFilterSelector
-          selectedMetric={selectedMetric}
-          availableMetrics={availableMetrics}
-          onChange={handleMetricFilterChange}
-        />
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            borderRadius: '16px',
-            padding: '4px 12px',
-            fontSize: '0.875rem',
-          }}
-        >
-          {searchText || filterMode !== 'all' || selectedMetric ? (
-            <>
-              <strong>{filteredResultsCount}</strong>
-              <span style={{ margin: '0 4px' }}>of</span>
-              <strong>{totalResultsCount}</strong>
-              <span style={{ margin: '0 4px' }}>results</span>
-              {searchText && (
-                <Chip
-                  size="small"
-                  label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
-                  onDelete={() => handleSearchTextChange('')}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                />
-              )}
-              {filterMode !== 'all' && (
-                <Chip
-                  size="small"
-                  label={`Filter: ${filterMode}`}
-                  onDelete={() => setFilterMode('all')}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                />
-              )}
-              {selectedMetric && (
-                <Chip
-                  size="small"
-                  label={`Metric: ${selectedMetric}`}
-                  onDelete={() => handleMetricFilterChange(null)}
-                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-                />
-              )}
-            </>
-          ) : (
-            <>{filteredResultsCount} results</>
-          )}
-        </Box>
-        {highlightedResultsCount > 0 && (
-          <Chip
-            size="small"
-            label={`${highlightedResultsCount} highlighted`}
-            sx={{
-              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-              color: 'rgba(25, 118, 210, 1)',
-              border: '1px solid rgba(25, 118, 210, 0.2)',
-              fontWeight: 500,
-            }}
-          />
-        )}
-        <Box flexGrow={1} />
-        <Box display="flex" justifyContent="flex-end">
-          <ResponsiveStack direction="row" spacing={2}>
-            <ColumnSelector
-              columnData={columnData}
-              selectedColumns={currentColumnState.selectedColumns}
-              onChange={handleChange}
+          <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
+            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
+              <TextField
+                variant="outlined"
+                size="small"
+                fullWidth
+                value={config?.description || evalId || ''}
+                slotProps={{
+                  input: {
+                    readOnly: true,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <ArrowDropDownIcon />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                onClick={() => setEvalSelectorDialogOpen(true)}
+                placeholder="Search or select an eval..."
+                sx={{ cursor: 'pointer' }}
+              />
+              <EvalSelectorDialog
+                open={evalSelectorDialogOpen}
+                onClose={() => setEvalSelectorDialogOpen(false)}
+                onEvalSelected={(evalId) => {
+                  setEvalSelectorDialogOpen(false);
+                  onRecentEvalSelected(evalId);
+                }}
+                title="Select an Eval"
+                focusedEvalId={evalId ?? undefined}
+              />
+            </Box>
+            {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
+            <AuthorChip
+              author={author}
+              onEditAuthor={handleEditAuthor}
+              currentUserEmail={currentUserEmail}
+              editable
             />
-            <Tooltip title="Edit table view settings" placement="bottom">
-              <Button
-                color="primary"
-                onClick={() => setViewSettingsModalOpen(true)}
-                startIcon={<SettingsIcon />}
-              >
-                Table Settings
-              </Button>
-            </Tooltip>
-            <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
-              Eval actions
-            </Button>
-            {config && (
-              <Menu
-                id="eval-actions-menu"
-                anchorEl={anchorEl}
-                keepMounted
-                open={Boolean(anchorEl)}
-                onClose={handleMenuClose}
-              >
-                <Tooltip title="Edit the name of this eval" placement="left">
-                  <MenuItem onClick={handleDescriptionClick}>
-                    <ListItemIcon>
-                      <EditIcon fontSize="small" />
-                    </ListItemIcon>
-                    Edit name
-                  </MenuItem>
-                </Tooltip>
-                <Tooltip title="Edit this eval in the web UI" placement="left">
-                  <MenuItem
-                    onClick={() => {
-                      setStateFromConfig(config);
-                      navigate('/setup/');
-                    }}
-                  >
-                    <ListItemIcon>
-                      <PlayArrowIcon fontSize="small" />
-                    </ListItemIcon>
-                    Edit and re-run
-                  </MenuItem>
-                </Tooltip>
-                <CompareEvalMenuItem
-                  initialEvals={recentEvals}
-                  onComparisonEvalSelected={handleComparisonEvalSelected}
+            {Object.keys(config?.tags || {}).map((tag) => (
+              <Chip
+                key={tag}
+                size="small"
+                label={`${tag}: ${config?.tags?.[tag]}`}
+                sx={{ opacity: 0.7 }}
+              />
+            ))}
+          </ResponsiveStack>
+          <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
+            <Box>
+              <FormControl>
+                <InputLabel id="results-table-zoom-label">Zoom</InputLabel>
+                <Select
+                  labelId="results-table-zoom-label"
+                  size="small"
+                  label="Zoom"
+                  value={resultsTableZoom}
+                  onChange={(e: SelectChangeEvent<number>) =>
+                    setResultsTableZoom(e.target.value as number)
+                  }
+                  sx={{ minWidth: 100 }}
+                >
+                  <MenuItem value={0.5}>50%</MenuItem>
+                  <MenuItem value={0.75}>75%</MenuItem>
+                  <MenuItem value={0.9}>90%</MenuItem>
+                  <MenuItem value={1}>100%</MenuItem>
+                  <MenuItem value={1.25}>125%</MenuItem>
+                  <MenuItem value={1.5}>150%</MenuItem>
+                  <MenuItem value={2}>200%</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Box>
+              <FilterModeSelector
+                filterMode={filterMode}
+                onChange={handleFilterModeChange}
+                showDifferentOption={visiblePromptCount > 1}
+              />
+            </Box>
+            <Box>
+              <SearchInputField
+                value={searchText}
+                onChange={handleSearchTextChange}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Text or regex"
+              />
+            </Box>
+
+            <FiltersButton
+              appliedFiltersCount={filters.appliedCount}
+              onClick={() => setFiltersFormOpen(true)}
+              ref={filtersButtonRef}
+            />
+            <FiltersForm
+              open={filtersFormOpen}
+              onClose={() => setFiltersFormOpen(false)}
+              anchorEl={filtersButtonRef.current}
+            />
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                borderRadius: '16px',
+                padding: '4px 12px',
+                fontSize: '0.875rem',
+              }}
+            >
+              {searchText || filterMode !== 'all' || filters.appliedCount > 0 ? (
+                <>
+                  <strong>{filteredResultsCount}</strong>
+                  <span style={{ margin: '0 4px' }}>of</span>
+                  <strong>{totalResultsCount}</strong>
+                  <span style={{ margin: '0 4px' }}>results</span>
+                  {searchText && (
+                    <Chip
+                      size="small"
+                      label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
+                      onDelete={() => handleSearchTextChange('')}
+                      sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                    />
+                  )}
+                  {filterMode !== 'all' && (
+                    <Chip
+                      size="small"
+                      label={`Filter: ${filterMode}`}
+                      onDelete={() => setFilterMode('all')}
+                      sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                    />
+                  )}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      // For metadata filters, both field and value must be present
+                      if (
+                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
+                      ) {
+                        return null;
+                      }
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+                      const label =
+                        filter.type === 'metric'
+                          ? `Metric: ${truncatedValue}`
+                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      return (
+                        <Chip
+                          key={filter.id}
+                          size="small"
+                          label={label}
+                          title={filter.value} // Show full value on hover
+                          onDelete={() => removeFilter(filter.id)}
+                          sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                        />
+                      );
+                    })}
+                </>
+              ) : (
+                <>{filteredResultsCount} results</>
+              )}
+            </Box>
+            {highlightedResultsCount > 0 && (
+              <Chip
+                size="small"
+                label={`${highlightedResultsCount} highlighted`}
+                sx={{
+                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                  color: 'rgba(25, 118, 210, 1)',
+                  border: '1px solid rgba(25, 118, 210, 0.2)',
+                  fontWeight: 500,
+                }}
+              />
+            )}
+            <Box flexGrow={1} />
+            <Box display="flex" justifyContent="flex-end">
+              <ResponsiveStack direction="row" spacing={2}>
+                <ColumnSelector
+                  columnData={columnData}
+                  selectedColumns={currentColumnState.selectedColumns}
+                  onChange={handleChange}
                 />
-                <Tooltip title="View the configuration that defines this eval" placement="left">
-                  <MenuItem onClick={() => setConfigModalOpen(true)}>
-                    <ListItemIcon>
-                      <VisibilityIcon fontSize="small" />
-                    </ListItemIcon>
-                    View YAML
-                  </MenuItem>
+                <Tooltip title="Edit table view settings" placement="bottom">
+                  <Button
+                    color="primary"
+                    onClick={() => setViewSettingsModalOpen(true)}
+                    startIcon={<SettingsIcon />}
+                  >
+                    Table Settings
+                  </Button>
                 </Tooltip>
-                <DownloadMenu />
-                {config?.sharing && (
-                  <Tooltip title="Generate a unique URL that others can access" placement="left">
-                    <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                      <ListItemIcon>
-                        {shareLoading ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <ShareIcon fontSize="small" />
-                        )}
-                      </ListItemIcon>
-                      Share
-                    </MenuItem>
+                <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
+                  Eval actions
+                </Button>
+                {canRenderResultsCharts && (
+                  <Button
+                    onClick={() => setRenderResultsCharts((prev) => !prev)}
+                    variant="text"
+                    startIcon={<BarChartIcon />}
+                  >
+                    {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                  </Button>
+                )}
+                {config && (
+                  <Menu
+                    id="eval-actions-menu"
+                    anchorEl={anchorEl}
+                    keepMounted
+                    open={Boolean(anchorEl)}
+                    onClose={handleMenuClose}
+                  >
+                    <Tooltip title="Edit the name of this eval" placement="left">
+                      <MenuItem onClick={handleDescriptionClick}>
+                        <ListItemIcon>
+                          <EditIcon fontSize="small" />
+                        </ListItemIcon>
+                        Edit name
+                      </MenuItem>
+                    </Tooltip>
+                    <Tooltip title="Edit this eval in the web UI" placement="left">
+                      <MenuItem
+                        onClick={() => {
+                          updateConfig(config);
+                          navigate('/setup/');
+                        }}
+                      >
+                        <ListItemIcon>
+                          <PlayArrowIcon fontSize="small" />
+                        </ListItemIcon>
+                        Edit and re-run
+                      </MenuItem>
+                    </Tooltip>
+                    <CompareEvalMenuItem
+                      initialEvals={recentEvals}
+                      onComparisonEvalSelected={handleComparisonEvalSelected}
+                    />
+                    <Tooltip title="View the configuration that defines this eval" placement="left">
+                      <MenuItem onClick={() => setConfigModalOpen(true)}>
+                        <ListItemIcon>
+                          <VisibilityIcon fontSize="small" />
+                        </ListItemIcon>
+                        View YAML
+                      </MenuItem>
+                    </Tooltip>
+                    <DownloadMenu />
+                    {config?.sharing && (
+                      <Tooltip
+                        title="Generate a unique URL that others can access"
+                        placement="left"
+                      >
+                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                          <ListItemIcon>
+                            {shareLoading ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <ShareIcon fontSize="small" />
+                            )}
+                          </ListItemIcon>
+                          Share
+                        </MenuItem>
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Delete this eval" placement="left">
+                      <MenuItem onClick={handleDeleteEvalClick}>
+                        <ListItemIcon>
+                          <DeleteIcon fontSize="small" />
+                        </ListItemIcon>
+                        Delete
+                      </MenuItem>
+                    </Tooltip>
+                  </Menu>
+                )}
+                {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
+                {(config?.redteam || config?.metadata?.redteam) && (
+                  <Tooltip title="View vulnerability scan report" placement="bottom">
+                    <Button
+                      color="primary"
+                      variant="contained"
+                      startIcon={<EyeIcon />}
+                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                    >
+                      Vulnerability Report
+                    </Button>
                   </Tooltip>
                 )}
-                <Tooltip title="Delete this eval" placement="left">
-                  <MenuItem onClick={handleDeleteEvalClick}>
-                    <ListItemIcon>
-                      <DeleteIcon fontSize="small" />
-                    </ListItemIcon>
-                    Delete
-                  </MenuItem>
-                </Tooltip>
-              </Menu>
-            )}
-            {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
-            {(config?.redteam || config?.metadata?.redteam) && (
-              <Tooltip title="View vulnerability scan report" placement="bottom">
-                <Button
-                  color="primary"
-                  variant="contained"
-                  startIcon={<EyeIcon />}
-                  onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
-                >
-                  Vulnerability Report
-                </Button>
-              </Tooltip>
-            )}
+              </ResponsiveStack>
+            </Box>
           </ResponsiveStack>
+          {canRenderResultsCharts && renderResultsCharts && (
+            <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
+          )}
         </Box>
-      </ResponsiveStack>
-      <ResultsCharts
-        columnVisibility={currentColumnState.columnVisibility}
-        recentEvals={recentEvals}
-      />
-      <ResultsTable
-        maxTextLength={maxTextLength}
-        columnVisibility={currentColumnState.columnVisibility}
-        wordBreak={wordBreak}
-        showStats={showInferenceDetails}
-        filterMode={filterMode}
-        failureFilter={failureFilter}
-        searchText={searchText}
-        debouncedSearchText={debouncedSearchValue}
-        onFailureFilterToggle={handleFailureFilterToggle}
-        onSearchTextChange={handleSearchTextChange}
-        setFilterMode={setFilterMode}
-        selectedMetric={selectedMetric}
-        onMetricFilter={handleMetricFilterChange}
-      />
+        <ResultsTable
+          maxTextLength={maxTextLength}
+          columnVisibility={currentColumnState.columnVisibility}
+          wordBreak={wordBreak}
+          showStats={showInferenceDetails}
+          filterMode={filterMode}
+          failureFilter={failureFilter}
+          searchText={searchText}
+          debouncedSearchText={debouncedSearchValue}
+          onFailureFilterToggle={handleFailureFilterToggle}
+          onSearchTextChange={handleSearchTextChange}
+          setFilterMode={setFilterMode}
+          zoom={resultsTableZoom}
+        />
+      </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
         open={shareModalOpen}
@@ -748,6 +849,6 @@ export default function ResultsView({
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
-    </div>
+    </>
   );
 }

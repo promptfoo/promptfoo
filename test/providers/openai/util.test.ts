@@ -2,10 +2,10 @@ import OpenAI from 'openai';
 import {
   calculateOpenAICost,
   failApiCall,
-  getTokenUsage,
-  validateFunctionCall,
   formatOpenAiError,
+  getTokenUsage,
   OPENAI_CHAT_MODELS,
+  validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -176,9 +176,9 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 60) / 1e6, 6);
   });
 
-  it('should calculate cost correctly for gpt-4.5-preview', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 75 + 500 * 150) / 1e6, 6);
+  it('should calculate cost correctly for gpt-4.1', () => {
+    const cost = calculateOpenAICost('gpt-4.1', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-3.5-turbo', () => {
@@ -278,23 +278,23 @@ describe('calculateOpenAICost', () => {
   });
 
   it('should return undefined for zero tokens', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 0, 0);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 0, 0);
     expect(cost).toBeUndefined();
   });
 
   it('should handle only prompt tokens', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000, 0);
-    expect(cost).toBeCloseTo((1000 * 75) / 1e6, 6);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 1000, 0);
+    expect(cost).toBeCloseTo((1000 * 2) / 1e6, 6);
   });
 
   it('should handle only completion tokens', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 0, 1000);
-    expect(cost).toBeCloseTo((1000 * 150) / 1e6, 6);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 0, 1000);
+    expect(cost).toBeCloseTo((1000 * 8) / 1e6, 6);
   });
 
   it('should handle large token counts', () => {
-    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo((1000000 * 75 + 1000000 * 150) / 1e6, 6);
+    const cost = calculateOpenAICost('gpt-4.1', {}, 1000000, 1000000);
+    expect(cost).toBeCloseTo((1000000 * 2 + 1000000 * 8) / 1e6, 6);
   });
 
   it('should handle mixed undefined audio tokens', () => {

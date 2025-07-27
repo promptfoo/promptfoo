@@ -4,9 +4,7 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
-import type { HarmPlugin } from '../constants';
 import {
   BIAS_PLUGINS,
   PII_PLUGINS,
@@ -20,7 +18,6 @@ import {
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -51,6 +48,9 @@ import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { HarmPlugin } from '../constants';
+
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
@@ -69,7 +69,7 @@ async function fetchRemoteTestCases(
   purpose: string,
   injectVar: string,
   n: number,
-  config?: PluginConfig,
+  config: PluginConfig,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -123,7 +123,7 @@ function createPluginFactory<T extends PluginConfig>(
         logger.debug(`Using local redteam generation for ${key}`);
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
-      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -219,7 +219,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.purpose,
         params.injectVar,
         params.n,
-        params.config,
+        params.config ?? {},
       );
       return testCases.map((testCase) => ({
         ...testCase,
@@ -253,6 +253,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.purpose,
       params.injectVar,
       params.n,
+      params.config ?? {},
     );
     return testCases.map((testCase) => ({
       ...testCase,
@@ -275,7 +276,13 @@ function createRemotePlugin<T extends PluginConfig>(
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
-      const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases: TestCase[] = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        config ?? {},
+      );
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -295,7 +302,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
-  MEMORY_POISONING_PLUGIN_ID,
+  'agentic:memory-poisoning',
   'ascii-smuggling',
   'bfla',
   'bola',

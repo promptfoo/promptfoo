@@ -1,6 +1,8 @@
 import fs from 'fs';
+
 import dedent from 'ts-dedent';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
+
 import type { Prompt } from '../../../src/types';
 
 jest.mock('fs');
@@ -198,5 +200,40 @@ describe('processCsvPrompts', () => {
     const result = await processCsvPrompts('prompts.csv', {});
 
     expect(result).toHaveLength(0);
+  });
+
+  it('should handle malformed CSV by falling back to line-by-line processing', async () => {
+    const csvContent = dedent`
+      "prompt","label"
+      "Tell me about {{topic}},"Basic Query"
+      "Malformed line with unbalanced quotes
+      "Another line
+    `;
+
+    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result).toHaveLength(4);
+    expect(result[0].raw).toBe('"prompt","label"');
+    expect(result[1].raw).toBe('"Tell me about {{topic}},"Basic Query"');
+    expect(result[2].raw).toBe('"Malformed line with unbalanced quotes');
+    expect(result[3].raw).toBe('"Another line');
+  });
+
+  it('should handle malformed CSV with a header row correctly', async () => {
+    const csvContent = dedent`
+      prompt
+      "Malformed CSV with a quote problem
+      Another prompt line
+    `;
+
+    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result).toHaveLength(2);
+    expect(result[0].raw).toBe('"Malformed CSV with a quote problem');
+    expect(result[1].raw).toBe('Another prompt line');
   });
 });

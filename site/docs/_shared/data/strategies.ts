@@ -136,6 +136,16 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/goat/',
   },
   {
+    category: 'Multi-turn',
+    strategy: 'mischievous-user',
+    displayName: 'Mischievous User',
+    description: 'Mischievous user conversations',
+    longDescription: 'Simulates a multi-turn conversation between a mischievous user and an agent',
+    cost: 'High',
+    asrIncrease: '10-20%',
+    link: '/docs/red-team/strategies/mischievous-user/',
+  },
+  {
     category: 'Static (Single-Turn)',
     strategy: 'video',
     displayName: 'Video Encoding',

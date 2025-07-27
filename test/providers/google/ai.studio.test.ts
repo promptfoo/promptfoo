@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+
 import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
@@ -207,7 +208,9 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain('Error: Expected one candidate in API response.');
+      expect(response.error).toContain(
+        'Error: Expected at least one candidate in AI Studio API response.',
+      );
     });
 
     it('should handle malformed API responses', async () => {
@@ -1272,6 +1275,186 @@ describe('AIStudioChatProvider', () => {
         expect.stringContaining('system-instruction.txt'),
         'utf8',
       );
+    });
+  });
+
+  describe('thinking token tracking', () => {
+    it('should track thinking tokens when present in response', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: {
+          apiKey: 'test-key',
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 20,
+            totalTokenCount: 30,
+            thoughtsTokenCount: 50, // Thinking tokens
+          },
+        },
+        cached: false,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 50,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+    });
+
+    it('should handle response without thinking tokens', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response without thinking' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 20,
+            totalTokenCount: 30,
+            // No thoughtsTokenCount field
+          },
+        },
+        cached: false,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        // No completionDetails field when thoughtsTokenCount is absent
+      });
+    });
+
+    it('should track thinking tokens with zero value', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: {
+          apiKey: 'test-key',
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response with zero thinking' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 20,
+            totalTokenCount: 30,
+            thoughtsTokenCount: 0, // Zero thinking tokens
+          },
+        },
+        cached: false,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
+    });
+
+    it('should track thinking tokens in cached responses', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: {
+          apiKey: 'test-key',
+          generationConfig: {
+            thinkingConfig: {
+              thinkingBudget: 1024,
+            },
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'cached response with thinking' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 20,
+            totalTokenCount: 80,
+            thoughtsTokenCount: 50, // Thinking tokens in cached response
+          },
+        },
+        cached: true,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.tokenUsage).toEqual({
+        cached: 80,
+        total: 80,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 50,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      });
     });
   });
 });

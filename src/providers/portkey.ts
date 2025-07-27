@@ -1,6 +1,7 @@
 import { getEnvString } from '../envars';
-import type { ProviderOptions } from '../types';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+
+import type { ProviderOptions } from '../types';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 interface PortkeyProviderOptions extends ProviderOptions {

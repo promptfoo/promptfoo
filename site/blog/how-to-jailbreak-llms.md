@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2025-01-07
 authors: [ian]
+tags: [security-vulnerability, red-teaming, prompt-injection]
 ---
 
 import ChatInterface from './goat/components/ChatInterface';

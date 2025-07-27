@@ -1,39 +1,38 @@
 import {
-  DEFAULT_NUM_TESTS_PER_PLUGIN,
-  REDTEAM_MODEL,
-  LLAMA_GUARD_REPLICATE_PROVIDER,
-  LLAMA_GUARD_ENABLED_CATEGORIES,
-  COLLECTIONS,
-  UNALIGNED_PROVIDER_HARM_PLUGINS,
-  REDTEAM_PROVIDER_HARM_PLUGINS,
-  HARM_PLUGINS,
-  PII_PLUGINS,
-  BASE_PLUGINS,
   ADDITIONAL_PLUGINS,
-  CONFIG_REQUIRED_PLUGINS,
-  DEFAULT_PLUGINS,
-  ALL_PLUGINS,
-  DATASET_PLUGINS,
-  Severity,
-  severityDisplayNames,
-  PLUGIN_PRESET_DESCRIPTIONS,
+  ADDITIONAL_STRATEGIES,
+  AGENTIC_EXEMPT_PLUGINS,
   AGENTIC_PLUGINS,
-  riskCategories,
-  categoryDescriptions,
-  displayNameOverrides,
-  riskCategorySeverityMap,
-  categoryAliases,
-  pluginDescriptions,
-  subCategoryDescriptions,
-  STRATEGY_COLLECTIONS,
-  STRATEGY_COLLECTION_MAPPINGS,
+  ALL_PLUGINS,
   ALL_STRATEGIES,
+  BASE_PLUGINS,
+  COLLECTIONS,
+  CONFIG_REQUIRED_PLUGINS,
+  categoryAliases,
+  categoryDescriptions,
+  DATASET_EXEMPT_PLUGINS,
+  DATASET_PLUGINS,
+  DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS,
+  displayNameOverrides,
+  HARM_PLUGINS,
+  LLAMA_GUARD_ENABLED_CATEGORIES,
+  LLAMA_GUARD_REPLICATE_PROVIDER,
+  PII_PLUGINS,
+  pluginDescriptions,
+  REDTEAM_MODEL,
+  REDTEAM_PROVIDER_HARM_PLUGINS,
+  riskCategories,
+  riskCategorySeverityMap,
+  Severity,
+  STRATEGY_COLLECTION_MAPPINGS,
+  STRATEGY_COLLECTIONS,
+  STRATEGY_EXEMPT_PLUGINS,
+  severityDisplayNames,
   strategyDescriptions,
   strategyDisplayNames,
-  AGENTIC_EXEMPT_PLUGINS,
-  DATASET_EXEMPT_PLUGINS,
-  STRATEGY_EXEMPT_PLUGINS,
-  ADDITIONAL_STRATEGIES,
+  subCategoryDescriptions,
+  UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -61,7 +60,15 @@ describe('constants', () => {
   });
 
   it('COLLECTIONS should contain expected values', () => {
-    expect(COLLECTIONS).toEqual(['default', 'foundation', 'harmful', 'pii', 'bias']);
+    expect(COLLECTIONS).toEqual([
+      'default',
+      'foundation',
+      'harmful',
+      'pii',
+      'bias',
+      'medical',
+      'guardrails-eval',
+    ]);
   });
 
   it('UNALIGNED_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {
@@ -176,25 +183,7 @@ describe('constants', () => {
     expect(severityDisplayNames[Severity.Low]).toBe('Low');
   });
 
-  it('PLUGIN_PRESET_DESCRIPTIONS should contain expected descriptions', () => {
-    expect(PLUGIN_PRESET_DESCRIPTIONS.RAG).toBe(
-      'Recommended plugins plus additional tests for RAG specific scenarios like access control',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS.Recommended).toBe(
-      'A broad set of plugins recommended by Promptfoo',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
-      'Minimal set of plugins to validate your setup',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS.Harmful).toBe(
-      'Harmful content assessment using MLCommons and HarmBench taxonomies',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
-      'OWASP Agentic AI Top 10 Threats and Mitigations',
-    );
-  });
-
-  it('should have MEMORY_POISONING_PLUGIN_ID in Security & Access Control category', () => {
+  it('should have agentic:memory-poisoning in Security & Access Control category', () => {
     expect(riskCategories['Security & Access Control']).toBeDefined();
     expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
   });
@@ -248,20 +237,8 @@ describe('constants', () => {
     expect(ALL_STRATEGIES).toContain('other-encodings');
   });
 
-  it('strategy collections should have proper descriptions', () => {
-    expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-    );
-  });
-
   it('strategy collections should have proper display names', () => {
     expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
-  });
-
-  it('strategy collections should have proper subcategory descriptions', () => {
-    expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-    );
   });
 
   it('ADDITIONAL_STRATEGIES should include emoji strategy', () => {

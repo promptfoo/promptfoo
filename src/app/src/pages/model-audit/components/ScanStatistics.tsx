@@ -1,12 +1,14 @@
-import React from 'react';
 import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
-import { Grid, Typography, alpha, useTheme } from '@mui/material';
+import Grid from '@mui/material/Grid';
+import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import { StatCard } from '../ModelAudit.styles';
+
 import type { ScanResult } from '../ModelAudit.types';
 
 interface ScanStatisticsProps {

@@ -1,24 +1,25 @@
-import React, { useState, forwardRef } from 'react';
-import type { LinkProps } from 'react-router-dom';
-import { Link, useLocation } from 'react-router-dom';
+import React, { forwardRef, useState } from 'react';
+
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
-import type { ButtonProps } from '@mui/material/Button';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import { styled } from '@mui/material/styles';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/material/styles';
+import { Link, useLocation } from 'react-router-dom';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
+import type { ButtonProps } from '@mui/material/Button';
+import type { LinkProps } from 'react-router-dom';
 import './Navigation.css';
 
 // Create a properly typed forwarded ref component for MUI compatibility
@@ -108,7 +109,7 @@ function CreateDropdown() {
           Eval
         </MenuItem>
         <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
-          Red team
+          Red Team
         </MenuItem>
       </Menu>
     </>

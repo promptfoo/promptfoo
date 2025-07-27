@@ -1,5 +1,5 @@
 import async from 'async';
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
@@ -8,13 +8,14 @@ import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
+import type { TestCase } from '../../types';
+
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
-export const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch
+const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch
 
 /**
  * Helper function to get the concurrency limit from config or use default
@@ -37,7 +38,7 @@ function getBatchSize(config: Record<string, any> = {}): number {
   return config.batchSize || DEFAULT_BATCH_SIZE;
 }
 
-export async function generateMultilingual(
+async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,

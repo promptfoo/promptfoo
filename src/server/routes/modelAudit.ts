@@ -1,13 +1,13 @@
-import { exec } from 'child_process';
-import { spawn } from 'child_process';
-import { Router } from 'express';
-import type { Request, Response } from 'express';
+import { exec, spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
+
+import { Router } from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import type { Request, Response } from 'express';
 
 const execAsync = promisify(exec);
 export const modelAuditRouter = Router();
@@ -153,7 +153,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     logger.info(`Running model scan on: ${resolvedPaths.join(', ')}`);
 
     // Track the scan
-    await telemetry.recordAndSend('webui_api', {
+    telemetry.record('webui_api', {
       event: 'model_scan',
       pathCount: paths.length,
       hasBlacklist: options.blacklist?.length > 0,
