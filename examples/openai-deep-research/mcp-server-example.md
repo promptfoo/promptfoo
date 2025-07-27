@@ -20,18 +20,18 @@ app.use(express.json());
 
 // Sample data store
 const documents = {
-  'doc1': {
+  doc1: {
     id: 'doc1',
     title: 'Q1 Sales Report',
     content: 'Total sales for Q1 were $1.2M, up 15% from last year...',
-    metadata: { department: 'sales', date: '2025-03-31' }
+    metadata: { department: 'sales', date: '2025-03-31' },
   },
-  'doc2': {
+  doc2: {
     id: 'doc2',
     title: 'Product Roadmap 2025',
     content: 'Key features planned: AI integration, mobile app redesign...',
-    metadata: { department: 'product', date: '2025-01-15' }
-  }
+    metadata: { department: 'product', date: '2025-01-15' },
+  },
 };
 
 // MCP endpoint
@@ -49,10 +49,10 @@ app.post('/mcp', async (req, res) => {
             type: 'object',
             properties: {
               query: { type: 'string', description: 'Search query' },
-              limit: { type: 'number', description: 'Max results', default: 10 }
+              limit: { type: 'number', description: 'Max results', default: 10 },
             },
-            required: ['query']
-          }
+            required: ['query'],
+          },
         },
         {
           name: 'fetch',
@@ -60,12 +60,12 @@ app.post('/mcp', async (req, res) => {
           inputSchema: {
             type: 'object',
             properties: {
-              id: { type: 'string', description: 'Document ID' }
+              id: { type: 'string', description: 'Document ID' },
             },
-            required: ['id']
-          }
-        }
-      ]
+            required: ['id'],
+          },
+        },
+      ],
     });
   }
 
@@ -77,25 +77,25 @@ app.post('/mcp', async (req, res) => {
       // Simple search implementation
       const query = args.query.toLowerCase();
       const results = Object.values(documents)
-        .filter(doc => 
-          doc.title.toLowerCase().includes(query) || 
-          doc.content.toLowerCase().includes(query)
+        .filter(
+          (doc) =>
+            doc.title.toLowerCase().includes(query) || doc.content.toLowerCase().includes(query),
         )
         .slice(0, args.limit || 10)
-        .map(doc => ({
+        .map((doc) => ({
           id: doc.id,
           title: doc.title,
           snippet: doc.content.substring(0, 100) + '...',
-          metadata: doc.metadata
+          metadata: doc.metadata,
         }));
 
       return res.json({
         content: [
           {
             type: 'text',
-            text: JSON.stringify({ results }, null, 2)
-          }
-        ]
+            text: JSON.stringify({ results }, null, 2),
+          },
+        ],
       });
     }
 
@@ -106,10 +106,10 @@ app.post('/mcp', async (req, res) => {
           content: [
             {
               type: 'text',
-              text: 'Document not found'
-            }
+              text: 'Document not found',
+            },
           ],
-          isError: true
+          isError: true,
         });
       }
 
@@ -117,9 +117,9 @@ app.post('/mcp', async (req, res) => {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(doc, null, 2)
-          }
-        ]
+            text: JSON.stringify(doc, null, 2),
+          },
+        ],
       });
     }
 
@@ -194,15 +194,15 @@ async def mcp_endpoint(request: MCPRequest):
                 }
             ]
         }
-    
+
     elif request.method == "tools/call":
         tool_name = request.params.get("name")
         args = request.params.get("arguments", {})
-        
+
         if tool_name == "search":
             query = args.get("query", "").lower()
             limit = args.get("limit", 10)
-            
+
             results = []
             for doc in documents.values():
                 if query in doc["title"].lower() or query in doc["content"].lower():
@@ -212,7 +212,7 @@ async def mcp_endpoint(request: MCPRequest):
                         "snippet": doc["content"][:100] + "...",
                         "metadata": doc["metadata"]
                     })
-            
+
             return {
                 "content": [
                     {
@@ -221,11 +221,11 @@ async def mcp_endpoint(request: MCPRequest):
                     }
                 ]
             }
-        
+
         elif tool_name == "fetch":
             doc_id = args.get("id")
             doc = documents.get(doc_id)
-            
+
             if not doc:
                 return {
                     "content": [
@@ -236,7 +236,7 @@ async def mcp_endpoint(request: MCPRequest):
                     ],
                     "isError": True
                 }
-            
+
             return {
                 "content": [
                     {
@@ -245,9 +245,9 @@ async def mcp_endpoint(request: MCPRequest):
                     }
                 ]
             }
-        
+
         raise HTTPException(status_code=400, detail="Unknown tool")
-    
+
     raise HTTPException(status_code=400, detail="Unknown method")
 
 if __name__ == "__main__":
@@ -327,14 +327,14 @@ Replace the sample data with connections to your actual systems:
 // Example: Connect to PostgreSQL
 const { Pool } = require('pg');
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
 });
 
 // In your search handler
 if (name === 'search') {
   const result = await pool.query(
     'SELECT id, title, content FROM documents WHERE to_tsvector(content) @@ plainto_tsquery($1) LIMIT $2',
-    [args.query, args.limit || 10]
+    [args.query, args.limit || 10],
   );
   // Format and return results...
 }
@@ -364,4 +364,4 @@ Enhance search with filters:
 }
 ```
 
-Remember: Deep research models will automatically use your search and fetch tools to gather information needed to answer user queries. The better your search implementation, the better the research results will be. 
+Remember: Deep research models will automatically use your search and fetch tools to gather information needed to answer user queries. The better your search implementation, the better the research results will be.
