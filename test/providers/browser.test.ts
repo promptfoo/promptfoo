@@ -357,6 +357,7 @@ describe('BrowserProvider', () => {
     });
 
     mockPage.waitForSelector.mockResolvedValue(null);
+    mockPage.content.mockResolvedValue('<html>page content</html>');
     const result = await provider.callApi('test');
     expect(result.output).toBeDefined();
   });
@@ -375,7 +376,83 @@ describe('BrowserProvider', () => {
 
     mockPage.content.mockResolvedValue('final-html');
     const result = await provider.callApi('test');
-    expect(result.output).toEqual({ output: undefined });
+    expect(result.output).toEqual('final-html');
+  });
+
+  it('should not double-wrap when transformResponse returns a full ProviderResponse', async () => {
+    const transformFn = jest.fn().mockReturnValue({
+      output: 'transformed output',
+      metadata: { custom: 'data' },
+      tokenUsage: { total: 100, prompt: 50, completion: 50 },
+    });
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+        transformResponse: transformFn,
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html>test</html>');
+    const result = await provider.callApi('test');
+
+    expect(transformFn).toHaveBeenCalledWith({}, '<html>test</html>');
+    expect(result).toEqual({
+      output: 'transformed output',
+      metadata: { custom: 'data' },
+      tokenUsage: { total: 100, prompt: 50, completion: 50 },
+    });
+  });
+
+  it('should wrap raw string values from transformResponse', async () => {
+    const transformFn = jest.fn().mockReturnValue('just a string');
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+        transformResponse: transformFn,
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html>test</html>');
+    const result = await provider.callApi('test');
+
+    expect(result).toEqual({
+      output: 'just a string',
+    });
+  });
+
+  it('should wrap raw array values from transformResponse', async () => {
+    const transformFn = jest.fn().mockReturnValue(['item1', 'item2']);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+        transformResponse: transformFn,
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html>test</html>');
+    const result = await provider.callApi('test');
+
+    expect(result).toEqual({
+      output: ['item1', 'item2'],
+    });
   });
 });
 
@@ -395,7 +472,7 @@ describe('createTransformResponse', () => {
   it('should default to returning finalHtml', () => {
     const tr = createTransformResponse(undefined);
     const result = tr({}, 'baz');
-    expect(result).toEqual({ output: undefined });
+    expect(result).toEqual({ output: 'baz' });
   });
 });
 

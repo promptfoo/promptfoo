@@ -84,7 +84,7 @@ export function createTransformResponse(
       finalHtml: string,
     ) => ProviderResponse;
   }
-  return ({ extracted, finalHtml }) => ({ output: finalHtml });
+  return (extracted, finalHtml) => ({ output: finalHtml });
 }
 
 export class BrowserProvider implements ApiProvider {
@@ -187,8 +187,17 @@ export class BrowserProvider implements ApiProvider {
 
         logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
         const ret = this.transformResponse(extracted, finalHtml);
-        logger.debug(`Browser response transform output: ${ret}`);
-        return { output: ret };
+        logger.debug(`Browser response transform output: ${safeJsonStringify(ret)}`);
+
+        // Check if ret is already a ProviderResponse object (has error or output property)
+        // or if it's a raw value that needs to be wrapped
+        if (typeof ret === 'object' && ret !== null && ('output' in ret || 'error' in ret)) {
+          // Already a ProviderResponse, return as-is
+          return ret;
+        } else {
+          // Raw value, wrap it
+          return { output: ret };
+        }
       } catch (error) {
         // Clean up on error
         if (this.config.connectOptions && !shouldCloseBrowser) {
