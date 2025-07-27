@@ -80,6 +80,22 @@ export interface OpenAiMCPTool {
   headers?: Record<string, string>;
 }
 
+// Responses API specific tool types
+export interface OpenAiWebSearchTool {
+  type: 'web_search_preview';
+  search_context_size?: 'small' | 'medium' | 'large';
+  user_location?: string;
+}
+
+export interface OpenAiCodeInterpreterTool {
+  type: 'code_interpreter';
+  container?: {
+    type: 'auto' | string;
+  };
+}
+
+export type OpenAiResponsesTool = OpenAiTool | OpenAiMCPTool | OpenAiWebSearchTool | OpenAiCodeInterpreterTool;
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
@@ -90,7 +106,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   best_of?: number;
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: (OpenAiTool | OpenAiMCPTool)[];
+  tools?: (OpenAiTool | OpenAiMCPTool | OpenAiWebSearchTool | OpenAiCodeInterpreterTool)[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   tool_resources?: Record<string, any>;
   showThinking?: boolean;

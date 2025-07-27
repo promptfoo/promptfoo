@@ -2430,7 +2430,7 @@ describe('OpenAiResponsesProvider', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
-          tools: [{ type: 'code_interpreter' }], // Missing web_search_preview
+          tools: [{ type: 'code_interpreter' } as any], // Missing web_search_preview
         },
       });
 
@@ -2461,7 +2461,7 @@ describe('OpenAiResponsesProvider', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
-          tools: [{ type: 'web_search_preview' }],
+          tools: [{ type: 'web_search_preview' } as any],
         },
       });
 
@@ -2475,12 +2475,12 @@ describe('OpenAiResponsesProvider', () => {
         config: {
           apiKey: 'test-key',
           tools: [
-            { type: 'web_search_preview' },
+            { type: 'web_search_preview' } as any,
             {
               type: 'mcp',
               server_label: 'test_server',
               server_url: 'http://test.com',
-              require_approval: 'auto', // Should be 'never'
+              require_approval: 'auto' as any, // Should be 'never'
             },
           ],
         },
@@ -2512,7 +2512,7 @@ describe('OpenAiResponsesProvider', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
-          tools: [{ type: 'web_search_preview' }],
+          tools: [{ type: 'web_search_preview' } as any],
         },
       });
 
