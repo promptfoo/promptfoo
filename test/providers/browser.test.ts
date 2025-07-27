@@ -494,7 +494,9 @@ describe('BrowserProvider - Connect to Existing Session', () => {
     };
 
     const playwrightExtra = await import('playwright-extra');
-    jest.mocked(playwrightExtra.chromium.connectOverCDP).mockResolvedValueOnce(mockExistingBrowser as any);
+    jest
+      .mocked(playwrightExtra.chromium.connectOverCDP)
+      .mockResolvedValueOnce(mockExistingBrowser as any);
 
     const provider = new BrowserProvider('test', {
       config: {
