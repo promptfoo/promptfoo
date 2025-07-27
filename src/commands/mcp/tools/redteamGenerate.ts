@@ -249,7 +249,9 @@ export function registerRedteamGenerateTool(server: McpServer) {
             outputPath: output || (write ? 'written to config' : 'redteam.yaml'),
           },
           configuration: {
-            purpose: result.defaultTest?.metadata?.purpose || purpose,
+            purpose: (result.defaultTest && typeof result.defaultTest === 'object' && 'metadata' in result.defaultTest) 
+              ? result.defaultTest.metadata?.purpose 
+              : purpose,
             plugins: plugins || Array.from(REDTEAM_DEFAULT_PLUGINS).map((p) => p),
             strategies: strategies || Array.from(DEFAULT_STRATEGIES).map((s) => s),
             numTests,
@@ -287,9 +289,15 @@ export function registerRedteamGenerateTool(server: McpServer) {
               : [],
           },
           metadata: {
-            entities: result.defaultTest?.metadata?.entities || [],
-            redteamConfig: result.redteam || {},
-            configHash: result.metadata?.configHash,
+            purpose: (result.defaultTest && typeof result.defaultTest === 'object' && 'metadata' in result.defaultTest)
+              ? result.defaultTest.metadata?.purpose 
+              : purpose,
+            entities: (result.defaultTest && typeof result.defaultTest === 'object' && 'metadata' in result.defaultTest)
+              ? result.defaultTest.metadata?.entities || []
+              : [],
+            generatedAt: new Date().toISOString(),
+            language,
+            provider: provider || REDTEAM_MODEL,
           },
           nextSteps: {
             runEvaluation: write

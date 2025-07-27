@@ -1,7 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { generateTestCases } from '../../../testCases';
+import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
+import type { TestSuite } from '../../../types';
 import { AbstractTool } from '../lib/baseTool';
 import type { ToolResult } from '../lib/types';
 
@@ -104,41 +105,65 @@ export class GenerateTestCasesTool extends AbstractTool {
         );
       }
       
-      // Prepare the configuration for test case generation
-      const config = {
-        prompts: [prompt],
-        providers: [provider || 'openai:gpt-4o'], // Default provider
+      // Create a test suite for generation
+      const testSuite: TestSuite = {
+        prompts: [{ label: 'test-case-generation', raw: prompt }],
+        providers: [],
         tests: [], // Will be generated
       };
       
-      // Generate test cases
-      const result = await generateTestCases(
-        config,
-        {
-          numTestCases,
-          instructions,
-          output: outputPath,
-        }
-      );
+      // Generate test cases with variables
+      const results = await synthesizeFromTestSuite(testSuite, {
+        instructions,
+        numPersonas: 1,
+        numTestCasesPerPersona: numTestCases,
+        provider,
+      });
       
-      if (!result || !result.tests || result.tests.length === 0) {
+      if (!results || results.length === 0) {
         return this.error('Failed to generate test cases. No data returned.');
       }
       
+      // Format results as test cases with basic assertions
+      const tests = results.map((vars: any) => {
+        const testCase: any = { vars };
+        
+        // Add basic assertions based on the prompt type
+        if (assertionTypes && assertionTypes.length > 0) {
+          testCase.assert = assertionTypes.map(type => ({ type }));
+        } else {
+          // Default assertions
+          testCase.assert = [
+            { type: 'is-json' },
+            { type: 'not-empty' },
+          ];
+        }
+        
+        return testCase;
+      });
+      
+      // Save to file if outputPath is provided
+      if (outputPath) {
+        const fs = await import('fs');
+        const yaml = await import('js-yaml');
+        const yamlContent = yaml.dump({ tests });
+        fs.writeFileSync(outputPath, yamlContent);
+      }
+      
       // Analyze the generated test cases
-      const analysis = this.analyzeTestCases(result.tests, variables);
+      const analysis = this.analyzeTestCases(tests, variables);
       
       return this.success({
-        testCases: result.tests,
+        testCases: tests,
         analysis,
         summary: {
-          totalGenerated: result.tests.length,
+          totalGenerated: tests.length,
           prompt,
           variables,
           outputPath: outputPath || 'Not saved to file',
           provider: provider || 'default',
         },
-        message: `Successfully generated ${result.tests.length} test cases with assertions`,
+        message: `Successfully generated ${tests.length} test cases with assertions`,
       });
       
     } catch (error: unknown) {

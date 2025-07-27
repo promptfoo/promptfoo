@@ -1,7 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { generateDataset } from '../../../dataset';
+import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
+import type { TestSuite } from '../../../types';
 import { AbstractTool } from '../lib/baseTool';
 import type { ToolResult } from '../lib/types';
 import { validateFilePath, validateProviderId } from '../lib/security';
@@ -91,45 +92,54 @@ export class GenerateDatasetTool extends AbstractTool {
         validateProviderId(provider);
       }
       
-      // Combine prompt with instructions
-      const fullPrompt = instructions 
-        ? `${prompt}\n\nAdditional instructions: ${instructions}`
-        : prompt;
+      // Create a minimal test suite for dataset generation
+      const testSuite: TestSuite = {
+        prompts: [{ label: 'dataset-generation', raw: prompt }],
+        providers: [],
+        tests: [],
+      };
       
       // Generate the dataset
-      const result = await generateDataset(
-        fullPrompt,
-        undefined, // tests (will be generated)
-        {
-          numSamples,
-          provider,
-          output: outputPath,
-        }
-      );
+      const results = await synthesizeFromTestSuite(testSuite, {
+        instructions,
+        numPersonas: 1,
+        numTestCasesPerPersona: numSamples,
+        provider,
+      });
       
-      if (!result || !result.dataset) {
+      if (!results || results.length === 0) {
         return this.error('Failed to generate dataset. No data returned.');
+      }
+      
+      // Format results as test cases
+      const dataset = results.map((vars: any) => ({ vars }));
+      
+      // Save to file if outputPath is provided
+      if (outputPath) {
+        const fs = await import('fs');
+        const yaml = await import('js-yaml');
+        const yamlContent = yaml.dump({ tests: dataset });
+        fs.writeFileSync(outputPath, yamlContent);
       }
       
       // Extract useful information from the result
       const summary = {
-        totalGenerated: result.dataset.length,
+        totalGenerated: dataset.length,
         outputPath: outputPath || 'Not saved to file',
         provider: provider || 'default',
         prompt: prompt,
       };
       
       // Sample the first few items for preview
-      const preview = result.dataset.slice(0, 3).map((item: any) => ({
+      const preview = dataset.slice(0, 3).map((item: any) => ({
         vars: item.vars,
-        description: item.description,
       }));
       
       return this.success({
-        dataset: result.dataset,
+        dataset,
         summary,
         preview,
-        message: `Successfully generated ${result.dataset.length} test cases`,
+        message: `Successfully generated ${dataset.length} test cases`,
       });
       
     } catch (error: unknown) {

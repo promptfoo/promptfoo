@@ -164,26 +164,17 @@ export function registerShareEvaluationTool(server: McpServer) {
         let existingUrl: string | null = null;
         if (cloudConfig.isEnabled() && !overwrite) {
           const alreadyShared = await hasEvalBeenShared(evalRecord);
-          if (alreadyShared) {
-            existingUrl = await getShareableUrl(evalRecord, showAuth);
+          if (alreadyShared && evalId) {
+            existingUrl = await getShareableUrl(evalRecord, evalId, showAuth);
             if (existingUrl) {
               const shareData = {
-                evalId: evalRecord.id,
-                shareUrl: existingUrl,
-                alreadyShared: true,
-                overwriteAvailable: true,
-                sharing: {
-                  showAuth,
-                  cloudEnabled: cloudConfig.isEnabled(),
-                  domain: new URL(existingUrl).hostname,
-                },
-                evaluation: {
-                  description: evalRecord.config.description,
-                  promptCount: evalRecord.prompts.length,
-                  createdAt: (evalRecord as any).createdAt || 'Unknown',
-                },
+                url: existingUrl,
+                evalId,
+                createdAt: evalRecord.createdAt,
+                description: evalRecord.description,
+                isExisting: true,
+                message: 'Evaluation already shared',
               };
-
               return createToolResponse('share_evaluation', true, shareData);
             }
           }

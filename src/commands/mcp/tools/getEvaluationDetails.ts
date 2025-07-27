@@ -52,14 +52,34 @@ export class GetEvaluationDetailsTool extends AbstractTool {
       
       // Extract key metrics for easier consumption
       const evalData = result.result;
-      const summary = {
+      const summary: any = {
         id,
-        totalTests: evalData.results?.length || 0,
-        passedTests: evalData.results?.filter((r: any) => r.success).length || 0,
-        failedTests: evalData.results?.filter((r: any) => !r.success).length || 0,
-        providers: evalData.providers?.map((p: any) => p.id) || [],
-        prompts: evalData.prompts?.length || 0,
       };
+      
+      // Handle different eval data structures
+      if ('results' in evalData && Array.isArray(evalData.results)) {
+        summary.totalTests = evalData.results.length;
+        summary.passedTests = evalData.results.filter((r: any) => r.success).length;
+        summary.failedTests = evalData.results.filter((r: any) => !r.success).length;
+      } else {
+        summary.totalTests = 0;
+        summary.passedTests = 0;
+        summary.failedTests = 0;
+      }
+      
+      if ('table' in evalData && evalData.table) {
+        const table = evalData.table as any;
+        if (table.head) {
+          summary.providers = table.head.providers || [];
+          summary.prompts = table.head.prompts?.length || 0;
+        } else {
+          summary.providers = [];
+          summary.prompts = 0;
+        }
+      } else {
+        summary.providers = [];
+        summary.prompts = 0;
+      }
       
       return this.success({
         evaluation: evalData,

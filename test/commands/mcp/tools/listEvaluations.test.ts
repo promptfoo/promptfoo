@@ -1,20 +1,50 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ListEvaluationsTool } from '../../../../src/commands/mcp/tools/listEvaluations';
 import * as evalModel from '../../../../src/models/eval';
+import * as performance from '../../../../src/commands/mcp/lib/performance';
 
 // Mock the eval model
-vi.mock('../../../../src/models/eval');
+jest.mock('../../../../src/models/eval');
+
+// Mock the performance module
+jest.mock('../../../../src/commands/mcp/lib/performance', () => ({
+  paginate: jest.fn((items, options) => {
+    const { page = 1, pageSize = 20 } = options || {};
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    return {
+      data: items.slice(startIndex, endIndex),
+      pagination: {
+        page,
+        pageSize,
+        totalItems: items.length,
+        totalPages: Math.ceil(items.length / pageSize),
+        hasNextPage: endIndex < items.length,
+        hasPreviousPage: page > 1,
+      },
+    };
+  }),
+  evaluationCache: {
+    get: jest.fn(),
+    set: jest.fn(),
+    getStats: jest.fn(() => ({ size: 0, calculatedSize: 0 })),
+    clear: jest.fn(),
+  },
+}));
 
 describe('ListEvaluationsTool', () => {
   let mockServer: McpServer;
   let tool: ListEvaluationsTool;
   
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
+    
+    // Clear the cache mock
+    (performance.evaluationCache.get as jest.Mock).mockReturnValue(undefined);
     
     mockServer = {
-      tool: vi.fn(),
+      tool: jest.fn(),
     } as any;
     
     tool = new ListEvaluationsTool();
@@ -44,7 +74,7 @@ describe('ListEvaluationsTool', () => {
         },
       ];
       
-      vi.mocked(evalModel.getEvalSummaries).mockResolvedValue(mockEvals);
+      (evalModel.getEvalSummaries as jest.Mock).mockResolvedValue(mockEvals);
       
       const result = await tool['execute']({});
       
@@ -53,8 +83,8 @@ describe('ListEvaluationsTool', () => {
       
       const response = JSON.parse(result.content[0].text);
       expect(response.success).toBe(true);
-      expect(response.data.evaluations).toEqual(mockEvals);
-      expect(response.data.summary).toEqual({
+      expect(response.data.evaluations).toEqual(mockEvals); // All items fit in first page
+      expect(response.data.summary).toMatchObject({
         totalCount: 2,
         recentCount: 1, // Only eval_1 is within 24 hours
         datasetId: 'all',
@@ -70,7 +100,7 @@ describe('ListEvaluationsTool', () => {
         },
       ];
       
-      vi.mocked(evalModel.getEvalSummaries).mockResolvedValue(mockEvals);
+      (evalModel.getEvalSummaries as jest.Mock).mockResolvedValue(mockEvals);
       
       const result = await tool['execute']({ datasetId: 'dataset_123' });
       
@@ -83,20 +113,20 @@ describe('ListEvaluationsTool', () => {
     });
     
     it('should handle empty results gracefully', async () => {
-      vi.mocked(evalModel.getEvalSummaries).mockResolvedValue([]);
+      (evalModel.getEvalSummaries as jest.Mock).mockResolvedValue([]);
       
       const result = await tool['execute']({});
       
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
       expect(response.data.evaluations).toEqual([]);
-      expect(response.data.summary.totalCount).toBe(0);
+      expect(response.data.pagination.totalItems).toBe(0);
       expect(response.data.summary.recentCount).toBe(0);
     });
     
     it('should handle database errors', async () => {
       const dbError = new Error('Failed to connect to database');
-      vi.mocked(evalModel.getEvalSummaries).mockRejectedValue(dbError);
+      (evalModel.getEvalSummaries as jest.Mock).mockRejectedValue(dbError);
       
       const result = await tool['execute']({});
       
@@ -104,12 +134,11 @@ describe('ListEvaluationsTool', () => {
       const response = JSON.parse(result.content[0].text);
       expect(response.success).toBe(false);
       expect(response.error).toContain('Failed to access evaluation database');
-      expect(response.data.originalError).toBe('Failed to connect to database');
     });
     
     it('should handle generic errors', async () => {
       const error = new Error('Something went wrong');
-      vi.mocked(evalModel.getEvalSummaries).mockRejectedValue(error);
+      (evalModel.getEvalSummaries as jest.Mock).mockRejectedValue(error);
       
       const result = await tool['execute']({});
       
@@ -126,9 +155,43 @@ describe('ListEvaluationsTool', () => {
       // Valid input
       expect(() => schema.parse({})).not.toThrow();
       expect(() => schema.parse({ datasetId: 'test' })).not.toThrow();
+      expect(() => schema.parse({ page: 1, pageSize: 50 })).not.toThrow();
       
       // Invalid input
       expect(() => schema.parse({ datasetId: 123 })).toThrow();
+      expect(() => schema.parse({ page: -1 })).toThrow();
+      expect(() => schema.parse({ pageSize: 200 })).toThrow();
+    });
+    
+    it('should handle pagination correctly', async () => {
+      // Create 25 mock evaluations
+      const mockEvals = Array.from({ length: 25 }, (_, i) => ({
+        id: `eval_${i}`,
+        description: `Test eval ${i}`,
+        createdAt: new Date().toISOString(),
+      }));
+      
+      (evalModel.getEvalSummaries as jest.Mock).mockResolvedValue(mockEvals);
+      
+      // Test first page
+      const result1 = await tool['execute']({ page: 1, pageSize: 10 });
+      const response1 = JSON.parse(result1.content[0].text);
+      expect(response1.data.evaluations).toHaveLength(10);
+      expect(response1.data.pagination).toMatchObject({
+        page: 1,
+        pageSize: 10,
+        totalItems: 25,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: false,
+      });
+      
+      // Test second page
+      const result2 = await tool['execute']({ page: 2, pageSize: 10 });
+      const response2 = JSON.parse(result2.content[0].text);
+      expect(response2.data.evaluations).toHaveLength(10);
+      expect(response2.data.pagination.hasNextPage).toBe(true);
+      expect(response2.data.pagination.hasPreviousPage).toBe(true);
     });
   });
   

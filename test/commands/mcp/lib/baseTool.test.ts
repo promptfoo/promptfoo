@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool';
@@ -50,7 +49,7 @@ describe('AbstractTool', () => {
   beforeEach(() => {
     // Create a mock MCP server
     mockServer = {
-      tool: vi.fn((name, schema, handler) => {
+      tool: jest.fn((name, schema, handler) => {
         toolHandler = handler;
       }),
     } as any;

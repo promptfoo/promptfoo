@@ -28,47 +28,13 @@ export async function createMcpServer() {
   });
   
   // Track MCP server creation
-  telemetry.record('mcp_server_created', {
+  telemetry.record('feature_used', {
+    feature: 'mcp_server',
     transport: process.env.MCP_TRANSPORT || 'unknown',
   });
 
-  // Wrap tool registration to track usage
-  const originalTool = server.tool.bind(server);
-  server.tool = (name: string, schema: any, handler: any) => {
-    // Wrap the handler to track tool usage
-    const wrappedHandler = async (args: any) => {
-      const startTime = Date.now();
-      let success = true;
-      let error: string | undefined;
-      
-      try {
-        const result = await handler(args);
-        
-        // Check if it's an error result
-        if (result?.isError) {
-          success = false;
-          error = 'Tool returned error';
-        }
-        
-        return result;
-      } catch (e) {
-        success = false;
-        error = e instanceof Error ? e.message : 'Unknown error';
-        throw e;
-      } finally {
-        // Track tool usage
-        telemetry.record('mcp_tool_used', {
-          toolName: name,
-          success,
-          error,
-          durationMs: Date.now() - startTime,
-          transport: process.env.MCP_TRANSPORT || 'unknown',
-        });
-      }
-    };
-    
-    return originalTool(name, schema, wrappedHandler);
-  };
+  // Note: Tool usage tracking would require deeper integration with MCP SDK
+  // For now, we track server creation and start events
 
   // Register core evaluation tools
   registerListEvaluationsTool(server);
@@ -139,7 +105,8 @@ export async function startHttpMcpServer(port: number): Promise<void> {
     logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
     
     // Track server start
-    telemetry.record('mcp_server_started', {
+    telemetry.record('feature_used', {
+      feature: 'mcp_server_started',
       transport: 'http',
       port,
     });
@@ -170,7 +137,8 @@ export async function startStdioMcpServer(): Promise<void> {
   await server.connect(transport);
   
   // Track server start
-  telemetry.record('mcp_server_started', {
+  telemetry.record('feature_used', {
+    feature: 'mcp_server_started',
     transport: 'stdio',
   });
 
