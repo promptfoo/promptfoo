@@ -10,9 +10,9 @@ prompts:
   - 'Create a well-documented Python function to {{task}}'
 
 providers:
-  - openai:gpt-4o
-  - openai:o1-mini
-  - anthropic:claude-3-5-sonnet-20241022
+  - openai:o4-mini
+  - anthropic:claude-4-sonnet
+  - google:gemini-2.0-flash
 
 tests:
   - vars:
