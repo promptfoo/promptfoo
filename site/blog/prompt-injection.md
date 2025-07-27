@@ -17,6 +17,7 @@ keywords:
 date: 2024-10-09
 # https://www.tldraw.com/r/f_RRQMHxGe4erRNUVAfZA?d=v-171.-485.3560.2381.page
 authors: [ian]
+tags: [security-vulnerability, best-practices, owasp, prompt-injection]
 ---
 
 # Prompt Injection: A Comprehensive Guide

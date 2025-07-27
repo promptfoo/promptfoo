@@ -1,7 +1,6 @@
 import { render } from '@testing-library/react';
-import React from 'react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsIndexPage from './page';
 
 vi.mock('./components/EvalsDataGrid', () => ({

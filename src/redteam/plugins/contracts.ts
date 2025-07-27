@@ -1,8 +1,9 @@
 import dedent from 'dedent';
-import type { Assertion, AssertionValue, ResultSuggestion } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:contracts';
+import type { Assertion, AssertionValue, ResultSuggestion } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:contracts';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>

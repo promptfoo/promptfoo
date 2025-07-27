@@ -1,19 +1,18 @@
 import {
-  FRAMEWORK_NAMES,
-  OWASP_LLM_TOP_10_NAMES,
-  OWASP_API_TOP_10_NAMES,
-  OWASP_AGENTIC_NAMES,
-  OWASP_LLM_TOP_10_MAPPING,
-  OWASP_API_TOP_10_MAPPING,
-  OWASP_AGENTIC_REDTEAM_MAPPING,
-  OWASP_LLM_RED_TEAM_MAPPING,
-  NIST_AI_RMF_MAPPING,
-  MITRE_ATLAS_MAPPING,
-  EU_AI_ACT_MAPPING,
-  ALIASED_PLUGINS,
   ALIASED_PLUGIN_MAPPINGS,
+  ALIASED_PLUGINS,
+  EU_AI_ACT_MAPPING,
+  FRAMEWORK_NAMES,
+  MITRE_ATLAS_MAPPING,
+  NIST_AI_RMF_MAPPING,
+  OWASP_AGENTIC_NAMES,
+  OWASP_AGENTIC_REDTEAM_MAPPING,
+  OWASP_API_TOP_10_MAPPING,
+  OWASP_API_TOP_10_NAMES,
+  OWASP_LLM_RED_TEAM_MAPPING,
+  OWASP_LLM_TOP_10_MAPPING,
+  OWASP_LLM_TOP_10_NAMES,
 } from '../../../src/redteam/constants/frameworks';
-import { MEMORY_POISONING_PLUGIN_ID } from '../../../src/redteam/plugins/agentic/constants';
 
 describe('Framework Constants', () => {
   describe('FRAMEWORK_NAMES', () => {
@@ -74,7 +73,7 @@ describe('Framework Constants', () => {
   describe('OWASP_AGENTIC_REDTEAM_MAPPING', () => {
     it('should have correct mapping for memory poisoning', () => {
       expect(OWASP_AGENTIC_REDTEAM_MAPPING['owasp:agentic:t01'].plugins).toContain(
-        MEMORY_POISONING_PLUGIN_ID,
+        'agentic:memory-poisoning',
       );
       expect(OWASP_AGENTIC_REDTEAM_MAPPING['owasp:agentic:t01'].strategies).toHaveLength(0);
     });

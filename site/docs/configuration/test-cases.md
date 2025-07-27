@@ -129,6 +129,9 @@ question,__expected1,__expected2,__expected3
 | `__threshold`                     | Pass threshold             | `0.8`               |
 | `__metadata:*`                    | Filterable metadata        | See below           |
 
+Using `__metadata` without a key is not supported. Specify the metadata field like `__metadata:category`.
+If a CSV file includes a `__metadata` column without a key, Promptfoo logs a warning and ignores the column.
+
 ### Metadata in CSV
 
 Add filterable metadata:

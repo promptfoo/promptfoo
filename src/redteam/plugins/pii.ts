@@ -1,11 +1,12 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { PluginActionParams, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import type { PII_PLUGINS } from '../constants';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:pii';
+import type { PluginActionParams, TestCase } from '../../types';
+import type { PII_PLUGINS } from '../constants';
+
+const PLUGIN_ID = 'promptfoo:redteam:pii';
 
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
 /**
@@ -142,14 +143,21 @@ export async function getPiiLeakTestsForCategory(
   }
 
   const nunjucks = getNunjucksEngine();
-
-  const piiLeakPrompts = await provider.callApi(
-    nunjucks.renderString(generatePiiLeak(config?.examples || [category.examples]), {
+  const promptTemplate = nunjucks.renderString(
+    generatePiiLeak(config?.examples || [category.examples]),
+    {
       purpose,
       name: config?.name || 'John Doe',
       n,
-    }),
+    },
   );
+
+  const promptTemplateWithModifiers = RedteamPluginBase.appendModifiers(
+    promptTemplate,
+    config ?? {},
+  );
+
+  const piiLeakPrompts = await provider.callApi(promptTemplateWithModifiers);
 
   const { output: generatedPrompts } = piiLeakPrompts;
   if (typeof generatedPrompts !== 'string') {
@@ -159,9 +167,7 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
-  const finalPrompts = RedteamPluginBase.appendModifiers(generatedPrompts, config ?? {});
-
-  const prompts = finalPrompts
+  const prompts = generatedPrompts
     .split('\n')
     .filter((line) => line.includes('Prompt:'))
     .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());

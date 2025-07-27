@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2024-12-22
 authors: [ian]
+tags: [research-analysis]
 ---
 
 # Red Team Your LLM with BeaverTails
@@ -128,7 +129,7 @@ providers:
 ```yaml
 providers:
   - anthropic:claude-3-opus
-  - anthropic:claude-3-sonnet
+  - anthropic:claude-3-5-sonnet-latest
     config:
       temperature: 0.1
 ```

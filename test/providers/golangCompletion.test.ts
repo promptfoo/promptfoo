@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 

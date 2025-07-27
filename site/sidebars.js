@@ -158,6 +158,7 @@ const redTeamSidebar = [
           'red-team/strategies/multi-turn',
           'red-team/strategies/goat',
           'red-team/strategies/pandamonium',
+          'red-team/strategies/mischievous-user',
         ],
       },
       {
@@ -184,7 +185,7 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Custom',
         collapsed: true,
-        items: ['red-team/strategies/custom'],
+        items: ['red-team/strategies/custom-strategy', 'red-team/strategies/custom'],
       },
       {
         type: 'category',
@@ -253,6 +254,11 @@ const redTeamSidebar = [
         type: 'doc',
         label: 'Agentic Red Teaming',
         id: 'red-team/agents',
+      },
+      {
+        type: 'doc',
+        label: 'MCP Security',
+        id: 'red-team/mcp-security-testing',
       },
       {
         type: 'doc',
@@ -400,6 +406,10 @@ const sidebars = {
     {
       type: 'doc',
       id: 'faq',
+    },
+    {
+      type: 'doc',
+      id: 'releases',
     },
   ],
   // Within enterprise docs, show only the following sidebar

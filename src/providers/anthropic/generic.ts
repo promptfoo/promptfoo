@@ -1,12 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
+
 import type { ApiProvider, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 
 /**
  * Base options shared by all Anthropic provider implementations
  */
-export interface AnthropicBaseOptions {
+interface AnthropicBaseOptions {
   apiKey?: string;
   apiBaseUrl?: string;
   headers?: Record<string, string>;

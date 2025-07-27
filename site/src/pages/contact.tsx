@@ -119,11 +119,6 @@ function Contact(): JSX.Element {
             </Box>
 
             <TabPanel value={tabValue} index={0}>
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="body1" color="text.secondary" align="center">
-                  Book a 30-minute demo to see Promptfoo in action
-                </Typography>
-              </Box>
               <Calendar />
             </TabPanel>
 

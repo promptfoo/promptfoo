@@ -29,3 +29,4 @@ redteam:
     - prompt-injection
     - goat
     - crescendo
+    - mischievous-user

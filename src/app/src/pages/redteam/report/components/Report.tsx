@@ -1,6 +1,8 @@
 import React from 'react';
+
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
@@ -20,31 +22,34 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   type EvaluateResult,
+  type EvaluateSummaryV2,
+  type GradingResult,
+  isProviderOptions,
+  type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
-  type GradingResult,
-  type ResultLightweightWithLabel,
-  type EvaluateSummaryV2,
-  isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {
+  const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
+  const { recordEvent } = useTelemetry();
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -54,6 +59,14 @@ const App: React.FC = () => {
       });
       const body = (await resp.json()) as SharedResults;
       setEvalData(body.data);
+
+      // Track funnel event for report viewed
+      recordEvent('funnel', {
+        type: 'redteam',
+        step: 'webui_report_viewed',
+        source: 'webui',
+        evalId: id,
+      });
     };
 
     if (searchParams) {
@@ -306,7 +319,7 @@ const App: React.FC = () => {
                   if (event.ctrlKey || event.metaKey) {
                     window.open(url, '_blank');
                   } else {
-                    window.location.href = url;
+                    navigate(url);
                   }
                 }}
               >

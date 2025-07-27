@@ -1,8 +1,8 @@
 import fs from 'fs';
 import { rm } from 'fs/promises';
+
 import yaml from 'js-yaml';
-import { reportProviderAPIKeyWarnings } from '../src/onboarding';
-import { createDummyFiles } from '../src/onboarding';
+import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types';
 
 jest.mock('fs', () => ({
@@ -42,7 +42,7 @@ jest.mock('../src/database', () => ({
 }));
 
 jest.mock('../src/telemetry', () => ({
-  recordAndSend: jest.fn(),
+  record: jest.fn(),
 }));
 
 jest.mock('../src/fetch', () => ({

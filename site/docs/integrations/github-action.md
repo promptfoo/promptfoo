@@ -35,7 +35,7 @@ jobs:
     steps:
       # This cache is optional, but you'll save money and time by setting it up!
       - name: Set up promptfoo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.cache/promptfoo
           key: ${{ runner.os }}-promptfoo-v1

@@ -1,12 +1,17 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
-import { checkEmailStatus, getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import {
+  checkEmailStatus,
+  getUserEmail,
+  getUserId,
+  setUserEmail,
+} from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { ApiSchemas } from '../apiSchemas';
+import type { Request, Response } from 'express';
 
 export const userRouter = Router();
 
@@ -28,6 +33,20 @@ userRouter.get('/email', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+userRouter.get('/id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = getUserId();
+    res.json(ApiSchemas.User.GetId.Response.parse({ id }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error(`Error getting user ID: ${fromError(error)}`);
+    } else {
+      logger.error(`Error getting user ID: ${error}`);
+    }
+    res.status(500).json({ error: 'Failed to get user ID' });
+  }
+});
+
 userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = ApiSchemas.User.Update.Request.parse(req.body);
@@ -38,7 +57,7 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
         message: `Email updated`,
       }),
     );
-    await telemetry.recordAndSend('webui_api', {
+    await telemetry.record('webui_api', {
       event: 'email_set',
       email,
       selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),

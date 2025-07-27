@@ -1,17 +1,20 @@
+import type { Agent } from 'http';
+
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { AwsBedrockGenericProvider } from './index';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
-import type { Agent } from 'http';
-import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getEnvInt } from '../../envars';
-import logger from '../../logger';
-import telemetry from '../../telemetry';
+
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
-import { AwsBedrockGenericProvider } from './index';
 
-export interface BedrockKnowledgeBaseOptions {
+interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
   profile?: string;
   region?: string;
@@ -27,7 +30,7 @@ export interface BedrockKnowledgeBaseOptions {
 }
 
 // Define citation types for metadata
-export interface CitationReference {
+interface CitationReference {
   content?: {
     text?: string;
     [key: string]: any;
@@ -43,7 +46,7 @@ export interface CitationReference {
   [key: string]: any;
 }
 
-export interface Citation {
+interface Citation {
   retrievedReferences?: CitationReference[];
   generatedResponsePart?: {
     textResponsePart?: {
@@ -85,7 +88,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     this.kbConfig = options.config || { knowledgeBaseId: '' };
 
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'knowledge_base',
       provider: 'bedrock',
     });
@@ -142,22 +145,40 @@ export class AwsBedrockKnowledgeBaseProvider
     const client = await this.getKnowledgeBaseClient();
 
     // Prepare the request parameters
-    const modelArn =
-      this.kbConfig.modelArn ||
-      (this.modelName.includes(':')
-        ? this.modelName.includes('arn:aws:bedrock')
-          ? this.modelName // Already has full ARN format
-          : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`
-        : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`);
+    let modelArn = this.kbConfig.modelArn;
+
+    if (!modelArn) {
+      if (this.modelName.includes('arn:aws:bedrock')) {
+        modelArn = this.modelName; // Already has full ARN format
+      } else if (
+        this.modelName.startsWith('us.') ||
+        this.modelName.startsWith('eu.') ||
+        this.modelName.startsWith('apac.')
+      ) {
+        // This is a cross-region inference profile - use inference-profile ARN format
+        // Note: We'll use the modelName directly as the inference profile ID since Knowledge Bases
+        // expect the inference profile ID, not a full ARN for these
+        modelArn = this.modelName;
+      } else {
+        // Regular foundation model
+        modelArn = `arn:aws:bedrock:${this.getRegion()}::foundation-model/${this.modelName}`;
+      }
+    }
+
+    const knowledgeBaseConfiguration: any = {
+      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+    };
+
+    // Only include modelArn if explicitly configured or if it's a valid model
+    if (this.kbConfig.modelArn || this.modelName !== 'default') {
+      knowledgeBaseConfiguration.modelArn = modelArn;
+    }
 
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
       retrieveAndGenerateConfiguration: {
         type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration: {
-          knowledgeBaseId: this.kbConfig.knowledgeBaseId,
-          modelArn,
-        },
+        knowledgeBaseConfiguration,
       },
     };
 
@@ -185,7 +206,7 @@ export class AwsBedrockKnowledgeBaseProvider
         return {
           output: parsedResponse.output,
           metadata: { citations: parsedResponse.citations },
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
           cached: true,
         };
       }
@@ -226,7 +247,7 @@ export class AwsBedrockKnowledgeBaseProvider
       return {
         output,
         metadata: { citations },
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
       };
     } catch (err) {
       return {

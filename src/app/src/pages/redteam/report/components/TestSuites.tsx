@@ -1,4 +1,5 @@
 import React from 'react';
+
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -15,12 +16,14 @@ import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
   displayNameOverrides,
+  type Plugin,
   riskCategories,
   Severity,
   subCategoryDescriptions,
-  type Plugin,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
+import { useNavigate } from 'react-router-dom';
+import { getMetricNameFromPlugin } from '../utils/metricMapping';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
@@ -76,6 +79,7 @@ const getSubCategoryStats = (
 };
 
 const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins }) => {
+  const navigate = useNavigate();
   const subCategoryStats = getSubCategoryStats(categoryStats, plugins).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
@@ -322,13 +326,15 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                         variant="contained"
                         size="small"
                         onClick={() => {
-                          const searchParams = new URLSearchParams(window.location.search);
-                          const evalId = searchParams.get('evalId');
                           const pluginId = subCategory.pluginName;
-                          const searchQuery = pluginId
-                            ? `metadata=pluginId:${pluginId}`
-                            : `metric=${subCategory.type}`;
-                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
+                          const categoryType = subCategory.type;
+
+                          const metricName = getMetricNameFromPlugin(
+                            pluginId || categoryType,
+                            categoryType,
+                          );
+
+                          navigate(`/eval/${evalId}?metric=${encodeURIComponent(metricName)}`);
                         }}
                       >
                         View logs

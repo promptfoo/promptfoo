@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
+
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import type { ResultsFile } from '@promptfoo/types';
 import { convertEvalDataToCsv } from '../utils/csvExport';
+import type { ResultsFile } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalDescription: string;
@@ -20,6 +22,8 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  const { recordEvent } = useTelemetry();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -41,6 +45,12 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const handleCsvDownload = () => {
     setIsDownloading(true);
     handleClose();
+
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'csv',
+    });
 
     try {
       const csv = convertEvalDataToCsv(evalData);
@@ -65,6 +75,12 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
     setIsDownloading(true);
     handleClose();
 
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'json',
+    });
+
     try {
       const jsonData = JSON.stringify(evalData, null, 2);
       const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
@@ -85,6 +101,11 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   };
   const handlePdfDownload = () => {
     handleClose();
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'pdf',
+    });
     window.print();
   };
 

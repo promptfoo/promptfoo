@@ -1,7 +1,8 @@
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 import * as configModule from '../../../src/util/config/load';
+
+import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 
 jest.mock('../../../src/redteam', () => ({
   synthesize: jest.fn(),

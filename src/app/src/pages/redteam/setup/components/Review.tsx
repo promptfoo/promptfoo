@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
 import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -7,12 +8,17 @@ import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
+import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -28,20 +34,19 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import type { RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
+import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job } from '@promptfoo/types';
 
 interface PolicyPlugin {
   id: 'policy';
@@ -81,6 +86,11 @@ export default function Review() {
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
+
+  // Auto-expand advanced config if there are existing test variables
+  const hasTestVariables =
+    config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
+  const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -233,6 +243,22 @@ export default function Review() {
       targetType: config.target.id,
     });
 
+    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
+      // Track report export
+      recordEvent('webui_action', {
+        action: 'redteam_run_with_example',
+      });
+    }
+    // Track funnel milestone - evaluation started
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_evaluation_started',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
     setIsRunning(true);
     setLogs([]);
     setEvalId(null);
@@ -269,6 +295,14 @@ export default function Review() {
 
           if (status.status === 'complete' && status.result && status.evalId) {
             setEvalId(status.evalId);
+
+            // Track funnel milestone - evaluation completed
+            recordEvent('funnel', {
+              type: 'redteam',
+              step: 'webui_evaluation_completed',
+              source: 'webui',
+              evalId: status.evalId,
+            });
           } else if (status.status === 'complete') {
             console.warn('No evaluation result was generated');
             showToast(
@@ -350,6 +384,7 @@ export default function Review() {
         onChange={handleDescriptionChange}
         variant="outlined"
         sx={{ mb: 4 }}
+        autoFocus
       />
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
@@ -643,7 +678,40 @@ export default function Review() {
 
       <Divider sx={{ my: 4 }} />
 
-      <DefaultTestVariables />
+      <Accordion
+        expanded={isAdvancedConfigExpanded}
+        onChange={(e, expanded) => {
+          setIsAdvancedConfigExpanded(expanded);
+        }}
+        sx={{
+          mb: 4,
+          '&:before': { display: 'none' },
+          boxShadow: theme.shadows[1],
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{
+            '& .MuiAccordionSummary-content': {
+              alignItems: 'center',
+              gap: 2,
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TuneIcon fontSize="small" color="action" />
+            <Typography variant="h6">Advanced Configuration</Typography>
+            <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ pt: 0 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Configure advanced options that apply to all test cases. These settings are for power
+            users who need fine-grained control over their red team evaluation.
+          </Typography>
+          <DefaultTestVariables />
+        </AccordionDetails>
+      </Accordion>
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
         Running Your Configuration

@@ -1,10 +1,10 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import {
   calculateAnthropicCost,
   outputFromMessage,
   parseMessages,
 } from '../../../src/providers/anthropic/util';
+import type Anthropic from '@anthropic-ai/sdk';
 
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
