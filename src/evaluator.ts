@@ -1508,7 +1508,7 @@ class Evaluator {
     }
 
     // Do we have to run comparisons between row outputs?
-    const compareRowsCount = rowsWithSelectBestAssertion.size;
+    const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
     // Mark concurrent phase as complete
     if (this.options.showProgressBar) {
@@ -1641,6 +1641,13 @@ class Evaluator {
             maxScoreAssertion,
           );
 
+          // Update progress bar
+          if (this.options.showProgressBar) {
+            progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (!isWebUI) {
+            logger.debug(`Max-score assertion for test #${testIdx} complete`);
+          }
+
           // Update results with max-score outcomes
           for (let index = 0; index < resultsToCompare.length; index++) {
             const result = resultsToCompare[index];
@@ -1654,21 +1661,20 @@ class Evaluator {
             const existingGradingResult = result.gradingResult;
 
             result.gradingResult = {
-              ...existingGradingResult, // Preserve existing data like tokensUsed, namedScores
-              ...maxScoreGradingResult, // Apply max-score results
+              pass: maxScoreGradingResult.pass,
+              score: maxScoreGradingResult.score,
+              reason: maxScoreGradingResult.reason,
               componentResults: [...existingComponentResults, maxScoreGradingResult],
-              // Merge namedScores instead of overwriting
               namedScores: {
                 ...(existingGradingResult?.namedScores || {}),
                 ...maxScoreGradingResult.namedScores,
               },
-              // Preserve tokensUsed from existing result
               tokensUsed: existingGradingResult?.tokensUsed || maxScoreGradingResult.tokensUsed,
+              assertion: maxScoreAssertion,
             };
 
-            // Update pass/fail status based on max-score result
-            result.success = maxScoreGradingResult.pass;
-            result.score = maxScoreGradingResult.score;
+            // Don't overwrite overall success/score - max-score is just another assertion
+            // The overall result should be determined by all assertions, not just max-score
 
             if (this.evalRecord.persisted) {
               await result.save();

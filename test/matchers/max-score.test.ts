@@ -143,7 +143,7 @@ describe('selectMaxScore', () => {
     ];
 
     await expect(selectMaxScore(outputs, results, mockAssertion)).rejects.toThrow(
-      'max-score requires at least one other assertion to aggregate scores from',
+      'max-score requires at least one other assertion (besides max-score or select-best) to aggregate scores from',
     );
   });
 

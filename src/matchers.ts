@@ -1317,7 +1317,9 @@ export async function selectMaxScore(
     );
 
     if (relevantResults.length === 0) {
-      throw new Error('max-score requires at least one other assertion to aggregate scores from');
+      throw new Error(
+        'max-score requires at least one other assertion (besides max-score or select-best) to aggregate scores from',
+      );
     }
 
     // Calculate weighted scores for each assertion
