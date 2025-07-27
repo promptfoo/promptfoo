@@ -94,7 +94,11 @@ export interface OpenAiCodeInterpreterTool {
   };
 }
 
-export type OpenAiResponsesTool = OpenAiTool | OpenAiMCPTool | OpenAiWebSearchTool | OpenAiCodeInterpreterTool;
+export type OpenAiResponsesTool =
+  | OpenAiTool
+  | OpenAiMCPTool
+  | OpenAiWebSearchTool
+  | OpenAiCodeInterpreterTool;
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
