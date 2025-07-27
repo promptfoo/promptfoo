@@ -4,21 +4,24 @@ import type { Page } from 'playwright';
 
 let mockPage: jest.Mocked<Page>;
 
+const mockBrowser = {
+  contexts: jest.fn(() => []),
+  newContext: jest.fn(() =>
+    Promise.resolve({
+      newPage: jest.fn(() => Promise.resolve(mockPage)),
+      addCookies: jest.fn(),
+      close: jest.fn(),
+    }),
+  ),
+  close: jest.fn(),
+};
+
 jest.mock('playwright-extra', () => ({
   chromium: {
     use: jest.fn(),
-    launch: jest.fn().mockImplementation(() =>
-      Promise.resolve({
-        newContext: jest.fn(() =>
-          Promise.resolve({
-            newPage: jest.fn(() => Promise.resolve(mockPage)),
-            addCookies: jest.fn(),
-            close: jest.fn(),
-          }),
-        ),
-        close: jest.fn(),
-      }),
-    ),
+    launch: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
+    connectOverCDP: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
+    connect: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
   },
 }));
 
@@ -392,5 +395,161 @@ describe('createTransformResponse', () => {
     const tr = createTransformResponse(undefined);
     const result = tr({}, 'baz');
     expect(result).toEqual({ output: undefined });
+  });
+});
+
+describe('BrowserProvider - Connect to Existing Session', () => {
+  let mockFetch: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockFetch = jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        json: () => Promise.resolve({ Browser: 'Chrome/120.0.0.0' }),
+      } as Response),
+    );
+  });
+
+  afterEach(() => {
+    mockFetch.mockRestore();
+  });
+
+  it('should require acceptSecurityRisk flag', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          // acceptSecurityRisk not set
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('acceptSecurityRisk: true');
+    expect(result.error).toContain('security implications');
+  });
+
+  it('should connect via CDP when configured', async () => {
+    const { chromium } = await import('playwright-extra');
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html>test content</html>');
+
+    await provider.callApi('test');
+
+    expect(chromium.connectOverCDP).toHaveBeenCalledWith('http://localhost:9222');
+    expect(mockPage.goto).toHaveBeenCalledWith('https://example.com');
+  });
+
+  it('should connect via WebSocket when configured', async () => {
+    const { chromium } = await import('playwright-extra');
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          mode: 'websocket',
+          wsEndpoint: 'ws://localhost:9222/devtools/browser/123',
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html></html>');
+
+    await provider.callApi('test');
+
+    expect(chromium.connect).toHaveBeenCalledWith({
+      wsEndpoint: 'ws://localhost:9222/devtools/browser/123',
+    });
+  });
+
+  it('should use existing context when connecting to existing browser', async () => {
+    const mockContext = {
+      newPage: jest.fn(() => Promise.resolve(mockPage)),
+      addCookies: jest.fn(),
+      close: jest.fn(),
+    };
+
+    // Create a new mock browser instance with contexts for this test
+    const mockExistingBrowser = {
+      contexts: jest.fn(() => [mockContext]),
+      newContext: jest.fn(),
+      close: jest.fn(),
+    };
+
+    const { chromium } = await import('playwright-extra');
+    (chromium.connectOverCDP as jest.Mock).mockResolvedValueOnce(mockExistingBrowser);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html></html>');
+
+    await provider.callApi('test');
+
+    expect(mockExistingBrowser.contexts).toHaveBeenCalled();
+    expect(mockExistingBrowser.newContext).not.toHaveBeenCalled();
+  });
+
+  it('should not close browser when connected to existing session', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html></html>');
+    mockPage.close = jest.fn();
+
+    await provider.callApi('test');
+
+    expect(mockPage.close).toHaveBeenCalled();
+    expect(mockBrowser.close).not.toHaveBeenCalled();
+  });
+
+  it('should handle connection failures gracefully', async () => {
+    mockFetch.mockRejectedValue(new Error('Connection refused'));
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    expect(result.error).toContain('--remote-debugging-port=9222');
   });
 });

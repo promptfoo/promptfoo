@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Basic test of browser session connection
+
+providers:
+  - id: browser
+    config:
+      connectOptions:
+        debuggingPort: 9222
+        acceptSecurityRisk: true
+
+      steps:
+        - action: navigate
+          args:
+            url: 'http://localhost:8080'
+
+        # The type action will automatically wait for the selector
+        - action: type
+          args:
+            selector: '#chat-input'
+            text: '{{prompt}}'
+
+        - action: click
+          args:
+            selector: '#send-button'
+
+        - action: wait
+          args:
+            ms: 1000
+
+        - action: extract
+          args:
+            selector: '.chat-message:last-child .message-content'
+          name: response
+
+      transformResponse: 'extracted.response'
+
+prompts:
+  - 'Who am I logged in as?'
+
+tests:
+  - vars:
+      prompt: 'Who am I logged in as?'
+    assert:
+      - type: contains
+        value: 'John Doe'
+      - type: contains
+        value: 'authenticated'
