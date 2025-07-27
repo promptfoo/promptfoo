@@ -128,6 +128,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   // Responses API specific options
   instructions?: string;
   max_output_tokens?: number;
+  max_tool_calls?: number;
   metadata?: Record<string, string>;
   parallel_tool_calls?: boolean;
   previous_response_id?: string;
@@ -135,6 +136,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stream?: boolean;
   truncation?: 'auto' | 'disabled';
   user?: string;
+  background?: boolean;
+  webhook_url?: string;
 
   /**
    * If set, automatically call these functions when the assistant activates

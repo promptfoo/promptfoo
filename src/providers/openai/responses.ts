@@ -166,6 +166,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
@@ -175,6 +176,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
+      ...(config.background ? { background: config.background } : {}),
+      ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
       ...(config.passthrough || {}),
     };
@@ -213,7 +216,45 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+
+    // Validate deep research models have required tools
+    const isDeepResearchModel = this.modelName.includes('deep-research');
+    if (isDeepResearchModel) {
+      const hasWebSearchTool = config.tools?.some(
+        (tool: any) => tool.type === 'web_search_preview',
+      );
+      if (!hasWebSearchTool) {
+        return {
+          error: `Deep research model ${this.modelName} requires the web_search_preview tool to be configured. Add it to your provider config:\ntools:\n  - type: web_search_preview`,
+        };
+      }
+
+      // Validate MCP configuration for deep research
+      const mcpTools = config.tools?.filter((tool: any) => tool.type === 'mcp') || [];
+      for (const mcpTool of mcpTools) {
+        if (mcpTool.require_approval !== 'never') {
+          return {
+            error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
+          };
+        }
+      }
+    }
+
     logger.debug(`Calling OpenAI Responses API: ${JSON.stringify(body)}`);
+
+    // Calculate timeout for deep research models
+    let timeout = REQUEST_TIMEOUT_MS;
+    if (isDeepResearchModel) {
+      // For deep research models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
+      // otherwise default to 10 minutes (600,000ms)
+      const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
+      if (evalTimeout > 0) {
+        timeout = evalTimeout;
+      } else {
+        timeout = 600_000; // 10 minutes default for deep research
+      }
+      logger.debug(`Using timeout of ${timeout}ms for deep research model ${this.modelName}`);
+    }
 
     let data, status, statusText;
     let cached = false;
@@ -230,7 +271,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        timeout,
         'json',
         context?.bustCache ?? context?.debug,
       ));
@@ -261,6 +302,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     try {
       // Find the assistant message in the output
       const output = data.output;
+
+      // Log the structure for debugging deep research responses
+      if (this.modelName.includes('deep-research')) {
+        logger.debug(`Deep research response structure: ${JSON.stringify(data, null, 2)}`);
+      }
+
       if (!output || !Array.isArray(output) || output.length === 0) {
         return {
           error: `Invalid response format: Missing output array`,
@@ -273,13 +320,30 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
       // Process all output items
       for (const item of output) {
+        if (!item || typeof item !== 'object') {
+          logger.warn(`Skipping invalid output item: ${JSON.stringify(item)}`);
+          continue;
+        }
+
         if (item.type === 'function_call') {
           result = JSON.stringify(item);
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
             for (const contentItem of item.content) {
+              if (!contentItem || typeof contentItem !== 'object') {
+                logger.warn(`Skipping invalid content item: ${JSON.stringify(contentItem)}`);
+                continue;
+              }
+
               if (contentItem.type === 'output_text') {
                 result += contentItem.text;
+                // Preserve annotations for deep research citations
+                if (contentItem.annotations && contentItem.annotations.length > 0) {
+                  if (!data.annotations) {
+                    data.annotations = [];
+                  }
+                  data.annotations.push(...contentItem.annotations);
+                }
               } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
                 result = JSON.stringify(contentItem);
               } else if (contentItem.type === 'refusal') {
@@ -293,6 +357,43 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
+        } else if (item.type === 'reasoning') {
+          // Handle reasoning output from deep research models
+          if (result) {
+            result += '\n';
+          }
+          result += `Reasoning: ${JSON.stringify(item.summary)}`;
+        } else if (item.type === 'web_search_call') {
+          // Handle web search calls from deep research models
+          if (result) {
+            result += '\n';
+          }
+          const action = item.action;
+          if (action) {
+            if (action.type === 'search') {
+              result += `Web Search: "${action.query}"`;
+            } else if (action.type === 'open_page') {
+              result += `Opening page: ${action.url}`;
+            } else if (action.type === 'find_in_page') {
+              result += `Finding in page: "${action.query}"`;
+            } else {
+              result += `Web action: ${action.type}`;
+            }
+          } else {
+            result += `Web Search Call (status: ${item.status || 'unknown'})`;
+          }
+          if (item.status === 'failed' && item.error) {
+            result += ` (Error: ${item.error})`;
+          }
+        } else if (item.type === 'code_interpreter_call') {
+          // Handle code interpreter calls from deep research models
+          if (result) {
+            result += '\n';
+          }
+          result += `Code Interpreter: ${item.code || 'Running code...'}`;
+          if (item.status === 'failed' && item.error) {
+            result += ` (Error: ${item.error})`;
+          }
         } else if (item.type === 'mcp_list_tools') {
           // MCP tools list - include in result for debugging/visibility
           if (result) {

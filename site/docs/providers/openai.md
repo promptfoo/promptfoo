@@ -1137,7 +1137,7 @@ Available models:
 
 All deep research models:
 
-- Require `web_search_preview` tool to be configured
+- **Require** `web_search_preview` tool to be configured
 - Support 200,000 token context window
 - Support up to 100,000 output tokens
 - May take 2-10 minutes to complete research tasks
@@ -1154,8 +1154,100 @@ providers:
         - type: web_search_preview # Required
 ```
 
+#### Advanced Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o3-deep-research
+    config:
+      max_output_tokens: 100000
+      max_tool_calls: 50 # Limit searches to control cost/latency
+      background: true # Recommended for long-running tasks
+      store: true # Store conversation for 30 days
+      tools:
+        - type: web_search_preview # Required
+        - type: code_interpreter # Optional: For data analysis
+          container:
+            type: auto
+        - type: mcp # Optional: Connect to private data
+          server_label: mycompany_data
+          server_url: https://api.mycompany.com/mcp
+          require_approval: never # Must be 'never' for deep research
+```
+
+#### Response Format
+
+Deep research models return specialized output items:
+
+- **web_search_call**: Web search actions (search, open_page, find_in_page)
+- **code_interpreter_call**: Code execution for analysis
+- **message**: Final answer with inline citations and annotations
+
+Example response structure:
+
+```json
+{
+  "output": [
+    {
+      "type": "web_search_call",
+      "action": {
+        "type": "search",
+        "query": "latest AI research papers 2025"
+      }
+    },
+    {
+      "type": "message",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Based on my research...",
+          "annotations": [
+            {
+              "url": "https://arxiv.org/...",
+              "title": "Paper Title",
+              "start_index": 123,
+              "end_index": 145
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Best Practices
+
+1. **Use Background Mode**: For production, always use `background: true` to handle long response times
+2. **Set High Token Limits**: Use `max_output_tokens: 50000` or higher
+3. **Configure Timeouts**: Set `PROMPTFOO_EVAL_TIMEOUT_MS=600000` for 10-minute timeouts
+4. **Control Costs**: Use `max_tool_calls` to limit the number of searches
+5. **Enhance Prompts**: Consider using a faster model to clarify/rewrite prompts before deep research
+
+#### Timeout Configuration
+
+Deep research models automatically use appropriate timeouts:
+
+- If `PROMPTFOO_EVAL_TIMEOUT_MS` is set, it will be used for the API call
+- Otherwise, deep research models default to a 10-minute timeout (600,000ms)
+- Regular models continue to use the standard 5-minute timeout
+
+Example:
+
+```bash
+# Set a custom timeout for all evaluations
+export PROMPTFOO_EVAL_TIMEOUT_MS=900000  # 15 minutes
+
+# Or set the default API timeout (affects all providers)
+export REQUEST_TIMEOUT_MS=600000  # 10 minutes
+```
+
 :::tip
 Deep research models require high `max_output_tokens` values (50,000+) and long timeouts. Set `PROMPTFOO_EVAL_TIMEOUT_MS=600000` for 10-minute timeouts.
+:::
+
+:::warning
+The `web_search_preview` tool is **required** for deep research models. The provider will return an error if this tool is not configured.
 :::
 
 ### Sending Images in Prompts
