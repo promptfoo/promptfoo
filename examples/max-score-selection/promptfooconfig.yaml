@@ -1,15 +1,18 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Max-score assertion for objective output selection
 
+# This example demonstrates how max-score can objectively select the best implementation
+# based on weighted scores from multiple assertions (correctness, documentation, efficiency)
+
 prompts:
   - 'Generate a Python function to {{task}}'
   - 'Write an efficient Python function to {{task}}'
   - 'Create a well-documented Python function to {{task}}'
 
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-3.5-turbo
-  - anthropic:claude-3-7-sonnet-20250219
+  - openai:gpt-4o
+  - openai:o1-mini
+  - anthropic:claude-3-5-sonnet-20241022
 
 tests:
   - vars:
@@ -33,17 +36,16 @@ tests:
       - type: llm-rubric
         value: 'Code includes a clear docstring explaining parameters, return value, and complexity'
 
-      # Code quality test
-      - type: contains
-        value: 'def merge_sorted_lists'
+      # Code structure and efficiency
+      - type: llm-rubric
+        value: 'The implementation uses an efficient algorithm (O(m+n) time complexity) and follows Python best practices'
 
       # Max-score selects the best implementation objectively
       - type: max-score
         value:
           weights:
             python: 3 # Correctness is most important
-            llm-rubric: 1 # Documentation is secondary
-            contains: 0.5 # Basic structure check
+            llm-rubric: 1.5 # Documentation and code quality weighted together
 
   - vars:
       task: 'check if a string is a palindrome (ignoring case and spaces)'
