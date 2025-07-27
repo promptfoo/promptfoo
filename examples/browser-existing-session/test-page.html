@@ -87,8 +87,16 @@
           // Add user message
           const userMsg = document.createElement('div');
           userMsg.className = 'chat-message';
-          userMsg.innerHTML =
-            '<strong>You:</strong><div class="message-content">' + message + '</div>';
+          
+          const userLabel = document.createElement('strong');
+          userLabel.textContent = 'You:';
+          userMsg.appendChild(userLabel);
+          
+          const userContent = document.createElement('div');
+          userContent.className = 'message-content';
+          userContent.textContent = message;
+          userMsg.appendChild(userContent);
+          
           document.getElementById('chat-container').appendChild(userMsg);
 
           // Simulate bot response
@@ -113,8 +121,15 @@
               response = 'I received your message: "' + message + '". How can I help you today?';
             }
 
-            botMsg.innerHTML =
-              '<strong>Assistant:</strong><div class="message-content">' + response + '</div>';
+            const botLabel = document.createElement('strong');
+            botLabel.textContent = 'Assistant:';
+            botMsg.appendChild(botLabel);
+            
+            const botContent = document.createElement('div');
+            botContent.className = 'message-content';
+            botContent.textContent = response;
+            botMsg.appendChild(botContent);
+            
             document.getElementById('chat-container').appendChild(botMsg);
           }, 500);
 

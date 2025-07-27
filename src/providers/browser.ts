@@ -173,9 +173,6 @@ export class BrowserProvider implements ApiProvider {
         throw error;
       }
     } catch (error) {
-      if (shouldCloseBrowser && browser) {
-        await browser.close();
-      }
       return { error: `Browser execution error: ${error}` };
     } finally {
       if (shouldCloseBrowser && browser) {
