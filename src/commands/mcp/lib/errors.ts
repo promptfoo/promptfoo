@@ -120,6 +120,44 @@ export class SharingError extends McpError {
 }
 
 /**
+ * Error thrown when rate limits are exceeded
+ */
+export class RateLimitError extends McpError {
+  readonly code = 'RATE_LIMIT_ERROR';
+  readonly statusCode = 429;
+
+  constructor(
+    service: string,
+    retryAfter?: number,
+    details?: Record<string, unknown>
+  ) {
+    const message = retryAfter 
+      ? `Rate limit exceeded for ${service}. Retry after ${retryAfter} seconds.`
+      : `Rate limit exceeded for ${service}`;
+    super(message, { service, retryAfter, ...details });
+  }
+}
+
+/**
+ * Error thrown when file operations fail
+ */
+export class FileOperationError extends McpError {
+  readonly code = 'FILE_OPERATION_ERROR';
+  readonly statusCode = 500;
+
+  constructor(
+    operation: 'read' | 'write' | 'delete' | 'create',
+    filePath: string,
+    originalError?: Error
+  ) {
+    super(
+      `Failed to ${operation} file: ${filePath}`,
+      { operation, filePath, originalError: originalError?.message }
+    );
+  }
+}
+
+/**
  * Utility function to convert unknown errors to McpError
  */
 export function toMcpError(
@@ -131,6 +169,29 @@ export function toMcpError(
   }
 
   if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    
+    // Check for specific error patterns
+    if (message.includes('rate limit')) {
+      return new RateLimitError('service', undefined, { originalError: error.message });
+    }
+    
+    if (message.includes('not found') || message.includes('enoent')) {
+      return new NotFoundError('Resource', undefined);
+    }
+    
+    if (message.includes('timeout') || message.includes('timed out')) {
+      return new TimeoutError('Operation', 30000);
+    }
+    
+    if (message.includes('auth') || message.includes('unauthorized') || message.includes('forbidden')) {
+      return new AuthenticationError(error.message);
+    }
+    
+    if (message.includes('config') || message.includes('invalid')) {
+      return new ConfigurationError(error.message);
+    }
+    
     return new ValidationError(error.message);
   }
 

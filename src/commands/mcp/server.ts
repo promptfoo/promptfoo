@@ -3,7 +3,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import logger from '../../logger';
+import telemetry from '../../telemetry';
 import { registerResources } from './resources';
+import { registerCompareProvidersTool } from './tools/compareProviders';
+import { registerGenerateDatasetTool } from './tools/generateDataset';
+import { registerGenerateTestCasesTool } from './tools/generateTestCases';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
 import { registerListEvaluationsTool } from './tools/listEvaluations';
 import { registerRedteamGenerateTool } from './tools/redteamGenerate';
@@ -22,8 +26,51 @@ export async function createMcpServer() {
     name: 'Promptfoo MCP',
     version: '1.0.0',
   });
+  
+  // Track MCP server creation
+  telemetry.record('mcp_server_created', {
+    transport: process.env.MCP_TRANSPORT || 'unknown',
+  });
 
-  // Register all tools
+  // Wrap tool registration to track usage
+  const originalTool = server.tool.bind(server);
+  server.tool = (name: string, schema: any, handler: any) => {
+    // Wrap the handler to track tool usage
+    const wrappedHandler = async (args: any) => {
+      const startTime = Date.now();
+      let success = true;
+      let error: string | undefined;
+      
+      try {
+        const result = await handler(args);
+        
+        // Check if it's an error result
+        if (result?.isError) {
+          success = false;
+          error = 'Tool returned error';
+        }
+        
+        return result;
+      } catch (e) {
+        success = false;
+        error = e instanceof Error ? e.message : 'Unknown error';
+        throw e;
+      } finally {
+        // Track tool usage
+        telemetry.record('mcp_tool_used', {
+          toolName: name,
+          success,
+          error,
+          durationMs: Date.now() - startTime,
+          transport: process.env.MCP_TRANSPORT || 'unknown',
+        });
+      }
+    };
+    
+    return originalTool(name, schema, wrappedHandler);
+  };
+
+  // Register core evaluation tools
   registerListEvaluationsTool(server);
   registerGetEvaluationDetailsTool(server);
   registerValidatePromptfooConfigTool(server);
@@ -31,6 +78,11 @@ export async function createMcpServer() {
   registerRunAssertionTool(server);
   registerRunEvaluationTool(server);
   registerShareEvaluationTool(server);
+
+  // Register generation tools
+  registerGenerateDatasetTool(server);
+  registerGenerateTestCasesTool(server);
+  registerCompareProvidersTool(server);
 
   // Register redteam tools
   registerRedteamRunTool(server);
@@ -49,6 +101,9 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid port number: ${port}. Port must be an integer between 1 and 65535.`);
   }
+  
+  // Set transport type for telemetry
+  process.env.MCP_TRANSPORT = 'http';
 
   const app = express();
   app.use(express.json());
@@ -82,6 +137,12 @@ export async function startHttpMcpServer(port: number): Promise<void> {
     logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
     logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
     logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
+    
+    // Track server start
+    telemetry.record('mcp_server_started', {
+      transport: 'http',
+      port,
+    });
   });
 }
 
@@ -89,6 +150,9 @@ export async function startHttpMcpServer(port: number): Promise<void> {
  * Starts an MCP server with stdio transport
  */
 export async function startStdioMcpServer(): Promise<void> {
+  // Set transport type for telemetry
+  process.env.MCP_TRANSPORT = 'stdio';
+  
   // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication
   logger.transports.forEach((transport) => {
     // Winston Console transport constructor name check
@@ -104,6 +168,11 @@ export async function startStdioMcpServer(): Promise<void> {
 
   // Connect the server to the stdio transport
   await server.connect(transport);
+  
+  // Track server start
+  telemetry.record('mcp_server_started', {
+    transport: 'stdio',
+  });
 
   // Don't log to stdout in stdio mode as it pollutes the JSON-RPC protocol
   // logger.info('Promptfoo MCP stdio server started');

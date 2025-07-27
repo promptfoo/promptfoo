@@ -90,6 +90,12 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
 - **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
 - **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
 
+### Generation Tools
+
+- **`generate_dataset`** - Generate test datasets using AI for comprehensive evaluation coverage
+- **`generate_test_cases`** - Generate test cases with assertions for existing prompts
+- **`compare_providers`** - Compare multiple AI providers side-by-side for performance and quality
+
 ### Redteam Security Tools
 
 - **`redteam_run`** - Execute comprehensive security testing against AI applications with dynamic attack probes
@@ -101,12 +107,79 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
 - **`test_provider`** - Test AI provider connectivity, credentials, and response quality
 - **`run_assertion`** - Test individual assertion rules against outputs for debugging
 
+## Example Workflows
+
+### 1. Basic Evaluation Workflow
+
+Ask your AI assistant:
+
+> "Help me run an evaluation. First, validate my config, then list recent evaluations, and finally run a new evaluation with just the first 5 test cases."
+
+The AI will use these tools in sequence:
+1. `validate_promptfoo_config` - Check your configuration
+2. `list_evaluations` - Show recent runs
+3. `run_evaluation` - Execute with test case filtering
+
+### 2. Provider Comparison
+
+> "Compare the performance of GPT-4, Claude 3, and Gemini Pro on my customer support prompt."
+
+The AI will:
+1. `test_provider` - Verify each provider works
+2. `compare_providers` - Run side-by-side comparison
+3. Analyze results and provide recommendations
+
+### 3. Security Testing
+
+> "Run a security audit on my chatbot prompt to check for jailbreak vulnerabilities."
+
+The AI will:
+1. `redteam_generate` - Create adversarial test cases
+2. `redteam_run` - Execute security tests
+3. `get_evaluation_details` - Analyze vulnerabilities found
+
+### 4. Dataset Generation
+
+> "Generate 20 diverse test cases for my email classification prompt, including edge cases."
+
+The AI will:
+1. `generate_dataset` - Create test data with AI
+2. `generate_test_cases` - Add appropriate assertions
+3. `run_evaluation` - Test the generated cases
+
 ## Transport Types
 
 Choose the appropriate transport based on your use case:
 
 - **STDIO (`--transport stdio`)**: For desktop AI tools (Cursor, Claude Desktop) that communicate via stdin/stdout
 - **HTTP (`--transport http`)**: For web applications, APIs, and remote integrations that need HTTP endpoints
+
+## Best Practices
+
+### 1. Start Small
+
+Begin with simple tools like `list_evaluations` and `validate_promptfoo_config` before moving to more complex operations.
+
+### 2. Use Filtering
+
+When working with large datasets:
+- Filter evaluations by dataset ID
+- Use test case indices to run partial evaluations
+- Apply prompt/provider filters for focused testing
+
+### 3. Iterative Testing
+
+1. Validate configuration first
+2. Test providers individually before comparisons
+3. Run small evaluation subsets before full runs
+4. Review results with `get_evaluation_details`
+
+### 4. Security First
+
+When using redteam tools:
+- Start with basic plugins before advanced attacks
+- Review generated test cases before running
+- Always analyze results thoroughly
 
 ## Troubleshooting
 
@@ -168,8 +241,46 @@ netstat -ano | findstr :3100  # Windows
 - Use `test_provider` to diagnose connectivity and authentication issues
 - Check your API keys and provider configurations
 
-## See Also
+## Advanced Usage
 
-- [Command Line Reference](/docs/usage/command-line#promptfoo-mcp) - Complete MCP command options
-- [MCP Client Integration](/docs/integrations/mcp) - Using promptfoo as an MCP client
-- [Model Context Protocol Specification](https://spec.modelcontextprotocol.io/) - Official MCP documentation
+### Custom HTTP Integrations
+
+For HTTP transport, you can integrate with any system that supports HTTP:
+
+```javascript
+// Example: Call MCP server from Node.js
+const response = await fetch('http://localhost:3100/mcp', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    method: 'tools/call',
+    params: {
+      name: 'list_evaluations',
+      arguments: { datasetId: 'my-dataset' }
+    }
+  })
+});
+```
+
+### Environment Variables
+
+The MCP server respects all promptfoo environment variables:
+
+```bash
+# Set provider API keys
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Configure promptfoo behavior
+export PROMPTFOO_CONFIG_DIR=/path/to/configs
+export PROMPTFOO_OUTPUT_DIR=/path/to/outputs
+
+# Start server with environment
+npx promptfoo@latest mcp --transport stdio
+```
+
+## Resources
+
+- [MCP Protocol Documentation](https://modelcontextprotocol.io)
+- [Promptfoo Documentation](https://promptfoo.dev)
+- [Example Configurations](https://github.com/promptfoo/promptfoo/tree/main/examples)
