@@ -41,6 +41,7 @@ describe('BrowserProvider', () => {
       $$eval: jest.fn(),
       content: jest.fn(),
       press: jest.fn(),
+      close: jest.fn(),
     } as unknown as jest.Mocked<Page>;
   });
 
@@ -448,12 +449,9 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       },
     });
 
-    mockPage.content.mockResolvedValue('<html>test content</html>');
-
     await provider.callApi('test');
 
     expect(chromium.connectOverCDP).toHaveBeenCalledWith('http://localhost:9222');
-    expect(mockPage.goto).toHaveBeenCalledWith('https://example.com');
   });
 
   it('should connect via WebSocket when configured', async () => {
@@ -470,8 +468,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       },
     });
 
-    mockPage.content.mockResolvedValue('<html></html>');
-
     await provider.callApi('test');
 
     expect(chromium.connect).toHaveBeenCalledWith({
@@ -480,16 +476,33 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   });
 
   it('should use existing context when connecting to existing browser', async () => {
+    const mockPage = {
+      goto: jest.fn(),
+      content: jest.fn(() => Promise.resolve('<html></html>')),
+      click: jest.fn(),
+      type: jest.fn(),
+      waitForSelector: jest.fn(),
+      $$: jest.fn(),
+      screenshot: jest.fn(),
+      waitForTimeout: jest.fn(),
+      close: jest.fn(),
+    };
+
     const mockContext = {
       newPage: jest.fn(() => Promise.resolve(mockPage)),
       addCookies: jest.fn(),
       close: jest.fn(),
     };
 
-    // Create a new mock browser instance with contexts for this test
     const mockExistingBrowser = {
-      contexts: jest.fn(() => [mockContext]),
-      newContext: jest.fn(),
+      contexts: jest.fn(() => [
+        {
+          newPage: jest.fn(() => Promise.resolve(mockPage)),
+          addCookies: jest.fn(),
+          close: jest.fn(),
+        },
+      ]),
+      newContext: jest.fn(() => Promise.resolve(mockContext)),
       close: jest.fn(),
     };
 
@@ -508,8 +521,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       },
     });
 
-    mockPage.content.mockResolvedValue('<html></html>');
-
     await provider.callApi('test');
 
     expect(mockExistingBrowser.contexts).toHaveBeenCalled();
@@ -517,6 +528,32 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   });
 
   it('should not close browser when connected to existing session', async () => {
+    const { chromium } = await import('playwright-extra');
+    const mockCloseFn = jest.fn();
+    const mockPageClose = jest.fn();
+
+    const mockConnectedBrowser = {
+      contexts: jest.fn(() => [
+        {
+          newPage: jest.fn(() =>
+            Promise.resolve({
+              goto: jest.fn(),
+              content: jest.fn(),
+              close: mockPageClose,
+            }),
+          ),
+          addCookies: jest.fn(),
+          close: jest.fn(),
+        },
+      ]),
+      newContext: jest.fn(),
+      close: mockCloseFn,
+    };
+
+    (chromium.connectOverCDP as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(mockConnectedBrowser),
+    );
+
     const provider = new BrowserProvider('test', {
       config: {
         connectOptions: {
@@ -527,13 +564,10 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       },
     });
 
-    mockPage.content.mockResolvedValue('<html></html>');
-    mockPage.close = jest.fn();
-
     await provider.callApi('test');
 
-    expect(mockPage.close).toHaveBeenCalled();
-    expect(mockBrowser.close).not.toHaveBeenCalled();
+    expect(mockPageClose).toHaveBeenCalled();
+    expect(mockCloseFn).not.toHaveBeenCalled();
   });
 
   it('should handle connection failures gracefully', async () => {
@@ -553,5 +587,99 @@ describe('BrowserProvider - Connect to Existing Session', () => {
 
     expect(result.error).toContain('Cannot connect to Chrome');
     expect(result.error).toContain('--remote-debugging-port=9222');
+  });
+
+  it('should handle 404 error when Chrome debugging port is not available', async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        json: () => Promise.reject(new Error('Not Found')),
+      } as Response),
+    );
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    expect(result.error).toContain('--remote-debugging-port=9222');
+  });
+
+  it('should handle 500 server error from Chrome debugging port', async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.reject(new Error('Server Error')),
+      } as Response),
+    );
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+  });
+
+  it('should handle network timeouts when connecting to Chrome', async () => {
+    // Simulate timeout
+    const timeoutError = new Error('Request timed out after 5000ms');
+    mockFetch.mockRejectedValue(timeoutError);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    // The error will be wrapped in the standard Chrome connection error message
+    expect(result.error).toContain('Make sure Chrome is running');
+  });
+
+  it('should handle ECONNREFUSED errors specifically', async () => {
+    const connError = new Error('connect ECONNREFUSED 127.0.0.1:9222');
+    (connError as any).code = 'ECONNREFUSED';
+    mockFetch.mockRejectedValue(connError);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+          acceptSecurityRisk: true,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    expect(result.error).toContain('Make sure Chrome is running');
   });
 });

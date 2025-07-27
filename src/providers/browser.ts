@@ -14,6 +14,30 @@ import type {
 
 const nunjucks = getNunjucksEngine();
 
+// Constants for connection configuration
+const DEFAULT_DEBUGGING_PORT = 9222;
+const DEFAULT_FETCH_TIMEOUT_MS = 5000;
+
+// Utility function to fetch with timeout
+async function fetchWithTimeout(
+  url: string,
+  timeout: number = DEFAULT_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout}ms`);
+    }
+    throw error;
+  }
+}
+
 interface BrowserAction {
   action: string;
   args?: Record<string, any>;
@@ -225,26 +249,13 @@ export class BrowserProvider implements ApiProvider {
         });
       } else {
         // Default to CDP connection
-        const port = connectOptions.debuggingPort || 9222;
+        const port = connectOptions.debuggingPort || DEFAULT_DEBUGGING_PORT;
         const cdpUrl = `http://localhost:${port}`;
 
         logger.debug(`Connecting via Chrome DevTools Protocol at ${cdpUrl}`);
 
         // Check if Chrome is accessible
         try {
-          const fetchWithTimeout = async (url: string, timeout: number = 5000) => {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-            try {
-              const response = await fetch(url, { signal: controller.signal });
-              clearTimeout(timeoutId);
-              return response;
-            } catch (error) {
-              clearTimeout(timeoutId);
-              throw error;
-            }
-          };
-
           const response = await fetchWithTimeout(`${cdpUrl}/json/version`);
           const version = await response.json();
           logger.debug(`Connected to browser: ${version.Browser}`);
