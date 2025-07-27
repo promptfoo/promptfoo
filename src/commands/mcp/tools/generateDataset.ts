@@ -82,7 +82,12 @@ export function registerGenerateDatasetTool(server: McpServer) {
         });
 
         if (!results || results.length === 0) {
-          return createToolResponse('generate_dataset', false, undefined, 'Failed to generate dataset. No data returned.');
+          return createToolResponse(
+            'generate_dataset',
+            false,
+            undefined,
+            'Failed to generate dataset. No data returned.',
+          );
         }
 
         // Format results as test cases
@@ -143,8 +148,13 @@ export function registerGenerateDatasetTool(server: McpServer) {
           );
         }
 
-        return createToolResponse('generate_dataset', false, undefined, `Failed to generate dataset: ${errorMessage}`);
+        return createToolResponse(
+          'generate_dataset',
+          false,
+          undefined,
+          `Failed to generate dataset: ${errorMessage}`,
+        );
       }
     },
   );
-} 
+}

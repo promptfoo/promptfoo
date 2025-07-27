@@ -28,10 +28,6 @@ export abstract class McpError extends Error {
 export class ValidationError extends McpError {
   readonly code = 'VALIDATION_ERROR';
   readonly statusCode = 400;
-
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message, details);
-  }
 }
 
 /**
@@ -113,10 +109,6 @@ export class AuthenticationError extends McpError {
 export class SharingError extends McpError {
   readonly code = 'SHARING_ERROR';
   readonly statusCode = 503;
-
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message, details);
-  }
 }
 
 /**
@@ -126,12 +118,8 @@ export class RateLimitError extends McpError {
   readonly code = 'RATE_LIMIT_ERROR';
   readonly statusCode = 429;
 
-  constructor(
-    service: string,
-    retryAfter?: number,
-    details?: Record<string, unknown>
-  ) {
-    const message = retryAfter 
+  constructor(service: string, retryAfter?: number, details?: Record<string, unknown>) {
+    const message = retryAfter
       ? `Rate limit exceeded for ${service}. Retry after ${retryAfter} seconds.`
       : `Rate limit exceeded for ${service}`;
     super(message, { service, retryAfter, ...details });
@@ -148,12 +136,13 @@ export class FileOperationError extends McpError {
   constructor(
     operation: 'read' | 'write' | 'delete' | 'create',
     filePath: string,
-    originalError?: Error
+    originalError?: Error,
   ) {
-    super(
-      `Failed to ${operation} file: ${filePath}`,
-      { operation, filePath, originalError: originalError?.message }
-    );
+    super(`Failed to ${operation} file: ${filePath}`, {
+      operation,
+      filePath,
+      originalError: originalError?.message,
+    });
   }
 }
 
@@ -170,28 +159,32 @@ export function toMcpError(
 
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
-    
+
     // Check for specific error patterns
     if (message.includes('rate limit')) {
       return new RateLimitError('service', undefined, { originalError: error.message });
     }
-    
+
     if (message.includes('not found') || message.includes('enoent')) {
       return new NotFoundError('Resource', undefined);
     }
-    
+
     if (message.includes('timeout') || message.includes('timed out')) {
       return new TimeoutError('Operation', 30000);
     }
-    
-    if (message.includes('auth') || message.includes('unauthorized') || message.includes('forbidden')) {
+
+    if (
+      message.includes('auth') ||
+      message.includes('unauthorized') ||
+      message.includes('forbidden')
+    ) {
       return new AuthenticationError(error.message);
     }
-    
+
     if (message.includes('config') || message.includes('invalid')) {
       return new ConfigurationError(error.message);
     }
-    
+
     return new ValidationError(error.message);
   }
 

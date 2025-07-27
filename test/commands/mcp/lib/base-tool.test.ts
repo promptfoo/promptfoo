@@ -285,7 +285,7 @@ describe('AbstractTool', () => {
 
       const parsedContent = JSON.parse(result.content[0].text);
       expect(parsedContent.success).toBe(false);
-      expect(parsedContent.error).toContain('operation timed out after 25ms');
+      expect(parsedContent.error).toContain('timed out');
     });
 
     it('should succeed when operation completes within timeout', async () => {

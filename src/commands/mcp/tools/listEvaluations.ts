@@ -81,7 +81,12 @@ export function registerListEvaluationsTool(server: McpServer) {
         }
 
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        return createToolResponse('list_evaluations', false, undefined, `Failed to list evaluations: ${errorMessage}`);
+        return createToolResponse(
+          'list_evaluations',
+          false,
+          undefined,
+          `Failed to list evaluations: ${errorMessage}`,
+        );
       }
     },
   );

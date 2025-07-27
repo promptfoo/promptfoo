@@ -97,7 +97,7 @@ export function registerTestProviderTool(server: McpServer) {
 
       try {
         // Extract provider ID for error messages
-        const providerId = typeof provider === 'string' ? provider : provider.id;
+        const _providerId = typeof provider === 'string' ? provider : provider.id;
 
         // Load the provider
         const apiProvider = await loadProvider(provider);
@@ -106,7 +106,11 @@ export function registerTestProviderTool(server: McpServer) {
         const startTime = Date.now();
 
         try {
-          const response = await withTimeout(apiProvider.callApi(defaultPrompt), timeoutMs, `Provider test`);
+          const response = await withTimeout(
+            apiProvider.callApi(defaultPrompt),
+            timeoutMs,
+            `Provider test`,
+          );
 
           const endTime = Date.now();
           const responseTime = endTime - startTime;
@@ -152,7 +156,12 @@ export function registerTestProviderTool(server: McpServer) {
             },
           };
 
-          return createToolResponse('test_provider', false, testResult, `Provider test failed: ${errorMessage}`);
+          return createToolResponse(
+            'test_provider',
+            false,
+            testResult,
+            `Provider test failed: ${errorMessage}`,
+          );
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -163,7 +172,10 @@ export function registerTestProviderTool(server: McpServer) {
           return createToolResponse(
             'test_provider',
             false,
-            { providerId, suggestion: 'Set the appropriate environment variables or update your config file.' },
+            {
+              providerId,
+              suggestion: 'Set the appropriate environment variables or update your config file.',
+            },
             `Invalid credentials for provider "${providerId}". Check your API keys and configuration.`,
           );
         }
@@ -174,8 +186,13 @@ export function registerTestProviderTool(server: McpServer) {
             false,
             {
               providerId,
-              suggestion: 'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
-              examples: ['openai:gpt-4o', 'anthropic:messages:claude-3-sonnet', 'azure:deployment-name'],
+              suggestion:
+                'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
+              examples: [
+                'openai:gpt-4o',
+                'anthropic:messages:claude-3-sonnet',
+                'azure:deployment-name',
+              ],
             },
             `Provider "${providerId}" not found. Check the provider ID format.`,
           );
@@ -205,7 +222,9 @@ async function loadProvider(provider: string | { id: string; config?: Record<str
 }
 
 function evaluateResponseQuality(response: string | undefined): string {
-  if (!response) return 'no_response';
+  if (!response) {
+    return 'no_response';
+  }
 
   const length = response.length;
   const hasReasoning =
@@ -214,8 +233,14 @@ function evaluateResponseQuality(response: string | undefined): string {
     response.toLowerCase().includes('therefore');
   const hasAnswer = /\b9\b/.test(response); // The correct answer is 9
 
-  if (length > 200 && hasReasoning && hasAnswer) return 'excellent';
-  if (length > 100 && (hasReasoning || hasAnswer)) return 'good';
-  if (length > 50) return 'adequate';
+  if (length > 200 && hasReasoning && hasAnswer) {
+    return 'excellent';
+  }
+  if (length > 100 && (hasReasoning || hasAnswer)) {
+    return 'good';
+  }
+  if (length > 50) {
+    return 'adequate';
+  }
   return 'poor';
 }

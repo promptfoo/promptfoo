@@ -55,7 +55,8 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         }
 
         // Use the same logic as the validate command
-        const configPathsArray = configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
+        const configPathsArray =
+          configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
 
         const { config, testSuite } = await resolveConfigs(
           { config: configPathsArray },
@@ -111,7 +112,12 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
 
         return validationResults.isValid
           ? createToolResponse('validate_promptfoo_config', true, validationResults)
-          : createToolResponse('validate_promptfoo_config', false, validationResults, 'Configuration validation failed');
+          : createToolResponse(
+              'validate_promptfoo_config',
+              false,
+              validationResults,
+              'Configuration validation failed',
+            );
       } catch (error: unknown) {
         if (error instanceof Error && error.message.includes('ENOENT')) {
           return createToolResponse(
@@ -140,8 +146,16 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
 function analyzeConfiguration(config: any) {
   const warnings: string[] = [];
 
-  const promptCount = Array.isArray(config.prompts) ? config.prompts.length : config.prompts ? 1 : 0;
-  const providerCount = Array.isArray(config.providers) ? config.providers.length : config.providers ? 1 : 0;
+  const promptCount = Array.isArray(config.prompts)
+    ? config.prompts.length
+    : config.prompts
+      ? 1
+      : 0;
+  const providerCount = Array.isArray(config.providers)
+    ? config.providers.length
+    : config.providers
+      ? 1
+      : 0;
   const testCount = Array.isArray(config.tests) ? config.tests.length : config.tests ? 1 : 0;
 
   if (promptCount === 0) {

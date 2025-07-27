@@ -26,7 +26,7 @@ export async function createMcpServer() {
     name: 'Promptfoo MCP',
     version: '1.0.0',
   });
-  
+
   // Track MCP server creation
   telemetry.record('feature_used', {
     feature: 'mcp_server',
@@ -67,7 +67,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid port number: ${port}. Port must be an integer between 1 and 65535.`);
   }
-  
+
   // Set transport type for telemetry
   process.env.MCP_TRANSPORT = 'http';
 
@@ -103,7 +103,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
     logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
     logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
     logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
-    
+
     // Track server start
     telemetry.record('feature_used', {
       feature: 'mcp_server_started',
@@ -119,7 +119,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
 export async function startStdioMcpServer(): Promise<void> {
   // Set transport type for telemetry
   process.env.MCP_TRANSPORT = 'stdio';
-  
+
   // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication
   logger.transports.forEach((transport) => {
     // Winston Console transport constructor name check
@@ -135,7 +135,7 @@ export async function startStdioMcpServer(): Promise<void> {
 
   // Connect the server to the stdio transport
   await server.connect(transport);
-  
+
   // Track server start
   telemetry.record('feature_used', {
     feature: 'mcp_server_started',

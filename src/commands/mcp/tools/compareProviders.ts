@@ -70,7 +70,11 @@ export function registerCompareProvidersTool(server: McpServer) {
             const providerStartTime = Date.now();
 
             try {
-              const response = await withTimeout(provider.callApi(testPrompt), timeoutMs, `Provider ${provider.id} test`);
+              const response = await withTimeout(
+                provider.callApi(testPrompt),
+                timeoutMs,
+                `Provider ${provider.id} test`,
+              );
 
               const providerEndTime = Date.now();
 
@@ -139,7 +143,12 @@ export function registerCompareProvidersTool(server: McpServer) {
           );
         }
 
-        return createToolResponse('compare_providers', false, undefined, `Failed to compare providers: ${errorMessage}`);
+        return createToolResponse(
+          'compare_providers',
+          false,
+          undefined,
+          `Failed to compare providers: ${errorMessage}`,
+        );
       }
     },
   );
@@ -175,7 +184,9 @@ function analyzeResults(results: any[], criteria?: string[]): any {
     }
 
     // Response length as a proxy for detail
-    const byResponseLength = [...successfulResults].sort((a, b) => (b.response?.length || 0) - (a.response?.length || 0));
+    const byResponseLength = [...successfulResults].sort(
+      (a, b) => (b.response?.length || 0) - (a.response?.length || 0),
+    );
     analysis.rankings.responseDetail = byResponseLength.map((r, i) => ({
       rank: i + 1,
       providerId: r.providerId,
@@ -186,7 +197,9 @@ function analyzeResults(results: any[], criteria?: string[]): any {
     const fastestProvider = byResponseTime[0];
     const slowestProvider = byResponseTime[byResponseTime.length - 1];
 
-    analysis.insights.push(`Fastest provider: ${fastestProvider.providerId} (${fastestProvider.responseTime}ms)`);
+    analysis.insights.push(
+      `Fastest provider: ${fastestProvider.providerId} (${fastestProvider.responseTime}ms)`,
+    );
 
     if (byResponseTime.length > 1) {
       const speedDiff = slowestProvider.responseTime - fastestProvider.responseTime;
@@ -195,7 +208,9 @@ function analyzeResults(results: any[], criteria?: string[]): any {
 
     if (withCost.length > 0) {
       const cheapest = analysis.rankings.cost[0];
-      analysis.insights.push(`Most cost-effective: ${cheapest.providerId} ($${cheapest.cost?.toFixed(4) || '0'})`);
+      analysis.insights.push(
+        `Most cost-effective: ${cheapest.providerId} ($${cheapest.cost?.toFixed(4) || '0'})`,
+      );
     }
   }
 
@@ -206,4 +221,4 @@ function analyzeResults(results: any[], criteria?: string[]): any {
   }
 
   return analysis;
-} 
+}

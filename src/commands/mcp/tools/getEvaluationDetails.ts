@@ -33,7 +33,10 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
           return createToolResponse(
             'get_evaluation_details',
             false,
-            { providedId: id, suggestion: 'Check if the evaluation ID is correct or if it has been deleted.' },
+            {
+              providedId: id,
+              suggestion: 'Check if the evaluation ID is correct or if it has been deleted.',
+            },
             `Evaluation with ID '${id}' not found. Use list_evaluations to find valid IDs.`,
           );
         }

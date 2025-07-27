@@ -15,7 +15,9 @@ export function registerGenerateTestCasesTool(server: McpServer) {
       prompt: z
         .string()
         .min(1, 'Prompt cannot be empty')
-        .describe('The prompt template to generate test cases for. Use {{variable}} syntax for variables.'),
+        .describe(
+          'The prompt template to generate test cases for. Use {{variable}} syntax for variables.',
+        ),
 
       instructions: z
         .string()
@@ -68,7 +70,9 @@ export function registerGenerateTestCasesTool(server: McpServer) {
       try {
         // Extract variables from the prompt
         const variableMatches = prompt.match(/\{\{(\w+)\}\}/g);
-        const variables = variableMatches ? [...new Set(variableMatches.map((v) => v.slice(2, -2)))] : [];
+        const variables = variableMatches
+          ? [...new Set(variableMatches.map((v) => v.slice(2, -2)))]
+          : [];
 
         if (variables.length === 0) {
           return createToolResponse(
@@ -95,7 +99,12 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         });
 
         if (!results || results.length === 0) {
-          return createToolResponse('generate_test_cases', false, undefined, 'Failed to generate test cases. No data returned.');
+          return createToolResponse(
+            'generate_test_cases',
+            false,
+            undefined,
+            'Failed to generate test cases. No data returned.',
+          );
         }
 
         // Format results as test cases with basic assertions
@@ -164,7 +173,12 @@ export function registerGenerateTestCasesTool(server: McpServer) {
           );
         }
 
-        return createToolResponse('generate_test_cases', false, undefined, `Failed to generate test cases: ${errorMessage}`);
+        return createToolResponse(
+          'generate_test_cases',
+          false,
+          undefined,
+          `Failed to generate test cases: ${errorMessage}`,
+        );
       }
     },
   );
@@ -206,7 +220,9 @@ function analyzeTestCases(testCases: any[], variables: string[]): any {
   if (analysis.casesWithAssertions === analysis.totalCases) {
     analysis.insights.push('All test cases have assertions ✓');
   } else {
-    analysis.insights.push(`${analysis.totalCases - analysis.casesWithAssertions} test cases missing assertions`);
+    analysis.insights.push(
+      `${analysis.totalCases - analysis.casesWithAssertions} test cases missing assertions`,
+    );
   }
 
   // Check variable coverage
@@ -225,4 +241,4 @@ function analyzeTestCases(testCases: any[], variables: string[]): any {
   }
 
   return analysis;
-} 
+}
