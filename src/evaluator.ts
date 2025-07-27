@@ -1727,45 +1727,111 @@ class Evaluator {
       suite: testSuite,
     });
 
-    telemetry.record('eval_ran', {
-      numPrompts: prompts.length,
-      numTests: prompts.reduce(
-        (acc, p) =>
-          acc +
-          (p.metrics?.testPassCount || 0) +
-          (p.metrics?.testFailCount || 0) +
-          (p.metrics?.testErrorCount || 0),
-        0,
+    // Calculate additional metrics for telemetry
+    const endTime = Date.now();
+    const totalEvalTimeMs = endTime - startTime;
+
+    // Calculate aggregated metrics
+    const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
+    const totalRequests = this.stats.tokenUsage.numRequests;
+
+    // Calculate efficiency metrics
+    const totalTokens = this.stats.tokenUsage.total;
+    const cachedTokens = this.stats.tokenUsage.cached;
+
+    // Calculate correct average latency by summing individual request latencies
+    const totalLatencyMs = this.evalRecord.results.reduce(
+      (sum, result) => sum + (result.latencyMs || 0),
+      0,
+    );
+    const avgLatencyMs =
+      this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
+
+    // Detect key feature usage patterns
+    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+    const usesTransforms = Boolean(
+      tests.some((t) => t.options?.transform || t.options?.postprocess) ||
+        testSuite.providers.some((p) => Boolean(p.transform)),
+    );
+    const usesScenarios = Boolean(testSuite.scenarios && testSuite.scenarios.length > 0);
+
+    // Detect if using any promptfoo.app example provider
+    const usesExampleProvider = testSuite.providers.some((provider) => {
+      const url = typeof provider.config?.url === 'string' ? provider.config.url : '';
+      const label = provider.label || '';
+      return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
+    });
+
+    // Calculate assertion metrics
+    const totalAssertions = prompts.reduce(
+      (acc, p) => acc + (p.metrics?.assertPassCount || 0) + (p.metrics?.assertFailCount || 0),
+      0,
+    );
+    const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
+
+    // Count model-graded vs other assertion types
+    const modelGradedCount = Array.from(assertionTypes).filter((type) =>
+      MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
+    ).length;
+
+    // Calculate provider distribution (maintain exact compatibility)
+    const providerPrefixes = Array.from(
+      new Set(
+        testSuite.providers.map((p) => {
+          const idParts = p.id().split(':');
+          return idParts.length > 1 ? idParts[0] : 'unknown';
+        }),
       ),
+    );
+
+    // Detect timeout occurrences (more robust than string matching)
+    const timeoutOccurred =
+      evalTimedOut ||
+      this.evalRecord.results.some(
+        (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
+      );
+
+    telemetry.record('eval_ran', {
+      // Basic metrics
+      numPrompts: prompts.length,
+      numTests: this.stats.successes + this.stats.failures + this.stats.errors,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
-      providerPrefixes: Array.from(
-        new Set(
-          testSuite.providers.map((p) => {
-            const idParts = p.id().split(':');
-            return idParts.length > 1 ? idParts[0] : 'unknown';
-          }),
-        ),
-      ).sort(),
+      providerPrefixes: providerPrefixes.sort(),
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.evalRecord.prompts.some(
-        (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
-      ),
-      numPasses: this.evalRecord.prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testPassCount || 0),
-        0,
-      ),
-      numFails: this.evalRecord.prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testFailCount || 0),
-        0,
-      ),
-      numErrors: this.evalRecord.prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testErrorCount || 0),
-        0,
-      ),
+      hasAnyPass: this.stats.successes > 0,
+
+      // Result counts
+      numPasses: this.stats.successes,
+      numFails: this.stats.failures,
+      numErrors: this.stats.errors,
+
+      // Performance metrics
+      totalEvalTimeMs,
+      avgLatencyMs: Math.round(avgLatencyMs),
+      concurrencyUsed: concurrency,
+      timeoutOccurred,
+
+      // Token and cost metrics
+      totalTokens,
+      cachedTokens,
+      totalCost,
+      totalRequests,
+
+      // Assertion metrics
+      numAssertions: totalAssertions,
+      passedAssertions,
+      modelGradedAssertions: modelGradedCount,
+      assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
+
+      // Feature usage
+      usesConversationVar,
+      usesTransforms,
+      usesScenarios,
+      usesExampleProvider,
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
       isRedteam: Boolean(options.isRedteam),
     });

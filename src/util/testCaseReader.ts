@@ -237,6 +237,7 @@ async function loadTestWithVars(
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
+  isDefaultTest: boolean = false,
 ): Promise<TestCase> {
   let testCase: TestCase;
 
@@ -262,6 +263,7 @@ export async function readTest(
   }
 
   if (
+    !isDefaultTest &&
     !testCase.assert &&
     !testCase.vars &&
     !testCase.options &&
