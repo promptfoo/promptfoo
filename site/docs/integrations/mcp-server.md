@@ -116,6 +116,7 @@ Ask your AI assistant:
 > "Help me run an evaluation. First, validate my config, then list recent evaluations, and finally run a new evaluation with just the first 5 test cases."
 
 The AI will use these tools in sequence:
+
 1. `validate_promptfoo_config` - Check your configuration
 2. `list_evaluations` - Show recent runs
 3. `run_evaluation` - Execute with test case filtering
@@ -125,6 +126,7 @@ The AI will use these tools in sequence:
 > "Compare the performance of GPT-4, Claude 3, and Gemini Pro on my customer support prompt."
 
 The AI will:
+
 1. `test_provider` - Verify each provider works
 2. `compare_providers` - Run side-by-side comparison
 3. Analyze results and provide recommendations
@@ -134,6 +136,7 @@ The AI will:
 > "Run a security audit on my chatbot prompt to check for jailbreak vulnerabilities."
 
 The AI will:
+
 1. `redteam_generate` - Create adversarial test cases
 2. `redteam_run` - Execute security tests
 3. `get_evaluation_details` - Analyze vulnerabilities found
@@ -143,6 +146,7 @@ The AI will:
 > "Generate 20 diverse test cases for my email classification prompt, including edge cases."
 
 The AI will:
+
 1. `generate_dataset` - Create test data with AI
 2. `generate_test_cases` - Add appropriate assertions
 3. `run_evaluation` - Test the generated cases
@@ -163,6 +167,7 @@ Begin with simple tools like `list_evaluations` and `validate_promptfoo_config` 
 ### 2. Use Filtering
 
 When working with large datasets:
+
 - Filter evaluations by dataset ID
 - Use test case indices to run partial evaluations
 - Apply prompt/provider filters for focused testing
@@ -177,6 +182,7 @@ When working with large datasets:
 ### 4. Security First
 
 When using redteam tools:
+
 - Start with basic plugins before advanced attacks
 - Review generated test cases before running
 - Always analyze results thoroughly
@@ -256,9 +262,9 @@ const response = await fetch('http://localhost:3100/mcp', {
     method: 'tools/call',
     params: {
       name: 'list_evaluations',
-      arguments: { datasetId: 'my-dataset' }
-    }
-  })
+      arguments: { datasetId: 'my-dataset' },
+    },
+  }),
 });
 ```
 
