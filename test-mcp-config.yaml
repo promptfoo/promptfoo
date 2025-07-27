@@ -1,0 +1,28 @@
+description: Test configuration for MCP server
+
+prompts:
+  - label: greeting
+    raw: "Hello, {{name}}! How are you today?"
+  - label: translation
+    raw: "Translate to French: {{text}}"
+
+providers:
+  - id: openai:gpt-3.5-turbo
+    config:
+      temperature: 0.5
+
+tests:
+  - vars:
+      name: Alice
+      text: "Good morning"
+  - vars:
+      name: Bob  
+      text: "How are you?"
+  - vars:
+      name: Charlie
+      text: "Nice to meet you"
+
+assert:
+  - type: not-empty
+  - type: contains
+    value: "{{name}}" 
