@@ -253,6 +253,24 @@ export const OPENAI_CHAT_MODELS = [
   })),
 ];
 
+// Deep research models for Responses API
+export const OPENAI_DEEP_RESEARCH_MODELS = [
+  ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1e6,
+      output: 40 / 1e6,
+    },
+  })),
+  ...['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6,
+      output: 8 / 1e6,
+    },
+  })),
+];
+
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
 export const OPENAI_COMPLETION_MODELS = [
   {
@@ -319,6 +337,7 @@ export function calculateOpenAICost(
       ...OPENAI_CHAT_MODELS,
       ...OPENAI_COMPLETION_MODELS,
       ...OPENAI_REALTIME_MODELS,
+      ...OPENAI_DEEP_RESEARCH_MODELS,
     ]);
   }
 
@@ -340,6 +359,7 @@ export function calculateOpenAICost(
     ...OPENAI_CHAT_MODELS,
     ...OPENAI_COMPLETION_MODELS,
     ...OPENAI_REALTIME_MODELS,
+    ...OPENAI_DEEP_RESEARCH_MODELS,
   ].find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
