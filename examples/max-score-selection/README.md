@@ -49,7 +49,6 @@ The `max-score` assertion provides a deterministic way to select the best output
 npx promptfoo@latest eval
 ```
 
-
 ## How It Works
 
 1. **Multiple Outputs Generated**: Each provider generates a solution
@@ -89,4 +88,3 @@ Use `select-best` when:
 - You need subjective judgment
 - The criteria are hard to quantify
 - You want nuanced evaluation of quality
-
