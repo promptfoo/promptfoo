@@ -1649,11 +1649,21 @@ class Evaluator {
               assertion: maxScoreAssertion,
             };
 
-            // Preserve existing componentResults and add max-score result
+            // Preserve existing gradingResult data and add max-score result to componentResults
             const existingComponentResults = result.gradingResult?.componentResults || [];
+            const existingGradingResult = result.gradingResult;
+
             result.gradingResult = {
-              ...maxScoreGradingResult,
+              ...existingGradingResult, // Preserve existing data like tokensUsed, namedScores
+              ...maxScoreGradingResult, // Apply max-score results
               componentResults: [...existingComponentResults, maxScoreGradingResult],
+              // Merge namedScores instead of overwriting
+              namedScores: {
+                ...(existingGradingResult?.namedScores || {}),
+                ...maxScoreGradingResult.namedScores,
+              },
+              // Preserve tokensUsed from existing result
+              tokensUsed: existingGradingResult?.tokensUsed || maxScoreGradingResult.tokensUsed,
             };
 
             // Update pass/fail status based on max-score result

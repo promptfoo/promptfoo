@@ -1281,7 +1281,9 @@ export async function matchesSelectBest(
 
 export async function selectMaxScore(
   outputs: string[],
-  resultsWithGradingResults: Array<{ gradingResult?: { componentResults?: any[] } | null }>,
+  resultsWithGradingResults: Array<{
+    gradingResult?: { componentResults?: GradingResult[] } | null;
+  }>,
   assertion: Assertion,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
@@ -1310,7 +1312,7 @@ export async function selectMaxScore(
 
     // Filter out max-score and select-best assertions
     const relevantResults = componentResults.filter(
-      (r: any) =>
+      (r: GradingResult) =>
         r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
     );
 
@@ -1322,7 +1324,7 @@ export async function selectMaxScore(
     let totalWeightedScore = 0;
     let totalWeight = 0;
 
-    relevantResults.forEach((componentResult: any) => {
+    relevantResults.forEach((componentResult: GradingResult) => {
       const assertionType = componentResult.assertion?.type || 'unknown';
       const weight =
         options.weights[assertionType] !== undefined ? options.weights[assertionType] : 1.0; // Default weight is 1
