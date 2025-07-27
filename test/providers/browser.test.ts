@@ -399,7 +399,7 @@ describe('createTransformResponse', () => {
 });
 
 describe('BrowserProvider - Connect to Existing Session', () => {
-  let mockFetch: jest.SpyInstance;
+  let mockFetch: ReturnType<typeof jest.spyOn>;
 
   beforeEach(() => {
     mockFetch = jest.spyOn(global, 'fetch').mockImplementation(() =>
@@ -493,8 +493,8 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       close: jest.fn(),
     };
 
-    const { chromium } = await import('playwright-extra');
-    (chromium.connectOverCDP as jest.Mock).mockResolvedValueOnce(mockExistingBrowser);
+    const playwrightExtra = await import('playwright-extra');
+    jest.mocked(playwrightExtra.chromium.connectOverCDP).mockResolvedValueOnce(mockExistingBrowser as any);
 
     const provider = new BrowserProvider('test', {
       config: {
