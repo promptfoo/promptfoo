@@ -28,7 +28,6 @@ export abstract class AbstractTool implements BaseTool {
   register(server: McpServer): void {
     // Pass the Zod schema directly - MCP SDK handles conversion to JSON Schema
     server.tool(this.name, this.schema as any || {}, async (args: unknown) => {
-      console.error(`[DEBUG] Tool ${this.name} received args:`, JSON.stringify(args));
       try {
         // Validate arguments if schema is provided
         if (this.schema) {
