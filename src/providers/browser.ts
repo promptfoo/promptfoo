@@ -1,4 +1,5 @@
 import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
+import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
@@ -17,26 +18,6 @@ const nunjucks = getNunjucksEngine();
 // Constants for connection configuration
 const DEFAULT_DEBUGGING_PORT = 9222;
 const DEFAULT_FETCH_TIMEOUT_MS = 5000;
-
-// Utility function to fetch with timeout
-async function fetchWithTimeout(
-  url: string,
-  timeout: number = DEFAULT_FETCH_TIMEOUT_MS,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeout}ms`);
-    }
-    throw error;
-  }
-}
 
 interface BrowserAction {
   action: string;
@@ -265,7 +246,11 @@ export class BrowserProvider implements ApiProvider {
 
         // Check if Chrome is accessible
         try {
-          const response = await fetchWithTimeout(`${cdpUrl}/json/version`);
+          const response = await fetchWithTimeout(
+            `${cdpUrl}/json/version`,
+            {},
+            DEFAULT_FETCH_TIMEOUT_MS,
+          );
           const version = await response.json();
           logger.debug(`Connected to browser: ${version.Browser}`);
         } catch {
