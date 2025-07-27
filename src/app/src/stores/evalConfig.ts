@@ -43,14 +43,24 @@ export const useStore = create<EvalConfigState>()(
         })),
 
       updateProviderConfig: (providerId, newConfig) =>
-        set((state) => ({
-          config: {
-            ...state.config,
-            providers: (state.config.providers || []).map((provider) =>
-              provider.id === providerId ? { ...provider, config: newConfig } : provider,
-            ),
-          },
-        })),
+        set((state) => {
+          // Providers can be a string, function, or array
+          const currentProviders = state.config.providers;
+          
+          // Only update if providers is an array
+          if (!Array.isArray(currentProviders)) {
+            return state;
+          }
+
+          return {
+            config: {
+              ...state.config,
+              providers: currentProviders.map((provider: any) =>
+                provider.id === providerId ? { ...provider, config: newConfig } : provider,
+              ),
+            },
+          };
+        }),
 
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
 
