@@ -14,6 +14,9 @@ demo_config.yaml
 demo_sophisticated.csv
 sophisticated_questions_full.json
 
+# Analysis outputs  
+fairness_analysis_detailed.csv
+
 # Temporary files
 *.tmp
 *.bak
