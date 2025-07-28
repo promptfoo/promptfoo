@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Human feedback collection via Slack for AI response evaluation
+
+# Environment setup
+# Set SLACK_BOT_TOKEN in your environment or .env file
+
+providers:
+  # AI providers for comparison
+  - id: openai:gpt-4o-mini
+    config:
+      temperature: 0.7
+      
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      temperature: 0.7
+  
+  # Slack provider for human feedback
+  - id: slack:C0123ABCDEF  # Replace with your channel ID
+    config:
+      responseStrategy: "first"
+      timeout: 300000  # 5 minutes
+      
+  # Alternative: Expert review from specific user
+  # - id: slack
+  #   config:
+  #     channel: "C0123ABCDEF"
+  #     responseStrategy: "user"
+  #     waitForUser: "U9876543210"  # Replace with expert's user ID
+  #     timeout: 600000  # 10 minutes
+
+prompts:
+  - file://prompts/customer-support.txt
+  - file://prompts/technical-explanation.txt
+  - file://prompts/creative-writing.txt
+
+tests:
+  # Customer support scenario
+  - description: "Handling customer complaint"
+    vars:
+      scenario: "angry customer"
+      issue: "package delivered to wrong address after 3 attempts"
+    assert:
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Acknowledge the customer's frustration
+          2. Apologize for the inconvenience
+          3. Offer a concrete solution
+          4. Provide next steps with timeline
+          Score 1-5 based on how well all criteria are met.
+      
+      # Check for empathy keywords
+      - type: javascript
+        value: |
+          const empathyWords = ['sorry', 'apologize', 'understand', 'frustrating', 'inconvenience'];
+          return empathyWords.some(word => output.toLowerCase().includes(word)) ? 'pass' : 'fail';
+
+  # Technical explanation scenario  
+  - description: "Explaining technical concept to non-technical audience"
+    vars:
+      scenario: "explain to grandparent"
+      topic: "how WiFi works"
+    assert:
+      - type: llm-rubric
+        value: |
+          Rate the explanation on:
+          1. Clarity - uses simple language, avoids jargon
+          2. Accuracy - technically correct but simplified
+          3. Relatability - uses analogies or examples
+          4. Completeness - covers key concepts
+          Score 1-5 overall.
+      
+      # Check for technical jargon
+      - type: javascript
+        value: |
+          const jargon = ['802.11', 'protocol', 'packet', 'bandwidth', 'encryption', 'IEEE'];
+          const hasJargon = jargon.some(term => output.toLowerCase().includes(term));
+          return hasJargon ? 'fail' : 'pass';
+
+  # Creative writing scenario
+  - description: "Creative story writing"
+    vars:
+      scenario: "children's bedtime story"
+      theme: "a brave little robot who's afraid of the dark"
+    assert:
+      - type: llm-rubric
+        value: |
+          Evaluate the story on:
+          1. Age-appropriateness for children
+          2. Positive message about overcoming fears
+          3. Engaging narrative with beginning, middle, end
+          4. Creative elements and imagination
+          Rate 1-5 for overall quality as bedtime story.
+      
+      # Check story length (should be substantial but not too long)
+      - type: javascript
+        value: |
+          const wordCount = output.split(/\s+/).length;
+          return wordCount >= 150 && wordCount <= 500 ? 'pass' : 'fail';
+
+# Evaluation settings
+evaluateOptions:
+  # Run evaluations sequentially for Slack
+  maxConcurrency: 1
+  
+  # Show detailed output
+  showProgressBar: false
+  
+  # Cache results to avoid re-running
+  cache: true
+
+# Transform settings for better display
+defaultTest:
+  options:
+    transform: "output"  # Can be customized as needed 

@@ -1,0 +1,12 @@
+Write a short story based on the following:
+
+Scenario: {{scenario}}
+Theme: {{theme}}
+
+Guidelines:
+- Make it engaging and imaginative
+- Include a clear beginning, middle, and end
+- Use descriptive language appropriate for the audience
+- Incorporate the theme meaningfully
+
+Your story: 

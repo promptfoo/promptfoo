@@ -1,0 +1,118 @@
+# Example: Testing a Slack Bot with promptfoo
+# This shows how to use the Slack provider to test another bot
+
+description: Automated testing of our customer support Slack bot
+
+providers:
+  # Test the bot with direct mentions
+  - id: slack
+    label: bot-direct-test
+    config:
+      channel: ${SLACK_TEST_CHANNEL_ID}
+      timeout: 10000
+      responseStrategy: user
+      userId: ${SLACK_TARGET_BOT_ID}  # The bot we're testing
+      messageFormatter: |
+        <@${SLACK_TARGET_BOT_ID}> {{prompt}}
+
+  # Compare with human responses
+  - id: slack
+    label: human-baseline
+    config:
+      channel: ${SLACK_HUMAN_CHANNEL_ID}
+      timeout: 30000
+      responseStrategy: first
+
+  # Optional: Compare with another AI provider
+  - openai:gpt-4
+
+prompts:
+  # Basic functionality tests
+  - "What are your capabilities?"
+  - "Help"
+  - "Hello"
+  
+  # Domain-specific tests
+  - file://prompts/bot-test-password-reset.txt
+  - file://prompts/bot-test-order-status.txt
+  - file://prompts/bot-test-billing.txt
+  
+  # Edge cases and error handling
+  - ""  # Empty message
+  - "URGENT!!!!! HELP NOW!!!!!"
+  - "😀🎉🚀"  # Emojis only
+  - "This is a very long message that exceeds normal limits and tests how the bot handles lengthy inputs that might be trying to overwhelm the system or cause issues with processing. The bot should handle this gracefully and provide a reasonable response without breaking or timing out."
+
+tests:
+  # Test 1: Bot should always respond
+  - assert:
+      - type: not-empty
+        
+  # Test 2: Response time (using metadata)
+  - assert:
+      - type: javascript
+        value: |
+          // Ensure bot responds within 5 seconds
+          const metadata = output._metadata || {};
+          const responseTime = metadata.responseTime || 0;
+          return responseTime < 5000;
+
+  # Test 3: No error messages
+  - assert:
+      - type: not-contains
+        value: "error"
+      - type: not-contains
+        value: "exception"
+      - type: not-contains  
+        value: "undefined"
+
+  # Test 4: Professional tone
+  - assert:
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Be professional and courteous
+          2. Be relevant to the user's query
+          3. Not contain any inappropriate content
+          4. Be grammatically correct
+
+  # Test 5: Specific functionality tests
+  - vars:
+      test_type: password_reset
+    assert:
+      - type: contains-any
+        value: ["reset", "password", "email", "link"]
+        
+  - vars:
+      test_type: order_status
+    assert:
+      - type: contains-any
+        value: ["order", "status", "tracking", "delivery"]
+        
+  - vars:
+      test_type: billing
+    assert:
+      - type: contains-any
+        value: ["invoice", "payment", "billing", "charge"]
+
+# Scenarios for comprehensive testing
+scenarios:
+  - config:
+      - vars:
+          SLACK_TEST_CHANNEL_ID: C_STAGING_CHANNEL
+          SLACK_TARGET_BOT_ID: U_STAGING_BOT
+    description: "Staging environment"
+    
+  - config:
+      - vars:
+          SLACK_TEST_CHANNEL_ID: C_PROD_CHANNEL
+          SLACK_TARGET_BOT_ID: U_PROD_BOT
+    description: "Production bot (read-only test)"
+
+outputPath: results/bot-test-{{date}}.json
+
+# Share results for team review
+sharing:
+  enabled: true
+  apiBaseUrl: https://api.promptfoo.com
+  appBaseUrl: https://app.promptfoo.com 
