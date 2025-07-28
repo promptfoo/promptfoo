@@ -14,6 +14,20 @@ The Slack provider enables human-in-the-loop evaluations by sending prompts to S
 
 ## Prerequisites
 
+### Install Dependencies
+
+The Slack provider requires the `@slack/web-api` package to be installed separately:
+
+```bash
+npm install @slack/web-api
+```
+
+:::note
+This is an optional dependency and only needs to be installed if you want to use the Slack provider.
+:::
+
+### Slack App Setup
+
 1. **Create a Slack App**
    - Go to [api.slack.com/apps](https://api.slack.com/apps)
    - Click "Create New App" → "From scratch"
