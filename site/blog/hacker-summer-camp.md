@@ -55,7 +55,7 @@ Want a deeper-dive demo? You can also book a 30-minute demo slot to see Promptfo
 
 ## Try the Tool at Arsenal Labs
 
-Watch our security researchers perform demonstrations of prompt injection, jailbreaking, and data exfiltration attacks. See how Promptfoo automatically detects and prevents these threats across GPT-4, Claude, Llama, and other popular models.
+Watch our security researchers perform demonstrations of prompt injection, jailbreaking, and data exfiltration attacks. See how Promptfoo automatically detects and prevents these threats across GPT, Claude, Gemini, Llama, and other popular models.
 
 - **Location**: Mandalay Bay Convention Center, Las Vegas
 - **Booth**: Business Hall, Arsenal Lab Station 1
