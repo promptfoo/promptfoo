@@ -419,9 +419,9 @@ describe('Python file references', () => {
       value: 'my_assert.py', // Missing file:// prefix
     };
 
-    jest.mocked(runPythonCode).mockRejectedValue(
-      new Error("NameError: name 'my_assert' is not defined"),
-    );
+    jest
+      .mocked(runPythonCode)
+      .mockRejectedValue(new Error("NameError: name 'my_assert' is not defined"));
 
     const output = 'Test output';
     const result = await runAssertion({
@@ -443,9 +443,7 @@ describe('Python file references', () => {
       value: 'my_assert.py:validate_output', // Missing file:// prefix with function name
     };
 
-    jest.mocked(runPythonCode).mockRejectedValue(
-      new Error("SyntaxError: invalid syntax"),
-    );
+    jest.mocked(runPythonCode).mockRejectedValue(new Error('SyntaxError: invalid syntax'));
 
     const output = 'Test output';
     const result = await runAssertion({

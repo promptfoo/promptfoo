@@ -160,23 +160,20 @@ ${
       reason = `Python assertion error: Missing module '${moduleName}'.\n\nInstall it with: pip install ${moduleName}`;
     } else if (error.message.includes('SyntaxError')) {
       // Check if it looks like a file path with function name
-      if (
-        typeof assertion.value === 'string' && 
-        assertion.value.includes('.py:')
-      ) {
+      if (typeof assertion.value === 'string' && assertion.value.includes('.py:')) {
         reason = `Python syntax error in assertion:\n${error.message}\n\nDid you mean to use 'file://${assertion.value}' to reference an external Python file with a specific function?`;
       } else {
         reason = `Python syntax error in assertion:\n${error.message}`;
       }
     } else if (
-      error.message.includes('NameError') && 
-      typeof assertion.value === 'string' && 
+      error.message.includes('NameError') &&
+      typeof assertion.value === 'string' &&
       (assertion.value.endsWith('.py') || assertion.value.includes('.py:'))
     ) {
       // Likely forgot file:// prefix
-      const suggestion = assertion.value.includes(':') ? 
-        'to reference an external Python file with a specific function' : 
-        'to reference an external Python file';
+      const suggestion = assertion.value.includes(':')
+        ? 'to reference an external Python file with a specific function'
+        : 'to reference an external Python file';
       reason = `Python assertion error: ${error.message}\n\nDid you mean to use 'file://${assertion.value}' ${suggestion}?`;
     } else if (error.message.includes('returned non-zero exit status')) {
       reason = `Python assertion crashed. Check the assertion code for errors.\n${error.message}`;
