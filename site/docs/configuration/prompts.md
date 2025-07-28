@@ -269,6 +269,167 @@ prompt,label
 "Translate to German: {{text}}","German Translation"
 ```
 
+## Prompty Files (Microsoft Format)
+
+Prompty is a file format developed by Microsoft for defining LLM prompts with metadata. Promptfoo supports `.prompty` files, allowing you to:
+
+- Define prompts with YAML frontmatter containing metadata and model configuration
+- Use role-based content sections (system, user, assistant, function)
+- Include sample data that serves as default variable values
+- Configure model-specific settings
+
+### Basic Example
+
+```prompty title="customer_service.prompty"
+---
+name: Customer Service Assistant
+description: A helpful customer service agent
+model:
+  api: chat
+  configuration:
+    type: openai
+    model: gpt-3.5-turbo
+  parameters:
+    temperature: 0.7
+    max_tokens: 500
+sample:
+  customer_name: "John"
+  issue: "billing question"
+---
+system:
+You are a friendly customer service representative for {{company}}.
+Help customers with their inquiries professionally and empathetically.
+
+user:
+Hi, I'm {{customer_name}} and I have a {{issue}}.
+```
+
+### Template Engine
+
+Prompty files use **Nunjucks** templating (Jinja2-compatible) for variable substitution. This includes:
+
+- Variable interpolation: `{{variable}}`
+- Conditionals: `{% if condition %}...{% endif %}`
+- Loops: `{% for item in items %}...{% endfor %}`
+
+Note: While Nunjucks is largely compatible with Jinja2, there may be minor differences in some advanced features.
+
+### Environment Variables
+
+You can reference environment variables in the configuration using `${env:VAR_NAME}` syntax:
+
+```prompty
+---
+name: Secure API Example
+model:
+  api: chat
+  configuration:
+    type: azure_openai
+    api_key: ${env:AZURE_OPENAI_API_KEY}
+    azure_endpoint: ${env:AZURE_OPENAI_ENDPOINT}
+    azure_deployment: gpt-4
+---
+```
+
+### Chat vs Completion API
+
+Prompty supports both chat and completion APIs:
+
+```prompty title="chat_example.prompty"
+---
+model:
+  api: chat
+---
+system:
+System message here
+
+user:
+User message here
+```
+
+```prompty title="completion_example.prompty"
+---
+model:
+  api: completion
+---
+Complete this story: {{beginning}}
+```
+
+### Model Configuration
+
+#### Azure OpenAI
+
+```prompty
+model:
+  configuration:
+    type: azure_openai
+    azure_endpoint: https://myresource.openai.azure.com
+    azure_deployment: gpt-4
+    api_version: 2024-02-01
+    api_key: ${env:AZURE_OPENAI_API_KEY}
+```
+
+#### OpenAI
+
+```prompty
+model:
+  configuration:
+    type: openai
+    model: gpt-4
+    organization: org-123
+    api_key: ${env:OPENAI_API_KEY}
+```
+
+### Sample Data
+
+The `sample` section provides default values for variables:
+
+```prompty
+---
+sample:
+  name: "Alice"
+  topic: "machine learning"
+---
+user:
+Hi {{name}}, can you explain {{topic}}?
+```
+
+### Multi-turn Conversations
+
+```prompty
+---
+model:
+  api: chat
+---
+system:
+You are a helpful tutor.
+
+user:
+What is recursion?
+
+assistant:
+Recursion is a programming technique where a function calls itself.
+
+user:
+Can you give me an example?
+```
+
+### Image Support
+
+Include images using markdown syntax:
+
+```prompty
+user:
+What's in this image?
+![Image description](https://example.com/image.jpg)
+```
+
+### Advanced Features
+
+- **Template Processing**: Uses Nunjucks templating (Jinja2-compatible)
+- **Configuration Merging**: Model parameters are merged with provider configurations
+- **Multiple Prompts**: Use glob patterns to load multiple prompty files: `file://prompts/*.prompty`
+
 ## External Prompt Management Systems
 
 Promptfoo integrates with external prompt management platforms, allowing you to centralize and version control your prompts:
