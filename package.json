@@ -70,7 +70,8 @@
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "mcp": "node dist/src/main.js mcp"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
