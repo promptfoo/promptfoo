@@ -284,6 +284,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(table),
             metadata: [],
+            plugin: [],
+            strategy: [],
           },
         },
       }));
@@ -298,6 +300,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(results.table),
             metadata: [],
+            plugin: [],
+            strategy: [],
           },
         },
       }));
@@ -388,6 +392,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
             options: {
               metric: computeAvailableMetrics(data.table),
               metadata: [],
+              plugin: [],
+              strategy: [],
             },
           },
         }));
