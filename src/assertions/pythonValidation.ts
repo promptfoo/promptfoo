@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import logger from '../logger';
 
 /**
  * Basic validation for Python assertion files
@@ -26,7 +25,7 @@ export async function validatePythonAssertionFile(
         error: `Path "${filePath}" exists but is not a file`,
       };
     }
-  } catch (error) {
+  } catch {
     return {
       isValid: false,
       error: `Python assertion file "${filePath}" not found`,
@@ -46,26 +45,33 @@ export function formatPythonAssertionError(
   functionName: string,
 ): string {
   const errorMessage = error.message;
-  
+
   // Check for common Python errors and add helpful context
-  if (errorMessage.includes('TypeError') && errorMessage.includes('missing') && errorMessage.includes('required positional argument')) {
+  if (
+    errorMessage.includes('TypeError') &&
+    errorMessage.includes('missing') &&
+    errorMessage.includes('required positional argument')
+  ) {
     return `Python assertion error: Function signature mismatch\n${errorMessage}\n\nMake sure your function accepts two parameters: (output, context)`;
   }
-  
+
   if (errorMessage.includes('ModuleNotFoundError') || errorMessage.includes('ImportError')) {
     const moduleMatch = errorMessage.match(/No module named ['"]([^'"]+)['"]/);
     const moduleName = moduleMatch ? moduleMatch[1] : 'the required module';
     return `Python assertion error: Missing module '${moduleName}'\n\nInstall it with: pip install ${moduleName}`;
   }
-  
-  if (errorMessage.includes('AttributeError') && errorMessage.includes(`has no attribute '${functionName}'`)) {
+
+  if (
+    errorMessage.includes('AttributeError') &&
+    errorMessage.includes(`has no attribute '${functionName}'`)
+  ) {
     return `Python assertion error: Function '${functionName}' not found in ${filePath}\n\nMake sure the function is defined at the module level.`;
   }
-  
+
   if (errorMessage.includes('Invalid JSON') && errorMessage.includes('when parsing result')) {
     return `Python assertion error: Invalid return value\n\nYour function must return one of:\n  - bool (True/False)\n  - float (0.0 to 1.0 for score)\n  - dict with keys: {"pass": bool, "score": float, "reason": str}`;
   }
-  
+
   // For other errors, just enhance with file/function context
   return `Python assertion error in ${filePath}::${functionName}\n${errorMessage}`;
-} 
+}
