@@ -22,6 +22,8 @@ import { type ResultsFilter, useTableStore } from '../store';
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
   metadata: 'Metadata',
+  plugin: 'Plugin',
+  strategy: 'Strategy',
 };
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
@@ -158,8 +160,11 @@ function Filter({
       if (filterType !== 'metadata') {
         updatedFilter.field = undefined;
       }
-      // Reset operator to 'equals' when changing types since metric only supports 'equals'
-      if (filterType === 'metric' && value.operator !== 'equals') {
+      // Reset operator to 'equals' when changing to types that only support 'equals'
+      if (
+        (filterType === 'metric' || filterType === 'plugin' || filterType === 'strategy') &&
+        value.operator !== 'equals'
+      ) {
         updatedFilter.operator = 'equals';
       }
       updateFilter(updatedFilter);
@@ -279,6 +284,12 @@ function Filter({
               ? [{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]
               : []),
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
+            ...(filters.options.plugin.length > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.plugin, value: 'plugin' }]
+              : []),
+            ...(filters.options.strategy.length > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
+              : []),
           ]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
@@ -302,7 +313,7 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric'
+            value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy'
               ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
               : [
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
@@ -316,7 +327,7 @@ function Filter({
         />
 
         <Box sx={{ flex: 1, minWidth: 250 }}>
-          {value.type === 'metric' ? (
+          {value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy' ? (
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -327,7 +338,7 @@ function Filter({
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
-              disabledValues={selectedMetricValues}
+              disabledValues={value.type === 'metric' ? selectedMetricValues : []}
             />
           ) : (
             <DebouncedTextField
@@ -361,14 +372,24 @@ export default function FiltersForm({
    * Adds a new filter with default values.
    */
   const handleAddFilter = useCallback(() => {
+    // Determine the default filter type based on available options
+    let defaultType: ResultsFilter['type'] = 'metadata';
+    if (filters.options.metric.length > 0) {
+      defaultType = 'metric';
+    } else if (filters.options.plugin.length > 0) {
+      defaultType = 'plugin';
+    } else if (filters.options.strategy.length > 0) {
+      defaultType = 'strategy';
+    }
+
     addFilter({
-      type: filters.options.metric.length > 0 ? 'metric' : 'metadata',
+      type: defaultType,
       operator: 'equals',
       // By default, the value is empty, which means the filter is not applied.
       // In other words, the filter is not applied until the user selects a value.
       value: '',
     });
-  }, [addFilter, filters.options.metric.length]);
+  }, [addFilter, filters.options]);
 
   /**
    * Removes all filters and closes the popover.

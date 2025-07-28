@@ -60,7 +60,7 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric' | 'metadata';
+export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy';
 
 export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
@@ -267,6 +267,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
         options: {
           metric: computeAvailableMetrics(table),
           metadata: [],
+          plugin: [],
+          strategy: [],
         },
       },
     })),
@@ -408,6 +410,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
     options: {
       metric: [],
       metadata: [],
+      plugin: [],
+      strategy: [],
     },
   },
 
