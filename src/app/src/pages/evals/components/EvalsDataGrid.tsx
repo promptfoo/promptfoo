@@ -23,6 +23,7 @@ import {
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
+import { useLocation } from 'react-router-dom';
 
 type Eval = {
   createdAt: number;
@@ -135,23 +136,30 @@ export default function EvalsDataGrid({
   /**
    * Fetch evals from the API.
    */
-  useEffect(() => {
-    const fetchEvals = async () => {
-      try {
-        const response = await callApi('/results', { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error('Failed to fetch evals');
-        }
-        const body = (await response.json()) as { data: Eval[] };
-        setEvals(body.data);
-      } catch (error) {
-        setError(error as Error);
-      } finally {
-        setIsLoading(false);
+  const fetchEvals = async () => {
+    try {
+      setIsLoading(true);
+      const response = await callApi('/results', { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('Failed to fetch evals');
       }
-    };
+      const body = (await response.json()) as { data: Eval[] };
+      setEvals(body.data);
+      setError(null);
+    } catch (error) {
+      setError(error as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Use React Router's location to detect navigation
+  const location = useLocation();
+
+  useEffect(() => {
+    // Fetch evals whenever we navigate to this page
     fetchEvals();
-  }, []);
+  }, [location.pathname]); // Refetch when the pathname changes
 
   /**
    * Construct dataset rows:
