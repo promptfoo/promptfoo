@@ -39,12 +39,12 @@ providers:
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform                | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`    |
 | [Cloudera](./cloudera.md)                           | Cloudera AI Inference Service                             | `cloudera:llama-2-13b-chat`                                     |
 | [Cohere](./cohere.md)                               | Cohere's language models                                  | `cohere:command`                                                |
-| [Databricks](./databricks.md)                       | Databricks Mosaic AI serving endpoints                    | `databricks:llama-2-70b`                                        |
+| [Databricks](./databricks.md)                       | Databricks Foundation Model APIs                          | `databricks:databricks-meta-llama-3-3-70b-instruct`             |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                                | `deepseek:deepseek-r1`                                          |
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface                    | `f5:path-name`                                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                                 | `fal:image:fal-ai/fast-sdxl`                                    |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                                     | `fireworks:accounts/fireworks/models/qwen-v2p5-7b`              |
-| [GitHub](./github.md)                               | GitHub AI Gateway                                         | `github:gpt-4.1`                                                |
+| [GitHub](./github.md)                               | GitHub Models - OpenAI, Anthropic, Google, and more       | `github:openai/gpt-4.1` or `github:anthropic/claude-3.7-sonnet` |
 | [Google AI Studio](./google.md)                     | Gemini models and Live API                                | `google:gemini-2.5-pro`, `google:live:gemini-2.0-flash-exp`     |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                                | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`              |
 | [Groq](./groq.md)                                   | High-performance inference API                            | `groq:llama-3.3-70b-versatile`                                  |

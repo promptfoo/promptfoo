@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
+
 import type { TestCase } from '../types';
 
 interface HuggingFaceResponse {

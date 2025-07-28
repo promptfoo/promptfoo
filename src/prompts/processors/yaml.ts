@@ -1,6 +1,8 @@
 import * as fs from 'fs';
+
 import yaml from 'js-yaml';
 import logger from '../../logger';
+
 import type { Prompt } from '../../types';
 
 /**

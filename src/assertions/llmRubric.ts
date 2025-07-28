@@ -1,6 +1,7 @@
 import { matchesLlmRubric } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export const handleLlmRubric = ({
   assertion,

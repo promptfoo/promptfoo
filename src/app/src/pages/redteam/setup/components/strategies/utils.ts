@@ -1,12 +1,13 @@
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
+
 import type { Config } from '../../types';
 
 export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
 }
 
-export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
+const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   audio: 1,
   base64: 1,
   basic: 1,

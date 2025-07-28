@@ -1,10 +1,11 @@
-import dedent from 'dedent';
 import path from 'path';
+
+import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import RedteamCrescendoProvider from '../redteam/providers/crescendo';
+import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
@@ -12,8 +13,6 @@ import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
-import type { LoadApiProviderContext } from '../types';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -89,6 +88,10 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+import { createGitHubProvider } from './github/index';
+
+import type { LoadApiProviderContext } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -520,18 +523,7 @@ export const providerMap: ProviderFactory[] = [
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://models.inference.ai.azure.com',
-          apiKeyEnvar: 'GITHUB_TOKEN',
-        },
-      });
-    },
+    ) => createGitHubProvider(providerPath, providerOptions, context),
   },
   {
     test: (providerPath: string) => providerPath.startsWith('groq:'),
@@ -980,6 +972,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
+      // Preserve the original path as the provider ID
+      const providerId = providerOptions.id ?? providerPath;
+
       if (providerPath.startsWith('file://')) {
         providerPath = providerPath.slice('file://'.length);
       }
@@ -989,7 +984,7 @@ export const providerMap: ProviderFactory[] = [
         : path.join(context.basePath || process.cwd(), providerPath);
 
       const CustomApiProvider = await importModule(modulePath);
-      return new CustomApiProvider(providerOptions);
+      return new CustomApiProvider({ ...providerOptions, id: providerId });
     },
   },
   {

@@ -1,6 +1,7 @@
-import type { EvaluateResult } from '../types';
 import { ResultFailureReason } from '../types';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './json';
+
+import type { EvaluateResult } from '../types';
 
 describe('JSON utilities for large data handling', () => {
   // Create test EvaluateResult with reasonable data size

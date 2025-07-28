@@ -1,7 +1,8 @@
-import { SimulatedUser, type Message } from '../../providers/simulatedUser';
-import type { ProviderResponse, TokenUsage } from '../../types';
+import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
+
+import type { ProviderResponse, TokenUsage } from '../../types';
 
 const PROVIDER_ID = 'promptfoo:redteam:mischievous-user';
 

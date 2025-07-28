@@ -1,5 +1,7 @@
 import logger from '../logger';
+
 import type { TokenUsage } from '../types/shared';
+import { createEmptyTokenUsage, accumulateTokenUsage } from './tokenUsageUtils';
 
 /**
  * A utility class for tracking token usage across an evaluation
@@ -30,18 +32,11 @@ export class TokenUsageTracker {
       return;
     }
 
-    const current =
-      this.providersMap.get(providerId) ??
-      ({
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        numRequests: 0,
-        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-        assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-      } satisfies TokenUsage);
-    this.providersMap.set(providerId, this.mergeUsage(current, usage));
+    const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
+    // Create a copy and accumulate the usage
+    const updated = { ...current };
+    accumulateTokenUsage(updated, usage);
+    this.providersMap.set(providerId, updated);
     logger.debug(
       `Tracked token usage for ${providerId}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
     );
@@ -69,49 +64,11 @@ export class TokenUsageTracker {
    * @returns Aggregated token usage
    */
   public getTotalUsage(): TokenUsage {
-    const result: TokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-      assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-      },
-    };
+    const result: TokenUsage = createEmptyTokenUsage();
 
     // Accumulate totals from all providers
     for (const usage of this.providersMap.values()) {
-      result.total! += usage.total ?? 0;
-      result.prompt! += usage.prompt ?? 0;
-      result.completion! += usage.completion ?? 0;
-      result.cached! += usage.cached ?? 0;
-      result.numRequests! += usage.numRequests ?? 0;
-
-      // Add completion details
-      if (usage.completionDetails) {
-        result.completionDetails!.reasoning! += usage.completionDetails.reasoning ?? 0;
-        result.completionDetails!.acceptedPrediction! +=
-          usage.completionDetails.acceptedPrediction ?? 0;
-        result.completionDetails!.rejectedPrediction! +=
-          usage.completionDetails.rejectedPrediction ?? 0;
-      }
-
-      // Add assertion statistics
-      if (usage.assertions) {
-        result.assertions!.total! += usage.assertions.total ?? 0;
-        result.assertions!.prompt! += usage.assertions.prompt ?? 0;
-        result.assertions!.completion! += usage.assertions.completion ?? 0;
-        result.assertions!.cached! += usage.assertions.cached ?? 0;
-      }
+      accumulateTokenUsage(result, usage);
     }
 
     return result;
@@ -137,40 +94,5 @@ export class TokenUsageTracker {
    */
   public cleanup(): void {
     this.providersMap.clear();
-  }
-
-  /**
-   * Merge token usage records
-   * @param current The current token usage
-   * @param update The new token usage to merge
-   * @returns The merged token usage
-   */
-  private mergeUsage(current: TokenUsage, update: TokenUsage): TokenUsage {
-    // Create a result object with all properties initialized
-    const result: TokenUsage = {
-      prompt: (current.prompt ?? 0) + (update.prompt ?? 0),
-      completion: (current.completion ?? 0) + (update.completion ?? 0),
-      cached: (current.cached ?? 0) + (update.cached ?? 0),
-      total: (current.total ?? 0) + (update.total ?? 0),
-      numRequests: (current.numRequests ?? 0) + (update.numRequests ?? 0),
-      completionDetails: {
-        reasoning:
-          (current.completionDetails?.reasoning ?? 0) + (update.completionDetails?.reasoning ?? 0),
-        acceptedPrediction:
-          (current.completionDetails?.acceptedPrediction ?? 0) +
-          (update.completionDetails?.acceptedPrediction ?? 0),
-        rejectedPrediction:
-          (current.completionDetails?.rejectedPrediction ?? 0) +
-          (update.completionDetails?.rejectedPrediction ?? 0),
-      },
-      assertions: {
-        total: (current.assertions?.total ?? 0) + (update.assertions?.total ?? 0),
-        prompt: (current.assertions?.prompt ?? 0) + (update.assertions?.prompt ?? 0),
-        completion: (current.assertions?.completion ?? 0) + (update.assertions?.completion ?? 0),
-        cached: (current.assertions?.cached ?? 0) + (update.assertions?.cached ?? 0),
-      },
-    };
-
-    return result;
   }
 }

@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2025-02-03
 authors: [vanessa]
+tags: [technical-guide, red-teaming]
 ---
 
 # What are the Security Risks of Deploying DeepSeek-R1?

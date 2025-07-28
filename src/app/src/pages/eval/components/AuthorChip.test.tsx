@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import React from 'react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthorChip } from './AuthorChip';
 
 describe('AuthorChip', () => {

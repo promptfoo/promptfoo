@@ -1,8 +1,3 @@
-export interface StrategiesProps {
-  onNext: () => void;
-  onBack: () => void;
-}
-
 export interface StrategyCardData {
   id: string;
   name: string;

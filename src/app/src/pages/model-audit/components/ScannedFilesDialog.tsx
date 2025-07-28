@@ -1,19 +1,18 @@
-import React from 'react';
-import { InsertDriveFile as FileIcon, Folder as FolderIcon } from '@mui/icons-material';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Stack,
-  Typography,
-} from '@mui/material';
+import FolderIcon from '@mui/icons-material/Folder';
+import FileIcon from '@mui/icons-material/InsertDriveFile';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+
 import type { ScanPath, ScanResult } from '../ModelAudit.types';
 
 interface ScannedFilesDialogProps {

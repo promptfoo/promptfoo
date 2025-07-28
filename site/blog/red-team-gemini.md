@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2025-06-18
 authors: [ian]
+tags: [technical-guide, red-teaming, google]
 ---
 
 # How to Red Team Gemini

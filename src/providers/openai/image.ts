@@ -1,21 +1,22 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import type { OpenAiSharedOptions } from './types';
+import { OpenAiGenericProvider } from '.';
 import { formatOpenAiError } from './util';
 
-export type OpenAiImageModel = 'dall-e-2' | 'dall-e-3';
-export type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
-export type DallE2Size = '256x256' | '512x512' | '1024x1024';
-export type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { OpenAiSharedOptions } from './types';
 
-export const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
-export const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
-export const DEFAULT_SIZE = '1024x1024';
+type OpenAiImageModel = 'dall-e-2' | 'dall-e-3';
+type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
+type DallE2Size = '256x256' | '512x512' | '1024x1024';
+type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
+
+const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
+const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
+const DEFAULT_SIZE = '1024x1024';
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
   '256x256': 0.016,

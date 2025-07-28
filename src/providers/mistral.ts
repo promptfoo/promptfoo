@@ -1,7 +1,9 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+
+import type { EnvVarKey } from '../envars';
 import type {
   ApiProvider,
   ProviderEmbeddingResponse,
@@ -9,7 +11,6 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({

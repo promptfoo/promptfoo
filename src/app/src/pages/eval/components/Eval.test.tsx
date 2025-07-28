@@ -1,11 +1,11 @@
-import { render, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import * as usePageMetaHook from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { act, render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 vi.mock('@app/hooks/usePageMeta');
 vi.mock('@app/utils/api');
@@ -65,6 +65,7 @@ const baseMockTableStore = {
   fetchEvalData: vi
     .fn()
     .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 }),
+  resetFilters: vi.fn(),
 };
 
 describe('Eval Page Metadata', () => {
@@ -178,5 +179,148 @@ describe('Eval Page Metadata', () => {
       title: 'Updated Eval Description',
       description: 'View evaluation results',
     });
+  });
+});
+
+describe('Eval', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      setComparisonEvalIds: vi.fn(),
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as Response);
+  });
+
+  it('should call resetFilters when mounted with a new fetchId', async () => {
+    const resetFiltersMock = vi.fn();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      resetFilters: resetFiltersMock,
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-1" />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(resetFiltersMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('should call resetFilters only once per render, even with different fetchIds', async () => {
+    const resetFiltersMock = vi.fn();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      resetFilters: resetFiltersMock,
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-1" />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(resetFiltersMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('should call resetFilters when navigating from one eval to another', async () => {
+    const resetFiltersMock = vi.fn();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      resetFilters: resetFiltersMock,
+    });
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+
+    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(resetFiltersMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('should not call resetFilters unnecessarily when other dependencies change', async () => {
+    const resetFiltersMock = vi.fn();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      resetFilters: resetFiltersMock,
+    });
+
+    const fetchId = 'test-eval-id';
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId={fetchId} />
+      </MemoryRouter>,
+    );
+
+    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
+    resetFiltersMock.mockClear();
+
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId={fetchId} />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(resetFiltersMock).not.toHaveBeenCalled();
+  });
+
+  it('should handle null fetchId gracefully without fetching data', async () => {
+    const fetchEvalDataMock = vi.fn().mockResolvedValue({ table: mockTable, config: {} });
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId={null} />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(fetchEvalDataMock).not.toHaveBeenCalled();
   });
 });

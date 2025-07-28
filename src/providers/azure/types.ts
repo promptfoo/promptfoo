@@ -1,4 +1,5 @@
 import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
+
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
 import type { AssistantFunctionCallback } from '../openai/types';
@@ -6,7 +7,7 @@ import type { AssistantFunctionCallback } from '../openai/types';
 /**
  * Options for configuring retry behavior
  */
-export interface RetryOptions {
+interface RetryOptions {
   /** Maximum number of retry attempts */
   maxRetries: number;
   /** Initial delay in milliseconds before the first retry */
