@@ -63,7 +63,7 @@ Watch our security researchers perform demonstrations of prompt injection, jailb
 
 ## Meet Us at the DEF CON Exhibitor Booth
 
-We'll be at DEF CON all weekend. Join us at the Exhibitor Booth to meet the team and maybe even get a t-shirt.
+We'll be at DEF CON all weekend. Come by our booth to meet the team and maybe even get a t-shirt.
 
 - **Location**: Las Vegas Convention Center
 - **Dates**: August 8 - 10, 2025
