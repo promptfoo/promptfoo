@@ -26,14 +26,12 @@ import {
   type TooltipItem,
 } from 'chart.js';
 import { ErrorBoundary } from 'react-error-boundary';
+import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-import type { VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
-  columnVisibility: VisibilityState;
-  recentEvals: ResultLightweightWithLabel[];
   handleHideCharts: () => void;
 }
 
@@ -107,7 +105,7 @@ function HistogramChart({ table }: ChartProps) {
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
-        label: `Column ${promptIdx + 1}`,
+        label: prompt.provider,
         data: counts,
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -133,7 +131,7 @@ function HistogramChart({ table }: ChartProps) {
             callbacks: {
               title(context) {
                 const datasetIndex = context[0].datasetIndex;
-                return `Column ${datasetIndex + 1}`;
+                return table.head.prompts[datasetIndex].provider;
               },
               label(context) {
                 const labelIndex = context.dataIndex;
@@ -147,6 +145,20 @@ function HistogramChart({ table }: ChartProps) {
             },
           },
         },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Frequency',
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Score',
+            },
+          },
+        },
       },
     });
   }, [table]);
@@ -155,6 +167,7 @@ function HistogramChart({ table }: ChartProps) {
 }
 
 function PassRateChart({ table }: ChartProps) {
+  const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
@@ -167,18 +180,11 @@ function PassRateChart({ table }: ChartProps) {
       passRateChartInstance.current.destroy();
     }
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const outputs = table.body
-        .map((row) => row.outputs[promptIdx])
-        .filter((output) => output != null);
-      const passCount = outputs.filter((output) => output.pass).length;
-      const passRate = (passCount / outputs.length) * 100;
-      return {
-        label: `Column ${promptIdx + 1}`,
-        data: [passRate],
-        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
-      };
-    });
+    const datasets = table.head.prompts.map((prompt, promptIdx) => ({
+      label: prompt.provider,
+      data: [passRates[promptIdx]],
+      backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+    }));
 
     passRateChartInstance.current = new Chart(passRateCanvasRef.current, {
       type: 'bar',
@@ -191,10 +197,17 @@ function PassRateChart({ table }: ChartProps) {
         plugins: {
           title: {
             display: true,
-            text: 'Pass rate',
+            text: 'Pass Rate',
           },
           legend: {
             display: true,
+          },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+              },
+            },
           },
         },
       },
@@ -622,7 +635,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [

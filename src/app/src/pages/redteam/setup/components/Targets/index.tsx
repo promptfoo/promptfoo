@@ -257,6 +257,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         updatedTarget.label = value;
       } else if (field === 'delay') {
         updatedTarget.delay = value;
+      } else if (field === 'config') {
+        updatedTarget.config = value;
       } else {
         updatedTarget.config[field] = value;
       }

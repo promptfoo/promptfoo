@@ -1,15 +1,13 @@
-import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
-
 import {
+  type BasePlugin,
   COLLECTIONS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
+  type PIIPlugin,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  type BasePlugin,
-  type PIIPlugin,
 } from '../../src/redteam/constants';
 import {
   RedteamConfigSchema,
@@ -18,6 +16,8 @@ import {
   RedteamPluginSchema,
   RedteamStrategySchema,
 } from '../../src/validators/redteam';
+
+import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 
 describe('RedteamPluginObjectSchema', () => {
   it('should validate valid plugin object', () => {
@@ -171,8 +171,9 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
-    expect(errorMessage).toContain('built-in plugins');
+    expect(errorMessage).toContain('Invalid plugin id');
+    expect(errorMessage).toContain('built-in plugin');
+    expect(errorMessage).toContain('https://www.promptfoo.dev/docs/red-team/plugins');
   });
 
   it('should provide helpful error message for invalid file:// paths', () => {
@@ -184,8 +185,9 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
-    expect(errorMessage).toContain('built-in plugins');
+    expect(errorMessage).toContain('Invalid plugin id');
+    expect(errorMessage).toContain('built-in plugin');
+    expect(errorMessage).toContain('https://www.promptfoo.dev/docs/red-team/plugins');
   });
 
   it('should provide helpful error message for invalid plugin object', () => {
@@ -200,8 +202,9 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
-    expect(errorMessage).toContain('built-in plugins');
+    expect(errorMessage).toContain('Invalid plugin id');
+    expect(errorMessage).toContain('built-in plugin');
+    expect(errorMessage).toContain('https://www.promptfoo.dev/docs/red-team/plugins');
   });
 });
 
@@ -1135,23 +1138,7 @@ describe('RedteamConfigSchema transform', () => {
         RedteamConfigSchema.parse({
           plugins: ['custom/path/without/file/protocol.js'],
         }),
-      ).toThrow(
-        JSON.stringify(
-          [
-            {
-              code: 'invalid_string',
-              validation: {
-                startsWith: 'file://',
-              },
-              message:
-                'Custom plugins must start with file:// (or use one of the built-in plugins)',
-              path: ['plugins', 0],
-            },
-          ],
-          null,
-          2,
-        ),
-      );
+      ).toThrow(/Invalid plugin id/);
     });
   });
 

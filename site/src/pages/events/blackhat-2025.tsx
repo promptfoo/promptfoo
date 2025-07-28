@@ -7,6 +7,7 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './blackhat-2025.module.css';
 
 export default function BlackHat2025(): JSX.Element {
@@ -83,7 +84,9 @@ export default function BlackHat2025(): JSX.Element {
               <h1 className={styles.heroTitle}>
                 Security for AI used by
                 <br />
-                <span className={styles.highlight}>100,000 Developers</span>
+                <span className={styles.highlight}>
+                  {SITE_CONSTANTS.USER_COUNT_DISPLAY} Developers
+                </span>
               </h1>
               <p className={styles.heroSubtitle}>
                 Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM

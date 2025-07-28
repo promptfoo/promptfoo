@@ -88,6 +88,7 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+import { createGitHubProvider } from './github/index';
 
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -522,18 +523,7 @@ export const providerMap: ProviderFactory[] = [
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://models.inference.ai.azure.com',
-          apiKeyEnvar: 'GITHUB_TOKEN',
-        },
-      });
-    },
+    ) => createGitHubProvider(providerPath, providerOptions, context),
   },
   {
     test: (providerPath: string) => providerPath.startsWith('groq:'),

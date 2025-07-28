@@ -743,7 +743,7 @@ describe('AnthropicMessagesProvider', () => {
 
   describe('cleanup', () => {
     it('should await initialization before cleanup', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: true,
@@ -766,7 +766,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup when MCP is not enabled', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: false,
@@ -780,7 +780,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup errors gracefully', async () => {
-      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+      provider = new AnthropicMessagesProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
             enabled: true,

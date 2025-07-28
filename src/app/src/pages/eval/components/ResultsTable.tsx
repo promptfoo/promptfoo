@@ -15,10 +15,12 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import { alpha } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -47,6 +49,7 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -357,9 +360,29 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Create a stable reference for applied filters to avoid unnecessary re-renders
+  const appliedFiltersString = React.useMemo(() => {
+    const appliedFilters = Object.values(filters.values)
+      .filter((filter) =>
+        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+      )
+      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
+    // Create a stable string representation of applied filters
+    return JSON.stringify(
+      appliedFilters.map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex, // Include sortIndex for complete representation
+      })),
+    );
+  }, [filters.values]);
+
   React.useEffect(() => {
     setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, filters.appliedCount]);
+  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -410,24 +433,13 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
-    filters.values,
-    // Ensure this re-triggers for filter CxUD operations.
-    filters.appliedCount,
+    appliedFiltersString, // Use the stable string representation instead of filters.values
+    // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
-  const numGoodTests = React.useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
-    [head.prompts, body],
-  );
-
-  const numTests = React.useMemo(
-    () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
-      ),
-    [head.prompts, body],
-  );
+  const testCounts = useTestCounts();
+  const passingTestCounts = usePassingTestCounts();
+  const passRates = usePassRates();
 
   const numAsserts = React.useMemo(
     () =>
@@ -631,10 +643,7 @@ function ResultsTable({
           columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
             id: `Prompt ${idx + 1}`,
             header: () => {
-              const pct =
-                numGoodTests[idx] && numTests[idx]
-                  ? ((numGoodTests[idx] / numTests[idx]) * 100.0).toFixed(2)
-                  : '0.00';
+              const pct = passRates[idx] ? passRates[idx].toFixed(2) : '0.00';
               const columnId = `Prompt ${idx + 1}`;
               const isChecked = failureFilter[columnId] || false;
 
@@ -651,8 +660,8 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / numTests[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / numTests[idx])} per test`}
+                          maximumFractionDigits: prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
+                        }).format(prompt.metrics.cost / testCounts[idx])} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -678,7 +687,7 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / numTests[idx])}
+                      }).format(prompt.metrics.tokenUsage.total / testCounts[idx])}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -686,7 +695,7 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / numTests[idx])}{' '}
+                      }).format(prompt.metrics.totalLatencyMs / testCounts[idx])}{' '}
                       ms
                     </div>
                   ) : null}
@@ -744,12 +753,13 @@ function ResultsTable({
                     <div className="summary">
                       <div
                         className={`highlight ${
-                          numGoodTests[idx] && numTests[idx]
-                            ? `success-${Math.round(((numGoodTests[idx] / numTests[idx]) * 100) / 20) * 20}`
+                          passRates[idx]
+                            ? `success-${Math.round(passRates[idx] / 20) * 20}`
                             : 'success-0'
                         }`}
                       >
-                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{numTests[idx]} cases)
+                        <strong>{pct}% passing</strong> ({passingTestCounts[idx]}/{testCounts[idx]}{' '}
+                        cases)
                       </div>
                     </div>
                     {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
@@ -856,12 +866,14 @@ function ResultsTable({
     metricTotals,
     numAsserts,
     numGoodAsserts,
-    numGoodTests,
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
     filters.appliedCount,
     handleMetricFilterClick,
+    passRates,
+    passingTestCounts,
+    testCounts,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -1056,8 +1068,29 @@ function ResultsTable({
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
+          position: 'relative',
         }}
       >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
+            zIndex: 1000,
+            opacity: isFetching ? 1 : 0,
+            pointerEvents: isFetching ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease-in-out',
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <CircularProgress size={60} />
+        </Box>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
           style={{
@@ -1285,6 +1318,7 @@ function ResultsTable({
             <TextField
               size="small"
               type="number"
+              value={pagination.pageIndex + 1}
               onChange={(e) => {
                 const page = e.target.value ? Number(e.target.value) - 1 : null;
                 if (page !== null && page >= 0 && page < pageCount) {

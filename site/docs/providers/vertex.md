@@ -27,7 +27,6 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 Anthropic's Claude models are available with the following versions:
 
 - `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
-- `vertex:claude-3-sonnet@20240229` - Claude 3 Sonnet
 - `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
 - `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
 - `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
@@ -332,8 +331,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: google-github-actions/auth@v1
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
       - name: Run promptfoo tests

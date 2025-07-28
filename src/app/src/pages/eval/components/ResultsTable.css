@@ -494,7 +494,7 @@ table.results-table,
   cursor: pointer;
   z-index: 101;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: 100%;
   background: #eee;
 }
 
@@ -520,8 +520,6 @@ thead.sticky {
 
     --collapsed--mui-form-label-margin-top: 0px;
 
-    --collapsed--th-padding-y: 16px;
-
     --collapsed--font-small-font-size: 15px;
   }
   to {
@@ -534,22 +532,12 @@ thead.sticky {
 
     --collapsed--mui-form-label-margin-top: -8px;
 
-    --collapsed--th-padding-y: 4px;
-
     --collapsed--font-small-font-size: 12px;
   }
 }
 
 [data-theme='dark'] .header-dismiss {
   background: #333;
-}
-
-.header-dismiss:hover {
-  background: #ddd;
-}
-
-[data-theme='dark'] .header-dismiss:hover {
-  background: #444;
 }
 
 thead .header-dismiss {
@@ -587,8 +575,8 @@ thead .header-dismiss {
 }
 
 .results-table thead th {
-  padding-top: var(--collapsed--th-padding-y);
-  padding-bottom: var(--collapsed--th-padding-y);
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 /* Ensure content below header doesn't jump when header collapses */
