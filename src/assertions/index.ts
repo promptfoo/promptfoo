@@ -188,6 +188,21 @@ export async function runAssertion({
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
+        const { formatPythonAssertionError, validatePythonAssertionFile } = await import(
+          './pythonValidation'
+        );
+
+        // Basic file validation
+        const validationResult = await validatePythonAssertionFile(filePath);
+        if (!validationResult.isValid) {
+          return {
+            pass: false,
+            score: 0,
+            reason: validationResult.error || 'Python file validation failed',
+            assertion,
+          };
+        }
+
         try {
           const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
             output,
@@ -196,10 +211,15 @@ export async function runAssertion({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
+          const formattedError = formatPythonAssertionError(
+            error as Error,
+            filePath,
+            functionName || 'get_assert',
+          );
           return {
             pass: false,
             score: 0,
-            reason: (error as Error).message,
+            reason: formattedError,
             assertion,
           };
         }

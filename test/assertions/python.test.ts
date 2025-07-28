@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions';
@@ -29,9 +30,25 @@ jest.mock('path', () => ({
   extname: jest.fn(jest.requireActual('path').extname),
 }));
 
+// Mock fs for file validation
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  return {
+    ...actual,
+    promises: {
+      ...actual.promises,
+      stat: jest.fn(),
+    },
+  };
+});
+
 describe('Python file references', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Mock successful file stat by default
+    (fs.promises.stat as jest.Mock).mockResolvedValue({
+      isFile: () => true,
+    });
   });
 
   it('should handle Python file reference with function name', async () => {
@@ -165,8 +182,10 @@ describe('Python file references', () => {
     expect(result).toMatchObject({
       pass: false,
       score: 0,
-      reason: 'Python error',
     });
+    expect(result.reason).toContain('Python assertion error');
+    expect(result.reason).toContain('/path/to/assert.py');
+    expect(result.reason).toContain('custom_function');
   });
 
   it('should handle Python returning a score', async () => {
@@ -367,6 +386,7 @@ describe('Python file references', () => {
       .mockRejectedValue(
         new Error('The Python script `call_api` function must return a dict with an `output`'),
       );
+
     const fileAssertion: Assertion = {
       type: 'python',
       value: 'file:///path/to/assert.py',
@@ -381,15 +401,16 @@ describe('Python file references', () => {
       providerResponse,
     });
     expect(runPython).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({
-      assertion: {
-        type: 'python',
-        value: 'file:///path/to/assert.py',
-      },
-      pass: false,
-      reason: 'The Python script `call_api` function must return a dict with an `output`',
-      score: 0,
+    expect(result.assertion).toEqual({
+      type: 'python',
+      value: 'file:///path/to/assert.py',
     });
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('Python assertion error');
+    expect(result.reason).toContain(
+      'The Python script `call_api` function must return a dict with an `output`',
+    );
   });
 
   it('should map snake_case keys from python dataclass to camelCase', async () => {

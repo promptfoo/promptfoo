@@ -142,10 +142,34 @@ ${
       }
     }
   } catch (err) {
+    const error = err as Error;
+    let reason = 'Python code execution failed';
+
+    // Provide more helpful error messages based on the error type
+    if (
+      error.message.includes('TypeError') &&
+      error.message.includes('required positional argument')
+    ) {
+      reason = `Python assertion error: Function signature mismatch. ${error.message}\n\nMake sure your function accepts (output, context) as parameters.`;
+    } else if (
+      error.message.includes('ModuleNotFoundError') ||
+      error.message.includes('ImportError')
+    ) {
+      const moduleMatch = error.message.match(/No module named ['"]([^'"]+)['"]/);
+      const moduleName = moduleMatch ? moduleMatch[1] : 'required module';
+      reason = `Python assertion error: Missing module '${moduleName}'.\n\nInstall it with: pip install ${moduleName}`;
+    } else if (error.message.includes('SyntaxError')) {
+      reason = `Python syntax error in assertion:\n${error.message}`;
+    } else if (error.message.includes('returned non-zero exit status')) {
+      reason = `Python assertion crashed. Check the assertion code for errors.\n${error.message}`;
+    } else {
+      reason = `Python assertion error: ${error.message}`;
+    }
+
     return {
       pass: false,
       score: 0,
-      reason: `Python code execution failed: ${(err as Error).message}`,
+      reason,
       assertion,
     };
   }
