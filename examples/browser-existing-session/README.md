@@ -55,7 +55,6 @@ providers:
     config:
       connectOptions:
         debuggingPort: 9222
-        acceptSecurityRisk: true
       # ... test steps
 
   # Launch new browser

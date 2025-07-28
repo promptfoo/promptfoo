@@ -48,8 +48,6 @@ interface BrowserProviderConfig {
     mode?: 'cdp' | 'websocket';
     debuggingPort?: number;
     wsEndpoint?: string;
-    // Security flag - requires explicit consent
-    acceptSecurityRisk?: boolean;
   };
 }
 
@@ -215,15 +213,6 @@ export class BrowserProvider implements ApiProvider {
     chromium: any,
   ): Promise<{ browser: any; shouldClose: boolean }> {
     const connectOptions = this.config.connectOptions!;
-
-    // Security check
-    if (!connectOptions.acceptSecurityRisk) {
-      throw new Error(
-        'Connecting to an existing browser session may expose sensitive data. ' +
-          'To proceed, set connectOptions.acceptSecurityRisk: true in your configuration. ' +
-          'Make sure you understand the security implications.',
-      );
-    }
 
     logger.warn(
       '⚠️  Connecting to existing browser instance. This may expose sensitive data from other tabs and sessions.',

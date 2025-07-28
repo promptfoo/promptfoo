@@ -79,7 +79,6 @@ providers:
     config:
       connectOptions:
         debuggingPort: 9222 # Chrome debugging port
-        acceptSecurityRisk: true # Required acknowledgment
 
       steps:
         # Your test steps here
@@ -98,7 +97,6 @@ providers:
 - `debuggingPort`: Port number for Chrome DevTools Protocol (default: 9222)
 - `mode`: Connection mode - `'cdp'` (default) or `'websocket'`
 - `wsEndpoint`: Direct WebSocket endpoint (when using `mode: 'websocket'`)
-- `acceptSecurityRisk`: Must be `true` to acknowledge security implications
 
 ## Supported Actions
 

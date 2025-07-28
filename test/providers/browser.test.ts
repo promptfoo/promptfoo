@@ -491,23 +491,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
     mockFetch.mockRestore();
   });
 
-  it('should require acceptSecurityRisk flag', async () => {
-    const provider = new BrowserProvider('test', {
-      config: {
-        connectOptions: {
-          debuggingPort: 9222,
-          // acceptSecurityRisk not set
-        },
-        steps: [],
-      },
-    });
-
-    const result = await provider.callApi('test');
-
-    expect(result.error).toContain('acceptSecurityRisk: true');
-    expect(result.error).toContain('security implications');
-  });
-
   it('should connect via CDP when configured', async () => {
     const { chromium } = await import('playwright-extra');
 
@@ -515,7 +498,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [
           {
@@ -539,7 +521,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
         connectOptions: {
           mode: 'websocket',
           wsEndpoint: 'ws://localhost:9222/devtools/browser/123',
-          acceptSecurityRisk: true,
         },
         steps: [],
       },
@@ -592,7 +573,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [],
       },
@@ -635,7 +615,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [],
       },
@@ -654,7 +633,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [],
       },
@@ -680,7 +658,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [],
       },
@@ -706,7 +683,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [],
       },
@@ -726,7 +702,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [],
       },
@@ -748,7 +723,6 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       config: {
         connectOptions: {
           debuggingPort: 9222,
-          acceptSecurityRisk: true,
         },
         steps: [],
       },

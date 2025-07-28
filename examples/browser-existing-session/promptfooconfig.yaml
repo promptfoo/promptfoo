@@ -12,7 +12,6 @@ providers:
     config:
       connectOptions:
         debuggingPort: 9222 # Chrome DevTools port
-        acceptSecurityRisk: true # Required acknowledgment of security risks
 
       steps:
         - action: navigate
