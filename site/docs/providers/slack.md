@@ -290,12 +290,14 @@ The Slack provider is excellent for testing other Slack bots in their native env
 ### Setup for Bot Testing
 
 1. **Invite both bots to a test channel**:
+
    ```
    /invite @your-bot-to-test
    /invite @provider
    ```
 
 2. **Configure the provider to mention the target bot**:
+
    ```yaml
    providers:
      - id: slack
@@ -316,7 +318,7 @@ The Slack provider is excellent for testing other Slack bots in their native env
          channel: C123456789
          timeout: 10000
          responseStrategy: user
-         userId: U_YOUR_BOT_ID  # The bot's user ID
+         userId: U_YOUR_BOT_ID # The bot's user ID
    ```
 
 ### Example: Testing a Customer Support Bot
@@ -336,9 +338,9 @@ providers:
         <@U_SUPPORT_BOT_ID> {{prompt}}
 
 prompts:
-  - "How do I reset my password?"
-  - "What are your business hours?"
-  - "I need to speak to a human"
+  - 'How do I reset my password?'
+  - 'What are your business hours?'
+  - 'I need to speak to a human'
   - "My order hasn't arrived yet, order #12345"
 
 tests:
@@ -346,27 +348,27 @@ tests:
       expected_intent: password_reset
     assert:
       - type: contains
-        value: "reset"
+        value: 'reset'
       - type: contains
-        value: "password"
-  
+        value: 'password'
+
   - vars:
       expected_intent: business_hours
     assert:
       - type: contains-any
-        value: ["hours", "open", "closed", "Monday", "schedule"]
-  
+        value: ['hours', 'open', 'closed', 'Monday', 'schedule']
+
   - vars:
       expected_intent: human_handoff
     assert:
       - type: contains-any
-        value: ["agent", "representative", "transfer", "human"]
-  
+        value: ['agent', 'representative', 'transfer', 'human']
+
   - vars:
       expected_intent: order_status
     assert:
       - type: contains
-        value: "12345"
+        value: '12345'
       - type: javascript
         value: |
           // Check if bot asked for more info or provided status
@@ -376,27 +378,30 @@ tests:
 ### Advanced Bot Testing Patterns
 
 #### 1. Multi-turn Conversations
+
 Test conversation flows by chaining prompts:
 
 ```yaml
 prompts:
   - "Hi, I'd like to order a pizza"
-  - "Yes, I want a large pepperoni"
-  - "My address is 123 Main St"
+  - 'Yes, I want a large pepperoni'
+  - 'My address is 123 Main St'
 ```
 
 #### 2. Error Handling
+
 Test how the bot handles invalid inputs:
 
 ```yaml
 prompts:
-  - "HELP ME NOW!!!!!!"
-  - "asdfghjkl"
+  - 'HELP ME NOW!!!!!!'
+  - 'asdfghjkl'
   - "' OR 1=1 --"
-  - ""
+  - ''
 ```
 
 #### 3. Load Testing
+
 Use multiple parallel evaluations to test bot performance:
 
 ```bash
@@ -404,6 +409,7 @@ promptfoo eval -c bot-test-config.yaml -j 10
 ```
 
 #### 4. A/B Testing Different Bots
+
 Compare multiple bot implementations:
 
 ```yaml
@@ -413,7 +419,7 @@ providers:
     config:
       channel: C_CHANNEL_V1
       userId: U_BOT_V1
-  
+
   - id: slack
     label: bot-v2
     config:
@@ -425,7 +431,7 @@ prompts:
 
 assert:
   - type: llm-rubric
-    value: "Response should be helpful, accurate, and mention the 30-day return window"
+    value: 'Response should be helpful, accurate, and mention the 30-day return window'
 ```
 
 ### Best Practices for Bot Testing
@@ -448,9 +454,9 @@ const client = new WebClient(process.env.SLACK_BOT_TOKEN);
 
 async function findBotId() {
   const members = await client.conversations.members({
-    channel: 'C_YOUR_CHANNEL'
+    channel: 'C_YOUR_CHANNEL',
   });
-  
+
   for (const userId of members.members) {
     const user = await client.users.info({ user: userId });
     if (user.user.is_bot) {

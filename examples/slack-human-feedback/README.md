@@ -16,6 +16,7 @@ This example demonstrates how to use the Slack provider to collect human feedbac
    - Copy the Bot User OAuth Token
 
 2. **Environment Setup**
+
    ```bash
    export SLACK_BOT_TOKEN="xoxb-your-bot-token"
    export OPENAI_API_KEY="your-openai-key"      # Optional
@@ -31,7 +32,7 @@ This example demonstrates how to use the Slack provider to collect human feedbac
 This Slack provider is also excellent for testing other Slack bots! See `bot-testing.yaml` for a comprehensive example that shows how to:
 
 - **Automated Bot Testing**: Test your Slack bot's responses automatically
-- **Regression Testing**: Ensure bot behavior doesn't degrade over updates  
+- **Regression Testing**: Ensure bot behavior doesn't degrade over updates
 - **A/B Testing**: Compare different bot versions or implementations
 - **Load Testing**: Test bot performance under various loads
 - **Edge Case Testing**: Verify bot handles errors and edge cases properly
@@ -39,6 +40,7 @@ This Slack provider is also excellent for testing other Slack bots! See `bot-tes
 ### Quick Bot Testing Setup
 
 1. **Find your bot's user ID**:
+
 ```bash
 # Create a helper script
 cat > find-bot-id.js << 'EOF'
@@ -59,22 +61,24 @@ node find-bot-id.js
 ```
 
 2. **Create a test configuration**:
+
 ```yaml
 providers:
   - id: slack
     config:
       channel: C_YOUR_TEST_CHANNEL
       responseStrategy: user
-      userId: U_BOT_TO_TEST  # From step 1
-      messageFormatter: "<@{{userId}}> {{prompt}}"
+      userId: U_BOT_TO_TEST # From step 1
+      messageFormatter: '<@{{userId}}> {{prompt}}'
 
 prompts:
-  - "Hello bot!"
-  - "What can you do?"
-  - "Help me with my order"
+  - 'Hello bot!'
+  - 'What can you do?'
+  - 'Help me with my order'
 ```
 
 3. **Run the test**:
+
 ```bash
 SLACK_TARGET_BOT_ID=U_BOT_TO_TEST promptfoo eval -c bot-test.yaml
 ```
@@ -110,6 +114,7 @@ This example includes three scenarios:
 3. **Creative Writing** - Assesses storytelling and creativity
 
 Each scenario is evaluated by:
+
 - OpenAI GPT-4 (AI baseline)
 - Anthropic Claude (AI comparison)
 - Human via Slack (ground truth)
@@ -117,23 +122,29 @@ Each scenario is evaluated by:
 ## Response Collection Strategies
 
 ### 1. First Response (Default)
+
 ```yaml
-responseStrategy: "first"
+responseStrategy: 'first'
 ```
+
 Captures the first non-bot message in the channel.
 
 ### 2. Specific User
+
 ```yaml
-responseStrategy: "user"
-waitForUser: "U9876543210"
+responseStrategy: 'user'
+waitForUser: 'U9876543210'
 ```
+
 Waits for a response from a specific expert.
 
 ### 3. Timeout Collection
+
 ```yaml
-responseStrategy: "timeout"
-timeout: 600000  # 10 minutes
+responseStrategy: 'timeout'
+timeout: 600000 # 10 minutes
 ```
+
 Collects all responses within the timeout period.
 
 ## Customization
@@ -151,14 +162,16 @@ You can customize how prompts appear in Slack by converting to JavaScript config
 ```javascript
 // promptfooconfig.js
 module.exports = {
-  providers: [{
-    id: 'slack:C0123ABCDEF',
-    config: {
-      formatMessage: (prompt) => {
-        return `🤖 *Evaluation Request*\n\n${prompt}\n\n_Please provide your response_`;
-      }
-    }
-  }]
+  providers: [
+    {
+      id: 'slack:C0123ABCDEF',
+      config: {
+        formatMessage: (prompt) => {
+          return `🤖 *Evaluation Request*\n\n${prompt}\n\n_Please provide your response_`;
+        },
+      },
+    },
+  ],
 };
 ```
 
@@ -179,22 +192,26 @@ module.exports = {
 ## Troubleshooting
 
 ### Bot Not Responding
+
 - Ensure bot is invited to the channel (`/invite @YourBot`)
 - Verify token has required permissions
 - Check channel ID is correct
 
 ### Timeout Errors
+
 - Increase timeout value
 - Ensure evaluators are aware of time constraints
 - Consider async collection strategy
 
 ### Rate Limits
+
 - Add delays between evaluations if needed
 - Use `PROMPTFOO_DELAY_MS` environment variable
 
 ## Example Output
 
 After running the evaluation, you'll see results comparing:
+
 - How different AI models handle each scenario
 - Human responses as ground truth
 - Assertion results showing quality metrics
@@ -206,4 +223,4 @@ The web viewer provides a comprehensive comparison table and detailed analysis.
 - Customize prompts for your use case
 - Add domain-specific evaluation criteria
 - Integrate with your existing workflow
-- Export results for further analysis 
+- Export results for further analysis
