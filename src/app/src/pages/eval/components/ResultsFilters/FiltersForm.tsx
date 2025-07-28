@@ -332,14 +332,16 @@ function Filter({
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
-              values={(filters.options[value.type] ?? []).map((optionValue) => ({
-                label:
-                  (value.type === 'plugin' || value.type === 'strategy') &&
-                  displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
-                    ? displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
-                    : optionValue,
-                value: optionValue,
-              }))}
+              values={(filters.options[value.type] ?? [])
+                .map((optionValue) => ({
+                  label:
+                    (value.type === 'plugin' || value.type === 'strategy') &&
+                    displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
+                      ? displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
+                      : optionValue,
+                  value: optionValue,
+                }))
+                .sort((a, b) => a.label.localeCompare(b.label))} // Sort by display name
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
