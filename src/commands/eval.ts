@@ -407,9 +407,7 @@ export async function doEval(
         notCloudEnabledShareInstructions();
       } else {
         const status = evaluationAborted ? 'cancelled (partial results saved)' : 'complete';
-        logger.info(
-          `${chalk.green('✔')} Evaluation ${status}. ID: ${chalk.cyan(evalRecord.id)}\n`,
-        );
+        logger.info(`${chalk.green('✔')} Evaluation ${status}. ID: ${chalk.cyan(evalRecord.id)}\n`);
         logger.info(
           `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
         );
