@@ -6,8 +6,25 @@ jest.mock('../../src/cache');
 jest.mock('../../src/logger');
 
 describe('AI21ChatCompletionProvider', () => {
+  let originalApiKey: string | undefined;
+
   beforeEach(() => {
+    jest.clearAllMocks();
     jest.resetAllMocks();
+    // Save original environment variable
+    originalApiKey = process.env.AI21_API_KEY;
+    // Ensure clean state for environment
+    delete process.env.AI21_API_KEY;
+  });
+
+  afterEach(() => {
+    // Restore original environment variable
+    if (originalApiKey === undefined) {
+      delete process.env.AI21_API_KEY;
+    } else {
+      process.env.AI21_API_KEY = originalApiKey;
+    }
+    jest.restoreAllMocks();
   });
 
   it('should construct with valid model name', () => {
@@ -33,7 +50,6 @@ describe('AI21ChatCompletionProvider', () => {
     process.env.AI21_API_KEY = 'env-key';
     const provider = new AI21ChatCompletionProvider('jamba-1.5-mini');
     expect(provider.getApiKey()).toBe('env-key');
-    delete process.env.AI21_API_KEY;
   });
 
   it('should get API URL from config', () => {

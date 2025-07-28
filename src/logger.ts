@@ -1,5 +1,6 @@
-import chalk from 'chalk';
 import path from 'path';
+
+import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 
@@ -20,9 +21,9 @@ export const LOG_LEVELS = {
 type LogLevel = keyof typeof LOG_LEVELS;
 
 // Lazy source map support - only loaded when debug is enabled
-let sourceMapSupportInitialized = false;
+export let sourceMapSupportInitialized = false;
 
-async function initializeSourceMapSupport(): Promise<void> {
+export async function initializeSourceMapSupport(): Promise<void> {
   if (!sourceMapSupportInitialized) {
     try {
       const sourceMapSupport = await import('source-map-support');
@@ -38,7 +39,7 @@ async function initializeSourceMapSupport(): Promise<void> {
  * Gets the caller location (filename and line number)
  * @returns String with file location information
  */
-function getCallerLocation(): string {
+export function getCallerLocation(): string {
   try {
     const error = new Error();
     const stack = error.stack?.split('\n') || [];
@@ -188,7 +189,7 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
 }
 
 // Wrapper enforces strict single-string argument logging
-export const logger: StrictLogger = Object.assign({}, winstonLogger, {
+const logger: StrictLogger = Object.assign({}, winstonLogger, {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   info: createLogMethod('info'),
@@ -208,5 +209,3 @@ if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
 }
 
 export default logger;
-
-export { sourceMapSupportInitialized, initializeSourceMapSupport, getCallerLocation };

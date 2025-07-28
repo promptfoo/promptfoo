@@ -1,7 +1,7 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
-import { InvalidArgumentError } from 'commander';
 import * as fs from 'fs';
+
+import chalk from 'chalk';
+import { InvalidArgumentError } from 'commander';
 import yaml from 'js-yaml';
 import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';
@@ -10,6 +10,7 @@ import telemetry from '../../telemetry';
 import { type TestSuite, type UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
+import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
   cache: boolean;
@@ -53,7 +54,6 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
   });
-  await telemetry.send();
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
@@ -86,9 +86,11 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
+    const existingDefaultTest =
+      typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
     existingConfig.defaultTest = {
-      ...existingConfig.defaultTest,
-      assert: [...(existingConfig.defaultTest?.assert || []), ...configAddition.assert],
+      ...existingDefaultTest,
+      assert: [...(existingDefaultTest?.assert || []), ...configAddition.assert],
     };
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
@@ -110,7 +112,6 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     numAssertionsGenerated: results.length,
     provider: options.provider || 'default',
   });
-  await telemetry.send();
 }
 
 function validateAssertionType(value: string, previous: string) {

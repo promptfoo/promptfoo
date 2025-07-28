@@ -3,10 +3,11 @@
  * See LICENSE.md for license details
  */
 import dedent from 'dedent';
-import type { AssertionValue, ResultSuggestion } from '../../types';
 import { RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:reasoning-dos';
+import type { AssertionValue, ResultSuggestion } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:reasoning-dos';
 
 export class ReasoningDosGrader extends RedteamGraderBase {
   id = PLUGIN_ID;

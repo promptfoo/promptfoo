@@ -1,16 +1,16 @@
 ---
-sidebar_label: Amazon SageMaker
-title: Amazon SageMaker Provider
-description: Evaluate models deployed on Amazon SageMaker endpoints with promptfoo
+sidebar_label: Amazon SageMaker AI
+title: Amazon SageMaker AI Provider
+description: Evaluate models deployed on Amazon SageMaker AI endpoints with promptfoo
 ---
 
-# Amazon SageMaker
+# Amazon SageMaker AI
 
-The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your evals. This enables testing and evaluation of any model deployed on SageMaker, including models from Hugging Face, custom-trained models, foundation models from Amazon SageMaker JumpStart, and more. For AWS-managed foundation models without custom endpoints, you might also consider the [AWS Bedrock provider](./aws-bedrock.md).
+The `sagemaker` provider allows you to use Amazon SageMaker AI endpoints in your evals. This enables testing and evaluation of any model deployed on SageMaker AI, including models from Hugging Face, custom-trained models, foundation models from Amazon SageMaker JumpStart, and more. For AWS-managed foundation models without custom endpoints, you might also consider the [AWS Bedrock provider](./aws-bedrock.md).
 
 ## Setup
 
-1. Ensure you have deployed the desired models as SageMaker endpoints.
+1. Ensure you have deployed the desired models as SageMaker AI endpoints.
 
 2. Install required dependencies:
 
@@ -95,10 +95,14 @@ The SageMaker provider supports several syntax patterns:
 2. Model type specification (for common model formats):
 
    ```yaml
-   sagemaker:huggingface:my-endpoint-name
+   sagemaker:model-type:my-endpoint-name
    ```
 
    This specifies a format handler to properly structure requests and parse responses for the model container type deployed on your endpoint.
+
+   :::tip
+   For non-embedding models, the type of model must be specified using the `sagemaker:model-type:endpoint-name` format or provided in the `config.modelType` field.
+   :::
 
 3. Embedding endpoint specification:
 

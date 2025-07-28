@@ -9,6 +9,7 @@ import { IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache');

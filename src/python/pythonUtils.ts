@@ -1,12 +1,13 @@
 ﻿import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { Options as PythonShellOptions } from 'python-shell';
+
 import { PythonShell } from 'python-shell';
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
+import type { Options as PythonShellOptions } from 'python-shell';
 
 export const state: {
   cachedPythonPath: string | null;
@@ -70,7 +71,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
   }
 
   // Start new validation and store the promise to prevent concurrent validations
-  state.validationPromise = (async () => {
+  const validationPromise = (async () => {
     try {
       const primaryPath = await tryPath(pythonPath);
       if (primaryPath) {
@@ -104,7 +105,8 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
     }
   })();
 
-  return state.validationPromise;
+  state.validationPromise = validationPromise;
+  return validationPromise;
 }
 
 /**
@@ -144,6 +146,8 @@ export async function runPython(
     mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
+    // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
+    ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };
 
   try {
@@ -154,11 +158,11 @@ export async function runPython(
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
 
-        pyshell.stdout.on('data', (chunk: Buffer) => {
+        pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());
         });
 
-        pyshell.stderr.on('data', (chunk: Buffer) => {
+        pyshell.stderr?.on('data', (chunk: Buffer) => {
           logger.error(chunk.toString('utf-8').trim());
         });
 
@@ -192,13 +196,6 @@ export async function runPython(
     }
     if (result?.type !== 'final_result') {
       throw new Error('The Python script `call_api` function must return a dict with an `output`');
-    }
-
-    // Add helpful logging about the data structure
-    if (result.data) {
-      logger.debug(
-        `Python script result data type: ${typeof result.data}, structure: ${result.data ? JSON.stringify(Object.keys(result.data)) : 'undefined'}`,
-      );
     }
 
     return result.data;

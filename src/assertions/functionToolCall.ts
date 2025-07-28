@@ -4,8 +4,8 @@ import { validateFunctionCall as validateGoogleFunctionCall } from '../providers
 import { VertexChatProvider } from '../providers/google/vertex';
 import { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import { validateFunctionCall as validateOpenAIFunctionCall } from '../providers/openai/util';
-import type { AssertionParams } from '../types';
-import type { GradingResult } from '../types';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export const handleIsValidFunctionCall = ({
   assertion,

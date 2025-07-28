@@ -1,17 +1,23 @@
-import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
+import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
+import { maybeLoadFromExternalFile } from '../util/file';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
+import { getNunjucksEngine } from '../util/templates';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { maybeLoadFromExternalFile } from '../util/file';
-import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
-import { getNunjucksEngine } from '../util/templates';
 
 const nunjucks = getNunjucksEngine();
+
+// Constants for connection configuration
+const DEFAULT_DEBUGGING_PORT = 9222;
+const DEFAULT_FETCH_TIMEOUT_MS = 5000;
 
 interface BrowserAction {
   action: string;
@@ -36,6 +42,13 @@ interface BrowserProviderConfig {
    * @deprecated
    */
   responseParser?: string | Function;
+
+  // Connection options for existing browser
+  connectOptions?: {
+    mode?: 'cdp' | 'websocket';
+    debuggingPort?: number;
+    wsEndpoint?: string;
+  };
 }
 
 export function createTransformResponse(
@@ -50,7 +63,7 @@ export function createTransformResponse(
       finalHtml: string,
     ) => ProviderResponse;
   }
-  return ({ extracted, finalHtml }) => ({ output: finalHtml });
+  return (extracted, finalHtml) => ({ output: finalHtml });
 }
 
 export class BrowserProvider implements ApiProvider {
@@ -100,38 +113,84 @@ export class BrowserProvider implements ApiProvider {
 
     chromium.use(stealth());
 
-    const browser = await chromium.launch({
-      headless: this.headless,
-      args: ['--ignore-certificate-errors'],
-    });
-    const browserContext = await browser.newContext({
-      ignoreHTTPSErrors: true,
-    });
-
-    if (this.config.cookies) {
-      await this.setCookies(browserContext);
-    }
-
-    const page = await browserContext.newPage();
-    const extracted: Record<string, any> = {};
+    let browser;
+    let shouldCloseBrowser = true;
+    let browserContext: BrowserContext;
 
     try {
-      // Execute all actions
-      for (const step of this.config.steps) {
-        await this.executeAction(page, step, vars, extracted);
+      // Connect to existing browser or launch new one
+      if (this.config.connectOptions) {
+        const connectionResult = await this.connectToExistingBrowser(chromium);
+        browser = connectionResult.browser;
+        shouldCloseBrowser = connectionResult.shouldClose;
+      } else {
+        browser = await chromium.launch({
+          headless: this.headless,
+          args: ['--ignore-certificate-errors'],
+        });
+      }
+
+      // Get or create browser context
+      const contexts = browser.contexts();
+      if (contexts.length > 0 && this.config.connectOptions) {
+        // Use existing context when connecting to existing browser
+        browserContext = contexts[0];
+        logger.debug('Using existing browser context');
+      } else {
+        // Create new context
+        browserContext = await browser.newContext({
+          ignoreHTTPSErrors: true,
+        });
+      }
+
+      if (this.config.cookies) {
+        await this.setCookies(browserContext);
+      }
+
+      const page = await browserContext.newPage();
+      const extracted: Record<string, any> = {};
+
+      try {
+        // Execute all actions
+        for (const step of this.config.steps) {
+          await this.executeAction(page, step, vars, extracted);
+        }
+
+        const finalHtml = await page.content();
+
+        // Clean up
+        if (this.config.connectOptions && !shouldCloseBrowser) {
+          // Only close the page when connected to existing browser
+          await page.close();
+        }
+
+        logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
+        const ret = this.transformResponse(extracted, finalHtml);
+        logger.debug(`Browser response transform output: ${safeJsonStringify(ret)}`);
+
+        // Check if ret is already a ProviderResponse object (has error or output property)
+        // or if it's a raw value that needs to be wrapped
+        if (typeof ret === 'object' && ret !== null && ('output' in ret || 'error' in ret)) {
+          // Already a ProviderResponse, return as-is
+          return ret;
+        } else {
+          // Raw value, wrap it
+          return { output: ret };
+        }
+      } catch (error) {
+        // Clean up on error
+        if (this.config.connectOptions && !shouldCloseBrowser) {
+          await page.close();
+        }
+        throw error;
       }
     } catch (error) {
-      await browser.close();
-      return { error: `Headless execution error: ${error}` };
+      return { error: `Browser execution error: ${error}` };
+    } finally {
+      if (shouldCloseBrowser && browser) {
+        await browser.close();
+      }
     }
-
-    const finalHtml = await page.content();
-    await browser.close();
-
-    logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
-    const ret = this.transformResponse(extracted, finalHtml);
-    logger.debug(`Browser response transform output: ${ret}`);
-    return { output: ret };
   }
 
   private async setCookies(browserContext: BrowserContext): Promise<void> {
@@ -147,6 +206,55 @@ export class BrowserProvider implements ApiProvider {
     } else if (Array.isArray(this.config.cookies)) {
       // Handle array of cookie objects
       await browserContext.addCookies(this.config.cookies);
+    }
+  }
+
+  private async connectToExistingBrowser(
+    chromium: any,
+  ): Promise<{ browser: any; shouldClose: boolean }> {
+    const connectOptions = this.config.connectOptions!;
+
+    try {
+      let browser;
+
+      if (connectOptions.mode === 'websocket' && connectOptions.wsEndpoint) {
+        logger.debug(`Connecting via WebSocket: ${connectOptions.wsEndpoint}`);
+        browser = await chromium.connect({
+          wsEndpoint: connectOptions.wsEndpoint,
+        });
+      } else {
+        // Default to CDP connection
+        const port = connectOptions.debuggingPort || DEFAULT_DEBUGGING_PORT;
+        const cdpUrl = `http://localhost:${port}`;
+
+        logger.debug(`Connecting via Chrome DevTools Protocol at ${cdpUrl}`);
+
+        // Check if Chrome is accessible
+        try {
+          const response = await fetchWithTimeout(
+            `${cdpUrl}/json/version`,
+            {},
+            DEFAULT_FETCH_TIMEOUT_MS,
+          );
+          const version = await response.json();
+          logger.debug(`Connected to browser: ${version.Browser}`);
+        } catch {
+          throw new Error(
+            `Cannot connect to Chrome at ${cdpUrl}. ` +
+              `Make sure Chrome is running with debugging enabled:\n` +
+              `  chrome --remote-debugging-port=${port}\n` +
+              `  or\n` +
+              `  chrome --remote-debugging-port=${port} --user-data-dir=/tmp/chrome-debug`,
+          );
+        }
+
+        browser = await chromium.connectOverCDP(cdpUrl);
+      }
+
+      return { browser, shouldClose: false };
+    } catch (error) {
+      logger.error(`Failed to connect to existing browser: ${error}`);
+      throw error;
     }
   }
 
