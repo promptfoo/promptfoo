@@ -16,6 +16,7 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
+import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { useDebounce } from 'use-debounce';
 import { type ResultsFilter, useTableStore } from '../store';
 
@@ -284,10 +285,10 @@ function Filter({
               ? [{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]
               : []),
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
-            ...(filters.options.plugin.length > 0
+            ...(filters.options.plugin.length > 1
               ? [{ label: TYPE_LABELS_BY_TYPE.plugin, value: 'plugin' }]
               : []),
-            ...(filters.options.strategy.length > 0
+            ...(filters.options.strategy.length > 1
               ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
               : []),
           ]}
@@ -331,9 +332,13 @@ function Filter({
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
-              values={(filters.options[value.type] ?? []).map((value) => ({
-                label: value,
-                value,
+              values={(filters.options[value.type] ?? []).map((optionValue) => ({
+                label:
+                  (value.type === 'plugin' || value.type === 'strategy') &&
+                  displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
+                    ? displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
+                    : optionValue,
+                value: optionValue,
               }))}
               value={value.value}
               onChange={(e) => handleValueChange(e)}
@@ -376,9 +381,9 @@ export default function FiltersForm({
     let defaultType: ResultsFilter['type'] = 'metadata';
     if (filters.options.metric.length > 0) {
       defaultType = 'metric';
-    } else if (filters.options.plugin.length > 0) {
+    } else if (filters.options.plugin.length > 1) {
       defaultType = 'plugin';
-    } else if (filters.options.strategy.length > 0) {
+    } else if (filters.options.strategy.length > 1) {
       defaultType = 'strategy';
     }
 

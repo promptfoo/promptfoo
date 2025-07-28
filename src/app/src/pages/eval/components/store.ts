@@ -258,23 +258,23 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setVersion: (version: number) => set(() => ({ version })),
 
   table: null,
-  setTable: (table: EvaluateTable | null) =>
+
+  /**
+   * Note: This method is only used when ratings are updated; therefore filters
+   * are not updated.
+   */
+  setTable: (table: EvaluateTable | null) => {
     set((prevState) => ({
       table,
       highlightedResultsCount: computeHighlightCount(table),
-      filters: {
-        ...prevState.filters,
-        options: {
-          metric: computeAvailableMetrics(table),
-          metadata: [],
-          plugin: [],
-          strategy: [],
-        },
-      },
-    })),
+      filters: prevState.filters,
+    }));
+  },
+
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
     if (resultsFile.version && resultsFile.version >= 4) {
       const table = convertResultsToTable(resultsFile);
+
       set((prevState) => ({
         table,
         version: resultsFile.version,
@@ -284,8 +284,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(table),
             metadata: [],
-            plugin: [],
-            strategy: [],
+            plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
+            strategy:
+              resultsFile.config?.redteam?.strategies?.map((strategy) =>
+                typeof strategy === 'string' ? strategy : strategy.id,
+              ) ?? [],
           },
         },
       }));
@@ -300,8 +303,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(results.table),
             metadata: [],
-            plugin: [],
-            strategy: [],
+            plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
+            strategy:
+              resultsFile.config?.redteam?.strategies?.map((strategy) =>
+                typeof strategy === 'string' ? strategy : strategy.id,
+              ) ?? [],
           },
         },
       }));
@@ -392,8 +398,11 @@ export const useTableStore = create<TableState>()((set, get) => ({
             options: {
               metric: computeAvailableMetrics(data.table),
               metadata: [],
-              plugin: [],
-              strategy: [],
+              plugin: data.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
+              strategy:
+                data.config?.redteam?.strategies?.map((strategy) =>
+                  typeof strategy === 'string' ? strategy : strategy.id,
+                ) ?? [],
             },
           },
         }));
