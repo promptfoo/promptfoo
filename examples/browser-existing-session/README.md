@@ -65,14 +65,6 @@ providers:
       # ... test steps
 ```
 
-## ⚠️ Security Warning
-
-Connecting to existing browser sessions exposes ALL tabs and data. Only use with:
-
-- Dedicated test browsers
-- Test accounts only
-- Never personal profiles
-
 ## Prerequisites
 
 ```bash

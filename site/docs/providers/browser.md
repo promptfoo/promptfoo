@@ -84,8 +84,6 @@ providers:
         # Your test steps here
 ```
 
-**⚠️ Security Warning**: This feature exposes ALL tabs and data in the connected browser. Only use with dedicated test browsers and accounts.
-
 **Setup Instructions**:
 
 1. Start Chrome with debugging: `chrome --remote-debugging-port=9222 --user-data-dir=/tmp/test`
