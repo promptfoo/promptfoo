@@ -437,6 +437,31 @@ describe('Python file references', () => {
     expect(result.reason).toContain("Did you mean to use 'file://my_assert.py'");
   });
 
+  it('should provide helpful error when file:// prefix is missing with named function', async () => {
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'my_assert.py:validate_output', // Missing file:// prefix with function name
+    };
+
+    jest.mocked(runPythonCode).mockRejectedValue(
+      new Error("SyntaxError: invalid syntax"),
+    );
+
+    const output = 'Test output';
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {},
+      providerResponse: { output },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('SyntaxError');
+    expect(result.reason).toContain("Did you mean to use 'file://my_assert.py:validate_output'");
+    expect(result.reason).toContain('specific function');
+  });
+
   it('should map snake_case keys from python dataclass to camelCase', async () => {
     const pythonResult = {
       pass_: true,
