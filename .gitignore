@@ -39,3 +39,8 @@ examples/grok-4-political-bias/results.json
 examples/grok-4-political-bias/results-multi-judge.json
 
 **/.claude/settings.local.json
+
+# Slack test files with credentials
+test-slack-setup.sh
+test-slack-live.yaml
+.env
