@@ -1,5 +1,7 @@
 ---
+title: Docker Model Runner
 sidebar_label: Docker Model Runner
+description: Use Docker Model Runner to evaluate AI models locally
 ---
 
 # Docker Model Runner
