@@ -285,10 +285,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy:
-              resultsFile.config?.redteam?.strategies?.map((strategy) =>
+            strategy: [
+              ...(resultsFile.config?.redteam?.strategies?.map((strategy) =>
                 typeof strategy === 'string' ? strategy : strategy.id,
-              ) ?? [],
+              ) ?? []),
+              'basic',
+            ],
           },
         },
       }));
@@ -304,10 +306,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(results.table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy:
-              resultsFile.config?.redteam?.strategies?.map((strategy) =>
+            strategy: [
+              ...(resultsFile.config?.redteam?.strategies?.map((strategy) =>
                 typeof strategy === 'string' ? strategy : strategy.id,
-              ) ?? [],
+              ) ?? []),
+              'basic',
+            ],
           },
         },
       }));
@@ -399,10 +403,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
               metric: computeAvailableMetrics(data.table),
               metadata: [],
               plugin: data.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-              strategy:
-                data.config?.redteam?.strategies?.map((strategy) =>
+              strategy: [
+                ...(data.config?.redteam?.strategies?.map((strategy) =>
                   typeof strategy === 'string' ? strategy : strategy.id,
-                ) ?? [],
+                ) ?? []),
+                'basic',
+              ],
             },
           },
         }));

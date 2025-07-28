@@ -474,13 +474,16 @@ export default class Eval {
           const sanitizedValue = value.replace(/'/g, "''");
           // Plugin ID is stored in test_case.metadata.pluginId
           condition = `json_extract(test_case, '$.metadata.pluginId') = '${sanitizedValue}'`;
+        } else if (type === 'strategy' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          if (sanitizedValue === 'basic') {
+            // Basic strategy means no strategyId (original plugin test cases)
+            condition = `(json_extract(test_case, '$.metadata.strategyId') IS NULL OR json_extract(test_case, '$.metadata.strategyId') = '')`;
+          } else {
+            // Strategy ID is stored in test_case.metadata.strategyId
+            condition = `json_extract(test_case, '$.metadata.strategyId') = '${sanitizedValue}'`;
+          }
         }
-        // TODO: StrategyId is not available on the test_case.metadata object.
-        // else if (type === 'strategy' && operator === 'equals') {
-        //   const sanitizedValue = value.replace(/'/g, "''");
-        //   // Strategy ID is stored in test_case.metadata.strategyId
-        //   condition = `json_extract(test_case, '$.metadata.strategyId') = '${sanitizedValue}'`;
-        // }
 
         if (condition) {
           // Logic operator can only be applied if there are already conditions
