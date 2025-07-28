@@ -40,6 +40,8 @@ describe('useTableStore', () => {
           options: {
             metric: [],
             metadata: [],
+            plugin: [],
+            strategy: [],
           },
         },
       });
