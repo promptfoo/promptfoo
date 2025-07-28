@@ -39,7 +39,7 @@ describe('ReplicateProvider', () => {
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('test response');
     expect(mockedFetchWithCache).toHaveBeenCalledWith(
-      'https://api.replicate.com/v1/predictions',
+      'https://api.replicate.com/v1/models/test-model/predictions',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
@@ -86,7 +86,7 @@ describe('ReplicateProvider', () => {
 
     await provider.callApi('test');
     expect(mockedFetchWithCache).toHaveBeenCalledWith(
-      'https://api.replicate.com/v1/predictions',
+      'https://api.replicate.com/v1/models/test-model/predictions',
       expect.objectContaining({
         body: expect.stringContaining('"prompt":"prefix_test_suffix"'),
       }),
@@ -159,6 +159,32 @@ describe('ReplicateProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: Model error');
+  });
+
+  it('should use versioned endpoint for models with version IDs', async () => {
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'test response',
+      },
+      cached: false,
+    });
+
+    const provider = new ReplicateProvider('test-model:version123', {
+      config: { apiKey: mockApiKey },
+    });
+
+    await provider.callApi('test prompt');
+    expect(mockedFetchWithCache).toHaveBeenCalledWith(
+      'https://api.replicate.com/v1/predictions',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"version":"version123"'),
+      }),
+      expect.any(Number),
+      'json',
+    );
   });
 });
 
@@ -321,11 +347,9 @@ describe('ReplicateModerationProvider', () => {
 });
 
 describe('DefaultModerationProvider', () => {
-  it('should be configured with LlamaGuard 3 (until LlamaGuard 4 is available)', () => {
-    expect(DefaultModerationProvider.modelName).toBe(
-      'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
-    );
-    // When LlamaGuard 4 is available on Replicate, update to use LLAMAGUARD_4_MODEL_ID
+  it('should be configured with LlamaGuard 4', () => {
+    expect(DefaultModerationProvider.modelName).toBe('meta/llama-guard-4-12b');
+    // LlamaGuard 4 is the default on Replicate
   });
 });
 

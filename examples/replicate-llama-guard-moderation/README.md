@@ -5,6 +5,7 @@ This example demonstrates how to use Meta's LlamaGuard models for content modera
 ## Features
 
 This example shows:
+
 - Using LlamaGuard 3 for content moderation
 - Checking for specific safety categories
 - Examples of content that might trigger different categories
@@ -35,6 +36,7 @@ LlamaGuard monitors these safety categories:
 
 1. Get a Replicate API token from https://replicate.com/account/api-tokens
 2. Set the environment variable:
+
    ```bash
    export REPLICATE_API_TOKEN=r8_your_token_here
    ```
@@ -46,11 +48,15 @@ LlamaGuard monitors these safety categories:
 
 ## LlamaGuard 4
 
-LlamaGuard 4 is a 12B parameter model that adds the S14 category for code interpreter abuse detection. It's the preferred default for promptfoo, but it's not yet available on Replicate. 
+LlamaGuard 4 is a 12B parameter model that adds the S14 category for code interpreter abuse detection. It's the default moderation provider for promptfoo on Replicate.
 
-When LlamaGuard 4 becomes available on Replicate:
-- promptfoo will automatically use it as the default moderation provider
-- You can explicitly specify it with: `replicate:moderation:meta/llama-guard-4-12b:<version_id>`
-- The example in the configuration file can be uncommented
+Using LlamaGuard 4:
 
-Until then, promptfoo defaults to LlamaGuard 3, which provides excellent coverage for categories S1-S13. 
+- It's automatically used as the default moderation provider
+- You can explicitly specify it with: `replicate:moderation:meta/llama-guard-4-12b`
+- The example in the configuration file demonstrates S14 category detection
+
+For compatibility, you can still use LlamaGuard 3:
+
+- Specify: `replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8`
+- Provides coverage for categories S1-S13

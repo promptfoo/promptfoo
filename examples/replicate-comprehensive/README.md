@@ -23,11 +23,13 @@ export REPLICATE_API_TOKEN=r8_your_api_token_here
 ## Features Demonstrated
 
 ### 1. Text Generation with Llama 3
+
 - Uses Meta's Llama 3 8B Instruct model
 - Configurable temperature, token limits, and sampling parameters
 - Demonstrates creative writing and explanatory tasks
 
 ### 2. Image Generation with SDXL
+
 - Uses Stable Diffusion XL for high-quality image generation
 - Custom resolution settings (512x512 for faster generation)
 - Tests both photorealistic and artistic styles
@@ -35,11 +37,13 @@ export REPLICATE_API_TOKEN=r8_your_api_token_here
 ## Running the Example
 
 1. Set your Replicate API token:
+
    ```bash
    export REPLICATE_API_TOKEN=your_token_here
    ```
 
 2. Run the evaluation:
+
    ```bash
    promptfoo eval
    ```
@@ -57,13 +61,14 @@ export REPLICATE_API_TOKEN=r8_your_api_token_here
 providers:
   - id: replicate:meta/meta-llama-3-8b-instruct
     config:
-      temperature: 0.5      # Balanced creativity
-      max_new_tokens: 200   # Limit response length
+      temperature: 0.5 # Balanced creativity
+      max_new_tokens: 200 # Limit response length
 ```
 
 ### Assertion Types
 
 The example uses various assertion types:
+
 - `contains-any`: Checks for specific keywords
 - `javascript`: Custom validation logic
 - `is-valid-openai-image-generation-response`: Validates image URLs
@@ -95,4 +100,4 @@ The example uses various assertion types:
 
 - Text generation: ~$0.0005 per 1K tokens (Llama 3 8B)
 - Image generation: ~$0.012 per image (SDXL)
-- Check current pricing at https://replicate.com/pricing 
+- Check current pricing at https://replicate.com/pricing

@@ -13,6 +13,7 @@ This is a minimal example to test the Replicate provider with promptfoo.
 1. Get a Replicate API token from https://replicate.com/account/api-tokens
 
 2. Set the environment variable:
+
    ```bash
    export REPLICATE_API_TOKEN=r8_your_token_here
    ```
@@ -37,14 +38,15 @@ Once this works, try:
 
 1. **Different Models**: Replace the model ID with:
    - `replicate:meta/meta-llama-3-8b-instruct` - For text generation
-   - `replicate:image:stability-ai/sdxl` - For image generation
+   - `replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc` - For image generation (or use latest version from Replicate)
 
 2. **More Examples**: Check out:
-   - `replicate-llama2` - Advanced text generation
+   - `replicate-llama4-scout` - Advanced text generation with Llama 4
    - `replicate-comprehensive` - All provider features
+   - `replicate-image-generation` - State-of-the-art image generation
 
 ## Troubleshooting
 
 - **API Key Error**: Make sure `REPLICATE_API_TOKEN` is set correctly
 - **Model Not Found**: Check the model ID matches one from https://replicate.com/explore
-- **Timeout**: Some models take 30-60 seconds on first run (cold start) 
+- **Timeout**: Some models take 30-60 seconds on first run (cold start)

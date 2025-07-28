@@ -2,7 +2,7 @@
 description: Replicate provider quick start
 
 prompts:
-  - "Say hello to {{name}} in a creative way"
+  - 'Say hello to {{name}} in a creative way'
 
 providers:
   # Using the fast hello-world model for testing
@@ -16,14 +16,14 @@ tests:
       name: World
     assert:
       - type: contains
-        value: "hello"
+        value: 'hello'
       - type: javascript
         value: output.toLowerCase().includes('world')
-        
+
   - vars:
       name: promptfoo
     assert:
       - type: contains-any
-        value: ["hello", "hi", "greetings"]
+        value: ['hello', 'hi', 'greetings']
       - type: javascript
-        value: output.toLowerCase().includes('promptfoo') 
+        value: output.toLowerCase().includes('promptfoo')

@@ -150,7 +150,9 @@ export class ReplicateProvider implements ApiProvider {
 
       // Create prediction with sync mode (wait up to 60 seconds)
       const createResponse = await fetchWithCache(
-        'https://api.replicate.com/v1/predictions',
+        this.modelName.includes(':')
+          ? 'https://api.replicate.com/v1/predictions'
+          : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
         {
           method: 'POST',
           headers: {
@@ -316,16 +318,14 @@ export class ReplicateModerationProvider
   }
 }
 
-// LlamaGuard 4 is preferred but not yet available on Replicate
-// When available, use: 'meta/llama-guard-4-12b:<version_id>'
+// LlamaGuard 4 is the preferred default on Replicate
 // LlamaGuard 4 adds S14: Code Interpreter Abuse category for enhanced safety
-// For now, defaulting to LlamaGuard 3
-export const LLAMAGUARD_4_MODEL_ID = 'meta/llama-guard-4-12b'; // Awaiting Replicate version ID
+export const LLAMAGUARD_4_MODEL_ID = 'meta/llama-guard-4-12b';
 export const LLAMAGUARD_3_MODEL_ID =
   'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
 
 export const DefaultModerationProvider = new ReplicateModerationProvider(
-  LLAMAGUARD_3_MODEL_ID, // Using LlamaGuard 3 until LlamaGuard 4 is available on Replicate
+  LLAMAGUARD_4_MODEL_ID, // Using LlamaGuard 4 as the default
 );
 
 export class ReplicateImageProvider extends ReplicateProvider {

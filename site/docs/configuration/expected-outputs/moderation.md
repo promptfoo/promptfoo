@@ -74,13 +74,18 @@ tests:
 ```
 
 :::tip
-LlamaGuard 4 is the preferred default with enhanced capabilities and an additional category (S14: Code Interpreter Abuse). However, it's not yet available on Replicate. When it becomes available, promptfoo will automatically use it. You can also explicitly specify it:
+LlamaGuard 4 is the default moderation provider on Replicate, featuring enhanced capabilities and an additional category (S14: Code Interpreter Abuse). You can explicitly specify it:
 
 ```yaml
-provider: 'replicate:moderation:meta/llama-guard-4-12b:<version_id>'
+provider: 'replicate:moderation:meta/llama-guard-4-12b'
 ```
 
-Until then, promptfoo defaults to LlamaGuard 3, which covers categories S1-S13.
+For compatibility or specific use cases, you can use LlamaGuard 3:
+
+```yaml
+provider: 'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8'
+```
+
 :::
 
 LlamaGuard monitors the following categories:

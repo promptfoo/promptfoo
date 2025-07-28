@@ -23,24 +23,21 @@ describe('ReplicateImageProvider Demonstration', () => {
       cached: false,
     });
 
-    const provider = new ReplicateImageProvider(
-      'black-forest-labs/flux-1.1-pro-ultra',
-      {
-        config: {
-          apiKey: mockApiKey,
-          width: 1024,
-          height: 1024,
-          output_format: 'webp',
-        },
-      }
-    );
+    const provider = new ReplicateImageProvider('black-forest-labs/flux-1.1-pro-ultra', {
+      config: {
+        apiKey: mockApiKey,
+        width: 1024,
+        height: 1024,
+        output_format: 'webp',
+      },
+    });
 
     const prompt = 'A majestic mountain landscape at golden hour';
     const result = await provider.callApi(prompt);
 
     // The provider formats the output as markdown
     expect(result.output).toBe(
-      '![A majestic mountain landscape at golden hour](https://replicate.delivery/pbxt/flux-ultra-example/beautiful-landscape.webp)'
+      '![A majestic mountain landscape at golden hour](https://replicate.delivery/pbxt/flux-ultra-example/beautiful-landscape.webp)',
     );
     expect(result.error).toBeUndefined();
 
@@ -50,14 +47,14 @@ describe('ReplicateImageProvider Demonstration', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
-          'Authorization': `Bearer ${mockApiKey}`,
+          Authorization: `Bearer ${mockApiKey}`,
           'Content-Type': 'application/json',
-          'Prefer': 'wait=60',
+          Prefer: 'wait=60',
         }),
         body: expect.stringContaining('"prompt":"A majestic mountain landscape at golden hour"'),
       }),
       expect.any(Number),
-      'json'
+      'json',
     );
   });
 
@@ -84,7 +81,7 @@ describe('ReplicateImageProvider Demonstration', () => {
 
     // Only the first image is returned for simplicity
     expect(result.output).toBe(
-      '![Generate variations](https://replicate.delivery/pbxt/example/image1.png)'
+      '![Generate variations](https://replicate.delivery/pbxt/example/image1.png)',
     );
   });
 
@@ -98,20 +95,17 @@ describe('ReplicateImageProvider Demonstration', () => {
       cached: false,
     });
 
-    const provider = new ReplicateImageProvider(
-      'black-forest-labs/flux-1.1-pro-ultra',
-      {
-        config: {
-          apiKey: mockApiKey,
-          raw: true, // Enable raw mode for photorealistic results
-        },
-      }
-    );
+    const provider = new ReplicateImageProvider('black-forest-labs/flux-1.1-pro-ultra', {
+      config: {
+        apiKey: mockApiKey,
+        raw: true, // Enable raw mode for photorealistic results
+      },
+    });
 
     const result = await provider.callApi('Professional headshot, natural lighting');
 
     expect(result.output).toBe(
-      '![Professional headshot, natural lighting](https://replicate.delivery/pbxt/flux-raw/photorealistic.png)'
+      '![Professional headshot, natural lighting](https://replicate.delivery/pbxt/flux-raw/photorealistic.png)',
     );
 
     // Verify raw parameter was passed (note: raw should be in input)
@@ -139,4 +133,4 @@ describe('ReplicateImageProvider Demonstration', () => {
     expect(result.error).toBe('NSFW content detected');
     expect(result.output).toBeUndefined();
   });
-}); 
+});

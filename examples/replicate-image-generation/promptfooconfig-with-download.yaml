@@ -1,5 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Quick test of Replicate image generation (2 models, 3 prompts)
+description: Image generation with automatic downloads
+
+# Enable the download hook
+extensions:
+  - file://save-images.js:hook
 
 prompts:
   - 'Generate an image: {{imagePrompt}}'
@@ -29,11 +33,8 @@ tests:
     assert:
       - type: javascript
         value: |
-          // Check that the output contains markdown image format
-          if (typeof output !== 'string') {
-            return false;
-          }
-          return output.includes('![') && output.includes('](http');
+          // Check markdown image format
+          return output && output.includes('![') && output.includes('](http');
 
   # Portrait
   - vars:
