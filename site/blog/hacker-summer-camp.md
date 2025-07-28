@@ -70,7 +70,7 @@ We'll be at DEF CON all weekend. Join us at the Exhibitor Booth to meet the team
 
 ## Have a Drink On Us at the Promptfoo Community Party
 
-We're throwing an open bar party for our Promptfoo community members. Space is limited. RSVP now to secure your spot at the AI security party of DEF CON.
+We're throwing an open bar [party](https://promptfoo.dev/events/defcon-2025) at the Star Wars-themed Millennium FANDOM BAR for our Promptfoo community members. Space is limited. RSVP now to secure your spot at the AI security party of DEF CON.
 
 <iframe
   src="https://lu.ma/embed/event/evt-68XHWgtMjY47tWT/simple"
