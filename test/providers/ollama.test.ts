@@ -1,9 +1,10 @@
 import { fetchWithCache } from '../../src/cache';
 import {
-  OllamaCompletionProvider,
   OllamaChatProvider,
+  OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+
 import type { CallApiContextParams } from '../../src/types';
 
 jest.mock('../../src/cache');
@@ -112,6 +113,97 @@ describe('OllamaCompletionProvider', () => {
   it('should handle toString method', () => {
     const provider = new OllamaCompletionProvider('llama2');
     expect(provider.toString()).toBe('[Ollama Completion Provider llama2]');
+  });
+
+  it('should extract token usage from response', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":false,"prompt_eval_count":26}\n{"response":" more","done":true,"prompt_eval_count":26,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response more',
+      tokenUsage: {
+        prompt: 26,
+        completion: 259,
+        total: 285,
+      },
+    });
+  });
+
+  it('should handle missing token usage gracefully', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+    });
+  });
+
+  it('should handle partial token usage (only prompt_eval_count)', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":true,"prompt_eval_count":26}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 26,
+        completion: 0,
+        total: 26,
+      },
+    });
+  });
+
+  it('should handle partial token usage (only eval_count)', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":true,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 0,
+        completion: 259,
+        total: 259,
+      },
+    });
   });
 });
 
@@ -276,6 +368,97 @@ describe('OllamaChatProvider', () => {
     expect(jest.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
     const call = jest.mocked(fetchWithCache).mock.calls[0] as any;
     expect(call[4]).toBe(true);
+  });
+
+  it('should extract token usage from chat response', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":false,"prompt_eval_count":26}\n{"message":{"role":"assistant","content":" more","images":null},"done":true,"prompt_eval_count":26,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response more',
+      tokenUsage: {
+        prompt: 26,
+        completion: 259,
+        total: 285,
+      },
+    });
+  });
+
+  it('should handle missing token usage gracefully in chat', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+    });
+  });
+
+  it('should handle partial token usage in chat (only prompt_eval_count)', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true,"prompt_eval_count":26}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 26,
+        completion: 0,
+        total: 26,
+      },
+    });
+  });
+
+  it('should handle partial token usage in chat (only eval_count)', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 0,
+        completion: 259,
+        total: 259,
+      },
+    });
   });
 });
 

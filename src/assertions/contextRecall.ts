@@ -1,7 +1,8 @@
 import { matchesContextRecall } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 /**
  * Handles context-recall assertions by evaluating whether the provided context
@@ -38,5 +39,8 @@ export const handleContextRecall = async ({
       test.options,
       test.vars,
     )),
+    metadata: {
+      context,
+    },
   };
 };

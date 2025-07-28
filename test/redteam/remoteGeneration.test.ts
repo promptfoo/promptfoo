@@ -4,14 +4,15 @@ import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { readGlobalConfig } from '../../src/globalConfig/globalConfig';
 import {
   getRemoteGenerationUrl,
+  getRemoteGenerationUrlForUnaligned,
+  getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
-  getRemoteHealthUrl,
-  getRemoteGenerationUrlForUnaligned,
 } from '../../src/redteam/remoteGeneration';
 
 jest.mock('../../src/envars');
 jest.mock('../../src/globalConfig/accounts');
+jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/cliState', () => ({
   remote: undefined,
 }));
@@ -23,42 +24,68 @@ describe('shouldGenerateRemote', () => {
     jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
   });
 
-  it('should return true when logged into cloud regardless of other conditions', () => {
+  it('should return false when remote generation is explicitly disabled, even for cloud users', () => {
     jest.mocked(isLoggedIntoCloud).mockReturnValue(true);
-    jest.mocked(getEnvBool).mockReturnValue(true);
-    jest.mocked(getEnvString).mockReturnValue('sk-123');
+    jest.mocked(getEnvBool).mockReturnValue(true); // neverGenerateRemote = true
+    expect(shouldGenerateRemote()).toBe(false);
+  });
+
+  it('should return true when logged into cloud and remote generation is not disabled', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(true);
+    jest.mocked(getEnvBool).mockReturnValue(false); // neverGenerateRemote = false
+    jest.mocked(getEnvString).mockReturnValue('sk-123'); // Has OpenAI key
+    expect(shouldGenerateRemote()).toBe(true);
+  });
+
+  it('should follow normal logic when not logged into cloud', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    jest.mocked(getEnvString).mockReturnValue('');
     expect(shouldGenerateRemote()).toBe(true);
   });
 
   it('should return true when remote generation is not disabled and no OpenAI key exists', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
     jest.mocked(getEnvBool).mockReturnValue(false);
     jest.mocked(getEnvString).mockReturnValue('');
     expect(shouldGenerateRemote()).toBe(true);
   });
 
   it('should return false when remote generation is disabled via env var', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
     jest.mocked(getEnvBool).mockReturnValue(true);
     jest.mocked(getEnvString).mockReturnValue('');
     expect(shouldGenerateRemote()).toBe(false);
   });
 
-  it('should return false when OpenAI key exists', () => {
+  it('should return false when OpenAI key exists and not logged into cloud', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
     jest.mocked(getEnvBool).mockReturnValue(false);
     jest.mocked(getEnvString).mockReturnValue('sk-123');
     expect(shouldGenerateRemote()).toBe(false);
   });
 
-  it('should return false when remote generation is disabled via env var and OpenAI key exists', () => {
+  it('should return false when remote generation is disabled and OpenAI key exists', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
     jest.mocked(getEnvBool).mockReturnValue(true);
     jest.mocked(getEnvString).mockReturnValue('sk-123');
     expect(shouldGenerateRemote()).toBe(false);
   });
 
-  it('should return true when cliState.remote is true regardless of other conditions', () => {
-    jest.mocked(getEnvBool).mockReturnValue(true);
+  it('should return true when cliState.remote is true regardless of OpenAI key', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    jest.mocked(getEnvBool).mockReturnValue(false);
     jest.mocked(getEnvString).mockReturnValue('sk-123');
     cliState.remote = true;
     expect(shouldGenerateRemote()).toBe(true);
+  });
+
+  it('should return false when cliState.remote is true but neverGenerateRemote is true', () => {
+    jest.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    jest.mocked(getEnvBool).mockReturnValue(true); // neverGenerateRemote = true
+    jest.mocked(getEnvString).mockReturnValue('sk-123');
+    cliState.remote = true;
+    expect(shouldGenerateRemote()).toBe(false);
   });
 });
 

@@ -1,12 +1,13 @@
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+
 import type {
+  ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import type { ApiProvider } from '../types/providers';
 
 // Define types for the expected model API response structure
 interface ModelMessage {

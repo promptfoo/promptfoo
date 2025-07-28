@@ -1,20 +1,22 @@
 import crypto from 'crypto';
+
 import z from 'zod';
 import { fromError } from 'zod-validation-error';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { transform } from '../util/transform';
+
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderEmbeddingResponse,
-  ProviderResponse,
   ProviderOptions,
+  ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { transform } from '../util/transform';
 import type { TransformContext } from '../util/transform';
 
 /**
@@ -28,7 +30,7 @@ const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'c
 /**
  * Zod schema for validating SageMaker options
  */
-export const SageMakerConfigSchema = z
+const SageMakerConfigSchema = z
   .object({
     // AWS credentials options
     accessKeyId: z.string().optional(),
@@ -78,7 +80,7 @@ interface SageMakerOptions extends ProviderOptions {
 /**
  * Base class for SageMaker providers with common functionality
  */
-export abstract class SageMakerGenericProvider {
+abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
   config: SageMakerConfig;

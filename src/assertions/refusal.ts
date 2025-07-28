@@ -1,4 +1,5 @@
 import { isBasicRefusal } from '../redteam/util';
+
 import type { AssertionParams, GradingResult } from '../types';
 
 export function handleIsRefusal(params: AssertionParams): GradingResult {

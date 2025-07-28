@@ -66,11 +66,18 @@ export function getRemoteVersionUrl(): string | null {
 }
 
 export function shouldGenerateRemote(): boolean {
+  // If remote generation is explicitly disabled, respect that even for cloud users
+  if (neverGenerateRemote()) {
+    return false;
+  }
+
+  // If logged into cloud, prefer remote generation
   if (isLoggedIntoCloud()) {
     return true;
   }
+
   // Generate remotely when the user has not disabled it and does not have an OpenAI key.
-  return (!neverGenerateRemote() && !getEnvString('OPENAI_API_KEY')) || (cliState.remote ?? false);
+  return !getEnvString('OPENAI_API_KEY') || (cliState.remote ?? false);
 }
 
 export function getRemoteGenerationUrlForUnaligned(): string {

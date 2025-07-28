@@ -1,6 +1,6 @@
 # google-aistudio-tools
 
-This example demonstrates how to use Google AI Studio's function calling and search capabilities with promptfoo.
+This example demonstrates how to use Google AI Studio's function calling, search capabilities, code execution, and URL context features with promptfoo.
 
 You can run this example with:
 
@@ -18,6 +18,8 @@ This example shows how to:
 
 1. **Function Calling**: Use Gemini to invoke predefined functions based on user queries
 2. **Google Search Integration**: Get up-to-date information from the web using Gemini models with search grounding
+3. **Code Execution**: Execute Python code to solve computational problems
+4. **URL Context**: Extract and analyze content from web URLs
 
 ## Function Calling Example
 
@@ -49,10 +51,38 @@ Run with:
 promptfoo eval -c promptfooconfig.search.yaml
 ```
 
+## Code Execution Example
+
+The code execution configuration (`promptfooconfig.codeexecution.yaml`) demonstrates:
+
+- Testing computational problems that require code to solve
+- Verifying that the answer is correct from the code execution
+
+Run with:
+
+```bash
+promptfoo eval -c promptfooconfig.codeexecution.yaml
+```
+
+## URL Context Example
+
+The URL context configuration (`promptfooconfig.urlcontext.yaml`) demonstrates:
+
+- Using Gemini to extract and analyze content from web URLs
+- Combining URL context with search capabilities
+
+Run with:
+
+```bash
+promptfoo eval -c promptfooconfig.urlcontext.yaml
+```
+
 ## Example Files
 
 - `promptfooconfig.yaml`: Function calling configuration
 - `promptfooconfig.search.yaml`: Search grounding configuration
+- `promptfooconfig.codeexecution.yaml`: Code execution configuration
+- `promptfooconfig.urlcontext.yaml`: URL context configuration
 - `tools.json`: Function definition for the weather example
 
 ## Notes on Google Search Integration

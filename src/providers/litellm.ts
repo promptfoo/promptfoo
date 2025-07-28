@@ -1,14 +1,17 @@
-import type { EnvOverrides } from '../types/env';
-import type {
-  ApiProvider,
-  ProviderOptions,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-} from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+
+import type { EnvOverrides } from '../types/env';
+import type {
+  ApiEmbeddingProvider,
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 type LiteLLMCompletionOptions = OpenAiCompletionOptions;
@@ -103,13 +106,20 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
 /**
  * LiteLLM Embedding Provider
  */
-class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper {
+class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbeddingProvider {
+  private embeddingProvider: OpenAiEmbeddingProvider;
+
   constructor(modelName: string, options: ProviderOptions) {
     const provider = new OpenAiEmbeddingProvider(modelName, options);
     super(provider, 'embedding');
+    this.embeddingProvider = provider;
     if (provider.getApiKey) {
       this.getApiKey = provider.getApiKey.bind(provider);
     }
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    return this.embeddingProvider.callEmbeddingApi(text);
   }
 }
 

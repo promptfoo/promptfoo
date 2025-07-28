@@ -1,25 +1,29 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: LiteLLM provider example - direct usage (no proxy)
+description: LiteLLM provider example - unified interface for multiple LLMs
 
-providers:
-  # Direct LiteLLM usage - connects to providers via LiteLLM library
-  # Requires appropriate API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
-  - id: litellm:gpt-4.1-mini
-    label: GPT-4.1 Mini (direct)
-
-  - id: litellm:claude-4-sonnet
-    label: Claude 4 Sonnet (direct)
-
-  - id: litellm:gemini-1.5-flash
-    label: Gemini 1.5 Flash (direct)
-
-  # Embedding model for similarity checks
-  - id: litellm:embedding:text-embedding-3-large
-    label: Text Embedding (direct)
+# This example demonstrates the LiteLLM provider, which provides a unified
+# interface to 400+ LLMs through a proxy server.
+#
+# REQUIREMENTS:
+# 1. LiteLLM proxy server must be running (use ./start-proxy.sh)
+# 2. Set API keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY
 
 prompts:
   - 'Translate this to {{language}}: {{text}}'
   - 'Write a haiku about {{topic}}'
+
+providers:
+  # All providers use the litellm: prefix and connect through the proxy
+  - litellm:gpt-4.1
+  - litellm:claude-sonnet-4-20250514
+  - litellm:gemini-2.5-pro
+
+# Configure embedding provider for similarity assertions
+# This also goes through the LiteLLM proxy
+defaultTest:
+  options:
+    provider:
+      embedding: litellm:embedding:text-embedding-3-large
 
 tests:
   - vars:
@@ -31,7 +35,6 @@ tests:
       - type: similar
         value: 'Bonjour, le monde!'
         threshold: 0.8
-        provider: litellm:embedding:text-embedding-3-large
 
   - vars:
       topic: 'artificial intelligence'

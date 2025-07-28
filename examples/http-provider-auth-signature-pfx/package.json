@@ -1,0 +1,25 @@
+{
+  "name": "http-provider-auth-signature-pfx",
+  "version": "1.0.0",
+  "description": "Example HTTP provider with PFX certificate signature authentication",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pem": "^1.14.8",
+    "promptfoo": "^0.116.7"
+  },
+  "keywords": [
+    "promptfoo",
+    "authentication",
+    "pfx",
+    "pkcs12",
+    "certificates",
+    "signature"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -4,9 +4,34 @@ sidebar_label: Web Browser
 
 # Browser Provider
 
-The Browser Provider allows you to automate web browser interactions for testing and scraping purposes.
+The Browser Provider enables automated web browser interactions for testing complex web applications and JavaScript-heavy websites where simpler providers are not sufficient.
 
-This provider uses Playwright to control a headless Chrome browser, enabling you to navigate web pages, interact with elements, and extract data.
+This provider uses [Playwright](https://playwright.dev/) to control headless browsers, allowing you to navigate pages, interact with elements, and extract data from dynamic websites. Playwright supports Chromium (Chrome, Edge), Firefox, and WebKit (Safari engine) browsers.
+
+## When to Use the Browser Provider
+
+The Browser Provider should only be used when simpler alternatives are not possible:
+
+1. **Try these first:**
+   - [HTTP Provider](/docs/providers/http) - For API calls and simple HTML responses
+   - [WebSocket Provider](/docs/providers/websocket) - For real-time connections
+   - [Custom Python Provider](/docs/providers/python) - For custom logic with existing libraries
+   - [Custom JavaScript Provider](/docs/providers/custom-api) - For Node.js-based solutions
+
+2. **Use Browser Provider only when:**
+   - The application requires JavaScript execution to render content
+   - You need to interact with complex UI elements (dropdowns, modals, etc.)
+   - Authentication requires browser-based workflows (OAuth, SSO)
+   - You need to test actual user interactions (clicks, typing, scrolling)
+
+### Important Considerations
+
+When using browser automation:
+
+1. **Rate Limiting**: Always implement delays between requests to avoid overwhelming servers
+2. **Anti-Bot Detection**: Many websites employ anti-bot measures that can detect and block automated browsers
+3. **Resource Usage**: Browser automation is 10-100x slower than direct API calls and consumes significant CPU/memory
+4. **Legal Compliance**: Always check the website's Terms of Service and robots.txt before automating
 
 ## Prerequisites
 
@@ -16,9 +41,11 @@ Playwright is a peer dependency of promptfoo, so you will need to install it sep
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
+Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
+
 ## Configuration
 
-To use the Headless Browser Provider, set the provider `id` to `browser` and provide a configuration object with a series of steps to execute.
+To use the Browser Provider, set the provider `id` to `browser` and define a series of `steps` to execute:
 
 ```yaml
 providers:
@@ -39,60 +66,135 @@ providers:
           args:
             selector: '#results'
           name: searchResults
-      transformResponse: 'data.searchResults'
+      transformResponse: 'extracted.searchResults'
 ```
+
+### Connecting to Existing Browser Sessions
+
+You can connect to an existing Chrome browser session (e.g., with OAuth authentication already completed):
+
+```yaml
+providers:
+  - id: browser
+    config:
+      connectOptions:
+        debuggingPort: 9222 # Chrome debugging port
+
+      steps:
+        # Your test steps here
+```
+
+**Setup Instructions**:
+
+1. Start Chrome with debugging: `chrome --remote-debugging-port=9222 --user-data-dir=/tmp/test`
+2. Complete authentication manually
+3. Run your tests
+
+**Connection Options**:
+
+- `debuggingPort`: Port number for Chrome DevTools Protocol (default: 9222)
+- `mode`: Connection mode - `'cdp'` (default) or `'websocket'`
+- `wsEndpoint`: Direct WebSocket endpoint (when using `mode: 'websocket'`)
 
 ## Supported Actions
 
-The Headless Browser Provider supports the following actions:
+The Browser Provider supports the following actions:
 
-1. `navigate`: Go to a specified URL
-2. `click`: Click on an element
-3. `type`: Enter text into an input field
-4. `screenshot`: Take a screenshot of the page
-5. `extract`: Extract text content from an element
-6. `wait`: Wait for a specified amount of time
-7. `waitForNewChildren`: Wait for new children of an element
+### Core Actions
 
-### Action Details
+#### 1. `navigate` - Load a webpage
 
-#### navigate
+Navigate to a specified URL.
 
-- `url`: The URL to navigate to
+```yaml
+- action: navigate
+  args:
+    url: 'https://example.com/search?q={{query}}'
+```
 
-#### click
+#### 2. `click` - Click an element
 
-- `selector`: The CSS selector of the element to click
-- `optional`: If true, then don't throw an error if the selector doesn't exist
+Click on any clickable element (button, link, etc.).
 
-#### extract
+```yaml
+- action: click
+  args:
+    selector: 'button[type="submit"]'
+    optional: true # Won't fail if element doesn't exist
+```
 
-- `selector`: The CSS selector of the element to extract text from
+#### 3. `type` - Enter text
 
-#### screenshot
+Type text into input fields, textareas, or any editable element.
 
-- `filename`: The filename to save the screenshot to
+```yaml
+- action: type
+  args:
+    selector: 'input[name="username"]'
+    text: '{{username}}'
+```
 
-#### type
+Special keys:
 
-- `selector`: The CSS selector of the input element
-- `text`: The text to type into the input
+- `<enter>` - Press Enter key
+- `<tab>` - Press Tab key
+- `<escape>` - Press Escape key
 
-Special characters can be sent using the following placeholders:
+#### 4. `extract` - Get text content
 
-- `<enter>`
-- `<tab>`
-- `<escape>`
+Extract text from any element. The extracted content is available in `transformResponse`.
 
-#### wait
+```yaml
+- action: extract
+  args:
+    selector: '.result-title'
+  name: title # Access as extracted.title
+```
 
-- `ms`: The number of milliseconds to wait
+#### 5. `wait` - Pause execution
 
-#### waitForNewChildren
+Wait for a specified duration (in milliseconds).
 
-- `parentSelector`: The CSS selector of the parent element to wait for new children of
-- `delay`: The number of milliseconds to wait before checking for new children
-- `timeout`: The maximum number of milliseconds to wait for new children
+```yaml
+- action: wait
+  args:
+    ms: 3000 # Wait 3 seconds
+```
+
+#### 6. `waitForNewChildren` - Wait for dynamic content
+
+Wait for new elements to appear under a parent element. Useful for content loaded via AJAX.
+
+```yaml
+- action: waitForNewChildren
+  args:
+    parentSelector: '#results-container'
+    delay: 500 # Check every 500ms
+    timeout: 10000 # Max wait time 10 seconds
+```
+
+#### 7. `screenshot` - Capture the page
+
+Take a screenshot of the current page state.
+
+```yaml
+- action: screenshot
+  args:
+    path: 'screenshot.png'
+    fullPage: true # Capture entire page, not just viewport
+```
+
+### Action Parameters
+
+| Action             | Required Args      | Optional Args      | Description                      |
+| ------------------ | ------------------ | ------------------ | -------------------------------- |
+| navigate           | `url`              | -                  | URL to navigate to               |
+| click              | `selector`         | `optional`         | CSS selector of element to click |
+| type               | `selector`, `text` | -                  | CSS selector and text to type    |
+| extract            | `selector`, `name` | -                  | CSS selector and variable name   |
+| wait               | `ms`               | -                  | Milliseconds to wait             |
+| waitForNewChildren | `parentSelector`   | `delay`, `timeout` | Parent element to watch          |
+| screenshot         | `path`             | `fullPage`         | File path to save screenshot     |
 
 ## Response Parsing
 
@@ -160,6 +262,16 @@ Supported config options:
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
+### Browser Support
+
+While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), promptfoo's browser provider currently only implements Chromium support. This includes:
+
+- **Chrome** - Google's browser
+- **Edge** - Microsoft's Chromium-based browser
+- **Chromium** - Open-source browser project
+
+The implementation uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities to avoid detection.
+
 ### Supported Browser Actions
 
 The `steps` array in the configuration can include the following actions:
@@ -167,7 +279,7 @@ The `steps` array in the configuration can include the following actions:
 | Action             | Description                                          | Required Args                      | Optional Args                      |
 | ------------------ | ---------------------------------------------------- | ---------------------------------- | ---------------------------------- |
 | navigate           | Navigate to a specified URL                          | `url`: string                      |                                    |
-| click              | Click on an element                                  | `selector`: string                 |                                    |
+| click              | Click on an element                                  | `selector`: string                 | `optional`: boolean                |
 | extract            | Extract text content from an element                 | `selector`: string, `name`: string |                                    |
 | screenshot         | Take a screenshot of the page                        | `path`: string                     | `fullPage`: boolean                |
 | type               | Type text into an input field                        | `selector`: string, `text`: string |                                    |
@@ -196,60 +308,292 @@ Steps are executed sequentially, enabling complex web interactions.
 
 All string values in `args` support Nunjucks templating, allowing use of variables like `{{prompt}}`.
 
-## Testing Streamlit applications
+## Advanced Features
 
-Streamlit applications follow a common pattern where `data-testid` attributes are used to identify elements.
+### Playwright Recorder Tools
 
-Here's an example configuration:
+The easiest way to create browser automation scripts is to record your interactions:
+
+#### Chrome Extension (Recommended)
+
+The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) is particularly helpful for quickly generating selectors:
+
+1. Install the extension from the Chrome Web Store
+2. Navigate to your target website
+3. Click the extension icon and start recording
+4. Perform your actions (click, type, etc.)
+5. Stop recording and copy the generated selectors/code
+6. Adapt the code for promptfoo's browser provider format
+
+This extension is especially useful because it:
+
+- Shows selectors in real-time as you hover over elements
+- Generates multiple selector options (CSS, text, XPath)
+- Allows you to copy individual selectors without recording full actions
+
+#### Playwright Inspector (All Browsers)
+
+For cross-browser recording, use Playwright's built-in recorder:
+
+```bash
+npx playwright codegen https://example.com
+```
+
+This opens an interactive browser window where you can perform actions and see generated code in real-time. You can choose between Chromium, Firefox, or WebKit.
+
+### Selector Strategies
+
+Playwright supports various selector strategies:
+
+| Strategy | Example                          | Description                   |
+| -------- | -------------------------------- | ----------------------------- |
+| CSS      | `#submit-button`                 | Standard CSS selectors        |
+| Text     | `text=Submit`                    | Find elements by text content |
+| Role     | `role=button[name="Submit"]`     | ARIA role-based selectors     |
+| Test ID  | `data-testid=submit`             | Data attribute selectors      |
+| XPath    | `xpath=//button[@type="submit"]` | XPath expressions             |
+
+For the most reliable selectors:
+
+- Prefer stable attributes like IDs and data-testid
+- Use role-based selectors for accessibility
+- Avoid position-based selectors that can break with layout changes
+
+### Debugging
+
+#### 1. Disable Headless Mode
+
+See exactly what's happening in the browser:
 
 ```yaml
 providers:
   - id: browser
     config:
-      headless: true # set to false to see the browser
+      headless: false # Opens visible browser window
+```
+
+#### 2. Enable Debug Logging
+
+Get detailed information about each action:
+
+```bash
+npx promptfoo@latest eval --verbose
+```
+
+#### 3. Take Screenshots
+
+Capture the page state during execution:
+
+```yaml
+steps:
+  - action: navigate
+    args:
+      url: 'https://example.com'
+  - action: screenshot
+    args:
+      path: 'debug-{{_attempt}}.png'
+```
+
+### Performance Optimization
+
+1. **Use headless mode in production**: It's faster and uses fewer resources
+2. **Minimize wait times**: Only wait as long as necessary
+3. **Batch operations**: Group related actions together
+4. **Reuse browser contexts**: For multiple tests against the same site
+
+### Best Practices for Rate Limiting
+
+Implementing proper rate limiting is crucial to avoid detection and server overload:
+
+```yaml
+providers:
+  - id: browser
+    config:
       steps:
-        # Load the page - make sure you get the full URL if it's in an iframe!
+        # Always start with a respectful delay
+        - action: wait
+          args:
+            ms: 2000
+
         - action: navigate
           args:
-            url: 'https://doc-chat-llm.streamlit.app/~/+/'
-        # Enter the message and press enter
-        - action: type
+            url: 'https://example.com'
+
+        # Wait between actions
+        - action: wait
           args:
-            selector: 'textarea'
-            text: '{{prompt}} <enter>'
-        # Wait for the response
+            ms: 1000
+
+        - action: click
+          args:
+            selector: '#button'
+
+        # Final delay before next request
+        - action: wait
+          args:
+            ms: 3000
+```
+
+**Tips for avoiding detection:**
+
+- Randomize delays between actions (1-3 seconds)
+- Use the stealth plugin (included with playwright-extra)
+- Avoid patterns that look automated
+- Consider using different user agents
+- Respect robots.txt and rate limits
+
+### Dealing with Anti-Bot Measures
+
+Many websites implement anti-bot detection systems (like Cloudflare, reCAPTCHA, etc.). Here's how to handle common scenarios:
+
+#### Common Anti-Bot Challenges
+
+| Challenge              | Detection Method                 | Mitigation Strategy                             |
+| ---------------------- | -------------------------------- | ----------------------------------------------- |
+| Browser fingerprinting | JavaScript checks for automation | Stealth plugin helps mask automation            |
+| Behavioral analysis    | Mouse movements, typing patterns | Add realistic delays and interactions           |
+| IP rate limiting       | Too many requests from one IP    | Implement proper delays, use proxies cautiously |
+| CAPTCHA challenges     | Human verification tests         | Consider if the site allows automation          |
+| User-Agent detection   | Checking for headless browsers   | Use realistic user agent strings                |
+
+#### Example with Anti-Bot Considerations
+
+```yaml
+providers:
+  - id: browser
+    config:
+      headless: false # Some sites detect headless mode
+      steps:
+        # Human-like delay before starting
+        - action: wait
+          args:
+            ms: 3000
+
+        - action: navigate
+          args:
+            url: '{{url}}'
+
+        # Wait for any anti-bot checks to complete
         - action: wait
           args:
             ms: 5000
-        # Read the response
+
+        # Type slowly like a human would
+        - action: type
+          args:
+            selector: '#search'
+            text: '{{query}}'
+            delay: 100 # Delay between keystrokes
+```
+
+**Note**: If a website has strong anti-bot measures, it's often a sign that automation is not welcome. Always respect the website owner's wishes and consider reaching out for API access instead.
+
+## Example: Testing a Login Flow
+
+Here's a complete example testing a login workflow:
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test login functionality
+
+prompts:
+  - 'Login with username {{username}} and password {{password}}'
+
+providers:
+  - id: browser
+    config:
+      headless: true
+      steps:
+        - action: navigate
+          args:
+            url: 'https://example.com/login'
+
+        - action: type
+          args:
+            selector: '#username'
+            text: '{{username}}'
+
+        - action: type
+          args:
+            selector: '#password'
+            text: '{{password}}'
+
+        - action: click
+          args:
+            selector: 'button[type="submit"]'
+
+        - action: wait
+          args:
+            ms: 2000
+
         - action: extract
           args:
-            selector: 'div.stChatMessage:last-of-type'
-          name: response
-      transformResponse: 'extracted.response'
+            selector: '.welcome-message'
+          name: welcomeText
+
+      transformResponse: |
+        return {
+          output: extracted.welcomeText,
+          success: extracted.welcomeText.includes('Welcome')
+        };
+
+tests:
+  - vars:
+      username: 'testuser'
+      password: 'testpass123'
+    assert:
+      - type: javascript
+        value: output.success === true
 ```
 
 ## Troubleshooting
 
-### Iframes
+### Common Issues and Solutions
 
-If you are using a selector to interact with the page and it keeps timing out, it could be because the element is inside an iframe.
+| Issue                          | Cause                                      | Solution                                                                                         |
+| ------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| "Element not found"            | Selector incorrect or element not loaded   | • Verify selector in DevTools<br />• Add wait before action<br />• Check if element is in iframe |
+| "Timeout waiting for selector" | Page loads slowly or element never appears | • Increase timeout<br />• Add explicit wait actions<br />• Check for failed network requests     |
+| "Access denied" or 403 errors  | Anti-bot detection triggered               | • Use headless: false<br />• Add more delays<br />• Check if automation is allowed               |
+| "Click intercepted"            | Element covered by overlay                 | • Wait for overlays to disappear<br />• Scroll element into view<br />• Use force click option   |
+| Inconsistent results           | Timing or detection issues                 | • Add consistent delays<br />• Use stealth plugin<br />• Test during off-peak hours              |
 
-If this is the case, try loading the iframe contents directly using the `navigate` action.
+### Debugging Anti-Bot Detection
 
-### Viewing the browser
-
-If you want to view the browser as it runs, you can set the `headless` option to `false` in the config.
+If you suspect anti-bot measures are blocking your automation:
 
 ```yaml
 providers:
   - id: browser
     config:
-      headless: false
+      headless: false # Always start with headed mode for debugging
+      steps:
+        - action: navigate
+          args:
+            url: '{{url}}'
+
+        - action: screenshot
+          args:
+            path: 'debug-landing.png' # Check if you hit a challenge page
+
+        - action: wait
+          args:
+            ms: 10000 # Longer wait to see what happens
+
+        - action: screenshot
+          args:
+            path: 'debug-after-wait.png'
 ```
 
-### Debugging
+## Useful Resources
 
-If you are having trouble getting your tests to run, set `headless` to `false` and the browser will open. You can then see what is happening in the browser console.
+- [Playwright Documentation](https://playwright.dev/docs/intro) - Official Playwright docs
+- [Playwright Browsers Guide](https://playwright.dev/docs/browsers) - Detailed information about supported browsers
+- [Playwright Selectors Guide](https://playwright.dev/docs/selectors) - Learn about CSS, text, and other selector strategies
+- [Playwright Best Practices](https://playwright.dev/docs/best-practices) - Tips for reliable automation
+- [Playwright Inspector](https://playwright.dev/docs/inspector) - Interactive tool for authoring and debugging tests
+- [Chrome DevTools Guide](https://developer.chrome.com/docs/devtools/) - For inspecting elements and finding selectors
 
-Additionally, setting the `LOG_LEVEL=debug` environment variable will print debug information to the console during your evaluation.
+---
+
+For more examples, check out the [headless-browser example](https://github.com/promptfoo/promptfoo/tree/main/examples/headless-browser) in our GitHub repository.

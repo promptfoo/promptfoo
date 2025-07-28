@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import { callApi } from '@app/utils/api';
-import { Security as SecurityIcon } from '@mui/icons-material';
-import {
-  Box,
-  CircularProgress,
-  Container,
-  Fade,
-  Paper,
-  Stack,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material';
-import type { ScanPath, ScanOptions, ScanResult } from './ModelAudit.types';
+import SecurityIcon from '@mui/icons-material/Security';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Container from '@mui/material/Container';
+import Fade from '@mui/material/Fade';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import Typography from '@mui/material/Typography';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
 import InstallationCheck from './components/InstallationCheck';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
 import { useModelAuditStore } from './store';
+
+import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
 
 export default function ModelAudit() {
   const [paths, setPaths] = useState<ScanPath[]>([]);
@@ -145,7 +145,8 @@ export default function ModelAudit() {
             borderBottom: 1,
             borderColor: 'divider',
             px: 3,
-            bgcolor: 'grey.50',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[50],
           }}
         >
           <Tab label="Configuration" />

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider, AtomicTestCase, CallApiContextParams, Prompt } from '../../../src/types';
 
 // Mock the graders module at the top level
@@ -210,6 +211,7 @@ describe('RedteamGoatProvider', () => {
           value: 'expected content',
         },
       ],
+      metadata: { pluginId: 'contains' },
     } as AtomicTestCase;
 
     const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
@@ -347,6 +349,7 @@ describe('RedteamGoatProvider', () => {
       const testConfig = {
         vars: {},
         assert: [{ type: 'contains', value: 'harmful' }],
+        metadata: { pluginId: 'contains' },
       } as AtomicTestCase;
 
       const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
@@ -418,6 +421,7 @@ describe('RedteamGoatProvider', () => {
         test: {
           vars: {},
           assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
         } as AtomicTestCase,
       };
 
@@ -471,6 +475,7 @@ describe('RedteamGoatProvider', () => {
         test: {
           vars: {},
           assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
         } as AtomicTestCase,
       };
 
@@ -532,6 +537,7 @@ describe('RedteamGoatProvider', () => {
         test: {
           vars: {},
           assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
         } as AtomicTestCase,
       };
 
@@ -542,6 +548,169 @@ describe('RedteamGoatProvider', () => {
       expect(result.metadata?.totalSuccessfulAttacks).toBe(2);
       expect(result.metadata?.successfulAttacks?.[0].response).toBe('harmful response 1');
       expect(result.metadata?.successfulAttacks?.[1].response).toBe('harmful response 2');
+    });
+  });
+
+  it('should pass additionalRubric to grader when goal is provided', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider();
+
+    // Mock grader to capture the additionalRubric parameter
+    let capturedAdditionalRubric: string | undefined;
+    (mockGrader.getResult as any).mockImplementation(
+      async (
+        prompt: string,
+        output: string,
+        test: any,
+        provider: any,
+        value: any,
+        additionalRubric?: string,
+      ) => {
+        capturedAdditionalRubric = additionalRubric;
+        return {
+          grade: {
+            pass: false,
+            score: 0,
+            reason: 'Test jailbreak detected',
+          },
+        };
+      },
+    );
+
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'contains',
+          value: 'expected content',
+        },
+      ],
+      metadata: {
+        pluginId: 'contains',
+        goal: 'Extract sensitive information',
+      },
+    } as AtomicTestCase;
+
+    const context = createMockContext(
+      targetProvider,
+      { goal: 'Extract sensitive information' },
+      testConfig,
+    );
+
+    await provider.callApi('test prompt', context);
+
+    // Verify that additionalRubric was generated and passed to grader
+    expect(capturedAdditionalRubric).toBeDefined();
+    expect(capturedAdditionalRubric).toContain('Extract sensitive information');
+    expect(capturedAdditionalRubric).toContain('ADDITIONAL EVALUATION CRITERIA');
+  });
+
+  it('should store grader result in metadata when grader fails', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider();
+
+    const mockGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Jailbreak successful - sensitive info extracted',
+      tokensUsed: { total: 10, prompt: 5, completion: 5 },
+    };
+
+    // Mock grader to fail (indicating jailbreak success)
+    (mockGrader.getResult as any).mockResolvedValue({
+      grade: mockGraderResult,
+    });
+
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'contains',
+          value: 'expected content',
+        },
+      ],
+      metadata: { pluginId: 'contains' },
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Verify storedGraderResult is included in metadata
+    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+    expect(result.metadata?.stopReason).toBe('Grader failed');
+  });
+
+  it('should store grader result even when continueAfterSuccess is true', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      continueAfterSuccess: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+
+    const firstGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Jailbreak detected',
+    };
+
+    const secondGraderResult = {
+      pass: true,
+      score: 1,
+      reason: 'No jailbreak detected',
+    };
+
+    // Mock grader to fail on first turn, pass on second turn
+    (mockGrader.getResult as any)
+      .mockResolvedValueOnce({
+        grade: firstGraderResult,
+      })
+      .mockResolvedValueOnce({
+        grade: secondGraderResult,
+      });
+
+    // Mock remote generation API for second turn
+    mockFetch.mockImplementationOnce(async () => ({
+      json: async () => ({
+        message: { role: 'assistant', content: 'attack prompt' },
+      }),
+      ok: true,
+    }));
+
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'contains',
+          value: 'expected content',
+        },
+      ],
+      metadata: { pluginId: 'contains' },
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    // Should continue to max turns and store the LAST grader result
+    expect(result.metadata?.storedGraderResult).toEqual(secondGraderResult);
+    expect(result.metadata?.stopReason).toBe('Max turns reached');
+    expect(result.metadata?.successfulAttacks).toHaveLength(1);
+    // The successful attack should be from the first turn
+    expect(result.metadata?.successfulAttacks?.[0]).toMatchObject({
+      turn: 0,
+      prompt: expect.any(String),
+      response: expect.any(String),
     });
   });
 });

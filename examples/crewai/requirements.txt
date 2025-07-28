@@ -1,0 +1,6 @@
+# CrewAI - Main framework used in this example
+crewai>=0.119.0
+
+# Optional: Environment variable management from .env files
+# Uncomment if you want to use .env files for API keys
+# python-dotenv>=1.0.1
