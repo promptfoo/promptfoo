@@ -28,6 +28,7 @@ import Stack from '@mui/material/Stack';
 import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
@@ -675,10 +676,25 @@ export default function ResultsView({
                       }
                       const truncatedValue =
                         filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
-                      const label =
-                        filter.type === 'metric'
-                          ? `Metric: ${truncatedValue}`
-                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+
+                      let label: string;
+                      if (filter.type === 'metric') {
+                        label = `Metric: ${truncatedValue}`;
+                      } else if (filter.type === 'plugin') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Plugin: ${displayName}`;
+                      } else if (filter.type === 'strategy') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Strategy: ${displayName}`;
+                      } else {
+                        // metadata type
+                        label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      }
+
                       return (
                         <Chip
                           key={filter.id}
