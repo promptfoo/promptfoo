@@ -26,6 +26,8 @@ tags: [company-update, conferences, defcon, blackhat]
 
 Black Hat + DEF CON USA 2025 will be here before we know it, and we would love to meet you.
 
+<!-- truncate -->
+
 ## Meet Us at the AI Summit
 
 This one-day summit before Black Hat is the leading forum for discussing AI innovation. Meet us at the summit to learn how Fortune 500 companies automatically catch LLM vulnerabilities during development before they reach production environments.
