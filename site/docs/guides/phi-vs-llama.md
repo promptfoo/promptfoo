@@ -31,7 +31,7 @@ cd phi-vs-llama
 
 ## Step 2: Configure
 
-Open `promptfooconfig.yaml` and set up the models you want to compare. We'll use the `ollama:chat:phi3` and `ollama:chat:llama3` endpoints.
+Open `promptfooconfig.yaml` and set up the models you want to compare. We'll use the `ollama:chat:phi4` and `ollama:chat:llama3.3` endpoints.
 
 ### Define prompts
 
@@ -51,12 +51,12 @@ prompts:
   - '{{message}}'
 
 providers:
-  - id: ollama:chat:phi3
+  - id: ollama:chat:phi4
     config:
       temperature: 0.01
       num_predict: 128
 
-  - id: ollama:chat:llama3.1
+  - id: ollama:chat:llama3.3
     config:
       temperature: 0.01
       num_predict: 128

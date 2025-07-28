@@ -117,7 +117,7 @@ Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:chat:llama3.1
+  - ollama:chat:llama3.3
     config:
       temperature: 0.7
       max_tokens: 150

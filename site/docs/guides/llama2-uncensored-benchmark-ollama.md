@@ -37,7 +37,7 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - ollama:llama2
+  - ollama:chat:llama3.3
   - ollama:llama2-uncensored
   - openai:gpt-4.1-mini
 ```
@@ -76,7 +76,7 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: ollama:llama2
+  - id: ollama:chat:llama3.3
     prompts:
       - llama_prompt
   - id: ollama:llama2-uncensored
@@ -123,7 +123,7 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: ollama:llama2
+  - id: ollama:chat:llama3.3
     prompts:
     - llama_prompt
   - id: ollama:llama2-uncensored
@@ -140,6 +140,8 @@ Let's set up a few assertions to automatically assess the output for correctness
 // highlight-start
 defaultTest:
   assert:
+    - type: icontains
+      value: don't know
     - type: not-icontains
       value: AI language model
     - type: not-icontains
@@ -177,7 +179,7 @@ prompts:
   llama_prompt.txt: llama_prompt
 
 providers:
-  - id: ollama:llama2
+  - id: ollama:chat:llama3.3
     prompts:
     - llama_prompt
   - id: ollama:llama2-uncensored
