@@ -214,10 +214,6 @@ export class BrowserProvider implements ApiProvider {
   ): Promise<{ browser: any; shouldClose: boolean }> {
     const connectOptions = this.config.connectOptions!;
 
-    logger.warn(
-      '⚠️  Connecting to existing browser instance. This may expose sensitive data from other tabs and sessions.',
-    );
-
     try {
       let browser;
 
