@@ -470,7 +470,17 @@ export default class Eval {
           } else if (operator === 'not_contains') {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
           }
+        } else if (type === 'plugin' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Plugin ID is stored in test_case.metadata.pluginId
+          condition = `json_extract(test_case, '$.metadata.pluginId') = '${sanitizedValue}'`;
         }
+        // TODO: StrategyId is not available on the test_case.metadata object.
+        // else if (type === 'strategy' && operator === 'equals') {
+        //   const sanitizedValue = value.replace(/'/g, "''");
+        //   // Strategy ID is stored in test_case.metadata.strategyId
+        //   condition = `json_extract(test_case, '$.metadata.strategyId') = '${sanitizedValue}'`;
+        // }
 
         if (condition) {
           // Logic operator can only be applied if there are already conditions
