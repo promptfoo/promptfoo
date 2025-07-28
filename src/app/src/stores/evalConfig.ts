@@ -46,7 +46,7 @@ export const useStore = create<EvalConfigState>()(
         set((state) => {
           // Providers can be a string, function, or array
           const currentProviders = state.config.providers;
-          
+
           // Only update if providers is an array
           if (!Array.isArray(currentProviders)) {
             return state;
