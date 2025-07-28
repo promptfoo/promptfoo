@@ -1,6 +1,6 @@
 ---
-title: 'Catch Promptfoo at Black Hat 2025 & DEF CON 33: Live LLM Hacks, Free Swag, Pool Party'
-description: 'Watch Promptfoo catch LLM exploits live at Black Hat USA and DEF CON 33. Booth 4712, Arsenal Labs demos, CEO deep-dive, and a pool-side open bar.'
+title: 'Catch Promptfoo at Black Hat 2025 & DEF CON 33: Live LLM Hacks, Free Swag'
+description: 'Watch Promptfoo catch LLM exploits live at Black Hat USA and DEF CON 33. Booth 4712, Arsenal Labs demos, and CEO deep-dive.'
 image: /img/blog/hacker-summer-camp-hero.webp
 imageAlt: 'Neon desert skyline with Promptfoo red panda mascot'
 keywords:
@@ -19,7 +19,7 @@ authors: ['vanessa']
 tags: [company-update, conferences, defcon, blackhat]
 ---
 
-Promptfoo is heading to hacker summer camp. Catch us at Black Hat USA and DEF CON 33 for live LLM hack sessions, technical deep-dives, and a pool-side meetup.
+Promptfoo is heading to hacker summer camp. Catch us at Black Hat USA and DEF CON 33 for live LLM hack sessions and technical deep-dives.
 
 <!-- truncate -->
 
@@ -81,23 +81,6 @@ Find the booth with a red panda mascot and the best security swag. Meet the team
 - Live demos of [agent security testing](/blog/agent-security)
 - Limited-run "My LLM Got Pwned at DEF CON" shirts
 - Stickers that make your laptop _feel_ 73% safer
-
-## Promptfoo Pool-Side Party
-
-Open bar, lightning talks, great networking. RSVP early, space is limited.
-
-<iframe
-  src="https://lu.ma/embed/event/evt-68XHWgtMjY47tWT/simple"
-  width="100%"
-  height="525"
-  frameborder="0"
-  allow="fullscreen; payment"
-  title="RSVP for Promptfoo DEF CON party"
-  loading="lazy"
-></iframe>
-<noscript>
-  <a href="https://lu.ma/promptfoo-defcon-party">RSVP on Luma</a>
-</noscript>
 
 ## Join the Team
 
