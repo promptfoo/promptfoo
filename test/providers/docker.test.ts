@@ -1,17 +1,74 @@
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
-import { createDockerProvider, parseProviderPath } from '../../src/providers/docker';
+import {
+  createDockerProvider,
+  fetchLocalModels,
+  hasLocalModel,
+  parseProviderPath,
+} from '../../src/providers/docker';
+import { fetchWithCache } from '../../src/cache';
 
 jest.mock('../../src/providers/openai');
 jest.mock('../../src/cache');
 
-describe('docker', () => {
-  describe('createDockerProvider', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
+describe('docker model runner provider', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('fetchLocalModels', () => {
+    it('should throw a helpful error if cannot connect to DMR endpoint', async () => {
+      jest.mocked(fetchWithCache).mockRejectedValue(new Error('some error'));
+
+      await expect(fetchLocalModels('http://localhost:1234/')).rejects.toThrow(
+        'Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner.',
+      );
+    });
+  });
+
+  describe('hasLocalModel', () => {
+    it('returns true if the model exists', async () => {
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [
+            {
+              id: 'ai/model-a:tag-a',
+            },
+            {
+              id: 'ai/model-b:tag-b',
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await expect(hasLocalModel('ai/model-a:tag-a', 'http://localhost:1234/')).resolves.toBe(true);
     });
 
+    it('returns false if the model does not exists', async () => {
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [
+            {
+              id: 'ai/model-x:tag-x',
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await expect(hasLocalModel('ai/model-a:tag-a', 'http://localhost:1234/')).resolves.toBe(
+        false,
+      );
+    });
+  });
+
+  describe('createDockerProvider', () => {
     it('creates chat completion provider when type is chat', () => {
       const provider = createDockerProvider('docker:chat:model-name');
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);

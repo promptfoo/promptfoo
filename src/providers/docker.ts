@@ -1,9 +1,54 @@
-import type { EnvOverrides, ProviderOptions } from '../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  EnvOverrides,
+  ProviderEmbeddingResponse,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types';
 import type { OpenAiCompletionOptions } from './openai/types';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { getEnvString } from '../envars';
+import { fetchWithCache } from '../cache';
+import logger from '../logger';
+
+type Model = {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+};
+
+type ModelsReply = {
+  data?: Model[];
+};
+
+export async function fetchLocalModels(apiBaseUrl: string): Promise<Model[]> {
+  try {
+    const { data } = await fetchWithCache<ModelsReply>(
+      `${apiBaseUrl}/models`,
+      undefined,
+      undefined,
+      'json',
+      true,
+      0,
+    );
+    return data?.data ?? [];
+  } catch (e: any) {
+    throw new Error(
+      `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${e.message}`,
+    );
+  }
+}
+
+export async function hasLocalModel(modelId: string, apiBaseUrl: string): Promise<boolean> {
+  const localModels = await fetchLocalModels(apiBaseUrl);
+  return localModels.some(
+    (model) => model && model.id?.toLocaleLowerCase() === modelId?.toLocaleLowerCase(),
+  );
+}
 
 export function parseProviderPath(providerPath: string): {
   type: 'chat' | 'completion' | 'embeddings';
@@ -62,10 +107,51 @@ export function createDockerProvider(
   switch (type) {
     case 'chat':
     default:
-      return new OpenAiChatCompletionProvider(model, openaiOptions);
+      return new DMRChatCompletionProvider(model, openaiOptions);
     case 'completion':
-      return new OpenAiCompletionProvider(model, openaiOptions);
+      return new DMRCompletionProvider(model, openaiOptions);
     case 'embeddings':
-      return new OpenAiEmbeddingProvider(model, openaiOptions);
+      return new DMREmbeddingProvider(model, openaiOptions);
+  }
+}
+
+export class DMRChatCompletionProvider extends OpenAiChatCompletionProvider {
+  public async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+      logger.warn(
+        `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
+      );
+    }
+    return super.callApi(prompt, context, callApiOptions);
+  }
+}
+
+export class DMRCompletionProvider extends OpenAiCompletionProvider {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+      logger.warn(
+        `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
+      );
+    }
+    return super.callApi(prompt, context, callApiOptions);
+  }
+}
+
+export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+      logger.warn(
+        `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
+      );
+    }
+    return super.callEmbeddingApi(text);
   }
 }
