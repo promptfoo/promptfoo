@@ -83,7 +83,7 @@ export default function BlackHat2025(): JSX.Element {
               <h1 className={styles.heroTitle}>
                 Security for AI used by
                 <br />
-                <span className={styles.highlight}>100,000 Developers</span>
+                <span className={styles.highlight}>125,000 Developers</span>
               </h1>
               <p className={styles.heroSubtitle}>
                 Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM
