@@ -1,10 +1,24 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Replicate Llama2 model evaluation and testing
+description: Replicate Llama model evaluation
 
 prompts:
   - file://prompts.txt
+
 providers:
-  - replicate:meta/llama-2-70b-chat:2d19859030ff705a87c746f7e96eea03aefb71f166725aee39692f1476566d48
+  # Llama 3 8B Instruct - Fast and cost-effective
+  - id: replicate:meta/meta-llama-3-8b-instruct
+    config:
+      temperature: 0.7
+      max_new_tokens: 500
+      top_p: 0.9
+
+  # Llama 3 70B Instruct - More capable but slower
+  - id: replicate:meta/meta-llama-3-70b-instruct
+    config:
+      temperature: 0.7
+      max_new_tokens: 500
+      top_p: 0.9
+
 tests:
   - vars:
       topic: bananas
@@ -16,3 +30,13 @@ tests:
       topic: healthy lifestyle
   - vars:
       topic: chimpanzees
+  - vars:
+      topic: artificial intelligence
+    assert:
+      - type: contains-any
+        value: ['AI', 'machine learning', 'neural', 'algorithm']
+  - vars:
+      topic: climate change
+    assert:
+      - type: llm-rubric
+        value: discusses environmental concerns

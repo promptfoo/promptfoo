@@ -8,8 +8,14 @@ export const REDTEAM_DEFAULTS = {
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
 
+// LlamaGuard 4 is preferred (supports S14: Code Interpreter Abuse) but not yet on Replicate
+// Using LlamaGuard 3 until LlamaGuard 4 is available
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
+
+// When LlamaGuard 4 is available on Replicate, use:
+// export const LLAMA_GUARD_REPLICATE_PROVIDER =
+//   'replicate:moderation:meta/llama-guard-4-12b:<version_id>';
 
 export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S1', // Violent Crimes

@@ -6,11 +6,23 @@ sidebar_label: Replicate
 
 Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/google-deepmind/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1).
 
-To run a model, specify the Replicate model name and version, like so:
+:::info
+The Replicate provider in promptfoo uses direct HTTP requests to the Replicate API, so no additional SDK installation is required.
+:::
+
+To run a model, specify the Replicate model name and optionally the version:
 
 ```
+# With specific version (recommended for consistency)
 replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+
+# Without version (uses latest)
+replicate:meta/meta-llama-3-8b-instruct
 ```
+
+:::tip
+For production use, always specify the version to ensure consistent results. You can find version IDs on the model's page on Replicate.
+:::
 
 ## Examples
 
