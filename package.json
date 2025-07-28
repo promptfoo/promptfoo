@@ -9,12 +9,15 @@
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "dist/src/index.js",
+  "main": "index.cjs",
+  "module": "index.mjs",
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js"
-    }
+      "types": "./dist/src/index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.cjs"
+    },
+    "./package.json": "./package.json"
   },
   "workspaces": [
     "src/app",
@@ -25,7 +28,9 @@
   "files": [
     "dist",
     "!dist/test",
-    "!dist/src/__mocks__"
+    "!dist/src/__mocks__",
+    "index.mjs",
+    "index.cjs"
   ],
   "engines": {
     "node": ">=18.0.0"
