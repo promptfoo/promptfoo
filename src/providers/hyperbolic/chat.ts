@@ -1,7 +1,8 @@
 import logger from '../../logger';
-import type { ApiProvider, ProviderOptions } from '../../types';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+
+import type { ApiProvider, ProviderOptions } from '../../types';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type HyperbolicConfig = OpenAiCompletionOptions;

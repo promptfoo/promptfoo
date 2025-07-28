@@ -1,23 +1,23 @@
 import { relations, sql } from 'drizzle-orm';
 import {
-  text,
-  integer,
-  sqliteTable,
-  primaryKey,
   index,
-  uniqueIndex,
+  integer,
+  primaryKey,
   real,
+  sqliteTable,
+  text,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import {
-  type Prompt,
-  type ProviderResponse,
-  type GradingResult,
-  type UnifiedConfig,
-  type ProviderOptions,
   type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateSummaryV2,
+  type GradingResult,
+  type Prompt,
+  type ProviderOptions,
+  type ProviderResponse,
   ResultFailureReason,
+  type UnifiedConfig,
 } from '../types';
 
 // ------------ Prompts ------------
@@ -26,9 +26,7 @@ export const promptsTable = sqliteTable(
   'prompts',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     prompt: text('prompt').notNull(),
   },
   (table) => ({
@@ -57,9 +55,7 @@ export const evalsTable = sqliteTable(
   'evals',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     author: text('author'),
     description: text('description'),
     results: text('results', { mode: 'json' }).$type<EvaluateSummaryV2 | object>().notNull(),
@@ -77,12 +73,8 @@ export const evalResultsTable = sqliteTable(
   'eval_results',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: integer('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evalsTable.id),
@@ -198,9 +190,7 @@ export const datasetsTable = sqliteTable(
   {
     id: text('id').primaryKey(),
     tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
     createdAtIdx: index('datasets_created_at_idx').on(table.createdAt),
@@ -266,12 +256,8 @@ export const configsTable = sqliteTable(
   'configs',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: integer('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     name: text('name').notNull(),
     type: text('type').notNull(), // e.g. 'redteam', 'eval', etc.
     config: text('config', { mode: 'json' }).notNull(),
@@ -336,9 +322,7 @@ export const tracesTable = sqliteTable(
       .notNull()
       .references(() => evalsTable.id),
     testCaseId: text('test_case_id').notNull(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
   },
   (table) => ({

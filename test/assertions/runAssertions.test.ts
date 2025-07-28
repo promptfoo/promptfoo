@@ -1,24 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, unused-imports/no-unused-imports */
-import dedent from 'dedent';
-import * as fs from 'fs';
-import * as path from 'path';
-import { runAssertion, runAssertions } from '../../src/assertions';
-import { validateXml, containsXml } from '../../src/assertions/xml';
-import { fetchWithRetries } from '../../src/fetch';
+import { runAssertions } from '../../src/assertions';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import {
-  DefaultGradingJsonProvider,
-  DefaultEmbeddingProvider,
-} from '../../src/providers/openai/defaults';
+import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
-import type {
-  Assertion,
-  ApiProvider,
-  AtomicTestCase,
-  ProviderResponse,
-  GradingResult,
-} from '../../src/types';
 import { TestGrader } from '../util/utils';
+
+import type { ApiProvider, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
@@ -82,7 +68,7 @@ jest.mock('../../src/matchers', () => {
   };
 });
 
-const Grader = new TestGrader();
+const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
@@ -430,5 +416,103 @@ describe('runAssertions', () => {
     expect(result.pass).toBeTruthy();
     expect(callApiSpy).toHaveBeenCalledTimes(1);
     expect(callModerationApiSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should use stored grader result from crescendo strategy', async () => {
+    const storedResult = {
+      pass: false,
+      score: 0,
+      reason: 'Detected jailbreak via crescendo strategy',
+      metadata: { confidence: 0.95 },
+    };
+
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'promptfoo:redteam:medical:prioritization-error' as const,
+          value: 'test assertion',
+        },
+      ],
+      metadata: {
+        pluginId: 'medical:prioritization-error',
+        strategyId: 'crescendo',
+      },
+    };
+
+    const providerResponse: ProviderResponse = {
+      output: 'Some target response',
+      metadata: {
+        storedGraderResult: storedResult,
+      },
+    };
+
+    const result = await runAssertions({
+      prompt: 'test prompt',
+      provider: {} as ApiProvider,
+      test,
+      providerResponse,
+    });
+
+    // Should use stored result instead of calling grader
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('Detected jailbreak via crescendo strategy');
+
+    // Check that component results contain the stored grader result
+    expect(result.componentResults).toHaveLength(1);
+    expect(result.componentResults![0].pass).toBe(false);
+    expect(result.componentResults![0].score).toBe(0);
+    expect(result.componentResults![0].reason).toBe('Detected jailbreak via crescendo strategy');
+    expect(result.componentResults![0].metadata?.confidence).toBe(0.95);
+  });
+
+  it('should construct proper return shape for stored grader result', async () => {
+    const storedResult = {
+      pass: false,
+      score: 0,
+      reason: 'Internal evaluator detected successful attack',
+    };
+
+    const assertion = {
+      type: 'promptfoo:redteam:medical:prioritization-error' as const,
+      value: 'test assertion',
+    };
+
+    const test: AtomicTestCase = {
+      assert: [assertion],
+      metadata: {
+        pluginId: 'medical:prioritization-error',
+        strategyId: 'crescendo',
+      },
+    };
+
+    const providerResponse: ProviderResponse = {
+      output: 'Some target response',
+      metadata: {
+        storedGraderResult: storedResult,
+      },
+    };
+
+    const result = await runAssertions({
+      prompt: 'test prompt',
+      provider: {} as ApiProvider,
+      test,
+      providerResponse,
+    });
+
+    // Should have proper assertion structure in component results
+    expect(result.componentResults).toHaveLength(1);
+    expect(result.componentResults![0].assertion).toEqual({
+      ...assertion,
+      value: assertion.value,
+    });
+
+    // Should include test metadata in component results
+    expect(result.componentResults![0].metadata).toEqual(
+      expect.objectContaining({
+        pluginId: 'medical:prioritization-error',
+        strategyId: 'crescendo',
+      }),
+    );
   });
 });

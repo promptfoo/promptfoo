@@ -132,6 +132,42 @@ The LiteLLM provider respects standard environment variables:
 - `AZURE_API_KEY`
 - Other provider-specific environment variables
 
+## Embedding Configuration
+
+LiteLLM supports embedding models that can be used for similarity metrics and other tasks. You can specify an embedding provider globally or for individual assertions.
+
+### 1. Set a default embedding provider for all tests
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: litellm:embedding:text-embedding-3-large
+```
+
+### 2. Override the embedding provider for a specific assertion
+
+```yaml
+assert:
+  - type: similar
+    value: Reference text
+    provider:
+      id: litellm:embedding:text-embedding-3-large
+```
+
+Additional configuration options can be passed through the `config` block if needed:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: litellm:embedding:text-embedding-3-large
+        config:
+          apiKey: ${OPENAI_API_KEY} # optional if set via environment variable
+```
+
 ## Complete Example
 
 Here's a complete example using multiple LiteLLM models:

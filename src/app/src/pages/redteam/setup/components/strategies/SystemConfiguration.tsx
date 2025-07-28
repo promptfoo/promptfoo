@@ -1,13 +1,10 @@
-import React from 'react';
-import {
-  Paper,
-  Typography,
-  FormControl,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-  Alert,
-} from '@mui/material';
+import Alert from '@mui/material/Alert';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Paper from '@mui/material/Paper';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import Typography from '@mui/material/Typography';
 
 interface SystemConfigurationProps {
   isStatefulValue: boolean;

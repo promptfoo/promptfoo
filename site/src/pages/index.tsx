@@ -10,6 +10,7 @@ import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import NewsletterForm from '../components/NewsletterForm';
+import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
 
 function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
@@ -22,7 +23,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
           from <span className={styles.heroHighlight}>prompt</span> to{' '}
           <span className={styles.heroHighlight}>production</span>
         </h1>
-        <p>Open-source LLM security trusted by 100,000+ users</p>
+        <p>Open-source LLM security trusted by {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -82,7 +83,7 @@ function HomepageWalkthrough() {
           </p>
           <p>Generate customized attacks for your use case:</p>
           <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest redteam init</code>
+            <code>npx promptfoo@latest redteam setup</code>
           </pre>
           <p>Our language models probe for specific risks in your system.</p>
           <ul>
@@ -232,9 +233,27 @@ function HomepageWalkthrough() {
   ];
 
   const selectedStepData = steps.find((step) => step.id === selectedStep);
+  const tabsRef = React.useRef<HTMLDivElement>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkScroll = () => {
+      if (tabsRef.current && isMobile) {
+        const { scrollWidth, clientWidth } = tabsRef.current;
+        setShowScrollIndicator(scrollWidth > clientWidth);
+      }
+    };
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [isMobile]);
+
   return (
     <div className={styles.walkthroughContainer}>
-      <div className={styles.walkthroughTabs}>
+      <div
+        className={clsx(styles.walkthroughTabs, showScrollIndicator && styles.scrollable)}
+        ref={tabsRef}
+      >
         {steps.map((step) => (
           <button
             key={step.id}

@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import type { StandaloneEval } from '@promptfoo/util';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
 interface HistoryPageProps {
   showDatasetColumn?: boolean;

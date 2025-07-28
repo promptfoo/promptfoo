@@ -1,7 +1,8 @@
 import { matchesContextRelevance } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 /**
  * Handles context-relevance assertions by evaluating whether the provided context
@@ -43,5 +44,8 @@ export const handleContextRelevance = async ({
       assertion.threshold ?? 0,
       test.options,
     )),
+    metadata: {
+      context,
+    },
   };
 };

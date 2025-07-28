@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2025-01-18
 authors: [ian]
+tags: [technical-guide, red-teaming]
 ---
 
 # How to Red Team a LangChain Application

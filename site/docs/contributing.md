@@ -175,7 +175,7 @@ When writing tests, please:
 
 ## Linting and Formatting
 
-We use ESLint and Prettier for code linting and formatting. Before submitting a pull request, please run:
+We use Biome for JavaScript/TypeScript linting and formatting, and Prettier for CSS/HTML/Markdown. Before submitting a pull request, please run:
 
 ```bash
 npm run format

@@ -219,4 +219,86 @@ describe('extractGoalFromPrompt', () => {
       process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = originalValue;
     }
   });
+
+  it('should skip goal extraction for dataset plugins with short plugin ID', async () => {
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose', 'beavertails');
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should skip goal extraction for dataset plugins with full plugin ID', async () => {
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      'promptfoo:redteam:cyberseceval',
+    );
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should skip goal extraction for all dataset plugins', async () => {
+    const datasetPlugins = [
+      'beavertails',
+      'cyberseceval',
+      'donotanswer',
+      'harmbench',
+      'toxic-chat',
+      'aegis',
+      'pliny',
+      'unsafebench',
+      'xstest',
+    ];
+
+    for (const pluginId of datasetPlugins) {
+      const result = await extractGoalFromPrompt('test prompt', 'test purpose', pluginId);
+      expect(result).toBeNull();
+
+      // Also test with full plugin ID format
+      const fullPluginId = `promptfoo:redteam:${pluginId}`;
+      const resultFull = await extractGoalFromPrompt('test prompt', 'test purpose', fullPluginId);
+      expect(resultFull).toBeNull();
+    }
+
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should proceed with API call for non-dataset plugins', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'extracted goal' },
+      deleteFromCache: async () => {},
+    });
+
+    // Test with a non-dataset plugin
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose', 'prompt-extraction');
+
+    expect(result).toBe('extracted goal');
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('should proceed with API call for non-dataset plugins with full plugin ID', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'extracted goal' },
+      deleteFromCache: async () => {},
+    });
+
+    // Test with a full non-dataset plugin ID
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      'promptfoo:redteam:sql-injection',
+    );
+
+    expect(result).toBe('extracted goal');
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  });
 });

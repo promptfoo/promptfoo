@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -203,5 +204,3 @@ export const CustomPoliciesSection = () => {
     </Box>
   );
 };
-
-export default memo(CustomPoliciesSection);

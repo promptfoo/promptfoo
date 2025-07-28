@@ -4,6 +4,9 @@ import { fetchWithRetries } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { neverGenerateRemote } from '../remoteGeneration';
+
 import type { AtomicTestCase, EvaluateResult, RunEvalOptions } from '../../types';
 import type {
   ApiProvider,
@@ -11,8 +14,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import invariant from '../../util/invariant';
-import { neverGenerateRemote } from '../remoteGeneration';
 
 /**
  * Type guard for RedteamPandamoniumProvider

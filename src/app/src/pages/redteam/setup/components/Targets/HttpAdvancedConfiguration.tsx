@@ -1,5 +1,5 @@
 import React from 'react';
-import Editor from 'react-simple-code-editor';
+
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -8,27 +8,36 @@ import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import KeyIcon from '@mui/icons-material/Key';
 import UploadIcon from '@mui/icons-material/Upload';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import { FormControl, FormControlLabel, RadioGroup, Radio, FormGroup } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormGroup from '@mui/material/FormGroup';
+import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import type { ProviderOptions } from '@promptfoo/types';
 import dedent from 'dedent';
+import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/components/prism-clike';
+
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
-import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 import 'prismjs/themes/prism.css';
+
+import Editor from 'react-simple-code-editor';
+import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 
 interface HttpAdvancedConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -301,6 +310,8 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                       if (event.target.checked) {
                         updateCustomTarget('signatureAuth', {
                           enabled: true,
+                          certificateType:
+                            selectedTarget.config.signatureAuth?.certificateType || 'pem',
                           keyInputType:
                             selectedTarget.config.signatureAuth?.keyInputType || 'upload',
                         });
@@ -317,272 +328,545 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <Stack spacing={4}>
                 <Box>
                   <Typography variant="subtitle1" gutterBottom>
-                    Key Input Method
+                    Certificate Type
                   </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        bgcolor:
-                          selectedTarget.config.signatureAuth?.keyInputType === 'upload'
-                            ? 'action.selected'
-                            : 'background.paper',
-                        '&:hover': {
-                          bgcolor: 'action.hover',
-                        },
-                      }}
-                      onClick={() =>
-                        updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
-                          keyInputType: 'upload',
-                        })
-                      }
-                    >
-                      <UploadIcon
-                        color={
-                          selectedTarget.config.signatureAuth?.keyInputType === 'upload'
-                            ? 'primary'
-                            : 'action'
-                        }
-                        sx={{ mb: 1 }}
-                      />
-                      <Typography variant="body1" gutterBottom>
-                        Upload Key
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" align="center">
-                        Upload PEM file
-                      </Typography>
-                    </Paper>
-
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        bgcolor:
-                          selectedTarget.config.signatureAuth?.keyInputType === 'path'
-                            ? 'action.selected'
-                            : 'background.paper',
-                        '&:hover': {
-                          bgcolor: 'action.hover',
-                        },
-                      }}
-                      onClick={() =>
-                        updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
-                          keyInputType: 'path',
-                        })
-                      }
-                    >
-                      <InsertDriveFileIcon
-                        color={
-                          selectedTarget.config.signatureAuth?.keyInputType === 'path'
-                            ? 'primary'
-                            : 'action'
-                        }
-                        sx={{ mb: 1 }}
-                      />
-                      <Typography variant="body1" gutterBottom>
-                        File Path
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" align="center">
-                        Specify key location
-                      </Typography>
-                    </Paper>
-
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        bgcolor:
-                          selectedTarget.config.signatureAuth?.keyInputType === 'base64'
-                            ? 'action.selected'
-                            : 'background.paper',
-                        '&:hover': {
-                          bgcolor: 'action.hover',
-                        },
-                      }}
-                      onClick={() =>
-                        updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
-                          keyInputType: 'base64',
-                        })
-                      }
-                    >
-                      <KeyIcon
-                        color={
-                          selectedTarget.config.signatureAuth?.keyInputType === 'base64'
-                            ? 'primary'
-                            : 'action'
-                        }
-                        sx={{ mb: 1 }}
-                      />
-                      <Typography variant="body1" gutterBottom>
-                        Base64 Key String
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" align="center">
-                        Paste encoded key
-                      </Typography>
-                    </Paper>
-                  </Box>
-                </Box>
-
-                {selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
-                  <Paper variant="outlined" sx={{ p: 3 }}>
-                    <input
-                      type="file"
-                      accept=".pem,.key"
-                      style={{ display: 'none' }}
-                      id="private-key-upload"
-                      onClick={(e) => {
-                        (e.target as HTMLInputElement).value = '';
-                      }}
+                  <FormControl fullWidth>
+                    <Select
+                      value={selectedTarget.config.signatureAuth?.certificateType || 'pem'}
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = async (event) => {
-                            try {
-                              const content = event.target?.result as string;
-                              updateCustomTarget('signatureAuth', {
-                                ...selectedTarget.config.signatureAuth,
-                                privateKey: content,
-                                privateKeyPath: undefined,
-                              });
-                              await validatePrivateKey(content);
-                              showToast('Private key validated successfully', 'success');
-                            } catch (error) {
-                              console.warn(
-                                'Key was loaded but could not be successfully validated:',
-                                error,
-                              );
-                              showToast(
-                                `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
-                                'warning',
-                              );
-                            }
-                          };
-                          reader.readAsText(file);
-                        }
-                      }}
-                    />
-                    <Box sx={{ textAlign: 'center' }}>
-                      {selectedTarget.config.signatureAuth?.privateKey ? (
-                        <>
-                          <Typography color="success.main" gutterBottom>
-                            Key file loaded successfully
-                          </Typography>
-                          <Button
-                            variant="outlined"
-                            color="error"
-                            startIcon={<ClearIcon />}
-                            onClick={() =>
-                              updateCustomTarget('signatureAuth', {
-                                ...selectedTarget.config.signatureAuth,
-                                privateKey: undefined,
-                                privateKeyPath: undefined,
-                              })
-                            }
-                          >
-                            Remove Key
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Typography gutterBottom color="text.secondary">
-                            Upload your PEM format private key
-                          </Typography>
-                          <label htmlFor="private-key-upload">
-                            <Button variant="outlined" component="span" startIcon={<VpnKeyIcon />}>
-                              Choose File
-                            </Button>
-                          </label>
-                        </>
-                      )}
-                    </Box>
-                  </Paper>
-                )}
-
-                {selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
-                  <Paper variant="outlined" sx={{ p: 3 }}>
-                    <Typography gutterBottom color="text.secondary">
-                      Specify the path on disk to your PEM format private key file
-                    </Typography>
-                    <TextField
-                      fullWidth
-                      placeholder="/path/to/private_key.pem"
-                      value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
-                      onChange={(e) => {
+                        const certType = e.target.value;
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config.signatureAuth,
-                          privateKeyPath: e.target.value,
+                          certificateType: certType,
+                          // Clear all type-specific fields when changing certificate type
+                          keyInputType: certType === 'pem' ? 'upload' : undefined,
                           privateKey: undefined,
+                          privateKeyPath: undefined,
+                          keystorePath: undefined,
+                          keystorePassword: undefined,
+                          keyAlias: undefined,
+                          pfxPath: undefined,
+                          pfxPassword: undefined,
+                          certPath: undefined,
+                          keyPath: undefined,
+                          pfxMode: undefined,
+                          type: certType,
                         });
                       }}
-                    />
-                  </Paper>
-                )}
+                      displayEmpty
+                    >
+                      <MenuItem value="pem">PEM</MenuItem>
+                      <MenuItem value="jks">JKS</MenuItem>
+                      <MenuItem value="pfx">PFX/PKCS#12</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
 
-                {selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
-                  <Paper variant="outlined" sx={{ p: 3 }}>
-                    <Stack spacing={2}>
-                      <TextField
-                        fullWidth
-                        multiline
-                        rows={4}
-                        placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
-                        value={selectedTarget.config.signatureAuth?.privateKey || ''}
-                        onChange={(e) => {
+                {selectedTarget.config.signatureAuth?.certificateType === 'pem' && (
+                  <Box>
+                    <Typography variant="subtitle1" gutterBottom>
+                      PEM Key Input Method
+                    </Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 2,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          bgcolor:
+                            selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                              ? 'action.selected'
+                              : 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        onClick={() =>
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
-                            privateKey: e.target.value,
-                            privateKeyPath: undefined,
-                          });
+                            keyInputType: 'upload',
+                          })
+                        }
+                      >
+                        <UploadIcon
+                          color={
+                            selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                              ? 'primary'
+                              : 'action'
+                          }
+                          sx={{ mb: 1 }}
+                        />
+                        <Typography variant="body1" gutterBottom>
+                          Upload Key
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" align="center">
+                          Upload PEM file
+                        </Typography>
+                      </Paper>
+
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 2,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          bgcolor:
+                            selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                              ? 'action.selected'
+                              : 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        onClick={() =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keyInputType: 'path',
+                          })
+                        }
+                      >
+                        <InsertDriveFileIcon
+                          color={
+                            selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                              ? 'primary'
+                              : 'action'
+                          }
+                          sx={{ mb: 1 }}
+                        />
+                        <Typography variant="body1" gutterBottom>
+                          File Path
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" align="center">
+                          Specify key location
+                        </Typography>
+                      </Paper>
+
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 2,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          bgcolor:
+                            selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                              ? 'action.selected'
+                              : 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        onClick={() =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keyInputType: 'base64',
+                          })
+                        }
+                      >
+                        <KeyIcon
+                          color={
+                            selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                              ? 'primary'
+                              : 'action'
+                          }
+                          sx={{ mb: 1 }}
+                        />
+                        <Typography variant="body1" gutterBottom>
+                          Base64 Key String
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" align="center">
+                          Paste encoded key
+                        </Typography>
+                      </Paper>
+                    </Box>
+                  </Box>
+                )}
+
+                {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
+                  selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
+                    <Paper variant="outlined" sx={{ p: 3 }}>
+                      <input
+                        type="file"
+                        accept=".pem,.key"
+                        style={{ display: 'none' }}
+                        id="private-key-upload"
+                        onClick={(e) => {
+                          (e.target as HTMLInputElement).value = '';
+                        }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = async (event) => {
+                              try {
+                                const content = event.target?.result as string;
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  type: 'pem',
+                                  privateKey: content,
+                                  privateKeyPath: undefined,
+                                  keystorePath: undefined,
+                                  keystorePassword: undefined,
+                                  keyAlias: undefined,
+                                  pfxPath: undefined,
+                                  pfxPassword: undefined,
+                                });
+                                await validatePrivateKey(content);
+                                showToast('Private key validated successfully', 'success');
+                              } catch (error) {
+                                console.warn(
+                                  'Key was loaded but could not be successfully validated:',
+                                  error,
+                                );
+                                showToast(
+                                  `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                                  'warning',
+                                );
+                              }
+                            };
+                            reader.readAsText(file);
+                          }
                         }}
                       />
                       <Box sx={{ textAlign: 'center' }}>
-                        <Button
-                          variant="outlined"
-                          startIcon={<CheckCircleIcon />}
-                          onClick={async () => {
-                            try {
-                              const inputKey =
-                                selectedTarget.config.signatureAuth?.privateKey || '';
-                              const formattedKey = await convertStringKeyToPem(inputKey);
+                        {selectedTarget.config.signatureAuth?.privateKey ? (
+                          <>
+                            <Typography color="success.main" gutterBottom>
+                              Key file loaded successfully
+                            </Typography>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              startIcon={<ClearIcon />}
+                              onClick={() =>
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  privateKey: undefined,
+                                  privateKeyPath: undefined,
+                                })
+                              }
+                            >
+                              Remove Key
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Typography gutterBottom color="text.secondary">
+                              Upload your PEM format private key
+                            </Typography>
+                            <label htmlFor="private-key-upload">
+                              <Button
+                                variant="outlined"
+                                component="span"
+                                startIcon={<VpnKeyIcon />}
+                              >
+                                Choose File
+                              </Button>
+                            </label>
+                          </>
+                        )}
+                      </Box>
+                    </Paper>
+                  )}
+
+                {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
+                  selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
+                    <Paper variant="outlined" sx={{ p: 3 }}>
+                      <Typography gutterBottom color="text.secondary">
+                        Specify the path on disk to your PEM format private key file
+                      </Typography>
+                      <TextField
+                        fullWidth
+                        placeholder="/path/to/private_key.pem"
+                        value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
+                        onChange={(e) => {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            type: 'pem',
+                            privateKeyPath: e.target.value,
+                            privateKey: undefined,
+                            keystorePath: undefined,
+                            keystorePassword: undefined,
+                            keyAlias: undefined,
+                            pfxPath: undefined,
+                            pfxPassword: undefined,
+                          });
+                        }}
+                      />
+                    </Paper>
+                  )}
+
+                {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
+                  selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
+                    <Paper variant="outlined" sx={{ p: 3 }}>
+                      <Stack spacing={2}>
+                        <TextField
+                          fullWidth
+                          multiline
+                          rows={4}
+                          placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
+                          value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                          onChange={(e) => {
+                            updateCustomTarget('signatureAuth', {
+                              ...selectedTarget.config.signatureAuth,
+                              type: 'pem',
+                              privateKey: e.target.value,
+                              privateKeyPath: undefined,
+                              keystorePath: undefined,
+                              keystorePassword: undefined,
+                              keyAlias: undefined,
+                              pfxPath: undefined,
+                              pfxPassword: undefined,
+                            });
+                          }}
+                        />
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Button
+                            variant="outlined"
+                            startIcon={<CheckCircleIcon />}
+                            onClick={async () => {
+                              try {
+                                const inputKey =
+                                  selectedTarget.config.signatureAuth?.privateKey || '';
+                                const formattedKey = await convertStringKeyToPem(inputKey);
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  type: 'pem',
+                                  privateKey: formattedKey,
+                                  privateKeyPath: undefined,
+                                  keystorePath: undefined,
+                                  keystorePassword: undefined,
+                                  keyAlias: undefined,
+                                  pfxPath: undefined,
+                                  pfxPassword: undefined,
+                                });
+                                await validatePrivateKey(formattedKey);
+                                showToast('Private key validated successfully', 'success');
+                              } catch (error) {
+                                console.warn(
+                                  'Key was loaded but could not be successfully validated:',
+                                  error,
+                                );
+                                showToast(
+                                  `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                                  'warning',
+                                );
+                              }
+                            }}
+                          >
+                            Format & Validate
+                          </Button>
+                        </Box>
+                      </Stack>
+                    </Paper>
+                  )}
+
+                {selectedTarget.config.signatureAuth?.certificateType === 'jks' && (
+                  <Paper variant="outlined" sx={{ p: 3 }}>
+                    <Stack spacing={3}>
+                      <Typography gutterBottom color="text.secondary">
+                        Configure Java KeyStore (JKS) settings for signature authentication
+                      </Typography>
+
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Keystore File
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          placeholder="/path/to/keystore.jks"
+                          value={selectedTarget.config.signatureAuth?.keystorePath || ''}
+                          onChange={(e) => {
+                            updateCustomTarget('signatureAuth', {
+                              ...selectedTarget.config.signatureAuth,
+                              type: 'jks',
+                              keystorePath: e.target.value,
+                              privateKey: undefined,
+                              privateKeyPath: undefined,
+                              pfxPath: undefined,
+                              pfxPassword: undefined,
+                            });
+                          }}
+                          label="Keystore Path"
+                          helperText="Enter full path to your JKS keystore file"
+                        />
+                      </Box>
+
+                      <TextField
+                        fullWidth
+                        type="password"
+                        label="Keystore Password"
+                        placeholder="Enter keystore password"
+                        value={selectedTarget.config.signatureAuth?.keystorePassword || ''}
+                        onChange={(e) => {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keystorePassword: e.target.value,
+                          });
+                        }}
+                        helperText="Password for the JKS keystore. Can also be set via PROMPTFOO_JKS_PASSWORD environment variable."
+                      />
+
+                      <TextField
+                        fullWidth
+                        label="Key Alias"
+                        placeholder="client"
+                        value={selectedTarget.config.signatureAuth?.keyAlias || ''}
+                        onChange={(e) => {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keyAlias: e.target.value,
+                          });
+                        }}
+                        helperText="Alias of the key to use from the keystore. If not specified, the first available key will be used."
+                      />
+                    </Stack>
+                  </Paper>
+                )}
+
+                {selectedTarget.config.signatureAuth?.certificateType === 'pfx' && (
+                  <Paper variant="outlined" sx={{ p: 3 }}>
+                    <Stack spacing={3}>
+                      <Typography gutterBottom color="text.secondary">
+                        Configure PFX (PKCS#12) certificate settings for signature authentication
+                      </Typography>
+
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Certificate Format
+                        </Typography>
+                        <RadioGroup
+                          value={selectedTarget.config.signatureAuth?.pfxMode || 'pfx'}
+                          onChange={(e) => {
+                            const mode = e.target.value;
+                            updateCustomTarget('signatureAuth', {
+                              ...selectedTarget.config.signatureAuth,
+                              pfxMode: mode,
+                              // Clear fields based on mode
+                              ...(mode === 'pfx'
+                                ? {
+                                    certPath: undefined,
+                                    keyPath: undefined,
+                                  }
+                                : {
+                                    pfxPath: undefined,
+                                    pfxPassword: undefined,
+                                  }),
+                            });
+                          }}
+                          row
+                        >
+                          <FormControlLabel value="pfx" control={<Radio />} label="PFX/P12 File" />
+                          <FormControlLabel
+                            value="separate"
+                            control={<Radio />}
+                            label="Separate CRT/KEY Files"
+                          />
+                        </RadioGroup>
+                      </Box>
+
+                      {(!selectedTarget.config.signatureAuth?.pfxMode ||
+                        selectedTarget.config.signatureAuth?.pfxMode === 'pfx') && (
+                        <>
+                          <Box>
+                            <Typography variant="subtitle2" gutterBottom>
+                              PFX/P12 Certificate File
+                            </Typography>
+                            <TextField
+                              fullWidth
+                              placeholder="/path/to/certificate.pfx"
+                              value={selectedTarget.config.signatureAuth?.pfxPath || ''}
+                              onChange={(e) => {
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  type: 'pfx',
+                                  pfxPath: e.target.value,
+                                  privateKey: undefined,
+                                  privateKeyPath: undefined,
+                                  keystorePath: undefined,
+                                  keystorePassword: undefined,
+                                  keyAlias: undefined,
+                                  certPath: undefined,
+                                  keyPath: undefined,
+                                });
+                              }}
+                              label="PFX File Path"
+                              helperText="Enter full path to your PFX/P12 certificate file"
+                            />
+                          </Box>
+
+                          <TextField
+                            fullWidth
+                            type="password"
+                            label="PFX Password"
+                            placeholder="Enter PFX password"
+                            value={selectedTarget.config.signatureAuth?.pfxPassword || ''}
+                            onChange={(e) => {
                               updateCustomTarget('signatureAuth', {
                                 ...selectedTarget.config.signatureAuth,
-                                privateKey: formattedKey,
-                                privateKeyPath: undefined,
+                                pfxPassword: e.target.value,
                               });
-                              await validatePrivateKey(formattedKey);
-                              showToast('Private key validated successfully', 'success');
-                            } catch (error) {
-                              console.warn(
-                                'Key was loaded but could not be successfully validated:',
-                                error,
-                              );
-                              showToast(
-                                `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
-                                'warning',
-                              );
-                            }
-                          }}
-                        >
-                          Format & Validate
-                        </Button>
-                      </Box>
+                            }}
+                            helperText="Password for the PFX certificate file. Can also be set via PROMPTFOO_PFX_PASSWORD environment variable."
+                          />
+                        </>
+                      )}
+
+                      {selectedTarget.config.signatureAuth?.pfxMode === 'separate' && (
+                        <>
+                          <Box>
+                            <Typography variant="subtitle2" gutterBottom>
+                              Certificate File (CRT)
+                            </Typography>
+                            <TextField
+                              fullWidth
+                              placeholder="/path/to/certificate.crt"
+                              value={selectedTarget.config.signatureAuth?.certPath || ''}
+                              onChange={(e) => {
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  type: 'pfx',
+                                  certPath: e.target.value,
+                                  privateKey: undefined,
+                                  privateKeyPath: undefined,
+                                  keystorePath: undefined,
+                                  keystorePassword: undefined,
+                                  keyAlias: undefined,
+                                  pfxPath: undefined,
+                                  pfxPassword: undefined,
+                                });
+                              }}
+                              label="Certificate File Path"
+                              helperText="Enter full path to your certificate file"
+                            />
+                          </Box>
+
+                          <Box>
+                            <Typography variant="subtitle2" gutterBottom>
+                              Private Key File (KEY)
+                            </Typography>
+                            <TextField
+                              fullWidth
+                              placeholder="/path/to/private.key"
+                              value={selectedTarget.config.signatureAuth?.keyPath || ''}
+                              onChange={(e) => {
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  keyPath: e.target.value,
+                                });
+                              }}
+                              label="Private Key File Path"
+                              helperText="Enter full path to your private key file"
+                            />
+                          </Box>
+                        </>
+                      )}
                     </Stack>
                   </Paper>
                 )}

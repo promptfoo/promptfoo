@@ -41,17 +41,18 @@ tests:
 
 ## Assertion properties
 
-| Property     | Type               | Required | Description                                                                                                            |
-| ------------ | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------- |
-| type         | string             | Yes      | Type of assertion                                                                                                      |
-| value        | string             | No       | The expected value, if applicable                                                                                      |
-| threshold    | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                |
-| weight       | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                    |
-| provider     | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                   |
-| rubricPrompt | string \| string[] | No       | Model-graded LLM prompt                                                                                                |
-| config       | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                          |
-| transform    | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs) |
-| metric       | string             | No       | Tag that appears in the web UI as a named metric                                                                       |
+| Property         | Type               | Required | Description                                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
+| value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
+| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                |
+| weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                    |
+| provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                   |
+| rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                |
+| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                                                                                                                                                                                          |
+| transform        | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                                                                                                                 |
+| metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                       |
+| contextTransform | string             | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
 
 ## Grouping assertions via Assertion Sets
 
@@ -472,85 +473,106 @@ See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/exa
 
 ## Creating derived metrics
 
-Derived metrics are computed at runtime based on other metrics and displayed as named metrics (see above). They are calculated after all individual test evaluations are completed using either mathematical expressions (powered by [mathjs](https://mathjs.org/)) or custom functions.
+Derived metrics calculate composite scores from your named assertions after evaluation completes. Use them for metrics like F1 scores, weighted averages, or custom scoring formulas.
 
-### Configuring derived metrics
-
-Add a `derivedMetrics` array to your config. Each entry needs:
-
-- **name**: Identifier for the metric in output results
-- **value**: Either:
-  - A mathematical expression string (using [mathjs syntax](https://mathjs.org/docs/expressions/syntax.html))
-  - A JavaScript function that returns a numeric value
-
-#### Examples
-
-Using mathematical expressions:
+Add a `derivedMetrics` array to your configuration:
 
 ```yaml
 derivedMetrics:
-  # Average score across tests
-  - name: 'AverageScore'
-    value: 'sum(scores) / length(scores)'
-
-  # Weighted scoring with multiple components
-  - name: 'WeightedScore'
-    value: '(accuracy * 0.6 + relevance * 0.3 + speed * 0.1)'
-
-  # Composite metric using previous calculations
-  - name: 'EfficiencyScore'
-    value: 'WeightedScore / (cost + 1)' # Add 1 to avoid division by zero
+  - name: 'f1_score'
+    value: '2 * precision * recall / (precision + recall)'
 ```
 
-Using a JavaScript function for complex logic:
+Each derived metric requires:
+
+- **name**: The metric identifier
+- **value**: A mathematical expression or JavaScript function
+
+:::tip
+Derived metrics are initialized to 0 and calculated per prompt. Errors are logged at debug level.
+:::
+
+### Mathematical expressions
+
+Use [mathjs](https://mathjs.org/) syntax for calculations:
 
 ```yaml
 derivedMetrics:
-  - name: 'CustomScore'
-    value: (namedScores, context) => {
-      // Access to all named metrics and test context
-      const { accuracy = 0, speed = 0, cost = 1 } = namedScores;
-      const { threshold, test } = context;
+  - name: 'weighted_score'
+    value: 'accuracy * 0.6 + relevance * 0.4'
 
-      // Can access test-specific data
-      if (test.vars.difficulty === 'hard') {
-        return accuracy * 2;
+  - name: 'harmonic_mean'
+    value: '3 / (1/accuracy + 1/relevance + 1/coherence)'
+```
+
+### JavaScript functions
+
+For complex logic:
+
+```yaml
+derivedMetrics:
+  - name: 'adaptive_score'
+    value: |
+      function(namedScores, evalStep) {
+        const { accuracy = 0, speed = 0 } = namedScores;
+        if (evalStep.tokensUsed?.total > 1000) {
+          return accuracy * 0.8; // Penalize verbose responses
+        }
+        return accuracy * 0.6 + speed * 0.4;
       }
-
-      return accuracy > threshold ? speed / cost : 0;
-    }
 ```
 
-#### Available Functions and Data
+### Example: F1 score
 
-In mathematical expressions:
+```yaml
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0
+      metric: true_positives
+      weight: 0
+    - type: javascript
+      value: output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0
+      metric: false_positives
+      weight: 0
+    - type: javascript
+      value: output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0
+      metric: false_negatives
+      weight: 0
 
-- All [mathjs functions](https://mathjs.org/docs/reference/functions.html) (sum, mean, std, etc.)
-- Any named metrics from your assertions
-- Previously defined derived metrics
+derivedMetrics:
+  - name: precision
+    value: 'true_positives / (true_positives + false_positives)'
+  - name: recall
+    value: 'true_positives / (true_positives + false_negatives)'
+  - name: f1_score
+    value: '2 * true_positives / (2 * true_positives + false_positives + false_negatives)'
+```
 
-In JavaScript functions:
+Metrics are calculated in order, so later metrics can reference earlier ones:
 
-- **namedScores**: Object containing all metric values
-- **context**: Object containing:
-  - `threshold`: Test case threshold if set
-  - `test`: Current test case data
-  - `vars`: Test variables
-  - `tokensUsed`: Token usage information
+```yaml
+derivedMetrics:
+  - name: base_score
+    value: '(accuracy + relevance) / 2'
+  - name: final_score
+    value: 'base_score * confidence_multiplier'
+```
 
-:::info
-Good to know:
+### Notes
 
-- Metrics are calculated in the order defined
-- Later metrics can reference earlier ones
-- Basic metrics must be named using the `metric` property in assertions
-- Metric names in expressions cannot contain spaces or special characters
-- Mathjs expressions run in a safe sandbox environment
-- Missing metrics default to 0 in expressions
-- Use default values in JavaScript functions to handle missing metrics
-  :::
+- Missing metrics default to 0
+- To avoid division by zero: `value: 'numerator / (denominator + 0.0001)'`
+- Debug errors with: `LOG_LEVEL=debug promptfoo eval`
+- No circular dependency protection - order your metrics carefully
 
-See the [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete implementation using derived metrics.
+Derived metrics appear in all outputs alongside regular metrics - in the web UI metrics column, JSON `namedScores`, and CSV columns.
+
+See also:
+
+- [Named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics) - Basic named metrics usage
+- [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) - Complete F1 score implementation
+- [MathJS documentation](https://mathjs.org/docs/expressions/syntax.html) - Expression syntax reference
 
 ## Running assertions directly on outputs
 

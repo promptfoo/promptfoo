@@ -257,6 +257,11 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
+        label: 'MCP Security',
+        id: 'red-team/mcp-security-testing',
+      },
+      {
+        type: 'doc',
         label: 'Multi-Modal Red Teaming',
         id: 'guides/multimodal-red-team',
       },
@@ -401,6 +406,10 @@ const sidebars = {
     {
       type: 'doc',
       id: 'faq',
+    },
+    {
+      type: 'doc',
+      id: 'releases',
     },
   ],
   // Within enterprise docs, show only the following sidebar

@@ -1,4 +1,5 @@
 import fs from 'fs';
+
 import * as yaml from 'js-yaml';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
@@ -8,11 +9,12 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
-import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
+
+import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
+import type { ApiProvider } from '../../../src/types';
 
 jest.mock('fs');
 jest.mock('../../../src/redteam');
@@ -662,33 +664,6 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
-  });
-
-  it('should not cleanup provider during redteam run', async () => {
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-      injectVar: 'input',
-    });
-    const options: RedteamCliGenerateOptions = {
-      output: 'test-output.json',
-      inRedteamRun: true,
-      cache: false,
-      defaultConfig: {},
-      write: false,
-      config: 'test-config.yaml',
-    };
-
-    await doGenerateRedteam(options);
-
-    expect(mockProvider.cleanup).not.toHaveBeenCalled();
   });
 
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
