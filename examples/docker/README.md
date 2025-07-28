@@ -5,6 +5,7 @@
 ## Getting Started
 
 1. Create a promptfoo project with docker examples
+
 ```bash
 npx promptfoo@latest init --example docker
 cd docker
@@ -14,11 +15,13 @@ cd docker
 3. Use the Docker Model Runner CLI to pull the models
 
 **For the simple example:**
+
 ```bash
 docker model pull ai/llama3.2:3B-Q4_K_M
 ```
 
 **For the advanced example:**
+
 ```bash
 docker model pull ai/llama3.2:3B-Q4_K_M
 docker model pull ai/gemma3:4B-Q4_K_M
@@ -35,6 +38,7 @@ Note: These six models together require ~20 GiB of disk storage.
 ```bash
 promptfoo eval -c promptfooconfig.comparison.simple.yaml
 ```
+
 ## Advanced Example
 
 ```bash
