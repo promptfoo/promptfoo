@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess } from 'child_process';
-import { exec } from 'child_process';
+import { type ChildProcess, exec, spawn } from 'child_process';
+
 import { Command } from 'commander';
-import { modelScanCommand, checkModelAuditInstalled } from '../../src/commands/modelScan';
+import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
 
 jest.mock('child_process');

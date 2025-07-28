@@ -1,9 +1,31 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  accumulateResponseTokenUsage,
+  accumulateGraderTokenUsage,
+} from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
+import { isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -16,28 +38,8 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-import {
-  CRESCENDO_SYSTEM_PROMPT,
-  EVAL_SYSTEM_PROMPT,
-  GOAL_RUBRIC_TEMPLATE,
-  REFUSAL_SYSTEM_PROMPT,
-} from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -257,13 +259,7 @@ export class CrescendoProvider implements ApiProvider {
       | 'Max rounds reached'
       | 'Max backtracks reached' = 'Max rounds reached';
 
-    const totalTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 0,
-      cached: 0,
-    };
+    const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
@@ -289,13 +285,8 @@ export class CrescendoProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
-    // Template for goal-specific evaluation
-    let additionalRubric = '';
-    if (this.userGoal) {
-      additionalRubric = this.nunjucks.renderString(GOAL_RUBRIC_TEMPLATE, {
-        goal: this.userGoal,
-      });
-    }
+    // Generate goal-specific evaluation rubric
+    const additionalRubric = getGoalRubric(this.userGoal);
 
     while (roundNum < this.maxTurns) {
       try {
@@ -312,11 +303,7 @@ export class CrescendoProvider implements ApiProvider {
             objectiveScore,
           );
         if (attackTokenUsage) {
-          totalTokenUsage.total += attackTokenUsage.total || 0;
-          totalTokenUsage.prompt += attackTokenUsage.prompt || 0;
-          totalTokenUsage.completion += attackTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += attackTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += attackTokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, attackTokenUsage);
         }
 
         if (!attackPrompt) {
@@ -337,13 +324,7 @@ export class CrescendoProvider implements ApiProvider {
           options,
         );
         lastResponse = response;
-        if (lastResponse.tokenUsage) {
-          totalTokenUsage.total += lastResponse.tokenUsage.total || 0;
-          totalTokenUsage.prompt += lastResponse.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += lastResponse.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += lastResponse.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += lastResponse.tokenUsage.cached || 0;
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
 
         if (lastResponse.sessionId && this.stateful) {
           vars['sessionId'] = lastResponse.sessionId;
@@ -363,13 +344,7 @@ export class CrescendoProvider implements ApiProvider {
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
         });
-        if (unblockingResult.tokenUsage) {
-          totalTokenUsage.total += unblockingResult.tokenUsage.total || 0;
-          totalTokenUsage.prompt += unblockingResult.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += unblockingResult.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += unblockingResult.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += unblockingResult.tokenUsage.cached || 0;
-        }
+        accumulateResponseTokenUsage(totalTokenUsage, unblockingResult);
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -388,13 +363,7 @@ export class CrescendoProvider implements ApiProvider {
             options,
           );
 
-          if (unblockingResponse.tokenUsage) {
-            totalTokenUsage.total += unblockingResponse.tokenUsage.total || 0;
-            totalTokenUsage.prompt += unblockingResponse.tokenUsage.prompt || 0;
-            totalTokenUsage.completion += unblockingResponse.tokenUsage.completion || 0;
-            totalTokenUsage.numRequests += unblockingResponse.tokenUsage.numRequests ?? 1;
-            totalTokenUsage.cached += unblockingResponse.tokenUsage.cached || 0;
-          }
+          accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
           // Update lastResponse to the unblocking response and continue
           lastResponse = unblockingResponse;
@@ -460,14 +429,7 @@ export class CrescendoProvider implements ApiProvider {
 
             graderPassed = grade.pass;
             storedGraderResult = grade;
-            if (grade.tokensUsed) {
-              totalTokenUsage.total += grade.tokensUsed.total || 0;
-              totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
-              totalTokenUsage.completion += grade.tokensUsed.completion || 0;
-              totalTokenUsage.cached += grade.tokensUsed.cached || 0;
-            } else {
-              totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-            }
+            accumulateGraderTokenUsage(totalTokenUsage, grade);
           }
         }
 
@@ -492,11 +454,7 @@ export class CrescendoProvider implements ApiProvider {
 
         const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output);
         if (evalTokenUsage) {
-          totalTokenUsage.total += evalTokenUsage.total || 0;
-          totalTokenUsage.prompt += evalTokenUsage.prompt || 0;
-          totalTokenUsage.completion += evalTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += evalTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += evalTokenUsage.cached || 0;
+          accumulateTokenUsage(totalTokenUsage, evalTokenUsage);
         }
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;

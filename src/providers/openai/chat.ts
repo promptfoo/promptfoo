@@ -1,22 +1,23 @@
 import path from 'path';
-import { OpenAiGenericProvider } from '.';
+
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;

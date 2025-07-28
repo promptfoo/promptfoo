@@ -1,8 +1,8 @@
 import { fetchWithCache } from '../../src/cache';
 import {
+  clearAimlApiModelsCache,
   createAimlApiProvider,
   fetchAimlApiModels,
-  clearAimlApiModelsCache,
 } from '../../src/providers/aimlapi';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';

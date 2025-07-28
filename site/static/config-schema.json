@@ -153,6 +153,9 @@
                             "FAL_KEY": {
                               "type": "string"
                             },
+                            "GITHUB_TOKEN": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
@@ -160,6 +163,9 @@
                               "type": "string"
                             },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GEMINI_API_KEY": {
                               "type": "string"
                             },
                             "GROQ_API_KEY": {
@@ -1158,6 +1164,7 @@
                           "indirect-prompt-injection",
                           "intent",
                           "mcp",
+                          "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
@@ -1251,8 +1258,7 @@
                         ]
                       },
                       {
-                        "type": "string",
-                        "pattern": "^file\\:\\/\\/"
+                        "type": "string"
                       }
                     ],
                     "description": "Name of the plugin or path to custom plugin"
@@ -1343,6 +1349,7 @@
                               "indirect-prompt-injection",
                               "intent",
                               "mcp",
+                              "medical",
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",
@@ -1436,8 +1443,7 @@
                             ]
                           },
                           {
-                            "type": "string",
-                            "pattern": "^file\\:\\/\\/"
+                            "type": "string"
                           }
                         ],
                         "description": "Name of the plugin"

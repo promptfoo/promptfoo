@@ -1,4 +1,5 @@
 import { addCrescendo } from '../../../src/redteam/strategies/crescendo';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addCrescendo', () => {

@@ -2,6 +2,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache', () => ({

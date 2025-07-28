@@ -1,4 +1,5 @@
 import { addInjections } from '../../../src/redteam/strategies/promptInjections';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addInjections', () => {

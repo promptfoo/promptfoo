@@ -1,9 +1,10 @@
 import React from 'react';
+
 import Stack from '@mui/material/Stack';
-import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
-import type { GradingResult } from '@promptfoo/types';
 import RiskCard from './RiskCard';
+import type { TopLevelCategory } from '@promptfoo/redteam/constants';
+import type { GradingResult } from '@promptfoo/types';
 
 const RiskCategories: React.FC<{
   categoryStats: Record<string, { pass: number; total: number }>;

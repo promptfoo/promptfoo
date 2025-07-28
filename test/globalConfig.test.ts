@@ -1,5 +1,7 @@
 import * as fs from 'fs';
+
 import yaml from 'js-yaml';
+
 import type {
   readGlobalConfig,
   writeGlobalConfig,

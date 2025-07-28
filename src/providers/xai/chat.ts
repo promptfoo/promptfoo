@@ -1,8 +1,9 @@
 import logger from '../../logger';
-import type { ApiProvider, ProviderOptions } from '../../types';
 import { renderVarsInObject } from '../../util';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+
+import type { ApiProvider, ProviderOptions } from '../../types';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type XAIConfig = {
@@ -256,13 +257,27 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
-    const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (!response || response.error) {
-      return response;
-    }
-
     try {
+      const response = await super.callApi(prompt, context, callApiOptions);
+
+      if (!response || response.error) {
+        // Check if the error indicates an authentication issue
+        if (
+          response?.error &&
+          (response.error.includes('502 Bad Gateway') ||
+            response.error.includes('invalid API key') ||
+            response.error.includes('authentication error'))
+        ) {
+          // Provide a more helpful error message for x.ai specific issues
+          return {
+            ...response,
+            error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+          };
+        }
+        return response;
+      }
+
+      // Rest of the existing response processing logic
       if (typeof response.raw === 'string') {
         try {
           const rawData = JSON.parse(response.raw);
@@ -332,11 +347,29 @@ class XAIProvider extends OpenAiChatCompletionProvider {
           reasoningTokens,
         );
       }
-    } catch (err) {
-      logger.error(`Error processing XAI response: ${err}`);
-    }
 
-    return response;
+      return response;
+    } catch (err) {
+      // Handle JSON parsing errors and other API errors
+      const errorMessage = err instanceof Error ? err.message : String(err);
+
+      // Check for common x.ai error patterns
+      if (errorMessage.includes('Error parsing response') && errorMessage.includes('<html')) {
+        // This is likely a 502 Bad Gateway or similar HTML error response
+        return {
+          error: `x.ai API error: Server returned an HTML error page instead of JSON. This often indicates an invalid API key or server issues.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+        };
+      } else if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway')) {
+        return {
+          error: `x.ai API error: 502 Bad Gateway - This often indicates an invalid API key.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+        };
+      }
+
+      // For other errors, pass them through with a helpful tip
+      return {
+        error: `x.ai API error: ${errorMessage}\n\nIf this persists, verify your API key at https://x.ai/`,
+      };
+    }
   }
 }
 

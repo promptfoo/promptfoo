@@ -5,7 +5,7 @@ import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
 import * as providers from '../src/providers';
-import { writeOutput, writeMultipleOutputs } from '../src/util';
+import { writeMultipleOutputs, writeOutput } from '../src/util';
 import * as fileUtils from '../src/util/file';
 
 jest.mock('../src/cache');
@@ -107,7 +107,6 @@ describe('index.ts exports', () => {
     'TestGeneratorConfigSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
-    'TokenUsageSchema',
     'UnifiedConfigSchema',
     'VarsSchema',
   ];

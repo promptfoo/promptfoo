@@ -2,6 +2,7 @@ import {
   CrossSessionLeakGrader,
   CrossSessionLeakPlugin,
 } from '../../../src/redteam/plugins/crossSessionLeak';
+
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
