@@ -477,7 +477,7 @@ export default class Eval {
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
           if (sanitizedValue === 'basic') {
-            // Basic strategy means no strategyId (original plugin test cases)
+            // Basic is represented by NULL in the test_case.metadata.strategyId field
             condition = `(json_extract(test_case, '$.metadata.strategyId') IS NULL OR json_extract(test_case, '$.metadata.strategyId') = '')`;
           } else {
             // Strategy ID is stored in test_case.metadata.strategyId
