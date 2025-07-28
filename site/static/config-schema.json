@@ -150,6 +150,12 @@
                             "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
+                            "DOCKER_MODEL_RUNNER_BASE_URL": {
+                              "type": "string"
+                            },
+                            "DOCKER_MODEL_RUNNER_API_KEY": {
+                              "type": "string"
+                            },
                             "FAL_KEY": {
                               "type": "string"
                             },
