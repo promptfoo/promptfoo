@@ -472,23 +472,26 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Handle metric parameter from URL
+  /**
+   * Apply filters from URL params.
+   */
   React.useEffect(() => {
-    const metricParam = searchParams.get('metric');
-    if (metricParam) {
+    const pluginParam = searchParams.get('plugin');
+
+    if (pluginParam) {
       const { addFilter, resetFilters } = useTableStore.getState();
 
       resetFilters();
 
       addFilter({
-        type: 'metric',
+        type: 'plugin',
         operator: 'equals',
-        value: metricParam,
+        value: pluginParam,
       });
 
       setSearchParams((prev) => {
         const newParams = new URLSearchParams(prev);
-        newParams.delete('metric');
+        newParams.delete('plugin');
         return newParams;
       });
     }

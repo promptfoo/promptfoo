@@ -110,7 +110,7 @@ describe('TestSuites Component Navigation', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?metric=Plugin%20With%20Special%20Chars',
+      '/eval/test-eval-123?plugin=Plugin%20With%20Special%20Chars',
     );
   });
 
@@ -136,7 +136,7 @@ describe('TestSuites Component Navigation', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?metric=Plugin%20With%20Special%20Chars',
+      '/eval/test-eval-123?plugin=Plugin%20With%20Special%20Chars',
     );
   });
 });
@@ -174,7 +174,7 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
     fireEvent.click(viewLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?metric=Test%20Plugin');
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=Test%20Plugin');
   });
 });
 
