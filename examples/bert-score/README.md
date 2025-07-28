@@ -22,12 +22,12 @@ Note: First run will download the BERT model (~1.4GB).
 # promptfooconfig.yaml
 tests:
   - vars:
-      text: "Hello world"
-      reference: "Hi there"
+      text: 'Hello world'
+      reference: 'Hi there'
     assert:
       - type: python
         value: file://bertscore_check.py
-        threshold: 0.7  # Pass if similarity > 70%
+        threshold: 0.7 # Pass if similarity > 70%
 ```
 
 Run: `promptfoo eval`
@@ -59,8 +59,9 @@ Run: `promptfoo eval -c promptfooconfig-advanced.yaml`
 ## How It Works
 
 BERTScore returns a similarity score from 0 to 1:
+
 - 0.9+ = Nearly identical meaning
-- 0.7-0.9 = Similar meaning  
+- 0.7-0.9 = Similar meaning
 - <0.7 = Different meaning
 
-[Learn more](https://arxiv.org/abs/1904.09675) 
+[Learn more](https://arxiv.org/abs/1904.09675)
