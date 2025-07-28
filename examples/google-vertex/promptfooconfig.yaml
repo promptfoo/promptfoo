@@ -10,9 +10,9 @@ providers:
   - id: 'vertex:gemini-1.5-flash'
     config:
       systemInstruction:
-      parts:
-        - text: Always talk like a cow. Mooo!
-  - id: 'vertex:gemini-2.0-flash-thinking-exp-1219'
+        parts:
+          - text: Always talk like a cow. Mooo!
+  - id: 'vertex:gemini-2.0-flash-thinking-exp'
     config:
       systemInstruction:
         parts:

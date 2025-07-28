@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
 import { useStore } from '@app/stores/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
@@ -28,7 +29,9 @@ const PromptsSection: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
 
-  const { prompts, setPrompts } = useStore();
+  const { config, updateConfig } = useStore();
+  const prompts = (config.prompts || []) as string[];
+  const setPrompts = (p: string[]) => updateConfig({ prompts: p });
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

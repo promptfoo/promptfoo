@@ -1,15 +1,17 @@
 import { Severity } from '../../src/redteam/constants';
+
 import type {
-  RedteamPluginObject,
-  RedteamPlugin,
-  RedteamStrategyObject,
+  BaseRedteamMetadata,
   PluginActionParams,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
-  SynthesizeOptions,
+  RedteamGenerateOptions,
+  RedteamPlugin,
+  RedteamPluginObject,
   RedteamRunOptions,
+  RedteamStrategyObject,
   SavedRedteamConfig,
-  BaseRedteamMetadata,
+  SynthesizeOptions,
 } from '../../src/redteam/types';
 import type { ApiProvider } from '../../src/types/providers';
 
@@ -173,6 +175,7 @@ describe('redteam types', () => {
       plugins: ['plugin1', { id: 'plugin2' }],
       strategies: ['strategy1'],
       entities: ['entity1'],
+      maxConcurrency: 5,
       applicationDefinition: {
         purpose: 'test purpose',
         features: 'key app features',
@@ -199,6 +202,7 @@ describe('redteam types', () => {
     expect(config.description).toBe('Test config');
     expect(config.prompts).toHaveLength(2);
     expect(config.plugins).toHaveLength(2);
+    expect(config.maxConcurrency).toBe(5);
     expect(config.applicationDefinition.features).toBe('key app features');
     expect(config.applicationDefinition.hasAccessTo).toBe('allowed data and systems');
     expect(config.applicationDefinition.doesNotHaveAccessTo).toBe('restricted data');
@@ -223,5 +227,34 @@ describe('redteam types', () => {
     expect(metadata.redteamFinalPrompt).toBe('final prompt');
     expect(metadata.messages).toHaveLength(1);
     expect(metadata.stopReason).toBe('complete');
+  });
+
+  it('should create valid RedteamGenerateOptions', () => {
+    const emptyOptions: RedteamGenerateOptions = {};
+    const partialOptions: RedteamGenerateOptions = {
+      cache: true,
+      plugins: [
+        {
+          id: 'test-plugin',
+          numTests: 5,
+        },
+      ],
+      maxConcurrency: 3,
+      injectVar: 'test_var',
+      language: 'en',
+      purpose: 'test purpose',
+      remote: false,
+      sharing: true,
+      testGenerationInstructions: 'test instructions',
+    };
+
+    expect(emptyOptions).toBeDefined();
+    expect(partialOptions.cache).toBe(true);
+    expect(partialOptions.plugins?.length).toBe(1);
+    expect(partialOptions.maxConcurrency).toBe(3);
+    expect(partialOptions.language).toBe('en');
+    expect(partialOptions.remote).toBe(false);
+    expect(partialOptions.sharing).toBe(true);
+    expect(partialOptions.testGenerationInstructions).toBe('test instructions');
   });
 });

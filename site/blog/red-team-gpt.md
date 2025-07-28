@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2025-06-07
 authors: [ian]
+tags: [technical-guide, red-teaming, openai]
 ---
 
 # How to Red Team GPT

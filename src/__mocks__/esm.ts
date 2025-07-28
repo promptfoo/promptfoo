@@ -5,7 +5,6 @@ export function getDirectory() {
 }
 
 export function importModule(filePath: string, functionName?: string) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require(path.resolve(filePath));
   if (functionName) {
     return mod[functionName];

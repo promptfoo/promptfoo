@@ -50,3 +50,6 @@ redteam:
     - id: goat # Dynamic multi-turn attack generation using adversarial techniques
       config:
         stateful: true
+    - id: mischievous-user
+      config:
+        stateful: true

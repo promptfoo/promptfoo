@@ -1,6 +1,7 @@
-import type { AssertionParams } from '../types';
 import { type GradingResult, isGradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams } from '../types';
 
 const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);

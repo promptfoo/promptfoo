@@ -1,9 +1,10 @@
 import dedent from 'dedent';
-import type { AssertionValue, ResultSuggestion } from '../../types';
 import invariant from '../../util/invariant';
 import { RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:indirect-prompt-injection';
+import type { AssertionValue, ResultSuggestion } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:indirect-prompt-injection';
 
 export class IndirectPromptInjectionGrader extends RedteamGraderBase {
   id = PLUGIN_ID;

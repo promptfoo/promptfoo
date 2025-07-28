@@ -1,5 +1,9 @@
 import React from 'react';
-import { Box, Typography, TextField } from '@mui/material';
+
+import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+
 import type { ProviderOptions } from '../../types';
 
 interface WebSocketEndpointConfigurationProps {
@@ -48,9 +52,9 @@ const WebSocketEndpointConfiguration: React.FC<WebSocketEndpointConfigurationPro
           fullWidth
           label="Timeout (ms)"
           type="number"
-          value={selectedTarget.config.timeoutMs}
-          onChange={(e) => updateWebSocketTarget('timeoutMs', Number.parseInt(e.target.value))}
-          margin="normal"
+          value={selectedTarget.config.timeoutMs || 5000}
+          onChange={(e) => updateWebSocketTarget('timeoutMs', Number.parseInt(e.target.value, 10))}
+          sx={{ mb: 2 }}
         />
       </Box>
     </Box>

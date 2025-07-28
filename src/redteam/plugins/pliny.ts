@@ -4,11 +4,12 @@
  */
 import dedent from 'dedent';
 import { fetchWithProxy } from '../../fetch';
-import { logger } from '../../logger';
-import type { Assertion, TestCase } from '../../types';
+import logger from '../../logger';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:pliny';
+import type { Assertion, TestCase } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:pliny';
 
 const URLS = [
   'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/GOOGLE.mkd',

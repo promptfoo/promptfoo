@@ -1,4 +1,5 @@
 import logger from '../../logger';
+
 import type { TestCase, TestCaseWithPlugin } from '../../types';
 
 export async function addGoatTestCases(

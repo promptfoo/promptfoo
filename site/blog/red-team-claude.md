@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2025-05-22
 authors: [ian]
+tags: [technical-guide, red-teaming, anthropic]
 ---
 
 # How to Red Team Claude

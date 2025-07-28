@@ -1,6 +1,7 @@
+import { AnthropicMessagesProvider } from './messages';
+
 import type { DefaultProviders, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { AnthropicMessagesProvider } from './messages';
 
 // Default model to use for all default providers
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';

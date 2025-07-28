@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 import LogoPanda from '../../static/img/logo-panda.svg';
+import { SITE_CONSTANTS } from '../constants';
 import styles from './press.module.css';
 
 const PressContent = () => {
@@ -53,9 +54,10 @@ const PressContent = () => {
             security industries.
           </Typography>
           <Typography variant="body1" paragraph>
-            Our core product is an open-source pentesting and evaluation framework used by 100,000+
-            developers. Promptfoo is among the most popular evaluation frameworks and is the first
-            product to adapt AI-specific pentesting techniques to your application.
+            Our core product is an open-source pentesting and evaluation framework used by{' '}
+            {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers. Promptfoo is among the most popular
+            evaluation frameworks and is the first product to adapt AI-specific pentesting
+            techniques to your application.
           </Typography>
         </Box>
 

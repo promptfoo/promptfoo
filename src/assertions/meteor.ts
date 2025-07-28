@@ -1,8 +1,8 @@
-import type { DataRecord } from 'natural';
-import type { Stemmer } from 'natural';
 import { PorterStemmer, WordNet } from 'natural';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+import type { DataRecord, Stemmer } from 'natural';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 type WordPair = [number, string];
 type MatchPair = [number, number];
@@ -99,14 +99,16 @@ async function matchSynonymEnums(
 
     // Get all synsets and their synonyms
     const candidateSynsets = await new Promise<DataRecord[]>((resolve) => {
-      wordnet.lookup(candidateWord, (results) => resolve(results));
+      wordnet.lookup(candidateWord, (results: DataRecord[]) => resolve(results));
     });
 
     // Create set of synonyms, filtering out ones with underscores
     // and including the original word
     const candidateSynonymSet = new Set([
       candidateWord,
-      ...candidateSynsets.flatMap((synset) => synset.synonyms.filter((syn) => !syn.includes('_'))),
+      ...candidateSynsets.flatMap((synset) =>
+        synset.synonyms.filter((syn: string) => !syn.includes('_')),
+      ),
     ]);
 
     for (let j = referenceCopy.length - 1; j >= 0; j--) {

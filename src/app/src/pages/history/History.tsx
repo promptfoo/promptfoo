@@ -1,31 +1,31 @@
-import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo } from 'react';
+
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
+  GridCsvExportMenuItem,
+  type GridExportMenuItemProps,
+  GridPrintExportMenuItem,
   type GridRenderCellParams,
-  GridToolbarContainer,
   GridToolbarColumnsButton,
-  GridToolbarFilterButton,
+  GridToolbarContainer,
   GridToolbarDensitySelector,
   GridToolbarExportContainer,
-  GridCsvExportMenuItem,
-  GridPrintExportMenuItem,
+  GridToolbarFilterButton,
   GridToolbarQuickFilter,
-  type GridExportMenuItemProps,
-  useGridApiContext,
   gridFilteredSortedRowIdsSelector,
   gridVisibleColumnFieldsSelector,
+  useGridApiContext,
 } from '@mui/x-data-grid';
-import type { StandaloneEval } from '@promptfoo/util';
+import { Link } from 'react-router-dom';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   const apiRef = useGridApiContext();
 

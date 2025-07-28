@@ -1,14 +1,17 @@
 ---
 sidebar_position: 4
+title: Azure OpenAI Provider
+description: Configure and use Azure OpenAI models with promptfoo for evals, including GPT-4, reasoning models, and vision capabilities
+keywords: [azure, openai, gpt-4, vision, reasoning models, evaluation]
 ---
 
 # Azure
 
-The `azure` provider is an interface to Azure. It shares configuration settings with the [OpenAI provider](/docs/providers/openai).
+The `azure` provider enables you to use Azure OpenAI Service models with Promptfoo. It shares configuration settings with the [OpenAI provider](/docs/providers/openai).
 
 ## Setup
 
-There are two ways to authenticate with Azure:
+There are three ways to authenticate with Azure OpenAI:
 
 ### Option 1: API Key Authentication
 
@@ -49,7 +52,7 @@ Authenticate with Azure CLI using `az login` before running promptfoo. This is t
 
 Optionally, you can also set:
 
-- AZURE_TOKEN_SCOPE / azureTokenScope (defaults to 'https://cognitiveservices.azure.com/.default')
+- `AZURE_TOKEN_SCOPE` / `azureTokenScope` (defaults to 'https://cognitiveservices.azure.com/.default')
 
 Then configure your deployment:
 
@@ -62,8 +65,11 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-35-turbo, gpt-4)
-- `azure:completion:<deployment name>` - uses the given deployment (for completion endpoints such as gpt-35-instruct)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
+- `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
+- `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
+
+Vision-capable models (GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
 
 ## Environment Variables
 
@@ -97,7 +103,7 @@ If `AZURE_DEPLOYMENT_NAME` is set, it will be automatically used as the default 
 For example, if you have these environment variables set:
 
 ```bash
-AZURE_DEPLOYMENT_NAME=gpt-4
+AZURE_DEPLOYMENT_NAME=gpt-4o
 AZURE_API_KEY=your-api-key
 AZURE_API_HOST=your-host.openai.azure.com
 ```
@@ -105,7 +111,7 @@ AZURE_API_HOST=your-host.openai.azure.com
 Or these client credential environment variables:
 
 ```bash
-AZURE_DEPLOYMENT_NAME=gpt-4
+AZURE_DEPLOYMENT_NAME=gpt-4o
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
 AZURE_TENANT_ID=your-tenant-id
@@ -119,7 +125,27 @@ Then Azure OpenAI will be used as the default provider for all operations includ
 - Suggestions
 - Synthesis
 
-Because embedding models are distinct from text generation, to set an embedding provider you must specify `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`.
+### Embedding Models
+
+Because embedding models are distinct from text generation models, to set a default embedding provider you must specify `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`.
+
+Set this environment variable to the deployment name of your embedding model:
+
+```bash
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-small
+```
+
+This deployment will automatically be used whenever embeddings are required, such as for similarity comparisons or dataset generation. You can also override the embedding provider in your configuration:
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: azure:embedding:text-embedding-3-small-deployment
+        config:
+          apiHost: 'your-resource.openai.azure.com'
+```
 
 Note that any moderation tasks will still use the OpenAI API.
 
@@ -148,10 +174,12 @@ providers:
 ```
 
 :::tip
+
 All other [OpenAI provider](/docs/providers/openai) environment variables and configuration properties are supported.
+
 :::
 
-## Using client credentials
+## Using Client Credentials
 
 To use client credentials for authentication with Azure, first install the peer dependency:
 
@@ -177,15 +205,9 @@ These credentials will be used to obtain an access token for the Azure OpenAI AP
 
 The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not specified. The `azureTokenScope` defaults to 'https://cognitiveservices.azure.com/.default', the scope required to authenticate with Azure Cognitive Services.
 
-You must also install a peer dependency from Azure:
+## Model-Graded Tests
 
-```sh
-npm i @azure/identity
-```
-
-## Model-graded tests
-
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use `gpt-4.1-2025-04-14` by default. If you are using Azure, you must override the grader to point to your Azure deployment.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use `gpt-4.1-2025-04-14` by default. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
@@ -193,7 +215,7 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: azure:chat:gpt-4-deployment-name
+      id: azure:chat:gpt-4o-deployment
       config:
         apiHost: 'xxxxxxx.openai.azure.com'
 ```
@@ -228,9 +250,42 @@ tests:
         value: Do not mention that you are an AI or chat assistant
 ```
 
+### Using Text and Embedding Providers for Different Assertion Types
+
+When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Azure deployments for each type using the **provider type map** pattern:
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    provider:
+      # Text provider for llm-rubric, answer-relevance, factuality, etc.
+      text:
+        id: azure:chat:o4-mini-deployment
+        config:
+          apiHost: 'text-models.openai.azure.com'
+
+      # Embedding provider for similarity assertions
+      embedding:
+        id: azure:embedding:text-embedding-3-large
+        config:
+          apiHost: 'embedding-models.openai.azure.com'
+```
+
 ### Similarity
 
-The `similar` assertion type requires an embedding model such as `text-embedding-ada-002`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
+The `similar` assertion type requires an embedding model such as `text-embedding-3-large` or `text-embedding-3-small`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
+
+For example, override the embedding deployment in your config:
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: azure:embedding:text-embedding-3-small-deployment
+        config:
+          apiHost: 'your-resource.openai.azure.com'
+```
 
 ## AI Services
 
@@ -252,54 +307,54 @@ providers:
 
 (The inconsistency in naming convention between `deployment_id` and `dataSources` reflects the actual naming in the Azure API.)
 
-## Configuration
+## Configuration Reference
 
-These properties can be set under the provider `config` key`:
+These properties can be set under the provider `config` key:
 
-General config
+### General Configuration
 
-| Name       | Description                                 |
-| ---------- | ------------------------------------------- |
-| apiHost    | API host.                                   |
-| apiBaseUrl | Base URL of the API (used instead of host). |
-| apiKey     | API key.                                    |
-| apiVersion | API version.                                |
+| Name       | Description                                               |
+| ---------- | --------------------------------------------------------- |
+| apiHost    | API host (e.g., `yourresource.openai.azure.com`)          |
+| apiBaseUrl | Base URL of the API (used instead of host)                |
+| apiKey     | API key for authentication                                |
+| apiVersion | API version. Use `2024-10-21` or newer for vision support |
 
-Azure-specific config
+### Azure-Specific Configuration
 
-| Name               | Description                                                     |
-| ------------------ | --------------------------------------------------------------- |
-| azureClientId      | Azure identity client ID.                                       |
-| azureClientSecret  | Azure identity client secret.                                   |
-| azureTenantId      | Azure identity tenant ID.                                       |
-| azureAuthorityHost | Azure identity authority host.                                  |
-| azureTokenScope    | Azure identity token scope.                                     |
-| deployment_id      | Azure cognitive services deployment ID.                         |
-| dataSources        | Azure cognitive services parameter for specifying data sources. |
+| Name               | Description                                                    |
+| ------------------ | -------------------------------------------------------------- |
+| azureClientId      | Azure identity client ID                                       |
+| azureClientSecret  | Azure identity client secret                                   |
+| azureTenantId      | Azure identity tenant ID                                       |
+| azureAuthorityHost | Azure identity authority host                                  |
+| azureTokenScope    | Azure identity token scope                                     |
+| deployment_id      | Azure cognitive services deployment ID                         |
+| dataSources        | Azure cognitive services parameter for specifying data sources |
 
-OpenAI config:
+### OpenAI Configuration
 
-| Name                  | Description                                                                                                                                                                                                                                   |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. Since Azure allows custom model naming, this flag is required to properly handle o1 models which do not support certain parameters. **(Deprecated, use `isReasoningModel` instead)** |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3-mini, etc.). This is the preferred flag over the deprecated `o1` flag.                                                                                                  |
-| max_completion_tokens | Maximum number of tokens to generate for reasoning models. Only used when `isReasoningModel` or `o1` is set to `true`.                                                                                                                        |
-| reasoning_effort      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'. Only used when `isReasoningModel` or `o1` is set to `true`.                                                                            |
-| temperature           | Controls randomness of the output. Not supported for reasoning models and will be automatically excluded when `isReasoningModel` or `o1` is `true`.                                                                                           |
-| max_tokens            | Maximum number of tokens to generate. Not supported for reasoning models and will be automatically excluded when `isReasoningModel` or `o1` is `true`.                                                                                        |
-| top_p                 | Controls nucleus sampling.                                                                                                                                                                                                                    |
-| frequency_penalty     | Penalizes new tokens based on their frequency.                                                                                                                                                                                                |
-| presence_penalty      | Penalizes new tokens based on their presence.                                                                                                                                                                                                 |
-| best_of               | Generates multiple outputs and chooses the best.                                                                                                                                                                                              |
-| functions             | Specifies functions available for use.                                                                                                                                                                                                        |
-| function_call         | Controls automatic function calling.                                                                                                                                                                                                          |
-| response_format       | Specifies the format of the response.                                                                                                                                                                                                         |
-| stop                  | Specifies stop sequences for the generation.                                                                                                                                                                                                  |
-| passthrough           | Anything under `passthrough` will be sent as a top-level request param                                                                                                                                                                        |
+| Name                  | Description                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                   |
+| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models** |
+| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                           |
+| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                               |
+| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                              |
+| top_p                 | Controls nucleus sampling (0-1)                                                                                             |
+| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                         |
+| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                            |
+| best_of               | Generates multiple outputs and returns the best                                                                             |
+| functions             | Array of functions available for the model to call                                                                          |
+| function_call         | Controls how the model calls functions                                                                                      |
+| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                   |
+| stop                  | Array of sequences where the model will stop generating                                                                     |
+| passthrough           | Additional parameters to send with the request                                                                              |
 
-## Using Reasoning Models (o1, o3-mini)
+## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
-Azure OpenAI now supports reasoning models like `o1` and `o3-mini`. These models operate differently from standard models with specific requirements:
+Azure OpenAI now supports reasoning models like `o1`, `o3`, `o3-mini`, and `o4-mini`. These models operate differently from standard models with specific requirements:
 
 1. They use `max_completion_tokens` instead of `max_tokens`
 2. They don't support `temperature` (it's ignored)
@@ -310,10 +365,10 @@ Since Azure allows custom deployment names that don't necessarily reflect the un
 ```yaml
 # For chat endpoints
 providers:
-  - id: azure:chat:my-o3-mini-deployment
+  - id: azure:chat:my-o4-mini-deployment
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
-      # Set this flag to true for reasoning models (o1, o3-mini)
+      # Set this flag to true for reasoning models (o1, o3, o3-mini, o4-mini)
       isReasoningModel: true
       # Use max_completion_tokens instead of max_tokens
       max_completion_tokens: 25000
@@ -322,7 +377,7 @@ providers:
 
 # For completion endpoints
 providers:
-  - id: azure:completion:my-o1-deployment
+  - id: azure:completion:my-o3-deployment
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       isReasoningModel: true
@@ -342,7 +397,7 @@ prompts:
   - 'Solve this complex math problem: {{problem}}'
 
 providers:
-  - id: azure:chat:my-o3-mini-deployment
+  - id: azure:chat:my-o4-mini-deployment
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       isReasoningModel: true
@@ -359,10 +414,6 @@ tests:
       effort_level: 'high'
 ```
 
-### Environment Variables
-
-These parameters can be configured directly in your configuration file as shown above.
-
 ### Troubleshooting
 
 If you encounter this error when using reasoning models:
@@ -373,20 +424,76 @@ API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is
 
 This means you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
 
+## Using Vision Models
+
+Azure OpenAI supports vision-capable models like GPT-4o and GPT-4.1 for image analysis.
+
+### Configuration
+
+```yaml
+providers:
+  - id: azure:chat:gpt-4o
+    config:
+      apiHost: 'your-resource-name.openai.azure.com'
+      apiVersion: '2024-10-21' # or newer for vision support
+```
+
+### Image Input
+
+Vision models require a specific message format. Images can be provided as:
+
+- **URLs**: Direct image links
+- **Local files**: Using `file://` paths (automatically converted to base64)
+- **Base64**: Data URIs with format `data:image/jpeg;base64,YOUR_DATA`
+
+```yaml
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What do you see in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "{{image_url}}"
+            }
+          }
+        ]
+      }
+    ]
+
+tests:
+  - vars:
+      image_url: https://example.com/image.jpg # URL
+  - vars:
+      image_url: file://assets/image.jpg # Local file (auto base64)
+  - vars:
+      image_url: data:image/jpeg;base64,/9j/4A... # Base64
+```
+
+### Example
+
+See the [azure-openai example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) for a complete working example with image analysis. Use `promptfooconfig.vision.yaml` for vision-specific features.
+
 ## Using DeepSeek Models
 
 Azure AI supports DeepSeek models such as DeepSeek-R1. Like other reasoning models, these require specific configuration:
 
 1. Set `isReasoningModel: true`
 2. Use `max_completion_tokens` instead of `max_tokens`
-3. Set API version to '2024-05-01-preview' (or latest available)
+3. Set API version to '2025-04-01-preview' (or latest available)
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: azure:chat:DeepSeek-R1
     config:
       apiHost: 'your-deployment-name.services.ai.azure.com'
-      apiVersion: '2024-05-01-preview'
+      apiVersion: '2025-04-01-preview'
       isReasoningModel: true
       max_completion_tokens: 2048
       reasoning_effort: 'medium' # Options: low, medium, high
@@ -401,7 +508,7 @@ defaultTest:
       id: azure:chat:DeepSeek-R1
       config:
         apiHost: 'your-deployment-name.services.ai.azure.com'
-        apiVersion: '2024-05-01-preview'
+        apiVersion: '2025-04-01-preview'
         isReasoningModel: true
         max_completion_tokens: 2048
 ```
@@ -410,15 +517,17 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 ## Assistants
 
-To eval an OpenAI assistant on Azure, first create a deployment for the assistant and create an assistant in the Azure web UI.
+To evaluate an OpenAI assistant on Azure:
 
-Then install the peer dependency locally:
+1. Create a deployment for the assistant in the Azure portal
+2. Create an assistant in the Azure web UI
+3. Install the peer dependency:
 
 ```sh
 npm i @azure/openai-assistants
 ```
 
-Next, record the assistant ID and set up your provider like so:
+4. Configure your provider with the assistant ID:
 
 ```yaml
 providers:
@@ -427,7 +536,7 @@ providers:
       apiHost: yourdeploymentname.openai.azure.com
 ```
 
-Be sure to replace the assistant ID and the name of your deployment.
+Replace the assistant ID and deployment name with your actual values.
 
 ### Function Tools with Assistants
 
@@ -466,7 +575,10 @@ providers:
 
 ### Using Vector Stores with Assistants
 
-Azure OpenAI Assistants support vector stores for enhanced file search capabilities. To use a vector store with your assistant, first create a vector store in the Azure Portal or via the API, then configure your assistant to use it:
+Azure OpenAI Assistants support vector stores for enhanced file search capabilities. To use a vector store:
+
+1. Create a vector store in the Azure Portal or via the API
+2. Configure your assistant to use it:
 
 ```yaml
 providers:
@@ -484,14 +596,14 @@ providers:
       # Optional parameters
       temperature: 1
       top_p: 1
-      apiVersion: '2024-05-01-preview'
+      apiVersion: '2025-04-01-preview'
 ```
 
-Make sure to:
+Key requirements:
 
-1. Set up a tool with `type: file_search`
-2. Configure the `tool_resources.file_search.vector_store_ids` array with your vector store IDs
-3. Set the appropriate `apiVersion` (recommended: `2024-05-01-preview` or later)
+- Set up a tool with `type: file_search`
+- Configure the `tool_resources.file_search.vector_store_ids` array with your vector store IDs
+- Set the appropriate `apiVersion` (recommended: `2025-04-01-preview` or later)
 
 ### Simple Example
 
@@ -513,10 +625,11 @@ tests:
 
 For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [azure-openai-assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant).
 
-See the guide on [How to eval OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
+See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
 
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
 - [Azure OpenAI Assistant Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant) - Complete working examples with various tool configurations
+- [Azure OpenAI Example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) - Example configurations including vision model support

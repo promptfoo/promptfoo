@@ -51,7 +51,7 @@ For each turn:
 3. The simulated user generates the next message based on their instructions
 4. This continues until either:
    - The maximum number of turns is reached
-   - The agent includes "###STOP###" in its response
+   - The agent determines that the conversation has reached a natural conclusion
 
 ## Configuration Options
 
@@ -134,6 +134,50 @@ tests:
 This enables automatic evaluation of whether your agent successfully handles different customer types and scenarios.
 
 For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/tau-simulated-user).
+
+### Using with Custom Providers
+
+The Simulated User Provider works seamlessly with custom providers (Python, JavaScript, etc.). All test-level `vars` are automatically passed to your custom provider's context, allowing you to access dynamic values like user IDs, session data, or routing information during conversations.
+
+```yaml
+providers:
+  - id: file://my_custom_agent.py
+    config:
+      base_url: https://api.example.com
+
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 5
+
+tests:
+  - vars:
+      workflow_id: 'wf-123'
+      session_id: 'sess-456'
+      instructions: |
+        You are booking a flight. Ask for the workflow ID to track your request.
+```
+
+In your custom provider, you can access these vars:
+
+```python
+def call_api(prompt, options, context):
+    # Access vars from the simulated conversation
+    workflow_id = context['vars']['workflow_id']  # "wf-123"
+    session_id = context['vars']['session_id']    # "sess-456"
+
+    # Use them in your logic
+    response = f"I'll track this as workflow {workflow_id}..."
+    return {"output": response}
+```
+
+This enables sophisticated testing scenarios where your custom provider can:
+
+- Route requests based on context variables
+- Maintain conversation state using session IDs
+- Access user-specific data for personalized responses
+- Implement complex business logic while testing multi-turn conversations
 
 ## Using as a Library
 

@@ -1,7 +1,7 @@
 import { parse } from 'csv-parse/sync';
 import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
-import { XSTestPlugin, fetchDataset, PLUGIN_ID } from '../../../src/redteam/plugins/xstest';
+import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
 
 jest.mock('fs');
 jest.mock('csv-parse/sync');
@@ -98,7 +98,7 @@ describe('XSTest Plugin', () => {
 
     it('should have correct plugin ID', () => {
       const plugin = new XSTestPlugin(mockProvider, 'test', 'input');
-      expect(plugin.id).toBe(PLUGIN_ID);
+      expect(plugin.id).toBe('promptfoo:redteam:xstest');
     });
 
     it('should generate assertions for a prompt', () => {

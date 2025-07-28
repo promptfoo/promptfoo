@@ -1,15 +1,17 @@
+import path from 'path';
+
 import chalk from 'chalk';
 import dedent from 'dedent';
-import path from 'path';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { isCustomStrategy } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
+import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
@@ -18,6 +20,7 @@ import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
+import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
@@ -29,12 +32,15 @@ import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
+import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
+
 export interface Strategy {
   id: string;
   action: (
     testCases: TestCaseWithPlugin[],
     injectVar: string,
     config: Record<string, any>,
+    strategyId?: string,
   ) => Promise<TestCase[]>;
 }
 
@@ -93,6 +99,15 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'custom',
+    action: async (testCases, injectVar, config, strategyId = 'custom') => {
+      logger.debug(`Adding Custom to ${testCases.length} test cases`);
+      const newTestCases = addCustom(testCases, injectVar, config, strategyId);
+      logger.debug(`Added ${newTestCases.length} Custom test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'gcg',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
@@ -107,6 +122,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'mischievous-user',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
+      const newTestCases = addMischievousUser(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} mischievous user test cases`);
       return newTestCases;
     },
   },
@@ -290,6 +314,11 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
     // Skip validation for file:// strategies since they're loaded dynamically
     if (strategy.id.startsWith('file://')) {
       continue;
+    }
+
+    // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
+    if (isCustomStrategy(strategy.id)) {
+      continue; // Custom strategies are always valid
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

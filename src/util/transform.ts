@@ -2,9 +2,10 @@ import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import type { Vars } from '../types';
 import { safeJoin } from './file.node';
 import { isJavascriptFile } from './fileExtensions';
+
+import type { Vars } from '../types';
 
 export type TransformContext = object;
 

@@ -2,8 +2,9 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
-import type { EvaluateResult, ResultFailureReason } from '../types';
 import invariant from '../util/invariant';
+
+import type { EvaluateResult, ResultFailureReason } from '../types';
 
 let ajvInstance: Ajv | null = null;
 
@@ -286,7 +287,7 @@ export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
 /**
  * Type definition for a logging-safe summary of an EvaluateResult.
  */
-export interface LoggableEvaluateResultSummary {
+interface LoggableEvaluateResultSummary {
   id?: string;
   testIdx: number;
   promptIdx: number;
