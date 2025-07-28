@@ -49,29 +49,27 @@ providers:
 | [Groq](./groq.md)                                             | High-performance LLM inference                            | `groq:llama-70b`                                             |
 | [Helicone](./helicone.md)                                     | Observability platform with caching and custom properties | `helicone:openai:gpt-4o`                                     |
 | [HuggingFace (Local Inference)](./huggingface.md)             | Local inference with transformers library                 | `huggingface:text:microsoft/Phi-4`                           |
-| [HuggingFace Endpoints](./huggingface-inference.md)           | Serverless HuggingFace endpoints                          | `huggingface:endpoint:your-endpoint-id`                      |
-| [HuggingFace Text Generation](./text-generation-inference.md) | HuggingFace text generation inference server              | `huggingface:text-generation:llama-7b`                       |
+| [HuggingFace Endpoints](./huggingface.md)                     | Serverless HuggingFace endpoints                          | `huggingface:endpoint:your-endpoint-id`                      |
+| [HuggingFace Text Generation](./huggingface.md) | HuggingFace text generation inference server              | `huggingface:text-generation:llama-7b`                       |
 | [Hyperbolic](./hyperbolic.md)                                 | High-efficiency AI inference cloud                        | `hyperbolic:deepseek-r1-distill-llama-70b`                   |
-| [IBM BAM](./bam.md)                                           | IBM BAM service (Experimental)                            | `bam:chat:granite-guardian-3-8b`                             |
+| [IBM BAM](./ibm-bam.md)                                           | IBM BAM service (Experimental)                            | `bam:chat:granite-guardian-3-8b`                             |
 | [LambdaLabs](./lambdalabs.md)                                 | Cloud compute for AI workloads                            | `lambdalabs:hermes-3-llama-3.1-70b-fp8`                      |
-| [Langfuse](./langfuse.md)                                     | Prompt management and tracing                             | `langfuse://my-prompt`                                       |
+
 | [LiteLLM](./litellm.md)                                       | Unified API proxy for 150+ LLM providers                  | `litellm:gpt-4o`                                             |
-| [Llama.cpp](./llamacpp.md)                                    | Run LLMs locally with C++ implementation                  | `llama:llama-3-8b`                                           |
-| [LM Studio](./lm-studio.md)                                   | Run open-source LLMs locally                              | `http://localhost:1234/v1/chat/completions`                  |
+| [Llama.cpp](./llama.cpp.md)                                    | Run LLMs locally with C++ implementation                  | `llama:llama-3-8b`                                           |
+
 | [LocalAI](./localai.md)                                       | Self-hosted OpenAI alternative                            | `localai:phi-2`                                              |
 | [Mistral AI](./mistral.md)                                    | Mistral's language models                                 | `mistral:mistral-large-latest`                               |
-| [Model Fusion](./modelfusion.md)                              | Multi-provider TypeScript SDK                             | `file://custom-modelfusion-provider.js`                      |
-| [Nebius AI](./nebius.md)                                      | AI infrastructure platform                                | `nebius:llama-3-1-70b-instruct`                              |
+
 | [Ollama](./ollama.md)                                         | Run LLMs locally                                          | `ollama:chat:llama4.1`                                       |
-| [OpenBMB](./openbmb.md)                                       | Open Multilingual Model Base                              | `openbmb:minicpm3-4b`                                        |
+
 | [OpenLLM](./openllm.md)                                       | Run any open-source LLMs as OpenAI-compatible APIs        | `http://localhost:3000/v1/chat/completions`                  |
 | [OpenRouter](./openrouter.md)                                 | Access multiple model providers with one API              | `openrouter:google/gemini-2.0-pro:beta`                      |
 | [Perplexity](./perplexity.md)                                 | Language models with web search                           | `perplexity:sonar-reasoning`                                 |
-| [Ping Pong](./pingpong.md)                                    | Single API gateway for model providers                    | `pingpong:chat:meta-llama/llama-3.3-70b-instruct`            |
-| [Portkey](./portkey.md)                                       | Gateway for managing multiple providers                   | `portkey:pp-gpt-4o-mini-230344`                              |
+
 | [Replicate](./replicate.md)                                   | Run ML models in the cloud                                | `replicate:meta/llama-3.3-70b-instruct`                      |
-| [SambaNova](./sambanova.md)                                   | High-performance AI hardware platform                     | `sambanova:llama3-405b`                                      |
-| [Together AI](./together.md)                                  | Scalable inference for open-source models                 | `together:meta-llama/Meta-Llama-3.3-70B-Instruct`            |
+
+| [Together AI](./togetherai.md)                                  | Scalable inference for open-source models                 | `together:meta-llama/Meta-Llama-3.3-70B-Instruct`            |
 | [vLLM](./vllm.md)                                             | High-throughput LLM serving                               | `vllm:llama-8b`                                              |
 | [Voyage AI](./voyage.md)                                      | Specialized embeddings and reranking models               | `voyage:voyage-3-lite`                                       |
 | [WebsocketGenerativeAI](./websocket.md)                       | Real-time streaming inference                             | `websocket:ws://localhost:8080`                              |
