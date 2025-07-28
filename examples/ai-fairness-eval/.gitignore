@@ -1,24 +1,20 @@
-# Generated datasets (except the example one)
-wokeness_eval_questions_original.csv
+# Generated files
+results/
+*.log
+.env
+.cache/
+__pycache__/
+*.pyc
+
+# Dataset variations
+wokeness_eval_questions_*.csv
 wokeness_eval_questions_old.csv
 demo_questions.csv
 demo_config.yaml
 demo_sophisticated.csv
 sophisticated_questions_full.json
 
-# Results and outputs
-results/
-demo_results.json
-fairness_analysis_detailed.csv
-*.log
-
-# Hidden audit set
-.hidden_audit_set.json
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-
-# OS files
-.DS_Store 
+# Temporary files
+*.tmp
+*.bak
+*~ 
