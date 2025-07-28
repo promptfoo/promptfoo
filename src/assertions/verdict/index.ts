@@ -36,6 +36,24 @@ export const handleVerdict = async ({
   const config = parseVerdictConfig(assertion.value as VerdictValue);
   const threshold = assertion.threshold ?? config.threshold ?? 0.5;
 
+  // Validate threshold
+  if (threshold < 0) {
+    return {
+      assertion,
+      pass: false,
+      score: 0,
+      reason: `Invalid threshold: ${threshold}. Threshold must be non-negative.`,
+    };
+  }
+
+  // Warn if threshold > 1 and no scale info (likely using raw values with normalized comparison)
+  if (threshold > 1 && typeof config.value === 'object' && !config.value.scale) {
+    console.warn(
+      `Warning: Threshold ${threshold} is greater than 1 but no scale information provided. ` +
+        `Verdict uses normalized scores (0-1). Consider using a normalized threshold or providing scale information.`,
+    );
+  }
+
   // Create execution context
   const context: ExecutionContext = {
     test,
@@ -66,7 +84,7 @@ export const handleVerdict = async ({
     // Execute based on config type
     let result: any;
 
-    if (typeof config.value === 'object' && 'pipeline' in config.value) {
+    if (typeof config.value === 'object' && 'pipeline' in config.value && config.value.pipeline) {
       // Complex pipeline execution
       const pipeline = createPipeline(config.value.pipeline);
       result = await executePipeline(pipeline, outputString, context);
@@ -125,6 +143,9 @@ function createUnitFromConfig(config: any): Unit {
     if (config.categories) {
       unitConfig.categories = config.categories;
     }
+    if (config.expectedCategories) {
+      unitConfig.expectedCategories = config.expectedCategories;
+    }
     if (config.scale) {
       unitConfig.scale = config.scale;
     }
@@ -132,11 +153,8 @@ function createUnitFromConfig(config: any): Unit {
     return createUnit(config.type, unitConfig);
   }
 
-  // Default to categorical judge
-  return createUnit('categorical', {
-    prompt: String(config),
-    categories: ['yes', 'no'],
-  });
+  // Default to judge unit
+  return createUnit('judge', config);
 }
 
 async function executePipeline(
@@ -161,9 +179,13 @@ function evaluateResult(
     if ('score' in result) {
       const rawScore = Number(result.score);
       const normalizedScore = normalizeScore(rawScore, result);
+      // Normalize threshold if scale info is available
+      const normalizedThreshold = result._scale
+        ? normalizeThreshold(threshold, result._scale)
+        : threshold;
       return {
         score: normalizedScore,
-        pass: normalizedScore >= threshold,
+        pass: normalizedScore >= normalizedThreshold,
         reason: formatAggregationReason(result),
       };
     }
@@ -183,29 +205,45 @@ function evaluateResult(
     const rawScore = Number(result.score);
     // Normalize score to 0-1 range if it has scale information
     const normalizedScore = normalizeScore(rawScore, result);
+    // Normalize threshold if scale info is available
+    const normalizedThreshold = result._scale
+      ? normalizeThreshold(threshold, result._scale)
+      : threshold;
     return {
       score: normalizedScore,
-      pass: normalizedScore >= threshold,
-      reason: result.explanation || `Score: ${rawScore}${result._scale ? ` (normalized: ${normalizedScore.toFixed(2)})` : ''}`,
+      pass: normalizedScore >= normalizedThreshold,
+      reason:
+        result.explanation ||
+        `Score: ${rawScore}${result._scale ? ` (normalized: ${normalizedScore.toFixed(2)})` : ''}`,
     };
   }
 
   if ('choice' in result || 'chosen' in result) {
     const choice = result.choice || result.chosen;
-    
+
+    // Check if we have expected categories
+    if (result._expectedCategories && result._expectedCategories.length > 0) {
+      const isExpected = result._expectedCategories.includes(choice.toLowerCase());
+      return {
+        score: isExpected ? 1 : 0,
+        pass: isExpected,
+        reason: formatChoiceReason(choice, result.explanation),
+      };
+    }
+
     // For custom categorical judgments (non yes/no), any valid choice is considered a pass
-    // The user should use the threshold parameter or specific assertions to check for expected values
+    // The user should use expectedCategories or threshold parameter to check for expected values
     const isYesNoChoice = ['yes', 'no'].includes(choice.toLowerCase());
-    
+
     if (!isYesNoChoice) {
-      // Custom categories - consider any choice as pass (score 1)
+      // Custom categories - consider any choice as pass (score 1) unless expectedCategories is specified
       return {
         score: 1,
         pass: true,
         reason: formatChoiceReason(choice, result.explanation),
       };
     }
-    
+
     // For yes/no choices, use positive detection
     const isPositive = isPositiveChoice(choice);
     return {
@@ -247,14 +285,51 @@ function normalizeScore(score: number, result: any): number {
   }
 
   const { min, max } = result._scale;
-  
+
   // Already in 0-1 range
   if (min === 0 && max === 1) {
     return score;
   }
-  
+
   // Normalize to 0-1
   return (score - min) / (max - min);
+}
+
+function normalizeThreshold(threshold: number, scale: { min: number; max: number }): number {
+  const { min, max } = scale;
+
+  // Validate scale
+  if (min >= max) {
+    console.warn(`Invalid scale: min (${min}) >= max (${max}). Using threshold as-is.`);
+    return threshold;
+  }
+
+  // If threshold is already in 0-1 range, assume it's pre-normalized
+  // This handles backwards compatibility
+  if (threshold >= 0 && threshold <= 1 && min !== 0 && max !== 1) {
+    return threshold;
+  }
+
+  // If threshold is within the scale range, normalize it
+  if (threshold >= min && threshold <= max) {
+    return (threshold - min) / (max - min);
+  }
+
+  // If threshold is outside scale range but > 1, assume it needs normalization
+  // This handles cases like threshold: 7 for a 1-10 scale
+  if (threshold > 1) {
+    // Warn if threshold is outside expected range
+    if (threshold > max) {
+      console.warn(
+        `Threshold ${threshold} is greater than scale maximum ${max}. ` +
+          `This will result in a normalized threshold > 1, which means the assertion will always fail.`,
+      );
+    }
+    return (threshold - min) / (max - min);
+  }
+
+  // Otherwise return as-is
+  return threshold;
 }
 
 function formatAggregationReason(result: any): string {
@@ -270,7 +345,9 @@ function formatAggregationReason(result: any): string {
   }
 
   if (agg.method === 'weighted-mean-pool') {
-    const normalizedMean = result._scale ? normalizeScore(agg.weightedMean, result) : agg.weightedMean;
+    const normalizedMean = result._scale
+      ? normalizeScore(agg.weightedMean, result)
+      : agg.weightedMean;
     return `Weighted average: ${agg.weightedMean.toFixed(2)} (normalized: ${normalizedMean.toFixed(2)})`;
   }
 

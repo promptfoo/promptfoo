@@ -196,17 +196,22 @@ export class MeanPoolUnit extends BaseUnit<AggregateInput, MeanPoolOutput> {
         return parsed;
       }
     }
-    
+
     // Handle categorical results
     if ('choice' in result) {
       const choice = String(result.choice).toLowerCase();
       if (choice === 'yes' || choice === 'true' || choice === 'correct' || choice === 'valid') {
         return 1;
-      } else if (choice === 'no' || choice === 'false' || choice === 'incorrect' || choice === 'invalid') {
+      } else if (
+        choice === 'no' ||
+        choice === 'false' ||
+        choice === 'incorrect' ||
+        choice === 'invalid'
+      ) {
         return 0;
       }
     }
-    
+
     return undefined;
   }
 
@@ -370,17 +375,22 @@ export class MinPoolUnit extends BaseUnit<AggregateInput, UnitOutput> {
         typeof result.score === 'number' ? result.score : parseFloat(String(result.score));
       return isNaN(score) ? undefined : score;
     }
-    
+
     // Handle categorical results
     if ('choice' in result) {
       const choice = String(result.choice).toLowerCase();
       if (choice === 'yes' || choice === 'true' || choice === 'correct' || choice === 'valid') {
         return 1;
-      } else if (choice === 'no' || choice === 'false' || choice === 'incorrect' || choice === 'invalid') {
+      } else if (
+        choice === 'no' ||
+        choice === 'false' ||
+        choice === 'incorrect' ||
+        choice === 'invalid'
+      ) {
         return 0;
       }
     }
-    
+
     return undefined;
   }
 

@@ -5,11 +5,21 @@ The `verdict` assertion enables sophisticated LLM-as-a-judge evaluation pipeline
 ## Score Normalization
 
 All verdict scores are automatically normalized to the 0-1 range to match promptfoo's conventions:
+
 - Likert scales (e.g., 1-5) are normalized: score 3 on a 1-5 scale becomes 0.5
 - Binary choices (yes/no) map to 1/0
 - Custom scales are proportionally mapped to 0-1
 
 The original scores are preserved in the reason field for transparency.
+
+## Threshold Behavior
+
+Thresholds can be specified in two ways:
+
+- **Raw scale values**: Use the actual scale value (e.g., `threshold: 4` for a 1-5 scale)
+- **Normalized values**: Use 0-1 range (e.g., `threshold: 0.8` for 80%)
+
+The system automatically detects and normalizes thresholds when scale information is available.
 
 ## Basic Usage
 
@@ -21,25 +31,42 @@ assert:
 ```
 
 ```yaml
-# Categorical classification
+# Categorical classification with expected values
 assert:
   - type: verdict
     value:
       type: categorical
       prompt: 'What is the sentiment of this response?'
       categories: ['positive', 'negative', 'neutral']
+      expectedCategories: ['positive'] # Only 'positive' will pass
 ```
 
 ```yaml
-# Numeric rating
+# Numeric rating with raw threshold
 assert:
   - type: verdict
     value:
       type: likert
       prompt: 'Rate the quality from 1-5'
       scale: [1, 5]
-    threshold: 4
+    threshold: 4 # Automatically normalized to 0.75
 ```
+
+## Categorical Assertions
+
+By default, any valid category choice is considered a pass. To specify which categories should pass:
+
+```yaml
+assert:
+  - type: verdict
+    value:
+      type: categorical
+      prompt: 'Is this explanation accurate?'
+      categories: ['accurate', 'partially accurate', 'inaccurate']
+      expectedCategories: ['accurate', 'partially accurate'] # These will pass
+```
+
+For yes/no categories, positive choices ('yes', 'true', 'correct', etc.) pass by default.
 
 ## Advanced Features
 

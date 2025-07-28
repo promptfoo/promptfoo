@@ -174,8 +174,57 @@ describe('Verdict Assertion', () => {
 
       const result = await handleVerdict(params);
       expect(result.pass).toBe(true);
-      expect(result.score).toBe(4);
-      expect(result.reason).toBe('Score: 4');
+      expect(result.score).toBe(0.75); // Score 4 on 1-5 scale normalized to 0.75
+      expect(result.reason).toBe('Score: 4 (normalized: 0.75)');
+    });
+
+    test('categorical verdict with expectedCategories', async () => {
+      const params: AssertionParams = {
+        assertion: {
+          type: 'verdict',
+          value: {
+            type: 'categorical',
+            prompt: 'Classify the sentiment',
+            categories: ['positive', 'negative', 'neutral'],
+            expectedCategories: ['positive', 'neutral'],
+          },
+        },
+        baseType: 'verdict',
+        context: mockContext,
+        inverse: false,
+        output: 'Great product!',
+        outputString: 'Great product!',
+        providerResponse: mockProviderResponse,
+        test: mockTest,
+        latencyMs: 100,
+      };
+
+      // Mock provider to return 'positive' (should pass)
+      const { getAndCheckProvider } = require('../../src/matchers');
+      getAndCheckProvider.mockResolvedValueOnce({
+        callApi: jest.fn().mockResolvedValue({
+          output: 'positive',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+
+      let result = await handleVerdict(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.reason).toBe('Choice: positive');
+
+      // Test with 'negative' (should fail)
+      getAndCheckProvider.mockResolvedValueOnce({
+        callApi: jest.fn().mockResolvedValue({
+          output: 'negative',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+
+      result = await handleVerdict(params);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Choice: negative');
     });
   });
 

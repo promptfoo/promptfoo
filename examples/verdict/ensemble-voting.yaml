@@ -28,6 +28,7 @@ tests:
 
                     Story: {{ output }}
                   categories: ['creative', 'not creative']
+                  expectedCategories: ['creative'] # Only 'creative' will pass
                 repeat: 3
 
             # Take majority vote
@@ -61,7 +62,7 @@ tests:
 
             # Average the scores
             - type: mean-pool
-        threshold: 4
+        threshold: 0.75 # Normalized threshold (equivalent to 4/5)
 
   # Weighted ensemble
   - vars:
@@ -87,6 +88,7 @@ tests:
                     name: completeness
                     prompt: 'Is the explanation complete?'
                     categories: ['complete', 'incomplete']
+                    expectedCategories: ['complete']
 
             # Weighted aggregation
             - type: weighted-mean

@@ -17,7 +17,7 @@ tests:
         value: 'Is the response factually correct?'
         threshold: 0.8
 
-  # Categorical classification
+  # Categorical classification with expected categories
   - vars:
       question: 'Write a haiku about spring'
     assert:
@@ -35,8 +35,9 @@ tests:
 
             Is this a valid haiku?
           categories: ['valid', 'invalid']
+          expectedCategories: ['valid'] # Only 'valid' will pass
 
-  # Likert scale rating
+  # Likert scale rating with raw threshold
   - vars:
       question: 'Explain photosynthesis to a 10-year-old'
     assert:
@@ -55,13 +56,13 @@ tests:
             Rate from 1 (too complex) to 5 (perfect for age)
           scale: [1, 5]
           explanation: true
-        threshold: 4
+        threshold: 4 # Will be normalized to 0.75
 
-  # Multiple verdict checks
+  # Multiple verdict checks with expected categories
   - vars:
       question: 'What are the benefits of regular exercise?'
     assert:
-      # Check accuracy
+      # Check accuracy with expected categories
       - type: verdict
         value:
           type: categorical
@@ -70,8 +71,9 @@ tests:
             Response: {{ output }}
             Answer with one of: accurate, inaccurate, partially accurate
           categories: ['accurate', 'inaccurate', 'partially accurate']
+          expectedCategories: ['accurate', 'partially accurate'] # These will pass
 
-      # Check completeness
+      # Check completeness with normalized threshold
       - type: verdict
         value:
           type: likert
@@ -80,8 +82,8 @@ tests:
             Response: {{ output }}
             Rate from 1-5:
           scale: [1, 5]
-        threshold: 3
+        threshold: 0.5 # Normalized threshold (equivalent to 3/5)
 
-      # Check clarity
+      # Check clarity (yes/no)
       - type: verdict
         value: 'Is this response clear and easy to understand?'

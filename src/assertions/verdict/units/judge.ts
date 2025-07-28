@@ -47,12 +47,12 @@ export class JudgeUnit extends BaseUnit<UnitInput, JudgeUnitOutput> {
 
   protected async preparePrompt(input: UnitInput, context: ExecutionContext): Promise<string> {
     let prompt = await super.preparePrompt(input, context);
-    
+
     // Add explanation request if configured
     if (this.config.explanation) {
       prompt += '\n\nProvide your score and explain your reasoning.';
     }
-    
+
     return prompt;
   }
 
@@ -112,8 +112,14 @@ export class JudgeUnit extends BaseUnit<UnitInput, JudgeUnitOutput> {
     const output: JudgeUnitOutput = {
       score: Number(response.score),
       _scale: {
-        min: this.scale instanceof LikertScale ? this.scale.min : Math.min(...(this.scale as DiscreteScale<number>).values),
-        max: this.scale instanceof LikertScale ? this.scale.max : Math.max(...(this.scale as DiscreteScale<number>).values),
+        min:
+          this.scale instanceof LikertScale
+            ? this.scale.min
+            : Math.min(...(this.scale as DiscreteScale<number>).values),
+        max:
+          this.scale instanceof LikertScale
+            ? this.scale.max
+            : Math.max(...(this.scale as DiscreteScale<number>).values),
       },
     };
 
@@ -131,11 +137,13 @@ export class JudgeUnit extends BaseUnit<UnitInput, JudgeUnitOutput> {
 
 interface CategoricalJudgeConfig extends UnitConfig {
   categories?: string[] | Scale<string>;
+  expectedCategories?: string[];
 }
 
 interface CategoricalJudgeOutput extends UnitOutput {
   choice: string;
   explanation?: string;
+  _expectedCategories?: string[];
 }
 
 export class CategoricalJudgeUnit extends BaseUnit<UnitInput, CategoricalJudgeOutput> {
@@ -250,6 +258,11 @@ export class CategoricalJudgeUnit extends BaseUnit<UnitInput, CategoricalJudgeOu
       output.explanation = response.explanation;
     } else if (this.config.explanation && response.reasoning) {
       output.explanation = response.reasoning;
+    }
+
+    // Add expected categories if configured
+    if ((this.config as CategoricalJudgeConfig).expectedCategories) {
+      output._expectedCategories = (this.config as CategoricalJudgeConfig).expectedCategories;
     }
 
     return output;

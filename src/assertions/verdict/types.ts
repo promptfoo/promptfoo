@@ -7,7 +7,7 @@
  * arXiv preprint arXiv:2502.18018.
  */
 
-import type { ApiProvider, GradingResult, TestCase } from '../../types';
+import type { ApiProvider, GradingResult, TestCase, ProviderOptions } from '../../types';
 
 // ==================== Scale Types ====================
 
@@ -132,17 +132,15 @@ export interface PreviousResults {
 export type VerdictValue =
   | string
   | {
-      type: 'categorical' | 'likert' | 'pairwise' | 'judge';
-      prompt: string;
+      prompt?: string;
+      type?: 'categorical' | 'likert' | 'judge' | 'verify' | string;
       categories?: string[];
+      expectedCategories?: string[]; // Categories that should be considered passing
       scale?: [number, number] | number[];
-      options?: string[];
       explanation?: boolean;
-      provider?: string;
-    }
-  | {
-      pipeline: PipelineStep[];
+      provider?: string | ProviderOptions | ApiProvider;
       threshold?: number;
+      pipeline?: PipelineConfig;
     };
 
 export interface VerdictConfig {

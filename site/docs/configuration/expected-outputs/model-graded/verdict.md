@@ -13,9 +13,21 @@ To maintain consistency with other promptfoo assertions, all verdict scores are 
 - **Likert scales**: A score of 3 on a 1-5 scale becomes 0.5 (normalized as `(3-1)/(5-1) = 0.5`)
 - **Custom numeric scales**: Proportionally mapped to 0-1
 - **Binary categories**: "yes" = 1, "no" = 0
-- **Custom categories**: All valid choices = 1 (pass)
+- **Custom categories**: All valid choices = 1 (pass) unless `expectedCategories` is specified
 
 The original scores are preserved in the output for transparency, shown as "Score: 3 (normalized: 0.50)".
+
+## Threshold Behavior
+
+Thresholds work intelligently with both raw and normalized values:
+
+- **Raw scale values**: Use the actual scale value (e.g., `threshold: 7` for a 1-10 scale)
+- **Normalized values**: Use 0-1 range (e.g., `threshold: 0.7` for 70%)
+
+The system automatically detects and normalizes thresholds when scale information is available. For example:
+
+- `threshold: 4` on a 1-5 scale is normalized to 0.75
+- `threshold: 0.8` is already normalized and used as-is
 
 ## How to use it
 
@@ -31,23 +43,40 @@ assert:
 For more complex evaluations:
 
 ```yaml
-# Categorical classification
+# Categorical classification with expected values
 assert:
   - type: verdict
     value:
       type: categorical
       prompt: 'What is the sentiment of this response?'
       categories: ['positive', 'negative', 'neutral']
+      expectedCategories: ['positive', 'neutral']  # Only these will pass
 
-# Numeric rating
+# Numeric rating with raw threshold
 assert:
   - type: verdict
     value:
       type: likert
       prompt: 'Rate the quality from 1-10'
       scale: [1, 10]
-    threshold: 7
+    threshold: 7  # Automatically normalized to 0.6
 ```
+
+## Categorical Assertions
+
+By default, any valid category choice is considered a pass. This allows for flexible classification tasks. To specify which categories should pass:
+
+```yaml
+assert:
+  - type: verdict
+    value:
+      type: categorical
+      prompt: 'Classify the response quality'
+      categories: ['excellent', 'good', 'fair', 'poor']
+      expectedCategories: ['excellent', 'good'] # Only these will pass
+```
+
+For yes/no categories, positive choices ('yes', 'true', 'correct', 'valid', 'good', 'positive') pass by default.
 
 ## How it works
 
@@ -63,6 +92,7 @@ Verdict provides a flexible system for LLM evaluation through:
 ### Judge Units
 
 **Categorical Judge**
+
 ```yaml
 assert:
   - type: verdict
@@ -73,6 +103,7 @@ assert:
 ```
 
 **Likert Scale Judge**
+
 ```yaml
 assert:
   - type: verdict
@@ -80,10 +111,11 @@ assert:
       type: likert
       prompt: 'Rate clarity on a scale of 1-5'
       scale: [1, 5]
-      explanation: true  # Request reasoning
+      explanation: true # Request reasoning
 ```
 
 **Pairwise Comparison**
+
 ```yaml
 assert:
   - type: verdict
@@ -93,12 +125,13 @@ assert:
         Compare these responses:
         A: {{ output }}
         B: "Alternative response here"
-        
+
         Which is better?
       options: ['A', 'B']
 ```
 
 **Verification Unit**
+
 ```yaml
 assert:
   - type: verdict
@@ -115,6 +148,7 @@ assert:
 ### Aggregation Units
 
 **Majority Voting (Max Pool)**
+
 ```yaml
 assert:
   - type: verdict
@@ -125,11 +159,12 @@ assert:
               type: categorical
               prompt: 'Is this appropriate?'
               categories: ['yes', 'no']
-            repeat: 3  # Create 3 judges
-        - type: max-pool  # Take majority vote
+            repeat: 3 # Create 3 judges
+        - type: max-pool # Take majority vote
 ```
 
 **Average Score (Mean Pool)**
+
 ```yaml
 assert:
   - type: verdict
@@ -145,6 +180,7 @@ assert:
 ```
 
 **All Must Pass (Min Pool)**
+
 ```yaml
 assert:
   - type: verdict
@@ -158,10 +194,11 @@ assert:
               - type: categorical
                 prompt: 'Is it accurate?'
                 categories: ['yes', 'no']
-        - type: min-pool  # All must be 'yes'
+        - type: min-pool # All must be 'yes'
 ```
 
 **Weighted Average**
+
 ```yaml
 assert:
   - type: verdict
@@ -204,7 +241,7 @@ assert:
                 name: complete
                 prompt: 'How complete is the answer? (1-5)'
                 scale: [1, 5]
-        
+
         # Layer 2: Verify judgments
         - layer:
             units:
@@ -213,7 +250,7 @@ assert:
                   Review: {{ previous.factual.choice }}
                   Reason: {{ previous.factual.explanation }}
                   Is this assessment valid?
-        
+
         # Final aggregation
         - type: mean-pool
 ```
@@ -238,13 +275,13 @@ assert:
                 prompt: 'As a technical reviewer, rate this (1-10)'
                 scale: [1, 10]
                 explanation: true
-        
+
         # Meta-evaluation
         - type: categorical
           prompt: |
             Expert 1: {{ previous.expert1.score }}/10
             Expert 2: {{ previous.expert2.score }}/10
-            
+
             Do the experts agree?
           categories: ['strong agreement', 'mild agreement', 'disagreement']
 ```
@@ -309,10 +346,11 @@ assert:
       type: likert
       prompt: 'Rate overall quality'
       scale: [1, 10]
-    threshold: 0.8  # Requires normalized score ≥ 0.8 (raw score ≥ 8.2 on 1-10 scale)
+    threshold: 0.8 # Requires normalized score ≥ 0.8 (raw score ≥ 8.2 on 1-10 scale)
 ```
 
 For a 1-5 Likert scale:
+
 - threshold: 0.5 = requires score ≥ 3
 - threshold: 0.75 = requires score ≥ 4
 - threshold: 1.0 = requires perfect score of 5

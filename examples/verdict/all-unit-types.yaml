@@ -17,11 +17,11 @@ tests:
           type: pairwise
           prompt: |
             Compare these two explanations:
-            
+
             A: {{ output }}
-            
+
             B: "The sky appears blue because air molecules scatter short-wavelength blue light more than other colors as sunlight passes through the atmosphere."
-            
+
             Which explanation is better? Choose A or B.
           options: ['A', 'B']
 
@@ -39,13 +39,13 @@ tests:
                 Is this answer mathematically correct?
                 Answer: {{ output }}
               categories: ['correct', 'incorrect']
-              
+
             # Verify the judgment
             - type: verify
               prompt: |
                 The answer given was: {{ output }}
                 The initial judgment was: {{ previous.initial_judge.choice }}
-                
+
                 Was the initial judgment accurate? Answer with 'valid' or 'invalid'.
 
   # Test provider override
@@ -54,7 +54,7 @@ tests:
     assert:
       - type: verdict
         value: 'Did the response name a valid color?'
-        provider: openai:gpt-3.5-turbo  # Override provider
+        provider: openai:gpt-3.5-turbo # Override provider
 
   # Test weighted mean aggregation
   - vars:
@@ -70,7 +70,7 @@ tests:
                     prompt: |
                       Rate the creativity of this story (1-5):
                       {{ output }}
-                      
+
                       Score (1-5):
                     scale: [1, 5]
                   - type: likert
@@ -78,7 +78,7 @@ tests:
                     prompt: |
                       Rate the coherence of this story (1-5):
                       {{ output }}
-                      
+
                       Score (1-5):
                     scale: [1, 5]
                   - type: likert
@@ -86,7 +86,7 @@ tests:
                     prompt: |
                       Rate the emotional impact (1-5):
                       {{ output }}
-                      
+
                       Score (1-5):
                     scale: [1, 5]
             - type: weighted-mean
@@ -123,4 +123,4 @@ tests:
                       Response: {{ output }}
                       Answer with: yes or no
                     categories: ['yes', 'no']
-            - type: min-pool  # All must be 'yes' to pass
+            - type: min-pool # All must be 'yes' to pass
