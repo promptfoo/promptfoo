@@ -413,6 +413,30 @@ describe('Python file references', () => {
     );
   });
 
+  it('should provide helpful error when file:// prefix is missing', async () => {
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'my_assert.py', // Missing file:// prefix
+    };
+
+    jest.mocked(runPythonCode).mockRejectedValue(
+      new Error("NameError: name 'my_assert' is not defined"),
+    );
+
+    const output = 'Test output';
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {},
+      providerResponse: { output },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('NameError');
+    expect(result.reason).toContain("Did you mean to use 'file://my_assert.py'");
+  });
+
   it('should map snake_case keys from python dataclass to camelCase', async () => {
     const pythonResult = {
       pass_: true,

@@ -160,6 +160,13 @@ ${
       reason = `Python assertion error: Missing module '${moduleName}'.\n\nInstall it with: pip install ${moduleName}`;
     } else if (error.message.includes('SyntaxError')) {
       reason = `Python syntax error in assertion:\n${error.message}`;
+    } else if (
+      error.message.includes('NameError') && 
+      typeof assertion.value === 'string' && 
+      assertion.value.endsWith('.py')
+    ) {
+      // Likely forgot file:// prefix
+      reason = `Python assertion error: ${error.message}\n\nDid you mean to use 'file://${assertion.value}' to reference an external Python file?`;
     } else if (error.message.includes('returned non-zero exit status')) {
       reason = `Python assertion crashed. Check the assertion code for errors.\n${error.message}`;
     } else {
