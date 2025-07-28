@@ -1,0 +1,169 @@
+# Custom Scales and Advanced Configurations
+
+description: 'Examples using custom scales and configurations'
+
+prompts:
+  - '{{ instruction }}'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # Custom discrete scale
+  - vars:
+      instruction: "Translate 'Hello, how are you?' to Spanish"
+    assert:
+      - type: verdict
+        value:
+          type: categorical
+          prompt: |
+            Rate the quality of this translation:
+            {{ output }}
+          categories: ['perfect', 'good', 'acceptable', 'poor', 'wrong']
+          explanation: true
+
+  # Binary scale
+  - vars:
+      instruction: 'Is 17 a prime number? Answer yes or no.'
+    assert:
+      - type: verdict
+        value:
+          type: categorical
+          prompt: 'Is the answer correct?'
+          categories: ['correct', 'incorrect']
+
+  # Extended Likert scale
+  - vars:
+      instruction: 'Write a professional email declining a job offer'
+    assert:
+      - type: verdict
+        value:
+          type: likert
+          prompt: |
+            Rate the professionalism of this email on a scale of 1-10:
+            1 = Completely unprofessional
+            10 = Exceptionally professional
+
+            Email: {{ output }}
+          scale: [1, 10]
+          explanation: true
+        threshold: 7
+
+  # Multiple custom scales in pipeline
+  - vars:
+      instruction: 'Solve this math problem: If a train travels 120 miles in 2 hours, what is its average speed?'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Check different aspects
+            - layer:
+                units:
+                  # Correctness
+                  - type: categorical
+                    name: correctness
+                    prompt: 'Is the final answer (60 mph) correct?'
+                    categories: ['correct', 'incorrect']
+
+                  # Method quality
+                  - type: categorical
+                    name: method
+                    prompt: 'Rate the solution method'
+                    categories: ['excellent', 'good', 'adequate', 'poor']
+
+                  # Explanation clarity
+                  - type: likert
+                    name: clarity
+                    prompt: 'Rate explanation clarity (1-7)'
+                    scale: [1, 7]
+
+            # Custom aggregation logic
+            - type: weighted-mean
+              weights:
+                correctness: 0.6 # Most important
+                method: 0.25
+                clarity: 0.15
+
+  # Temperature-controlled evaluation
+  - vars:
+      instruction: 'Generate a creative story opening'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Low temperature for consistent evaluation
+            - layer:
+                units:
+                  - type: likert
+                    prompt: 'Rate creativity (1-5)'
+                    scale: [1, 5]
+                    temperature: 0.3
+
+                  - type: likert
+                    prompt: 'Rate writing quality (1-5)'
+                    scale: [1, 5]
+                    temperature: 0.3
+
+                  - type: likert
+                    prompt: 'Rate engagement (1-5)'
+                    scale: [1, 5]
+                    temperature: 0.3
+                repeat: 2 # Each judge evaluates twice
+
+            # Average all scores
+            - type: mean-pool
+        threshold: 3.5
+
+  # Provider-specific evaluation
+  - vars:
+      instruction: 'Explain quantum entanglement'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Use different providers for diversity
+            - layer:
+                units:
+                  - type: categorical
+                    prompt: 'Is this explanation scientifically accurate?'
+                    categories: ['accurate', 'mostly accurate', 'inaccurate']
+                    provider: openai:gpt-4
+
+                  - type: categorical
+                    prompt: 'Is this explanation scientifically accurate?'
+                    categories: ['accurate', 'mostly accurate', 'inaccurate']
+                    provider: anthropic:claude-3-sonnet
+
+            # Require consensus
+            - type: max-pool
+        threshold: 0.8
+
+  # Complex scoring with explanations
+  - vars:
+      instruction: "Debug this code: print('Hello World'"
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Detailed evaluation
+            - type: categorical
+              prompt: |
+                Evaluate this debugging attempt:
+                {{ output }}
+
+                Categories:
+                - "perfect": Found and fixed all issues correctly
+                - "good": Found the issue but explanation could be better  
+                - "partial": Found some issues but missed others
+                - "incorrect": Wrong diagnosis or fix
+              categories: ['perfect', 'good', 'partial', 'incorrect']
+              explanation: true
+
+            # Follow-up verification
+            - type: verify
+              prompt: |
+                Previous evaluation: {{ previous.categorical_judge.choice }}
+                Explanation: {{ previous.categorical_judge.explanation }}
+
+                The code has a missing closing parenthesis. 
+                Was this identified and fixed correctly?

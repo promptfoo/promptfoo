@@ -1,0 +1,87 @@
+# Basic Verdict Assertion Examples
+
+description: 'Basic examples of verdict assertions'
+
+prompts:
+  - 'You are a helpful AI assistant. {{ question }}'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # Simple yes/no verdict
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: verdict
+        value: 'Is the response factually correct?'
+        threshold: 0.8
+
+  # Categorical classification
+  - vars:
+      question: 'Write a haiku about spring'
+    assert:
+      - type: verdict
+        value:
+          type: categorical
+          prompt: |
+            Evaluate if this is a proper haiku.
+            A haiku should have:
+            - 3 lines
+            - 5-7-5 syllable pattern
+            - Nature theme
+
+            Response: {{ output }}
+
+            Is this a valid haiku?
+          categories: ['valid', 'invalid']
+
+  # Likert scale rating
+  - vars:
+      question: 'Explain photosynthesis to a 10-year-old'
+    assert:
+      - type: verdict
+        value:
+          type: likert
+          prompt: |
+            Rate how well this explanation is suited for a 10-year-old child.
+            Consider:
+            - Simple language
+            - Age-appropriate concepts
+            - Engaging tone
+
+            Response: {{ output }}
+
+            Rate from 1 (too complex) to 5 (perfect for age)
+          scale: [1, 5]
+          explanation: true
+        threshold: 4
+
+  # Multiple verdict checks
+  - vars:
+      question: 'What are the benefits of regular exercise?'
+    assert:
+      # Check accuracy
+      - type: verdict
+        value:
+          type: categorical
+          prompt: |
+            Is this response medically accurate?
+            Response: {{ output }}
+            Answer with one of: accurate, inaccurate, partially accurate
+          categories: ['accurate', 'inaccurate', 'partially accurate']
+
+      # Check completeness
+      - type: verdict
+        value:
+          type: likert
+          prompt: |
+            How comprehensive is this response about the benefits of exercise? (1-5)
+            Response: {{ output }}
+            Rate from 1-5:
+          scale: [1, 5]
+        threshold: 3
+
+      # Check clarity
+      - type: verdict
+        value: 'Is this response clear and easy to understand?'

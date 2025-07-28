@@ -1,0 +1,123 @@
+# Ensemble Voting with Verdict
+
+description: 'Examples of using multiple judges with aggregation'
+
+prompts:
+  - |
+    You are a creative writing assistant.
+
+    User request: {{ task }}
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # Simple majority vote
+  - vars:
+      task: 'Write a short story about a robot learning to paint'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Have 3 judges evaluate creativity
+            - layer:
+                unit:
+                  type: categorical
+                  prompt: |
+                    Is this story creative and original?
+
+                    Story: {{ output }}
+                  categories: ['creative', 'not creative']
+                repeat: 3
+
+            # Take majority vote
+            - type: max-pool
+        threshold: 0.7
+
+  # Multiple criteria with averaging
+  - vars:
+      task: 'Create a recipe for chocolate chip cookies'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Multiple judges rate different aspects
+            - layer:
+                units:
+                  - type: likert
+                    name: clarity_judge_1
+                    prompt: 'Rate the clarity of recipe instructions (1-5)'
+                    scale: [1, 5]
+
+                  - type: likert
+                    name: clarity_judge_2
+                    prompt: 'How easy are these instructions to follow? (1-5)'
+                    scale: [1, 5]
+
+                  - type: likert
+                    name: clarity_judge_3
+                    prompt: 'Rate the step-by-step clarity (1-5)'
+                    scale: [1, 5]
+
+            # Average the scores
+            - type: mean-pool
+        threshold: 4
+
+  # Weighted ensemble
+  - vars:
+      task: 'Explain blockchain technology'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Different aspects with different importance
+            - layer:
+                units:
+                  - type: likert
+                    name: accuracy
+                    prompt: 'Rate technical accuracy (1-5)'
+                    scale: [1, 5]
+
+                  - type: likert
+                    name: clarity
+                    prompt: 'Rate explanation clarity (1-5)'
+                    scale: [1, 5]
+
+                  - type: categorical
+                    name: completeness
+                    prompt: 'Is the explanation complete?'
+                    categories: ['complete', 'incomplete']
+
+            # Weighted aggregation
+            - type: weighted-mean
+              weights:
+                accuracy: 0.5 # Most important
+                clarity: 0.3
+                completeness: 0.2
+        threshold: 0.8
+
+  # Conservative evaluation (min pool)
+  - vars:
+      task: 'Write safety instructions for using a ladder'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Multiple safety checks
+            - layer:
+                units:
+                  - type: categorical
+                    prompt: 'Are all necessary safety warnings included?'
+                    categories: ['yes', 'no']
+
+                  - type: categorical
+                    prompt: 'Is the language clear and unambiguous?'
+                    categories: ['yes', 'no']
+
+                  - type: categorical
+                    prompt: 'Are the instructions complete?'
+                    categories: ['yes', 'no']
+
+            # All must pass (conservative)
+            - type: min-pool
+        threshold: 1.0 # All judges must say "yes"

@@ -77,6 +77,7 @@ import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { handleVerdict } from './verdict';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
@@ -318,6 +319,7 @@ export async function runAssertion({
     'trace-error-spans': handleTraceErrorSpans,
     'trace-span-count': handleTraceSpanCount,
     'trace-span-duration': handleTraceSpanDuration,
+    verdict: handleVerdict,
     webhook: handleWebhook,
     pi: handlePiScorer,
   };

@@ -1,0 +1,126 @@
+# Test all verdict unit types
+description: 'Comprehensive test of all verdict unit types'
+
+prompts:
+  - 'You are a helpful AI assistant. {{ question }}'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # Test pairwise comparison
+  - vars:
+      question: 'Explain why the sky is blue in one sentence'
+    assert:
+      - type: verdict
+        value:
+          type: pairwise
+          prompt: |
+            Compare these two explanations:
+            
+            A: {{ output }}
+            
+            B: "The sky appears blue because air molecules scatter short-wavelength blue light more than other colors as sunlight passes through the atmosphere."
+            
+            Which explanation is better? Choose A or B.
+          options: ['A', 'B']
+
+  # Test verify unit
+  - vars:
+      question: 'What is 2 + 2?'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # First judge the answer
+            - type: categorical
+              name: initial_judge
+              prompt: |
+                Is this answer mathematically correct?
+                Answer: {{ output }}
+              categories: ['correct', 'incorrect']
+              
+            # Verify the judgment
+            - type: verify
+              prompt: |
+                The answer given was: {{ output }}
+                The initial judgment was: {{ previous.initial_judge.choice }}
+                
+                Was the initial judgment accurate? Answer with 'valid' or 'invalid'.
+
+  # Test provider override
+  - vars:
+      question: 'Name a color'
+    assert:
+      - type: verdict
+        value: 'Did the response name a valid color?'
+        provider: openai:gpt-3.5-turbo  # Override provider
+
+  # Test weighted mean aggregation
+  - vars:
+      question: 'Write a short story about a robot'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            - layer:
+                units:
+                  - type: likert
+                    name: creativity
+                    prompt: |
+                      Rate the creativity of this story (1-5):
+                      {{ output }}
+                      
+                      Score (1-5):
+                    scale: [1, 5]
+                  - type: likert
+                    name: coherence
+                    prompt: |
+                      Rate the coherence of this story (1-5):
+                      {{ output }}
+                      
+                      Score (1-5):
+                    scale: [1, 5]
+                  - type: likert
+                    name: emotion
+                    prompt: |
+                      Rate the emotional impact (1-5):
+                      {{ output }}
+                      
+                      Score (1-5):
+                    scale: [1, 5]
+            - type: weighted-mean
+              weights:
+                creativity: 0.5
+                coherence: 0.3
+                emotion: 0.2
+        threshold: 3.5
+
+  # Test min-pool (all must pass)
+  - vars:
+      question: 'List three benefits of exercise'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            - layer:
+                units:
+                  - type: categorical
+                    prompt: |
+                      Does the response mention physical health benefits?
+                      Response: {{ output }}
+                      Answer with: yes or no
+                    categories: ['yes', 'no']
+                  - type: categorical
+                    prompt: |
+                      Does the response mention mental health benefits?
+                      Response: {{ output }}
+                      Answer with: yes or no
+                    categories: ['yes', 'no']
+                  - type: categorical
+                    prompt: |
+                      Are there at least 3 benefits listed?
+                      Response: {{ output }}
+                      Answer with: yes or no
+                    categories: ['yes', 'no']
+            - type: min-pool  # All must be 'yes' to pass

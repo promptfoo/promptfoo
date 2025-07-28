@@ -1,0 +1,158 @@
+# Verification Pipeline Examples
+
+description: 'Multi-stage evaluation with verification'
+
+prompts:
+  - |
+    You are an AI tutor helping students learn.
+
+    Student question: {{ question }}
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # Basic judge + verify pattern
+  - vars:
+      question: 'Why do objects fall to the ground?'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Initial assessment
+            - type: categorical
+              prompt: |
+                Is this explanation scientifically accurate?
+                Response: {{ output }}
+              categories: ['accurate', 'inaccurate']
+              explanation: true
+
+            # Verify the assessment
+            - type: verify
+              prompt: |
+                Previous assessment: {{ previous.categorical_judge.choice }}
+                Reasoning: {{ previous.categorical_judge.explanation }}
+
+                Original response: {{ output }}
+
+                Do you agree with the assessment? Provide confidence level.
+
+  # Multi-level verification
+  - vars:
+      question: 'How do vaccines work?'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Layer 1: Multiple initial assessments
+            - layer:
+                units:
+                  - type: categorical
+                    name: accuracy_check
+                    prompt: 'Is the medical information accurate?'
+                    categories: ['accurate', 'inaccurate', 'partially accurate']
+                    explanation: true
+
+                  - type: categorical
+                    name: completeness_check
+                    prompt: 'Is the explanation complete?'
+                    categories: ['complete', 'incomplete']
+                    explanation: true
+
+                  - type: likert
+                    name: clarity_rating
+                    prompt: 'Rate clarity for general audience (1-5)'
+                    scale: [1, 5]
+
+            # Layer 2: Verify each assessment
+            - layer:
+                units:
+                  - type: verify
+                    prompt: |
+                      Verify accuracy assessment:
+                      Result: {{ previous.accuracy_check.choice }}
+                      Reasoning: {{ previous.accuracy_check.explanation }}
+
+                  - type: verify
+                    prompt: |
+                      Verify completeness assessment:
+                      Result: {{ previous.completeness_check.choice }}
+                      Reasoning: {{ previous.completeness_check.explanation }}
+
+            # Final aggregation
+            - type: mean-pool
+
+  # Chain verification
+  - vars:
+      question: 'Explain the theory of relativity'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Expert 1 evaluates
+            - type: likert
+              name: expert1
+              prompt: |
+                As a physics expert, rate this explanation of relativity.
+                Consider accuracy and depth.
+                Response: {{ output }}
+                Rate 1-10:
+              scale: [1, 10]
+              explanation: true
+
+            # Expert 2 reviews Expert 1's assessment
+            - type: categorical
+              name: expert2
+              prompt: |
+                Expert 1 rated this {{ previous.expert1.score }}/10
+                Their reasoning: {{ previous.expert1.explanation }}
+
+                Original response: {{ output }}
+
+                Do you agree with Expert 1's assessment?
+              categories: ['agree', 'disagree', 'partially agree']
+              explanation: true
+
+            # Final expert synthesizes
+            - type: likert
+              name: final_expert
+              prompt: |
+                Expert 1 score: {{ previous.expert1.score }}/10
+                Expert 2 opinion: {{ previous.expert2.choice }}
+                Expert 2 reasoning: {{ previous.expert2.explanation }}
+
+                Original response: {{ output }}
+
+                Provide final rating (1-10):
+              scale: [1, 10]
+        threshold: 7
+
+  # Pairwise comparison with verification
+  - vars:
+      question: 'What causes seasons on Earth?'
+    assert:
+      - type: verdict
+        value:
+          pipeline:
+            # Generate alternative explanation
+            - type: pairwise
+              prompt: |
+                Compare these two explanations:
+
+                A: {{ output }}
+
+                B: "Seasons are caused by Earth's tilted axis as it orbits the sun, 
+                    causing different parts to receive varying amounts of sunlight 
+                    throughout the year."
+
+                Which explanation is better?
+              options: ['A', 'B']
+              explanation: true
+
+            # Verify the comparison
+            - type: verify
+              prompt: |
+                The comparison chose: {{ previous.pairwise_judge.chosen }}
+                Reasoning: {{ previous.pairwise_judge.explanation }}
+
+                Is this assessment fair and accurate?
