@@ -32,7 +32,7 @@ We started Promptfoo in 2024 after watching AI systems grow increasingly complex
 
 AI security has become the largest blocker to enterprises shipping generative AI applications to end users. We see it every day—companies want to deploy AI applications, but they're held back by security concerns.
 
-Architectures like agents, RAGs, and most recently MCP (Model Context Protocol) have expanded what's possible with AI, but they've also dramatically increased the attack surface:
+Architectures like agents, RAGs (Retrieval-Augmented Generation), and most recently MCP (Model Context Protocol) have expanded what's possible with AI, but they've also dramatically increased the attack surface:
 
 - **Autonomous agents** execute actions with production system access
 - **RAG pipelines** can leak entire knowledge bases through retrieval manipulation
@@ -55,7 +55,7 @@ The adoption has been incredible:
 
 We're excited to have Ganesh Bell, Managing Director at Insight Partners, join our board. He brings deep experience scaling developer platforms at GE Digital and Uptake.
 
-"Promptfoo has created a category-defining product," said Ganesh Bell, Managing Director at Insight Partners. "Every serious enterprise deploying AI will need comprehensive security testing, and Promptfoo's combination of technical depth, open source adoption, and enterprise traction positions them perfectly to capture this massive market opportunity. We're thrilled to partner with them as they build the full AI security stack."
+"Promptfoo has created a category-defining product," said Ganesh. "Every serious enterprise deploying AI will need comprehensive security testing, and Promptfoo's combination of technical depth, open source adoption, and enterprise traction positions them perfectly to capture this massive market opportunity. We're thrilled to partner with them as they build the full AI security stack."
 
 "When we first invested in Promptfoo, we recognized that AI security would become mission-critical for every enterprise," said Zane Lackey, General Partner at Andreessen Horowitz. "In just one year, they've validated that thesis and then some. This additional investment reflects our conviction that they'll define how companies approach AI security for years to come."
 
@@ -65,13 +65,13 @@ The internet is being rebuilt for agents, and the APIs they call are increasingl
 
 Our roadmap focuses on four key trends:
 
-**First**, we're adding deep support for agentic and multi-agent workflows, including chain-level tracing and safety checks that watch conversations unfold over many steps.
+First, we're adding deep support for agentic and multi-agent workflows, including chain-level tracing and safety checks that watch conversations unfold over many steps.
 
-**Second**, we're embracing MCP as the wiring standard for tool calls, so every function invocation can be captured, replayed, and scored for correctness and security.
+Second, we're embracing MCP as the wiring standard for tool calls, so every function invocation can be captured, replayed, and scored for correctness and security.
 
-**Third**, voice and other audio-first interfaces are resurging thanks to better speech models, so we're building native audio features to secure spoken applications.
+Third, voice and other audio-first interfaces are resurging thanks to better speech models, so we're building native audio features to secure spoken applications.
 
-**Finally**, prompt work is moving toward test-driven development: teams write evaluations first, run them on every commit, and rerun them automatically whenever an application is updated.
+Finally, prompt work is moving toward test-driven development: teams write evaluations first, run them on every commit, and rerun them automatically whenever an application is updated.
 
 Regulation is also accelerating. EU AI Act includes fines for insufficient testing and transparency. In the United States, OWASP LLM Top 10 and NIST AI Risk Management Framework are often cited as key requirements.
 
