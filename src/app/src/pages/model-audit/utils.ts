@@ -17,6 +17,16 @@ export const getSeverityValue = (label: string): string => {
 };
 
 /**
+ * Strips position information from a file path
+ * @param filePath - The file path that may contain position info
+ * @returns The file path without position information
+ */
+const stripPositionInfo = (filePath: string): string => {
+  // Remove position information like " (pos 123)" from the end of the path
+  return filePath.replace(/\s*\(pos\s+\d+\)\s*$/i, '').trim();
+};
+
+/**
  * Extracts the file path from an issue, checking multiple possible locations
  * @param issue - The scan issue object
  * @returns The file path or 'Unknown' if not found
@@ -27,23 +37,21 @@ export const getIssueFilePath = (issue: {
 }): string => {
   // Check location first (most common)
   if (issue.location && typeof issue.location === 'string' && issue.location.trim()) {
-    return issue.location;
+    return stripPositionInfo(issue.location);
   }
 
   // Check details.path
   if (issue.details?.path && typeof issue.details.path === 'string' && issue.details.path.trim()) {
-    return issue.details.path;
+    return stripPositionInfo(issue.details.path);
   }
 
-  // Check details.files array
-  if (
-    issue.details?.files &&
-    Array.isArray(issue.details.files) &&
-    issue.details.files.length > 0 &&
-    typeof issue.details.files[0] === 'string' &&
-    issue.details.files[0].trim()
-  ) {
-    return issue.details.files[0];
+  // Check details.files array - iterate to find first valid string
+  if (issue.details?.files && Array.isArray(issue.details.files)) {
+    for (const file of issue.details.files) {
+      if (file && typeof file === 'string' && file.trim()) {
+        return stripPositionInfo(file);
+      }
+    }
   }
 
   return 'Unknown';
