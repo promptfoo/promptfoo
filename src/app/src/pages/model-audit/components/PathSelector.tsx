@@ -218,7 +218,7 @@ export default function PathSelector({
                 }
               }}
               error={!!error}
-              helperText={error || "Enter a file path or directory path. Press Enter or click Add."}
+              helperText={error || 'Enter a file path or directory path. Press Enter or click Add.'}
               disabled={isChecking}
               InputProps={{
                 endAdornment: (

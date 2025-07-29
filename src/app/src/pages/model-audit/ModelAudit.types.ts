@@ -18,7 +18,10 @@ export interface ScanIssue {
   severity: 'error' | 'warning' | 'info' | 'debug';
   message: string;
   location?: string | null;
-  details?: Record<string, any>;
+  details?: Record<string, any> & {
+    path?: string;
+    files?: string[];
+  };
   timestamp?: number;
 }
 

@@ -68,7 +68,11 @@ export default function SecurityFindings({
     const csvHeaders = ['Severity', 'Message', 'Location', 'Details'];
     const csvRows = scanResults.issues.map((issue) => {
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
-      const location = issue.location || issue.details?.path || '';
+      const location =
+        issue.location ||
+        issue.details?.path ||
+        (issue.details?.files && issue.details.files[0]) ||
+        '';
       return [
         getSeverityLabel(issue.severity),
         `"${issue.message.replace(/"/g, '""')}"`,
@@ -97,7 +101,12 @@ export default function SecurityFindings({
   // Group issues by file
   const issuesByFile = filteredIssues.reduce(
     (acc, issue) => {
-      const file = issue.location || issue.details?.path || 'Unknown';
+      // Try multiple locations where file path might be stored
+      const file =
+        issue.location ||
+        issue.details?.path ||
+        (issue.details?.files && issue.details.files[0]) ||
+        'Unknown';
       if (!acc[file]) {
         acc[file] = [];
       }
@@ -386,9 +395,14 @@ export default function SecurityFindings({
                       {getSeverityLabel(issue.severity)}
                     </SeverityBadge>
                   </Stack>
-                  {(issue.location || (issue.details && issue.details.path)) && (
+                  {(issue.location ||
+                    issue.details?.path ||
+                    (issue.details?.files && issue.details.files[0])) && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Location: {issue.location || issue.details?.path}
+                      Location:{' '}
+                      {issue.location ||
+                        issue.details?.path ||
+                        (issue.details?.files && issue.details.files[0])}
                     </Typography>
                   )}
                   {issue.details && (
