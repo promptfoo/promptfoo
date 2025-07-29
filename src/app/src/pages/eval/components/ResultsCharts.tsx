@@ -32,7 +32,10 @@ import { useTableStore } from './store';
 import type { EvaluateTable, UnifiedConfig } from './types';
 
 interface ResultsChartsProps {
-  handleHideCharts: () => void;
+  /**
+   * Optional callback to hide the charts.
+   */
+  handleHideCharts?: () => void;
 }
 
 interface ChartProps {
@@ -700,12 +703,14 @@ function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   return (
     <ErrorBoundary fallback={null}>
       <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
-        <IconButton
-          style={{ position: 'absolute', right: 0, top: 0 }}
-          onClick={() => handleHideCharts()}
-        >
-          <CloseIcon />
-        </IconButton>
+        {handleHideCharts && (
+          <IconButton
+            style={{ position: 'absolute', right: 0, top: 0 }}
+            onClick={() => handleHideCharts()}
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />
