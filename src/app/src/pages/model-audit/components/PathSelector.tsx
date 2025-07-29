@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 import { callApi } from '@app/utils/api';
 import {
@@ -9,6 +9,7 @@ import {
   Delete as DeleteIcon,
   InsertDriveFile as FileIcon,
   Folder as FolderIcon,
+  FolderOpen as FolderOpenIcon,
   GitHub as GitHubIcon,
   Lock as LockIcon,
   Storage as StorageIcon,
@@ -43,6 +44,21 @@ interface PathSelectorProps {
   currentWorkingDir?: string;
 }
 
+// Extend HTMLInputElement to support webkitdirectory attribute
+declare module 'react' {
+  interface InputHTMLAttributes<T> extends React.HTMLAttributes<T> {
+    webkitdirectory?: string;
+    directory?: string;
+  }
+}
+
+// Extend File interface to include webkitRelativePath
+declare global {
+  interface File {
+    readonly webkitRelativePath: string;
+  }
+}
+
 export default function PathSelector({
   paths,
   onAddPath,
@@ -54,6 +70,8 @@ export default function PathSelector({
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { recentScans, clearRecentScans } = useModelAuditStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddPath = async (input: string) => {
     const trimmedPath = input.trim();
@@ -98,61 +116,102 @@ export default function PathSelector({
         // Make a best guess based on the input
         const isDirectory = trimmedPath.endsWith('/');
         const name = trimmedPath.split('/').pop() || trimmedPath;
-
         onAddPath({
           path: trimmedPath,
           type: isDirectory ? 'directory' : 'file',
-          name,
+          name: isDirectory ? name.slice(0, -1) : name,
         });
         setPathInput('');
+        setTimeout(() => setError(null), 5000);
       }
     } catch (_error) {
-      // Show user-friendly error and still allow adding the path
-      setError('Could not verify path - adding anyway');
+      setError('Failed to check path. The path will be added anyway.');
 
-      // Fallback to simple logic if API call fails
+      // Add the path anyway with a best guess
       const isDirectory = trimmedPath.endsWith('/');
       const name = trimmedPath.split('/').pop() || trimmedPath;
-
       onAddPath({
         path: trimmedPath,
         type: isDirectory ? 'directory' : 'file',
-        name,
+        name: isDirectory ? name.slice(0, -1) : name,
       });
       setPathInput('');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setIsChecking(false);
     }
   };
 
-  const tabIcon = (icon: React.ReactElement, isLocked: boolean = false) => {
-    if (isLocked) {
-      return (
-        <Badge
-          badgeContent={<LockIcon sx={{ fontSize: 10 }} />}
-          sx={{
-            '& .MuiBadge-badge': {
-              right: -3,
-              top: 3,
-              padding: 0,
-              minWidth: 12,
-              height: 12,
-            },
-          }}
-        >
-          {icon}
-        </Badge>
-      );
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      // For file input, we get the full path (in Electron environments)
+      // or just the filename (in web browsers)
+      const file = files[0];
+      const path = file.webkitRelativePath || file.name;
+
+      // If we have a webkitRelativePath, it means a folder was selected
+      if (file.webkitRelativePath) {
+        // Extract the folder path
+        const folderPath = file.webkitRelativePath.split('/')[0];
+        handleAddPath(folderPath + '/');
+      } else {
+        // Single file selected
+        handleAddPath(path);
+      }
     }
-    return icon;
+
+    // Reset the input
+    event.target.value = '';
   };
+
+  const tabIcon = (icon: React.ReactNode, isEnterprise = false) =>
+    isEnterprise ? (
+      <Badge
+        badgeContent={
+          <Tooltip title="Enterprise Feature">
+            <LockIcon sx={{ fontSize: 12 }} />
+          </Tooltip>
+        }
+        sx={{
+          '& .MuiBadge-badge': {
+            right: -4,
+            top: 4,
+            backgroundColor: 'transparent',
+            color: 'text.disabled',
+          },
+        }}
+      >
+        {icon}
+      </Badge>
+    ) : (
+      icon
+    );
 
   return (
     <Box>
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+        accept=".pkl,.safetensors,.bin,.h5,.onnx,.pt,.pth,.ckpt,.keras,.tflite,.pb"
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+        webkitdirectory=""
+        directory=""
+        multiple
+      />
+
       <Tabs
         value={activeTab}
         onChange={(_, newValue) => setActiveTab(newValue)}
-        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+        variant="fullWidth"
+        sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
       >
         <Tab label="Local Files" icon={tabIcon(<ComputerIcon />)} iconPosition="start" />
         <Tooltip title="Cloud storage integration is available in Promptfoo Enterprise">
@@ -166,10 +225,10 @@ export default function PathSelector({
             />
           </span>
         </Tooltip>
-        <Tooltip title="Git repository integration is available in Promptfoo Enterprise">
+        <Tooltip title="GitHub integration is available in Promptfoo Enterprise">
           <span>
             <Tab
-              label="Git Repositories"
+              label="GitHub"
               icon={tabIcon(<GitHubIcon />, true)}
               iconPosition="start"
               disabled
@@ -205,34 +264,60 @@ export default function PathSelector({
           )}
 
           <Box sx={{ mb: 3 }}>
-            <TextField
-              fullWidth
-              label="Add model path"
-              placeholder="Examples: ./model.pkl, /path/to/models/, ../data/model.h5"
-              value={pathInput}
-              onChange={(e) => setPathInput(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAddPath(pathInput);
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <TextField
+                fullWidth
+                label="Add model path"
+                placeholder="Examples: ./model.pkl, /path/to/models/, ../data/model.h5"
+                value={pathInput}
+                onChange={(e) => setPathInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddPath(pathInput);
+                  }
+                }}
+                error={!!error}
+                helperText={
+                  error || 'Enter a file path or directory path. Press Enter or click Add.'
                 }
-              }}
-              error={!!error}
-              helperText={error || 'Enter a file path or directory path. Press Enter or click Add.'}
-              disabled={isChecking}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      onClick={() => handleAddPath(pathInput)}
-                      disabled={!pathInput.trim() || isChecking}
-                    >
-                      {isChecking ? 'Checking...' : 'Add'}
-                    </Button>
-                  </InputAdornment>
-                ),
-              }}
-            />
+                disabled={isChecking}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Button
+                        onClick={() => handleAddPath(pathInput)}
+                        disabled={!pathInput.trim() || isChecking}
+                      >
+                        {isChecking ? 'Checking...' : 'Add'}
+                      </Button>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <Stack direction="column" spacing={1}>
+                <Tooltip title="Browse for a file">
+                  <Button
+                    variant="outlined"
+                    startIcon={<FileIcon />}
+                    onClick={() => fileInputRef.current?.click()}
+                    sx={{ whiteSpace: 'nowrap' }}
+                  >
+                    Select File
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Browse for a folder">
+                  <Button
+                    variant="outlined"
+                    startIcon={<FolderOpenIcon />}
+                    onClick={() => folderInputRef.current?.click()}
+                    sx={{ whiteSpace: 'nowrap' }}
+                  >
+                    Select Folder
+                  </Button>
+                </Tooltip>
+              </Stack>
+            </Stack>
           </Box>
         </Box>
       )}

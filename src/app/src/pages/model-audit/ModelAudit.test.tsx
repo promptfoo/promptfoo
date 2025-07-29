@@ -62,7 +62,7 @@ describe('ModelAudit', () => {
 
     // Default mock implementation with all required properties
     mockCheckInstallation.mockResolvedValue({ installed: true, cwd: '/fake/dir' });
-    
+
     mockUseModelAuditStore.mockReturnValue({
       // State
       recentScans: [],
@@ -86,7 +86,7 @@ describe('ModelAudit', () => {
       showFilesDialog: false,
       showInstallationDialog: false,
       showOptionsDialog: false,
-      
+
       // Actions
       addRecentScan: mockAddRecentScan,
       removeRecentScan: vi.fn(),
@@ -105,7 +105,7 @@ describe('ModelAudit', () => {
       setShowInstallationDialog: vi.fn(),
       setShowOptionsDialog: vi.fn(),
       getRecentScans: vi.fn().mockReturnValue([]),
-      
+
       // Persist
       persist: {
         rehydrate: vi.fn().mockResolvedValue(undefined),

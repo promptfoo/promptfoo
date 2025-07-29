@@ -43,7 +43,7 @@ export default function ModelAudit() {
     showFilesDialog,
     showInstallationDialog,
     showOptionsDialog,
-    
+
     // Actions
     setPaths,
     removePath,
@@ -142,9 +142,7 @@ export default function ModelAudit() {
       sx={{
         minHeight: '100vh',
         bgcolor: (theme) =>
-          theme.palette.mode === 'dark'
-            ? theme.palette.background.default
-            : theme.palette.grey[50],
+          theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
         py: 4,
       }}
     >
@@ -159,8 +157,8 @@ export default function ModelAudit() {
                 Scan ML models for security vulnerabilities using the{' '}
                 <Link href="https://pypi.org/project/modelaudit/" target="_blank">
                   modelaudit
-                </Link>
-                {' '}package
+                </Link>{' '}
+                package
               </Typography>
             </Box>
             <Box sx={{ ml: 'auto' }}>
@@ -284,10 +282,7 @@ export default function ModelAudit() {
             </Typography>
           </DialogContent>
           <DialogActions>
-            <Button
-              onClick={() => checkInstallation()}
-              disabled={installationStatus.checking}
-            >
+            <Button onClick={() => checkInstallation()} disabled={installationStatus.checking}>
               {installationStatus.checking ? 'Checking...' : 'Refresh Status'}
             </Button>
             <Button
