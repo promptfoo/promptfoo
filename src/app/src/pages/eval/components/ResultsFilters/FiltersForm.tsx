@@ -338,9 +338,11 @@ function Filter({
               values={(filters.options[value.type] ?? [])
                 .map((optionValue) => {
                   let label: string | React.ReactNode = optionValue;
+                  let displayName: string | null = null;
                   if (value.type === 'plugin' || value.type === 'strategy') {
-                    const displayName =
-                      displayNameOverrides[optionValue as keyof typeof displayNameOverrides];
+                    displayName = displayNameOverrides[
+                      optionValue as keyof typeof displayNameOverrides
+                    ] as string;
                     if (displayName) {
                       label = (
                         <div
@@ -366,11 +368,11 @@ function Filter({
                       );
                     }
                   }
-                  return { label, value: optionValue };
+                  return { label, value: optionValue, sortValue: displayName ?? optionValue };
                 })
                 .sort((a, b) => {
                   // Sort by the option value since label might be a React element
-                  return a.value.localeCompare(b.value);
+                  return a.sortValue.localeCompare(b.sortValue);
                 })} // Sort by value
               value={value.value}
               onChange={(e) => handleValueChange(e)}
