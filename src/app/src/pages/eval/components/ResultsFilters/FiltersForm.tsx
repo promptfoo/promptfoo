@@ -163,6 +163,11 @@ function Filter({
       if (filterType !== 'metadata') {
         updatedFilter.field = undefined;
       }
+      // Clear value when switching between different filter types
+      // This prevents inheriting incompatible values (e.g., plugin value for strategy filter)
+      if (value.type !== filterType) {
+        updatedFilter.value = '';
+      }
       // Reset operator to 'equals' when changing to types that only support 'equals'
       if (
         (filterType === 'metric' || filterType === 'plugin' || filterType === 'strategy') &&
