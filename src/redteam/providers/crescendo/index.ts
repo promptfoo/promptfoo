@@ -261,8 +261,6 @@ export class CrescendoProvider implements ApiProvider {
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
-    logger.debug(`[Crescendo] Test metadata: ${JSON.stringify(context?.test, null, 2)}`);
-    logger.debug(`[Crescendo] Config: ${JSON.stringify(this.config, null, 2)}`);
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
       currentRound: roundNum + 1,
