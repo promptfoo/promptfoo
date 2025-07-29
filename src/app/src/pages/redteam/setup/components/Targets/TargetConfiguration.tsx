@@ -230,7 +230,6 @@ export default function TargetConfiguration({
             display: 'flex',
             gap: 2,
             ...(validationErrors && {
-              width: '100%',
               justifyContent: 'space-between',
             }),
           }}
