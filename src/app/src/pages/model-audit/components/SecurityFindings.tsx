@@ -1,16 +1,26 @@
+import { useState } from 'react';
+
 import {
   CheckCircle as CheckCircleIcon,
   Code as CodeIcon,
   Download as DownloadIcon,
   Error as ErrorIcon,
+  ExpandLess,
+  ExpandMore,
   Info as InfoIcon,
+  InsertDriveFile as FileIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Collapse from '@mui/material/Collapse';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
@@ -20,7 +30,7 @@ import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
 import { getSeverityLabel } from '../utils';
 
-import type { ScanResult } from '../ModelAudit.types';
+import type { ScanResult, ScanIssue } from '../ModelAudit.types';
 
 interface SecurityFindingsProps {
   scanResults: ScanResult;
@@ -38,6 +48,8 @@ export default function SecurityFindings({
   onToggleRawOutput,
 }: SecurityFindingsProps) {
   const theme = useTheme();
+  const [groupByFile, setGroupByFile] = useState(true);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
@@ -82,6 +94,37 @@ export default function SecurityFindings({
     return !selectedSeverity || issue.severity === selectedSeverity;
   });
 
+  // Group issues by file
+  const issuesByFile = filteredIssues.reduce(
+    (acc, issue) => {
+      const file = issue.location || issue.details?.path || 'Unknown';
+      if (!acc[file]) {
+        acc[file] = [];
+      }
+      acc[file].push(issue);
+      return acc;
+    },
+    {} as Record<string, ScanIssue[]>,
+  );
+
+  const toggleFileExpansion = (file: string) => {
+    const newExpanded = new Set(expandedFiles);
+    if (newExpanded.has(file)) {
+      newExpanded.delete(file);
+    } else {
+      newExpanded.add(file);
+    }
+    setExpandedFiles(newExpanded);
+  };
+
+  const toggleAllFiles = () => {
+    if (expandedFiles.size === Object.keys(issuesByFile).length) {
+      setExpandedFiles(new Set());
+    } else {
+      setExpandedFiles(new Set(Object.keys(issuesByFile)));
+    }
+  };
+
   return (
     <Box>
       {scanResults.issues.length > 0 && (
@@ -91,32 +134,56 @@ export default function SecurityFindings({
         </Alert>
       )}
 
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={600}>
-          Security Findings
-        </Typography>
-        <Stack direction="row" spacing={2}>
-          <Select
-            value={selectedSeverity || 'all'}
-            onChange={(e) => onSeverityChange(e.target.value === 'all' ? null : e.target.value)}
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+        <Typography variant="h6">Security Findings</Typography>
+        <Box sx={{ flexGrow: 1 }} />
+
+        <Button
+          size="small"
+          onClick={() => setGroupByFile(!groupByFile)}
+          startIcon={groupByFile ? <FileIcon /> : <CodeIcon />}
+        >
+          {groupByFile ? 'Group by File' : 'Flat List'}
+        </Button>
+
+        {groupByFile && Object.keys(issuesByFile).length > 1 && (
+          <Button
             size="small"
-            sx={{ minWidth: 150 }}
+            onClick={toggleAllFiles}
+            startIcon={
+              expandedFiles.size === Object.keys(issuesByFile).length ? (
+                <ExpandLess />
+              ) : (
+                <ExpandMore />
+              )
+            }
           >
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="error">Critical Only</MenuItem>
-            <MenuItem value="warning">Warnings Only</MenuItem>
-            <MenuItem value="info">Info Only</MenuItem>
-            <MenuItem value="debug">Debug Only</MenuItem>
-          </Select>
-          <Button variant="outlined" onClick={handleDownloadResults} startIcon={<DownloadIcon />}>
-            Export Report
+            {expandedFiles.size === Object.keys(issuesByFile).length
+              ? 'Collapse All'
+              : 'Expand All'}
           </Button>
-          {scanResults.rawOutput && (
-            <Button variant="outlined" onClick={onToggleRawOutput} startIcon={<CodeIcon />}>
-              {showRawOutput ? 'Hide' : 'Show'} Raw Output
-            </Button>
-          )}
-        </Stack>
+        )}
+
+        <Select
+          value={selectedSeverity || 'all'}
+          onChange={(e) => onSeverityChange(e.target.value === 'all' ? null : e.target.value)}
+          size="small"
+          sx={{ minWidth: 150 }}
+        >
+          <MenuItem value="all">All</MenuItem>
+          <MenuItem value="error">Critical Only</MenuItem>
+          <MenuItem value="warning">Warnings Only</MenuItem>
+          <MenuItem value="info">Info Only</MenuItem>
+          <MenuItem value="debug">Debug Only</MenuItem>
+        </Select>
+
+        <Button size="small" onClick={handleDownloadResults} startIcon={<DownloadIcon />}>
+          Export CSV
+        </Button>
+
+        <Button size="small" onClick={onToggleRawOutput} startIcon={<CodeIcon />}>
+          {showRawOutput ? 'Hide' : 'Show'} Raw Output
+        </Button>
       </Stack>
 
       <Divider sx={{ mb: 3 }} />
@@ -139,7 +206,128 @@ export default function SecurityFindings({
             Your models appear to be secure and ready for deployment.
           </Typography>
         </Paper>
+      ) : groupByFile ? (
+        <Stack spacing={2}>
+          {Object.entries(issuesByFile).map(([file, issues]) => {
+            const criticalCount = issues.filter((i) => i.severity === 'error').length;
+            const warningCount = issues.filter((i) => i.severity === 'warning').length;
+            const infoCount = issues.filter((i) => i.severity === 'info').length;
+            const isExpanded = expandedFiles.has(file);
+            const fileName = file.split('/').pop() || file;
+
+            return (
+              <Paper key={file} elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
+                <Box
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    bgcolor: alpha(theme.palette.action.hover, 0.02),
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.action.hover, 0.05),
+                    },
+                  }}
+                  onClick={() => toggleFileExpansion(file)}
+                >
+                  <Stack direction="row" alignItems="center" spacing={2}>
+                    <IconButton size="small">
+                      {isExpanded ? <ExpandLess /> : <ExpandMore />}
+                    </IconButton>
+
+                    <FileIcon color="action" />
+
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        {fileName}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ fontFamily: 'monospace' }}
+                      >
+                        {file}
+                      </Typography>
+                    </Box>
+
+                    <Stack direction="row" spacing={1}>
+                      {criticalCount > 0 && (
+                        <Chip
+                          size="small"
+                          label={`${criticalCount} critical`}
+                          color="error"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      )}
+                      {warningCount > 0 && (
+                        <Chip
+                          size="small"
+                          label={`${warningCount} warning${warningCount > 1 ? 's' : ''}`}
+                          color="warning"
+                        />
+                      )}
+                      {infoCount > 0 && (
+                        <Chip size="small" label={`${infoCount} info`} color="info" />
+                      )}
+                    </Stack>
+                  </Stack>
+                </Box>
+
+                <Collapse in={isExpanded}>
+                  <Divider />
+                  <Box sx={{ p: 2 }}>
+                    <Stack spacing={2}>
+                      {issues.map((issue, index) => (
+                        <Paper
+                          key={index}
+                          sx={{
+                            p: 3,
+                            borderLeft: 4,
+                            borderColor:
+                              issue.severity === 'error'
+                                ? 'error.main'
+                                : issue.severity === 'warning'
+                                  ? 'warning.main'
+                                  : 'info.main',
+                            bgcolor: alpha(
+                              issue.severity === 'error'
+                                ? theme.palette.error.main
+                                : issue.severity === 'warning'
+                                  ? theme.palette.warning.main
+                                  : theme.palette.info.main,
+                              0.02,
+                            ),
+                          }}
+                        >
+                          <Stack direction="row" spacing={2} alignItems="flex-start">
+                            {getSeverityIcon(issue.severity)}
+                            <Box sx={{ flexGrow: 1 }}>
+                              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+                                <Typography variant="body1" fontWeight={600}>
+                                  {issue.message}
+                                </Typography>
+                                <SeverityBadge severity={issue.severity}>
+                                  {getSeverityLabel(issue.severity)}
+                                </SeverityBadge>
+                              </Stack>
+                              {issue.details && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                                    {JSON.stringify(issue.details, null, 2)}
+                                  </pre>
+                                </Alert>
+                              )}
+                            </Box>
+                          </Stack>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </Box>
+                </Collapse>
+              </Paper>
+            );
+          })}
+        </Stack>
       ) : (
+        // Original flat list view
         <Stack spacing={2}>
           {filteredIssues.map((issue, index) => (
             <Paper
@@ -176,31 +364,15 @@ export default function SecurityFindings({
                   </Stack>
                   {(issue.location || (issue.details && issue.details.path)) && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Location: <code>{issue.location || issue.details?.path}</code>
+                      Location: {issue.location || issue.details?.path}
                     </Typography>
                   )}
                   {issue.details && (
-                    <Collapse in={true}>
-                      <Paper
-                        sx={{
-                          p: 2,
-                          mt: 2,
-                          bgcolor: (theme) =>
-                            theme.palette.mode === 'dark'
-                              ? theme.palette.grey[800]
-                              : theme.palette.grey[50],
-                        }}
-                        variant="outlined"
-                      >
-                        <Typography
-                          variant="caption"
-                          component="pre"
-                          sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
-                        >
-                          {JSON.stringify(issue.details, null, 2)}
-                        </Typography>
-                      </Paper>
-                    </Collapse>
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                        {JSON.stringify(issue.details, null, 2)}
+                      </pre>
+                    </Alert>
                   )}
                 </Box>
               </Stack>
@@ -209,31 +381,33 @@ export default function SecurityFindings({
         </Stack>
       )}
 
-      {showRawOutput && scanResults.rawOutput && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Raw Scanner Output
-          </Typography>
-          <Paper
-            sx={{
-              p: 2,
-              bgcolor: (theme) =>
-                theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50],
-              color: (theme) =>
-                theme.palette.mode === 'dark' ? theme.palette.grey[100] : theme.palette.grey[900],
+      {/* Raw Output Dialog */}
+      <Dialog
+        open={showRawOutput}
+        onClose={onToggleRawOutput}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{ sx: { height: '80vh' } }}
+      >
+        <DialogTitle>Raw Scanner Output</DialogTitle>
+        <DialogContent>
+          <pre
+            style={{
+              backgroundColor: theme.palette.grey[900],
+              color: theme.palette.grey[100],
+              padding: theme.spacing(2),
+              borderRadius: theme.shape.borderRadius,
               overflow: 'auto',
-              maxHeight: 400,
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
             }}
-            variant="outlined"
           >
-            {scanResults.rawOutput}
-          </Paper>
-        </Box>
-      )}
+            {scanResults.rawOutput || 'No raw output available'}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }
