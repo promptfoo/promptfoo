@@ -285,10 +285,11 @@ function Filter({
               ? [{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]
               : []),
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
-            ...(filters.options.plugin.length > 1
+            // Show plugin and strategy filters if there are any options available i.e. these are redteam eval results.
+            ...(filters.options.plugin.length > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.plugin, value: 'plugin' }]
               : []),
-            ...(filters.options.strategy.length > 1
+            ...(filters.options.strategy.length > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
               : []),
           ]}
