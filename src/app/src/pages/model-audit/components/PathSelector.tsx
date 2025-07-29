@@ -218,7 +218,7 @@ export default function PathSelector({
                 }
               }}
               error={!!error}
-              helperText={error}
+              helperText={error || "Enter a file path or directory path. Press Enter or click Add."}
               disabled={isChecking}
               InputProps={{
                 endAdornment: (
@@ -232,7 +232,6 @@ export default function PathSelector({
                   </InputAdornment>
                 ),
               }}
-              helperText="Enter a file path or directory path. Press Enter or click Add."
             />
           </Box>
         </Box>
