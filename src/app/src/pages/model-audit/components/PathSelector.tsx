@@ -94,7 +94,7 @@ export default function PathSelector({
       } else {
         // Path doesn't exist but we'll still add it with a warning
         setError('Path does not exist or is not accessible');
-        
+
         // Make a best guess based on the input
         const isDirectory = trimmedPath.endsWith('/');
         const name = trimmedPath.split('/').pop() || trimmedPath;
@@ -106,10 +106,10 @@ export default function PathSelector({
         });
         setPathInput('');
       }
-    } catch (error) {
+    } catch (_error) {
       // Show user-friendly error and still allow adding the path
       setError('Could not verify path - adding anyway');
-      
+
       // Fallback to simple logic if API call fails
       const isDirectory = trimmedPath.endsWith('/');
       const name = trimmedPath.split('/').pop() || trimmedPath;
@@ -223,8 +223,8 @@ export default function PathSelector({
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Button 
-                      onClick={() => handleAddPath(pathInput)} 
+                    <Button
+                      onClick={() => handleAddPath(pathInput)}
                       disabled={!pathInput.trim() || isChecking}
                     >
                       {isChecking ? 'Checking...' : 'Add'}
