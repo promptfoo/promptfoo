@@ -41,6 +41,55 @@ describe('ModelAudit', () => {
   const mockAddRecentScan = vi.fn();
   const mockCheckInstallation = vi.fn();
 
+  const getDefaultStoreState = () => ({
+    // State
+    recentScans: [],
+    paths: [],
+    scanOptions: {
+      blacklist: [],
+      timeout: 300,
+      verbose: false,
+    },
+    isScanning: false,
+    scanResults: null,
+    error: null,
+    installationStatus: {
+      checking: false,
+      installed: true,
+      lastChecked: Date.now(),
+      error: null,
+      cwd: '/fake/dir',
+    },
+    activeTab: 0,
+    showFilesDialog: false,
+    showInstallationDialog: false,
+    showOptionsDialog: false,
+
+    // Actions
+    addRecentScan: mockAddRecentScan,
+    removeRecentScan: vi.fn(),
+    clearRecentScans: vi.fn(),
+    setPaths: vi.fn(),
+    addPath: vi.fn(),
+    removePath: vi.fn(),
+    setScanOptions: vi.fn(),
+    setIsScanning: vi.fn(),
+    setScanResults: vi.fn(),
+    setError: vi.fn(),
+    setInstallationStatus: vi.fn(),
+    checkInstallation: mockCheckInstallation,
+    setActiveTab: vi.fn(),
+    setShowFilesDialog: vi.fn(),
+    setShowInstallationDialog: vi.fn(),
+    setShowOptionsDialog: vi.fn(),
+    getRecentScans: vi.fn().mockReturnValue([]),
+
+    // Persist
+    persist: {
+      rehydrate: vi.fn().mockResolvedValue(undefined),
+    },
+  });
+
   const mockScanResults: ScanResult = {
     path: '/test/path',
     issues: [
@@ -63,54 +112,7 @@ describe('ModelAudit', () => {
     // Default mock implementation with all required properties
     mockCheckInstallation.mockResolvedValue({ installed: true, cwd: '/fake/dir' });
 
-    mockUseModelAuditStore.mockReturnValue({
-      // State
-      recentScans: [],
-      paths: [],
-      scanOptions: {
-        blacklist: [],
-        timeout: 300,
-        verbose: false,
-      },
-      isScanning: false,
-      scanResults: null,
-      error: null,
-      installationStatus: {
-        checking: false,
-        installed: true,
-        lastChecked: Date.now(),
-        error: null,
-        cwd: '/fake/dir',
-      },
-      activeTab: 0,
-      showFilesDialog: false,
-      showInstallationDialog: false,
-      showOptionsDialog: false,
-
-      // Actions
-      addRecentScan: mockAddRecentScan,
-      removeRecentScan: vi.fn(),
-      clearRecentScans: vi.fn(),
-      setPaths: vi.fn(),
-      addPath: vi.fn(),
-      removePath: vi.fn(),
-      setScanOptions: vi.fn(),
-      setIsScanning: vi.fn(),
-      setScanResults: vi.fn(),
-      setError: vi.fn(),
-      setInstallationStatus: vi.fn(),
-      checkInstallation: mockCheckInstallation,
-      setActiveTab: vi.fn(),
-      setShowFilesDialog: vi.fn(),
-      setShowInstallationDialog: vi.fn(),
-      setShowOptionsDialog: vi.fn(),
-      getRecentScans: vi.fn().mockReturnValue([]),
-
-      // Persist
-      persist: {
-        rehydrate: vi.fn().mockResolvedValue(undefined),
-      },
-    });
+    mockUseModelAuditStore.mockReturnValue(getDefaultStoreState());
 
     mockCallApi.mockImplementation(async (path, options) => {
       if (path.endsWith('/model-audit/check-installed')) {
@@ -165,7 +167,7 @@ describe('ModelAudit', () => {
   describe('Installation Status', () => {
     it('should show not installed status in header when modelaudit is not installed', async () => {
       mockUseModelAuditStore.mockReturnValue({
-        ...mockUseModelAuditStore(),
+        ...getDefaultStoreState(),
         installationStatus: {
           checking: false,
           installed: false,
@@ -226,7 +228,7 @@ describe('ModelAudit', () => {
       const mockSetError = vi.fn();
 
       mockUseModelAuditStore.mockReturnValue({
-        ...mockUseModelAuditStore(),
+        ...getDefaultStoreState(),
         setPaths: mockSetPaths,
         setScanResults: mockSetScanResults,
         setActiveTab: mockSetActiveTab,
@@ -263,7 +265,7 @@ describe('ModelAudit', () => {
 
       // Update the mock to have a path
       mockUseModelAuditStore.mockReturnValue({
-        ...mockUseModelAuditStore(),
+        ...getDefaultStoreState(),
         paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
         setPaths: mockSetPaths,
         setScanResults: mockSetScanResults,
@@ -286,7 +288,7 @@ describe('ModelAudit', () => {
 
       // Update the mock to show scan results
       mockUseModelAuditStore.mockReturnValue({
-        ...mockUseModelAuditStore(),
+        ...getDefaultStoreState(),
         scanResults: mockScanResults,
         activeTab: 1,
         setPaths: mockSetPaths,
@@ -314,7 +316,7 @@ describe('ModelAudit', () => {
       const mockSetShowFilesDialog = vi.fn();
 
       mockUseModelAuditStore.mockReturnValue({
-        ...mockUseModelAuditStore(),
+        ...getDefaultStoreState(),
         scanResults: mockScanResults,
         activeTab: 1,
         showFilesDialog: false,

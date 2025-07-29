@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 
 import { callApi } from '@app/utils/api';
 import {
+  ArrowDropDown as ArrowDropDownIcon,
   Clear as ClearIcon,
   Cloud as CloudIcon,
   CloudUpload as CloudUploadIcon,
@@ -13,26 +14,32 @@ import {
   GitHub as GitHubIcon,
   Lock as LockIcon,
   Storage as StorageIcon,
+  Upload as UploadIcon,
 } from '@mui/icons-material';
 import Alert from '@mui/material/Alert';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import ButtonGroup from '@mui/material/ButtonGroup';
 import Chip from '@mui/material/Chip';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
 import Grid from '@mui/material/Grid';
+import Grow from '@mui/material/Grow';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import MenuItem from '@mui/material/MenuItem';
+import MenuList from '@mui/material/MenuList';
 import Paper from '@mui/material/Paper';
+import Popper from '@mui/material/Popper';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import { useModelAuditStore } from '../store';
 
 import type { ScanPath } from '../ModelAudit.types';
@@ -57,7 +64,34 @@ declare global {
   interface File {
     readonly webkitRelativePath: string;
   }
+
+    interface DataTransferItem {
+    webkitGetAsEntry(): FileSystemEntry | null;
+  }
 }
+
+const SUPPORTED_FILE_EXTENSIONS = [
+  '.pkl',
+  '.safetensors',
+  '.bin',
+  '.h5',
+  '.onnx',
+  '.pt',
+  '.pth',
+  '.ckpt',
+  '.keras',
+  '.tflite',
+  '.pb',
+];
+
+const SUPPORTED_FILE_TYPES = {
+  PyTorch: ['.pt', '.pth', '.bin'],
+  TensorFlow: ['.pb', '.h5', '.keras', '.tflite'],
+  ONNX: ['.onnx'],
+  Pickle: ['.pkl'],
+  SafeTensors: ['.safetensors'],
+  Checkpoint: ['.ckpt'],
+};
 
 export default function PathSelector({
   paths,
@@ -65,13 +99,18 @@ export default function PathSelector({
   onRemovePath,
   currentWorkingDir,
 }: PathSelectorProps) {
+  const theme = useTheme();
   const [pathInput, setPathInput] = useState('');
   const [activeTab, setActiveTab] = useState(0);
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [browseMenuOpen, setBrowseMenuOpen] = useState(false);
   const { recentScans, clearRecentScans } = useModelAuditStore();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const browseButtonRef = useRef<HTMLDivElement>(null);
 
   const handleAddPath = async (input: string) => {
     const trimmedPath = input.trim();
@@ -145,48 +184,113 @@ export default function PathSelector({
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      // For file input, we get the full path (in Electron environments)
-      // or just the filename (in web browsers)
-      const file = files[0];
-      const path = file.webkitRelativePath || file.name;
+      // Handle multiple files
+      const filePaths = Array.from(files).map((file) => {
+        // For folder selection, extract unique folder paths
+        if (file.webkitRelativePath) {
+          const parts = file.webkitRelativePath.split('/');
+          return parts.slice(0, -1).join('/') + '/';
+        }
+        return file.name;
+      });
 
-      // If we have a webkitRelativePath, it means a folder was selected
-      if (file.webkitRelativePath) {
-        // Extract the folder path
-        const folderPath = file.webkitRelativePath.split('/')[0];
-        handleAddPath(folderPath + '/');
-      } else {
-        // Single file selected
-        handleAddPath(path);
-      }
+      // Get unique paths
+      const uniquePaths = [...new Set(filePaths)];
+
+      // Add each unique path
+      uniquePaths.forEach((path) => {
+        if (!paths.some((p) => p.path === path)) {
+          handleAddPath(path);
+        }
+      });
     }
 
     // Reset the input
     event.target.value = '';
   };
 
-  const tabIcon = (icon: React.ReactNode, isEnterprise = false) =>
-    isEnterprise ? (
-      <Badge
-        badgeContent={
-          <Tooltip title="Enterprise Feature">
-            <LockIcon sx={{ fontSize: 12 }} />
-          </Tooltip>
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+
+      const items = Array.from(e.dataTransfer.items);
+
+      items.forEach((item) => {
+        if (item.kind === 'file') {
+          const entry = item.webkitGetAsEntry();
+          if (entry) {
+            // Handle both files and directories
+            if (entry.isDirectory) {
+              handleAddPath(entry.fullPath + '/');
+            } else {
+              handleAddPath(entry.fullPath);
+            }
+          }
         }
-        sx={{
-          '& .MuiBadge-badge': {
-            right: -4,
-            top: 4,
-            backgroundColor: 'transparent',
-            color: 'text.disabled',
-          },
-        }}
-      >
-        {icon}
-      </Badge>
-    ) : (
-      icon
-    );
+      });
+    },
+    [paths],
+  );
+
+  const tabIcon = (icon: React.ReactElement, isEnterprise = false): React.ReactElement => {
+    if (isEnterprise) {
+      return (
+        <Badge
+          badgeContent={
+            <Tooltip title="Enterprise Feature">
+              <LockIcon sx={{ fontSize: 12 }} />
+            </Tooltip>
+          }
+          sx={{
+            '& .MuiBadge-badge': {
+              right: -4,
+              top: 4,
+              backgroundColor: 'transparent',
+              color: 'text.disabled',
+            },
+          }}
+        >
+          {icon}
+        </Badge>
+      );
+    }
+    return icon;
+  };
+
+  const getFileTypeChip = (filename: string) => {
+    const ext = filename.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+
+    for (const [type, extensions] of Object.entries(SUPPORTED_FILE_TYPES)) {
+      if (extensions.includes(ext)) {
+        return (
+          <Chip
+            label={type}
+            size="small"
+            sx={{
+              ml: 1,
+              backgroundColor:
+                theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
+            }}
+          />
+        );
+      }
+    }
+    return null;
+  };
 
   return (
     <Box>
@@ -195,7 +299,8 @@ export default function PathSelector({
         type="file"
         style={{ display: 'none' }}
         onChange={handleFileSelect}
-        accept=".pkl,.safetensors,.bin,.h5,.onnx,.pt,.pth,.ckpt,.keras,.tflite,.pb"
+        accept={SUPPORTED_FILE_EXTENSIONS.join(',')}
+        multiple
       />
       <input
         ref={folderInputRef}
@@ -263,12 +368,78 @@ export default function PathSelector({
             </Alert>
           )}
 
+          {/* Drag and Drop Zone */}
+          <Paper
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            sx={{
+              p: 4,
+              mb: 3,
+              border: '2px dashed',
+              borderColor: isDragging ? 'primary.main' : 'divider',
+              borderRadius: 2,
+              backgroundColor: isDragging
+                ? theme.palette.action.hover
+                : theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.02)'
+                  : 'rgba(0, 0, 0, 0.02)',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              transform: isDragging ? 'scale(1.02)' : 'scale(1)',
+              '&:hover': {
+                borderColor: 'primary.main',
+                backgroundColor: theme.palette.action.hover,
+              },
+            }}
+          >
+            <UploadIcon
+              sx={{
+                fontSize: 48,
+                color: isDragging ? 'primary.main' : 'text.secondary',
+                mb: 2,
+              }}
+            />
+            <Typography variant="h6" gutterBottom>
+              Drop files or folders here
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Or use the controls below to browse or enter paths manually
+            </Typography>
+
+            {/* Supported file types */}
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="caption" color="text.secondary">
+                Supported formats:
+              </Typography>
+              <Stack
+                direction="row"
+                spacing={1}
+                flexWrap="wrap"
+                justifyContent="center"
+                sx={{ mt: 1 }}
+              >
+                {Object.entries(SUPPORTED_FILE_TYPES).map(([type, exts]) => (
+                  <Chip
+                    key={type}
+                    label={`${type} (${exts.join(', ')})`}
+                    size="small"
+                    variant="outlined"
+                    sx={{ m: 0.5 }}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          </Paper>
+
+          {/* Manual Input Section */}
           <Box sx={{ mb: 3 }}>
-            <Stack direction="row" spacing={1} alignItems="flex-start">
+            <Stack direction="row" spacing={2} alignItems="flex-start">
               <TextField
                 fullWidth
                 label="Add model path"
-                placeholder="Examples: ./model.pkl, /path/to/models/, ../data/model.h5"
+                placeholder="Type a path or drag & drop above"
                 value={pathInput}
                 onChange={(e) => setPathInput(e.target.value)}
                 onKeyPress={(e) => {
@@ -278,16 +449,20 @@ export default function PathSelector({
                   }
                 }}
                 error={!!error}
-                helperText={
-                  error || 'Enter a file path or directory path. Press Enter or click Add.'
-                }
+                helperText={error || 'Enter a file or directory path'}
                 disabled={isChecking}
                 InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <FolderOpenIcon sx={{ color: 'text.secondary' }} />
+                    </InputAdornment>
+                  ),
                   endAdornment: (
                     <InputAdornment position="end">
                       <Button
                         onClick={() => handleAddPath(pathInput)}
                         disabled={!pathInput.trim() || isChecking}
+                        size="small"
                       >
                         {isChecking ? 'Checking...' : 'Add'}
                       </Button>
@@ -295,30 +470,131 @@ export default function PathSelector({
                   ),
                 }}
               />
-              <Stack direction="column" spacing={1}>
-                <Tooltip title="Browse for a file">
-                  <Button
-                    variant="outlined"
-                    startIcon={<FileIcon />}
-                    onClick={() => fileInputRef.current?.click()}
-                    sx={{ whiteSpace: 'nowrap' }}
-                  >
-                    Select File
-                  </Button>
-                </Tooltip>
-                <Tooltip title="Browse for a folder">
-                  <Button
-                    variant="outlined"
-                    startIcon={<FolderOpenIcon />}
-                    onClick={() => folderInputRef.current?.click()}
-                    sx={{ whiteSpace: 'nowrap' }}
-                  >
-                    Select Folder
-                  </Button>
-                </Tooltip>
-              </Stack>
+
+              {/* Browse Button with Dropdown */}
+              <ButtonGroup variant="contained" ref={browseButtonRef} sx={{ flexShrink: 0 }}>
+                <Button
+                  startIcon={<FolderOpenIcon />}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Browse
+                </Button>
+                <Button size="small" onClick={() => setBrowseMenuOpen(!browseMenuOpen)}>
+                  <ArrowDropDownIcon />
+                </Button>
+              </ButtonGroup>
+
+              <Popper
+                open={browseMenuOpen}
+                anchorEl={browseButtonRef.current}
+                transition
+                disablePortal
+                placement="bottom-end"
+                sx={{ zIndex: 1300 }}
+              >
+                {({ TransitionProps }) => (
+                  <Grow {...TransitionProps}>
+                    <Paper elevation={8}>
+                      <ClickAwayListener onClickAway={() => setBrowseMenuOpen(false)}>
+                        <MenuList>
+                          <MenuItem
+                            onClick={() => {
+                              fileInputRef.current?.click();
+                              setBrowseMenuOpen(false);
+                            }}
+                          >
+                            <ListItemIcon>
+                              <FileIcon fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText>Select Files</ListItemText>
+                          </MenuItem>
+                          <MenuItem
+                            onClick={() => {
+                              folderInputRef.current?.click();
+                              setBrowseMenuOpen(false);
+                            }}
+                          >
+                            <ListItemIcon>
+                              <FolderIcon fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText>Select Folder</ListItemText>
+                          </MenuItem>
+                        </MenuList>
+                      </ClickAwayListener>
+                    </Paper>
+                  </Grow>
+                )}
+              </Popper>
             </Stack>
           </Box>
+
+          {/* Recent Scans Section */}
+          {recentScans.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ mb: 2 }}
+              >
+                <Typography variant="subtitle2" color="text.secondary">
+                  Recent Paths
+                </Typography>
+                {recentScans.length > 3 && (
+                  <Button
+                    size="small"
+                    startIcon={<ClearIcon />}
+                    onClick={clearRecentScans}
+                    sx={{ color: 'text.secondary' }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </Stack>
+
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.02)'
+                      : 'rgba(0, 0, 0, 0.02)',
+                }}
+              >
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {recentScans
+                    .flatMap((scan) => scan.paths)
+                    .filter(
+                      (path, index, self) => index === self.findIndex((p) => p.path === path.path),
+                    )
+                    .slice(0, 8)
+                    .map((path, index) => (
+                      <Chip
+                        key={`${path.path}-${index}`}
+                        label={path.name || path.path}
+                        size="medium"
+                        onClick={() => {
+                          if (!paths.some((p) => p.path === path.path)) {
+                            handleAddPath(path.path);
+                          }
+                        }}
+                        icon={path.type === 'directory' ? <FolderIcon /> : <FileIcon />}
+                        variant="outlined"
+                        sx={{
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          '&:hover': {
+                            backgroundColor: theme.palette.action.hover,
+                            transform: 'translateY(-1px)',
+                          },
+                        }}
+                      />
+                    ))}
+                </Stack>
+              </Paper>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -470,103 +746,104 @@ export default function PathSelector({
         </Box>
       )}
 
-      {recentScans.length > 0 && (
-        <Box sx={{ mb: 2 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              <strong>Recent:</strong>
-            </Typography>
-            {recentScans.length > 3 && (
-              <IconButton
-                size="small"
-                onClick={clearRecentScans}
-                title="Clear recent scans"
-                sx={{ p: 0.5 }}
-              >
-                <ClearIcon fontSize="small" />
-              </IconButton>
-            )}
-          </Stack>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {recentScans
-              .flatMap((scan) => scan.paths)
-              .filter((path, index, self) => index === self.findIndex((p) => p.path === path.path))
-              .slice(0, 8)
-              .map((path, index) => (
-                <Chip
-                  key={`${path.path}-${index}`}
-                  label={path.path}
-                  size="small"
-                  onClick={() => handleAddPath(path.path)}
-                  sx={{ cursor: 'pointer' }}
-                  icon={path.type === 'directory' ? <FolderIcon /> : <FileIcon />}
-                />
-              ))}
-          </Stack>
-        </Box>
-      )}
-
+      {/* Selected Paths Section */}
       {paths.length > 0 && (
-        <>
-          <Typography variant="subtitle1" sx={{ mt: 4, mb: 2 }} fontWeight={600}>
-            Selected Items ({paths.length})
-          </Typography>
-          <List>
-            {paths.map((path, index) => (
-              <ListItem
-                key={index}
-                secondaryAction={
+        <Box sx={{ mt: 4 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+              Selected Paths
+              <Chip label={paths.length} size="small" color="primary" sx={{ ml: 1, height: 20 }} />
+            </Typography>
+          </Stack>
+
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              backgroundColor:
+                theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+            }}
+          >
+            <Stack spacing={1.5}>
+              {paths.map((path, index) => (
+                <Paper
+                  key={index}
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    backgroundColor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 2,
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      borderColor: theme.palette.primary.main,
+                      transform: 'translateX(4px)',
+                      '& .delete-button': {
+                        opacity: 1,
+                      },
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                    {path.type === 'directory' ? (
+                      <FolderIcon
+                        sx={{
+                          mr: 2,
+                          color: theme.palette.primary.main,
+                          fontSize: 28,
+                        }}
+                      />
+                    ) : (
+                      <FileIcon
+                        sx={{
+                          mr: 2,
+                          color: theme.palette.text.secondary,
+                          fontSize: 28,
+                        }}
+                      />
+                    )}
+
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {path.name || path.path.split('/').pop() || path.path}
+                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography variant="caption" color="text.secondary">
+                          {path.path}
+                        </Typography>
+                        {path.type === 'file' && getFileTypeChip(path.path)}
+                      </Stack>
+                    </Box>
+                  </Box>
+
                   <IconButton
+                    className="delete-button"
                     edge="end"
-                    aria-label={`Delete ${path.name || path.path}`}
+                    aria-label={`Remove ${path.name || path.path}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       onRemovePath(index);
                     }}
                     size="small"
                     sx={{
-                      zIndex: 1,
+                      ml: 2,
+                      opacity: 0.7,
+                      transition: 'opacity 0.2s',
+                      color: theme.palette.error.main,
                       '&:hover': {
-                        backgroundColor: 'error.light',
-                        color: 'error.contrastText',
+                        backgroundColor: theme.palette.error.light + '20',
                       },
                     }}
                   >
                     <DeleteIcon fontSize="small" />
                   </IconButton>
-                }
-                sx={{
-                  position: 'relative',
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? theme.palette.grey[800]
-                      : theme.palette.grey[50],
-                  borderRadius: 2,
-                  mb: 1,
-                  pr: 6,
-                }}
-              >
-                <ListItemIcon>
-                  {path.type === 'directory' ? (
-                    <FolderIcon color="primary" />
-                  ) : (
-                    <FileIcon color="action" />
-                  )}
-                </ListItemIcon>
-                <ListItemText
-                  primary={path.name || path.path}
-                  secondary={
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography variant="body2" color="text.secondary">
-                        {path.type === 'directory' ? 'Directory' : 'File'}
-                      </Typography>
-                    </Stack>
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
-        </>
+                </Paper>
+              ))}
+            </Stack>
+          </Paper>
+        </Box>
       )}
     </Box>
   );
