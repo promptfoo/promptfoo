@@ -65,7 +65,7 @@ declare global {
     readonly webkitRelativePath: string;
   }
 
-    interface DataTransferItem {
+  interface DataTransferItem {
     webkitGetAsEntry(): FileSystemEntry | null;
   }
 }
@@ -369,13 +369,16 @@ export default function PathSelector({
           )}
 
           {/* Drag and Drop Zone */}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Add model path
+          </Typography>
           <Paper
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             sx={{
-              p: 4,
-              mb: 3,
+              p: 3,
+              mb: 2.5,
               border: '2px dashed',
               borderColor: isDragging ? 'primary.main' : 'divider',
               borderRadius: 2,
@@ -396,16 +399,16 @@ export default function PathSelector({
           >
             <UploadIcon
               sx={{
-                fontSize: 48,
+                fontSize: 40,
                 color: isDragging ? 'primary.main' : 'text.secondary',
-                mb: 2,
+                mb: 1.5,
               }}
             />
-            <Typography variant="h6" gutterBottom>
+            <Typography variant="body1" gutterBottom sx={{ fontWeight: 500 }}>
               Drop files or folders here
             </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Or use the controls below to browse or enter paths manually
+            <Typography variant="body2" color="text.secondary">
+              or use the controls below
             </Typography>
 
             {/* Supported file types */}
@@ -462,7 +465,8 @@ export default function PathSelector({
                       <Button
                         onClick={() => handleAddPath(pathInput)}
                         disabled={!pathInput.trim() || isChecking}
-                        size="small"
+                        variant="text"
+                        sx={{ mr: 1 }}
                       >
                         {isChecking ? 'Checking...' : 'Add'}
                       </Button>
@@ -472,14 +476,27 @@ export default function PathSelector({
               />
 
               {/* Browse Button with Dropdown */}
-              <ButtonGroup variant="contained" ref={browseButtonRef} sx={{ flexShrink: 0 }}>
+              <ButtonGroup
+                variant="contained"
+                ref={browseButtonRef}
+                sx={{
+                  flexShrink: 0,
+                  height: '56px', // Match TextField height
+                  alignSelf: 'flex-start',
+                }}
+              >
                 <Button
                   startIcon={<FolderOpenIcon />}
                   onClick={() => fileInputRef.current?.click()}
+                  sx={{ height: '100%' }}
                 >
                   Browse
                 </Button>
-                <Button size="small" onClick={() => setBrowseMenuOpen(!browseMenuOpen)}>
+                <Button
+                  size="small"
+                  onClick={() => setBrowseMenuOpen(!browseMenuOpen)}
+                  sx={{ height: '100%', minWidth: '40px' }}
+                >
                   <ArrowDropDownIcon />
                 </Button>
               </ButtonGroup>
