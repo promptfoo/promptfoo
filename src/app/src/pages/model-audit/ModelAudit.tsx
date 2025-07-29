@@ -154,11 +154,10 @@ export default function ModelAudit() {
                 Model Audit
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                Scan ML models for security vulnerabilities using the{' '}
-                <Link href="https://pypi.org/project/modelaudit/" target="_blank">
-                  modelaudit
-                </Link>{' '}
-                package
+                Scan ML models for security vulnerabilities.{' '}
+                <Link href="https://www.promptfoo.dev/docs/model-audit/" target="_blank">
+                  Learn more
+                </Link>
               </Typography>
             </Box>
             <Box sx={{ ml: 'auto' }}>
