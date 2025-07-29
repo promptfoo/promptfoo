@@ -18,6 +18,7 @@ import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
+import { getSeverityLabel } from '../utils';
 
 import type { ScanResult } from '../ModelAudit.types';
 
@@ -57,7 +58,7 @@ export default function SecurityFindings({
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
       const location = issue.location || issue.details?.path || '';
       return [
-        issue.severity,
+        getSeverityLabel(issue.severity),
         `"${issue.message.replace(/"/g, '""')}"`,
         `"${location.replace(/"/g, '""')}"`,
         `"${details}"`,
@@ -102,7 +103,7 @@ export default function SecurityFindings({
             sx={{ minWidth: 150 }}
           >
             <MenuItem value="all">All</MenuItem>
-            <MenuItem value="error">Errors Only</MenuItem>
+            <MenuItem value="error">Critical Only</MenuItem>
             <MenuItem value="warning">Warnings Only</MenuItem>
             <MenuItem value="info">Info Only</MenuItem>
             <MenuItem value="debug">Debug Only</MenuItem>
@@ -131,7 +132,7 @@ export default function SecurityFindings({
           <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
           <Typography variant="h6" color="success.main">
             {selectedSeverity
-              ? `No ${selectedSeverity} issues found`
+              ? `No ${getSeverityLabel(selectedSeverity)} issues found`
               : 'No security issues detected'}
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -169,7 +170,9 @@ export default function SecurityFindings({
                     <Typography variant="body1" fontWeight={600}>
                       {issue.message}
                     </Typography>
-                    <SeverityBadge severity={issue.severity}>{issue.severity}</SeverityBadge>
+                    <SeverityBadge severity={issue.severity}>
+                      {getSeverityLabel(issue.severity)}
+                    </SeverityBadge>
                   </Stack>
                   {(issue.location || (issue.details && issue.details.path)) && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
