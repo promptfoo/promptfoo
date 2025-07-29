@@ -69,9 +69,11 @@ describe('ModelAudit utils', () => {
     });
 
     it('should handle non-string values in files array', () => {
-      expect(getIssueFilePath({ 
-        details: { files: [null, undefined, 123, '/valid/path.py'] as any } 
-      })).toBe('Unknown');
+      expect(
+        getIssueFilePath({
+          details: { files: [null, undefined, 123, '/valid/path.py'] as any },
+        }),
+      ).toBe('Unknown');
     });
 
     it('should follow precedence order: location > details.path > details.files', () => {

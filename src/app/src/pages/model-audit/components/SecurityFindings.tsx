@@ -98,7 +98,7 @@ export default function SecurityFindings({
   const issuesByFile = filteredIssues.reduce(
     (acc, issue) => {
       const file = getIssueFilePath(issue);
-      
+
       if (!acc[file]) {
         acc[file] = [];
       }

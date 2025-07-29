@@ -1,24 +1,50 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material';
 import SecurityIcon from '@mui/icons-material/Security';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Fade from '@mui/material/Fade';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { callApi } from '@app/utils/api';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
-import InstallationCheck from './components/InstallationCheck';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
 import { useModelAuditStore } from './store';
 
 import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
+
+// Cache key and duration
+const INSTALLATION_CACHE_KEY = 'modelaudit_installation_status';
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+
+// Singleton promise for request deduplication
+let checkInstallationPromise: Promise<{ installed: boolean; cwd: string }> | null = null;
+
+interface InstallationStatus {
+  checking: boolean;
+  installed: boolean | null;
+  lastChecked: number | null;
+  error: string | null;
+}
+
+interface CachedInstallationStatus {
+  installed: boolean;
+  cwd: string;
+  timestamp: number;
+}
 
 export default function ModelAudit() {
   const [paths, setPaths] = useState<ScanPath[]>([]);
@@ -31,10 +57,16 @@ export default function ModelAudit() {
   const [scanResults, setScanResults] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showOptionsDialog, setShowOptionsDialog] = useState(false);
-  const [modelAuditInstalled, setModelAuditInstalled] = useState<boolean | null>(null);
+  const [installationStatus, setInstallationStatus] = useState<InstallationStatus>({
+    checking: false,
+    installed: null,
+    lastChecked: null,
+    error: null,
+  });
   const [currentWorkingDir, setCurrentWorkingDir] = useState<string>('');
   const [activeTab, setActiveTab] = useState(0);
   const [showFilesDialog, setShowFilesDialog] = useState(false);
+  const [showInstallationDialog, setShowInstallationDialog] = useState(false);
 
   const { addRecentScan } = useModelAuditStore();
 
@@ -42,20 +74,116 @@ export default function ModelAudit() {
     useModelAuditStore.persist.rehydrate();
   }, []);
 
-  // Check if modelaudit is installed
-  const checkModelAuditInstalled = async () => {
-    try {
-      const response = await callApi('/model-audit/check-installed');
-      const data = await response.json();
-      setModelAuditInstalled(data.installed);
-      setCurrentWorkingDir(data.cwd || '');
-    } catch {
-      setModelAuditInstalled(false);
+  // Load cached status on mount
+  useEffect(() => {
+    const cached = localStorage.getItem(INSTALLATION_CACHE_KEY);
+    if (cached) {
+      try {
+        const data: CachedInstallationStatus = JSON.parse(cached);
+        // Use cached data immediately for good UX
+        setInstallationStatus({
+          checking: false,
+          installed: data.installed,
+          lastChecked: data.timestamp,
+          error: null,
+        });
+        setCurrentWorkingDir(data.cwd || '');
+      } catch {
+        // Ignore invalid cache
+      }
     }
+  }, []);
+
+  // Check if modelaudit is installed with deduplication
+  const checkModelAuditInstalled = async (force = false): Promise<void> => {
+    // If already checking and not forcing, return existing promise
+    if (checkInstallationPromise && !force) {
+      await checkInstallationPromise;
+      return;
+    }
+
+    // Check cache first (unless forced)
+    if (!force) {
+      const cached = localStorage.getItem(INSTALLATION_CACHE_KEY);
+      if (cached) {
+        try {
+          const data: CachedInstallationStatus = JSON.parse(cached);
+          const age = Date.now() - data.timestamp;
+          if (age < CACHE_DURATION) {
+            // Cache is still valid, but we'll check in background anyway
+            setInstallationStatus({
+              checking: false,
+              installed: data.installed,
+              lastChecked: data.timestamp,
+              error: null,
+            });
+            setCurrentWorkingDir(data.cwd || '');
+          }
+        } catch {
+          // Ignore invalid cache
+        }
+      }
+    }
+
+    // Set checking state
+    setInstallationStatus((prev) => ({ ...prev, checking: true, error: null }));
+
+    // Create deduplicated promise
+    checkInstallationPromise = callApi('/model-audit/check-installed')
+      .then(async (response) => {
+        const data = await response.json();
+        const timestamp = Date.now();
+
+        // Update state
+        setInstallationStatus({
+          checking: false,
+          installed: data.installed,
+          lastChecked: timestamp,
+          error: null,
+        });
+        setCurrentWorkingDir(data.cwd || '');
+
+        // Cache the result
+        const cacheData: CachedInstallationStatus = {
+          installed: data.installed,
+          cwd: data.cwd || '',
+          timestamp,
+        };
+        localStorage.setItem(INSTALLATION_CACHE_KEY, JSON.stringify(cacheData));
+
+        return data;
+      })
+      .catch((err) => {
+        setInstallationStatus({
+          checking: false,
+          installed: false,
+          lastChecked: Date.now(),
+          error: 'Failed to check installation status',
+        });
+        return { installed: false, cwd: '' };
+      })
+      .finally(() => {
+        // Clear the promise after completion
+        checkInstallationPromise = null;
+      });
+
+    await checkInstallationPromise;
   };
 
-  React.useEffect(() => {
+  // Check on mount and periodically in background
+  useEffect(() => {
+    // Initial check
     checkModelAuditInstalled();
+
+    // Background check every 5 minutes
+    const interval = setInterval(
+      () => {
+        checkModelAuditInstalled();
+      },
+      5 * 60 * 1000,
+    );
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleAddPath = (path: ScanPath) => {
@@ -67,6 +195,20 @@ export default function ModelAudit() {
   };
 
   const handleScan = async () => {
+    // Check installation status first
+    if (installationStatus.installed === false) {
+      setShowInstallationDialog(true);
+      return;
+    }
+
+    // If installation status is unknown or checking, verify first
+    if (installationStatus.installed === null || installationStatus.checking) {
+      await checkModelAuditInstalled(true); // Force check
+      // Re-check will happen through state update, but we need to wait
+      // for the current check to complete
+      return;
+    }
+
     if (paths.length === 0) {
       setError('Please add at least one path to scan');
       return;
@@ -106,21 +248,7 @@ export default function ModelAudit() {
     }
   };
 
-  if (modelAuditInstalled === null) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Stack spacing={2} alignItems="center">
-          <CircularProgress />
-          <Typography>Checking ModelAudit installation...</Typography>
-        </Stack>
-      </Container>
-    );
-  }
-
-  if (modelAuditInstalled === false) {
-    return <InstallationCheck />;
-  }
-
+  // Remove blocking UI - go straight to main UI
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* Header */}
@@ -130,6 +258,41 @@ export default function ModelAudit() {
           <Typography variant="h4" fontWeight={700}>
             Model Audit
           </Typography>
+
+          {/* Installation Status Indicator */}
+          <Box sx={{ ml: 'auto' }}>
+            {installationStatus.checking ? (
+              <Tooltip title="Checking ModelAudit installation...">
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CircularProgress size={16} />
+                  <Typography variant="body2" color="text.secondary">
+                    Checking...
+                  </Typography>
+                </Stack>
+              </Tooltip>
+            ) : installationStatus.installed === true ? (
+              <Tooltip title="ModelAudit is installed and ready">
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                  <Typography variant="body2" color="success.main">
+                    Ready
+                  </Typography>
+                </Stack>
+              </Tooltip>
+            ) : installationStatus.installed === false ? (
+              <Tooltip title="ModelAudit is not installed. Click to learn more.">
+                <Button
+                  size="small"
+                  startIcon={<ErrorIcon sx={{ fontSize: 16 }} />}
+                  color="error"
+                  onClick={() => setShowInstallationDialog(true)}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Not Installed
+                </Button>
+              </Tooltip>
+            ) : null}
+          </Box>
         </Stack>
         <Typography variant="body1" color="text.secondary" sx={{ ml: 7 }}>
           Scan model files for security vulnerabilities and potential risks
@@ -166,6 +329,7 @@ export default function ModelAudit() {
               error={error}
               onClearError={() => setError(null)}
               currentWorkingDir={currentWorkingDir}
+              installationStatus={installationStatus}
             />
           </Box>
         </Fade>
@@ -198,6 +362,50 @@ export default function ModelAudit() {
         scanResults={scanResults}
         paths={paths}
       />
+
+      {/* Installation Dialog */}
+      <Dialog
+        open={showInstallationDialog}
+        onClose={() => setShowInstallationDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <ErrorIcon color="error" />
+            <Typography variant="h6">ModelAudit Not Installed</Typography>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" paragraph>
+            ModelAudit is required to scan ML models for security vulnerabilities.
+          </Typography>
+          <Paper sx={{ p: 2, bgcolor: 'action.hover', mb: 2 }}>
+            <Typography variant="body2" fontFamily="monospace">
+              pip install modelaudit
+            </Typography>
+          </Paper>
+          <Typography variant="body2" color="text.secondary">
+            After installation, click the refresh button to verify.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => checkModelAuditInstalled(true)}
+            disabled={installationStatus.checking}
+          >
+            {installationStatus.checking ? 'Checking...' : 'Refresh Status'}
+          </Button>
+          <Button
+            variant="contained"
+            href="https://www.promptfoo.dev/docs/model-audit/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View Documentation
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }
