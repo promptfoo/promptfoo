@@ -51,6 +51,8 @@ export default function PathSelector({
 }: PathSelectorProps) {
   const [pathInput, setPathInput] = useState('');
   const [activeTab, setActiveTab] = useState(0);
+  const [isChecking, setIsChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { recentScans, clearRecentScans } = useModelAuditStore();
 
   const handleAddPath = async (input: string) => {
@@ -58,6 +60,16 @@ export default function PathSelector({
     if (!trimmedPath) {
       return;
     }
+
+    // Check if path already exists
+    if (paths.some((p) => p.path === trimmedPath)) {
+      setError('Path already added');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    setIsChecking(true);
+    setError(null);
 
     try {
       // Check path type using the API
@@ -78,9 +90,12 @@ export default function PathSelector({
           type: data.type,
           name: data.name || trimmedPath.split('/').pop() || trimmedPath,
         });
+        setPathInput('');
       } else {
-        // Path doesn't exist, make a best guess based on the input
-        // If it ends with a slash, treat as directory
+        // Path doesn't exist but we'll still add it with a warning
+        setError('Path does not exist or is not accessible');
+        
+        // Make a best guess based on the input
         const isDirectory = trimmedPath.endsWith('/');
         const name = trimmedPath.split('/').pop() || trimmedPath;
 
@@ -89,9 +104,12 @@ export default function PathSelector({
           type: isDirectory ? 'directory' : 'file',
           name,
         });
+        setPathInput('');
       }
     } catch (error) {
-      console.error('Error checking path:', error);
+      // Show user-friendly error and still allow adding the path
+      setError('Could not verify path - adding anyway');
+      
       // Fallback to simple logic if API call fails
       const isDirectory = trimmedPath.endsWith('/');
       const name = trimmedPath.split('/').pop() || trimmedPath;
@@ -101,9 +119,10 @@ export default function PathSelector({
         type: isDirectory ? 'directory' : 'file',
         name,
       });
+      setPathInput('');
+    } finally {
+      setIsChecking(false);
     }
-
-    setPathInput('');
   };
 
   const tabIcon = (icon: React.ReactElement, isLocked: boolean = false) => {
@@ -198,11 +217,17 @@ export default function PathSelector({
                   handleAddPath(pathInput);
                 }
               }}
+              error={!!error}
+              helperText={error}
+              disabled={isChecking}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Button onClick={() => handleAddPath(pathInput)} disabled={!pathInput.trim()}>
-                      Add
+                    <Button 
+                      onClick={() => handleAddPath(pathInput)} 
+                      disabled={!pathInput.trim() || isChecking}
+                    >
+                      {isChecking ? 'Checking...' : 'Add'}
                     </Button>
                   </InputAdornment>
                 ),
@@ -407,8 +432,8 @@ export default function PathSelector({
               <ListItem
                 key={index}
                 secondaryAction={
-                  <IconButton 
-                    edge="end" 
+                  <IconButton
+                    edge="end"
                     aria-label={`Delete ${path.name || path.path}`}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -420,7 +445,7 @@ export default function PathSelector({
                       '&:hover': {
                         backgroundColor: 'error.light',
                         color: 'error.contrastText',
-                      }
+                      },
                     }}
                   >
                     <DeleteIcon fontSize="small" />

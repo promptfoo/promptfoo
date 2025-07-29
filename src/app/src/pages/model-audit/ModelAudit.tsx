@@ -64,7 +64,7 @@ export default function ModelAudit() {
 
   const handleRemovePath = (index: number) => {
     setPaths(paths.filter((_, i) => i !== index));
-  }
+  };
 
   const handleScan = async () => {
     if (paths.length === 0) {
@@ -104,7 +104,7 @@ export default function ModelAudit() {
     } finally {
       setIsScanning(false);
     }
-  }
+  };
 
   if (modelAuditInstalled === null) {
     return (
