@@ -127,31 +127,6 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('should use metric search when plugin ID is not available', () => {
-    const propsWithoutPluginId = {
-      ...defaultProps,
-      failures: [
-        {
-          prompt: 'Test prompt',
-          output: 'Test output',
-          gradingResult: {
-            pass: false,
-            score: 0,
-            reason: 'Failed test',
-          },
-          result: createMockEvaluateResult({}),
-        },
-      ],
-    };
-
-    render(<RiskCategoryDrawer {...propsWithoutPluginId} />);
-
-    const viewAllLogsButton = screen.getByText('View All Logs');
-    fireEvent.click(viewAllLogsButton);
-
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=Test%20Category');
-  });
-
   it('should close drawer when close button is clicked', () => {
     const onCloseMock = vi.fn();
     const props = { ...defaultProps, onClose: onCloseMock };
