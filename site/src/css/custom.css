@@ -70,10 +70,6 @@ code p {
   font-weight: 600;
 }
 
-.theme-doc-sidebar-container > div > div {
-  padding-top: calc(1rem + 45px) !important;
-}
-
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
 }
