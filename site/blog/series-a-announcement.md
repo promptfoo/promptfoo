@@ -1,6 +1,6 @@
 ---
 title: 'Promptfoo Raises $18.4M Series A to Build the Definitive AI Security Stack'
-description: 'We raised $18.4M from Insight Partners and Andreessen Horowitz to accelerate development of the most widely adopted AI security testing solution.'
+description: 'We raised $18.4M from Insight Partners with participation from Andreessen Horowitz. Funding will accelerate development of the most widely adopted AI security testing solution.'
 image: /img/blog/series-a-announcement.jpg
 keywords:
   [
@@ -20,111 +20,90 @@ authors: [ian, michael]
 tags: [company-update]
 ---
 
-# Promptfoo Raises $18.4M Series A
+# Promptfoo Raises $18.4M Series A to Build the Definitive AI Security Stack
 
 **Led by Insight Partners with participation from Andreessen Horowitz.**
 
 Promptfoo has raised an $18.4 million Series A led by Insight Partners, with participation from Andreessen Horowitz.
 
-We started Promptfoo in 2024 because AI security tooling hadn't kept pace with AI system complexity. One year later, 125,000 developers use our open source framework and dozens of Fortune 500 companies run our platform in production.
+We started Promptfoo in 2024 after watching AI systems grow increasingly complex while security tooling lagged behind. Today, over 125,000 developers use our open source framework and more than 30 Fortune 500 companies run our platform in production.
 
-## The problem: AI architectures are getting complex
+## The real problem we're solving
 
-New AI architectures create new attack surfaces:
+AI security has become the largest blocker to enterprises shipping generative AI applications to end users. We see it every day—companies want to deploy AI applications, but they're held back by security concerns.
 
-- **RAG pipelines** can leak entire knowledge bases through retrieval manipulation
+Architectures like agents, RAGs, and most recently MCP (Model Context Protocol) have expanded what's possible with AI, but they've also dramatically increased the attack surface:
+
 - **Autonomous agents** execute actions with production system access
-- **MCP (Model Context Protocol) servers** enable tools and APIs that introduce new injection vectors
+- **RAG pipelines** can leak entire knowledge bases through retrieval manipulation
+- **MCP servers** enable tools and APIs that introduce new injection vectors
 - **Multimodal systems** accept text, voice, and images—each a potential attack vector
 
-As these architectures hit production, we're seeing real-world incidents of prompt injection, data leakage, insecure tool use, and more. These architectures have expanded what's possible with AI, but they've dramatically increased the attack surface. Traditional security tools weren't built for this complexity, and manual testing can't keep pace.
-
-We're seeing prompt injection, data leakage, and tool abuse incidents weekly. Traditional security tools miss these AI-specific vulnerabilities.
+As these architectures hit production, we're seeing real-world incidents of prompt injection, data leakage, insecure tool use, and more. Traditional security tools weren't built for this complexity, and manual testing can't keep pace.
 
 <!-- truncate -->
 
-## What we've built: Developer-first AI security
+## Who's using Promptfoo
 
-Security should be built in from the start, not patched on later. That's why we've created tools that developers love to use.
+The adoption has been incredible:
 
-Promptfoo stands apart as the only developer-first AI security solution that closes the loop from discovery to resolution. Our platform:
+- **125,000+ developers** have downloaded our open source tools
+- **30+ Fortune 500 companies** run Promptfoo in production CI/CD pipelines
+- **Foundation model labs** test their models with Promptfoo before release
 
-- **Runs automated red-team tests** in your build pipeline
-- **Generates actionable fixes** for each vulnerability found
-- **Integrates with Jira, Snyk, GitHub** and existing security tools
+## Welcome to Ganesh Bell
 
-This automation—covering attack generation, exploit search, and regression testing—helps teams protect their AI supply chain, catch risks before deployment, and train app-specific defenses. Enterprise customers report 6× faster security testing (based on three Fortune 500 case studies).
+We're excited to have Ganesh Bell, Managing Director at Insight Partners, join our board. He brings deep experience scaling developer platforms at GE Digital and Uptake.
 
-## Who trusts Promptfoo
+"Promptfoo has created a category-defining product," said Ganesh Bell, Managing Director at Insight Partners. "Every serious enterprise deploying AI will need comprehensive security testing, and Promptfoo's combination of technical depth, open source adoption, and enterprise traction positions them perfectly to capture this massive market opportunity. We're thrilled to partner with them as they build the full AI security stack."
 
-Our rapid adoption speaks to the critical need we're addressing:
+"When we first invested in Promptfoo, we recognized that AI security would become mission-critical for every enterprise," said Zane Lackey, General Partner at Andreessen Horowitz. "In just one year, they've validated that thesis and then some. This additional investment reflects our conviction that they'll define how companies approach AI security for years to come."
 
-## Adoption metrics
+## What's next: Building for the agentic future
 
-- **125,000+ developers** use our open source tools
-- **Dozens of Fortune 500 companies** run Promptfoo in production
-- **50+ peer-reviewed papers** cite our security research
-- **Customers span retail, telecom, healthcare, finance, and media**
-- **Foundation model labs** use Promptfoo to test their models
+The internet is being rebuilt for agents, and the APIs they call are increasingly being exposed as Model Context Protocol (MCP) servers. We're seeing a shift from single-turn text to long-running, tool-using agents that can collaborate, hand off tasks, and critique each other. These agents may live in untrusted environments, execute code, and have access to sensitive data. Large enterprises are embedding vast amounts of proprietary data into RAGs and agents. These new architectures introduce unique risks.
 
-## Welcome Ganesh Bell to our board
+Our roadmap focuses on four key trends:
 
-We're excited to welcome **Ganesh Bell**, Managing Director at Insight Partners, to our board of directors. Ganesh brings deep expertise in scaling developer-first platforms from his time at GE Digital and Uptake, and his guidance will be invaluable as we build the full AI security stack.
+**First**, we're adding deep support for agentic and multi-agent workflows, including chain-level tracing and safety checks that watch conversations unfold over many steps.
 
-"Promptfoo has created a category-defining product," said Ganesh. "Every serious enterprise deploying AI will need comprehensive security testing, and Promptfoo's combination of technical depth, open source adoption, and enterprise traction positions them perfectly to capture this massive market opportunity. We're thrilled to partner with them as they build the full AI security stack."
+**Second**, we're embracing MCP as the wiring standard for tool calls, so every function invocation can be captured, replayed, and scored for correctness and security.
 
-Ganesh Bell, Managing Director at Insight Partners, joins our board. His experience scaling developer platforms at GE Digital and Uptake will guide our growth.
+**Third**, voice and other audio-first interfaces are resurging thanks to better speech models, so we're building native audio features to secure spoken applications.
 
-"Every enterprise deploying AI needs security testing," said Ganesh. "Promptfoo's technical depth, open source adoption, and enterprise traction position them to define this market."
+**Finally**, prompt work is moving toward test-driven development: teams write evaluations first, run them on every commit, and rerun them automatically whenever an application is updated.
 
-## The power of open source
+Regulation is also accelerating. EU AI Act includes fines for insufficient testing and transparency. In the United States, OWASP LLM Top 10 and NIST AI Risk Management Framework are often cited as key requirements.
 
-Our approach has always been rooted in open source. We believe the best security tools are built in the open, tested by the community, and hardened through real-world use.
+## Our long-term vision
 
-Zane Lackey, General Partner at Andreessen Horowitz, who led our seed round, put it perfectly: "Promptfoo's open-source toolkit jump-started the AI security space. In just one year, they've validated that thesis and then some. This additional investment reflects our conviction that they'll define how companies approach AI security for years to come."
+Red teaming is becoming a staple requirement of the enterprise AI development cycle. As organizations mature in their AI development, they go from prototype to product quality evaluations to adversarial evaluations (red teaming).
 
-Zane Lackey, General Partner at Andreessen Horowitz, who led our seed round: "Promptfoo's open-source toolkit jump-started the AI security space. We're doubling down as they define the category."
+While red teaming still looks specialized today, as AI agents become increasingly capable, continuous adversarial testing will become as fundamental as unit tests in traditional software.
 
-## What's next: The full AI security stack
+Our long-term vision is for Promptfoo to play the same role in AI infrastructure that CI pipelines play in DevOps: every new model or prompt change, or tool integration is automatically evaluated, red-teamed, and either blocked or promoted with a signed safety report.
 
-This funding allows us to accelerate our vision of comprehensive AI security. While red teaming remains our core, we're expanding to build the full stack:
+We're hiring aggressively across engineering, research, and go-to-market to make this vision a reality.
 
-- **Static analysis** to catch unsafe patterns before runtime
-- **Runtime guardrails** that adapt to emerging threats
-- **Security posture management** across your entire AI surface
-- **Compliance automation** for emerging AI regulations
+## Why we're developer-first
 
-We're also aggressively expanding our team across engineering, research, and go-to-market to support our growing customer base and accelerate product development.
+AI teams are evolving from "vibes-based" testing to rigorous quality evaluations to comprehensive red teaming. We're powering that entire journey.
 
-## Roadmap: Beyond red teaming
+By making security testing as natural as running unit tests, we help developers:
 
-This funding accelerates our product expansion:
+- Catch vulnerabilities during development, not after deployment
+- Build security expertise into their teams
+- Ship faster with confidence
+- Meet compliance requirements without friction
 
-- **Static analysis**: Catch unsafe patterns in code and prompts before runtime
-- **Runtime guardrails**: Block attacks in production with app-specific rules
-- **Security posture management**: Track AI risk across your organization
-- **Compliance automation**: Generate reports for SOC2, ISO 27001, and emerging AI regulations
+## Get involved
 
-We're hiring across engineering, research, and go-to-market.
+The best time to secure your AI is now:
 
-## Join us in securing the AI future
-
-To our community of developers who've shaped Promptfoo from day one: thank you. Your feedback, contributions, and trust have brought us here. To the enterprises betting their AI future on our platform: we won't let you down.
-
-The next chapter of AI security starts now, and we'd love for you to be part of it:
-
-→ **[Try Promptfoo on GitHub](https://github.com/promptfoo/promptfoo)** - Our open source toolkit remains free forever  
-→ **[We're hiring](https://promptfoo.dev/careers)** - Join us in building the AI security stack  
-→ **[Request a demo](https://promptfoo.dev/contact)** - See how Promptfoo can secure your AI applications
-
-Let's build the future of AI security together.
-
-## Get started
-
-→ **[Try Promptfoo on GitHub](https://github.com/promptfoo/promptfoo)**  
-→ **[Join our team](https://promptfoo.dev/careers)**  
-→ **[Request a demo](https://promptfoo.dev/contact)**
+→ **[Try our open source tools](https://github.com/promptfoo/promptfoo)** - Free forever  
+→ **[Request an enterprise demo](https://promptfoo.dev/contact)** - See how Fortune 500s secure their AI  
+→ **[Join our team](https://promptfoo.dev/careers)** - We're hiring!
 
 ---
 
-*For media inquiries, please contact press@promptfoo.dev* 
+_For media inquiries: press@promptfoo.dev_
