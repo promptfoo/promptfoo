@@ -45,7 +45,7 @@ function HomepageWalkthrough() {
   const [selectedStep, setSelectedStep] = React.useState(() => {
     if (typeof window !== 'undefined') {
       if (window.location.hash === '#evals') {
-        return 5;
+        return 6;
       } else if (window.location.hash === '#redteam') {
         return 1;
       } else if (window.location.hash === '#guardrails') {
@@ -54,6 +54,8 @@ function HomepageWalkthrough() {
         return 3;
       } else if (window.location.hash === '#mcp') {
         return 4;
+      } else if (window.location.hash === '#tracing') {
+        return 5;
       }
     }
     return 1; // Default to Red Teaming
@@ -203,6 +205,34 @@ function HomepageWalkthrough() {
       destinationUrl: '/mcp',
     },
     {
+      id: 5,
+      caption: 'Tracing',
+      mobileCaption: 'Tracing',
+      image: '/img/docs/trace.png',
+      image2x: '/img/docs/trace.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Debug agent execution with built-in tracing</p>
+          <p>See what your agents are actually doing:</p>
+          <ul>
+            <li>Follow agent reasoning and tool calls step-by-step</li>
+            <li>Find performance bottlenecks in your workflows</li>
+            <li>Debug tricky agent behaviors during development</li>
+            <li>Link traces to specific test cases</li>
+          </ul>
+          <p>Works with OpenTelemetry. No extra infrastructure needed.</p>
+          <p>
+            <strong>
+              <Link to="/docs/tracing">&raquo; Learn more about Tracing</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <CompareIcon />,
+      destinationUrl: '/docs/tracing',
+    },
+    {
+      id: 6,
       caption: 'Evaluations',
       mobileCaption: 'Evals',
       image: '/img/claude-vs-gpt-example.png',
@@ -212,10 +242,14 @@ function HomepageWalkthrough() {
       description: (
         <>
           <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
-          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
+          <p>Start testing your AI systems in minutes:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest init</code>
           </pre>
+          <p>
+            Test agent workflows, tool usage, MCP, RAG, multimodal, and foundation models. Compare
+            models and prompts side-by-side.
+          </p>
           <p>
             Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
             dependencies, or logins.

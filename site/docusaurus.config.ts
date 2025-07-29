@@ -138,6 +138,10 @@ const config: Config = {
               label: 'MCP Proxy',
             },
             {
+              to: '/docs/tracing/',
+              label: 'Tracing',
+            },
+            {
               to: '/docs/getting-started/',
               label: 'Evaluations',
             },
