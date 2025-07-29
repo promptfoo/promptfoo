@@ -16,6 +16,7 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { useDebounce } from 'use-debounce';
 import { type ResultsFilter, useTableStore } from '../store';
@@ -45,7 +46,7 @@ function Dropdown({
 }: {
   id: string;
   label?: string;
-  values: { label: string; value: string }[];
+  values: { label: string | React.ReactNode; value: string }[];
   value: string;
   onChange: (value: string) => void;
   width?: number | string;
@@ -132,6 +133,7 @@ function Filter({
   totalFilters: number;
   onClose: () => void;
 }) {
+  const theme = useTheme();
   const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
@@ -334,15 +336,42 @@ function Filter({
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
               values={(filters.options[value.type] ?? [])
-                .map((optionValue) => ({
-                  label:
-                    (value.type === 'plugin' || value.type === 'strategy') &&
-                    displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
-                      ? displayNameOverrides[optionValue as keyof typeof displayNameOverrides]
-                      : optionValue,
-                  value: optionValue,
-                }))
-                .sort((a, b) => a.label.localeCompare(b.label))} // Sort by display name
+                .map((optionValue) => {
+                  let label: string | React.ReactNode = optionValue;
+                  if (value.type === 'plugin' || value.type === 'strategy') {
+                    const displayName =
+                      displayNameOverrides[optionValue as keyof typeof displayNameOverrides];
+                    if (displayName) {
+                      label = (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            gap: 16,
+                          }}
+                        >
+                          {displayName}
+                          <code
+                            style={{
+                              fontSize: '0.8em',
+                              color: theme.palette.text.secondary,
+                            }}
+                          >
+                            {optionValue}
+                          </code>
+                        </div>
+                      );
+                    }
+                  }
+                  return { label, value: optionValue };
+                })
+                .sort((a, b) => {
+                  // Sort by the option value since label might be a React element
+                  return a.value.localeCompare(b.value);
+                })} // Sort by value
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
