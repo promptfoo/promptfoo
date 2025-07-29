@@ -7,22 +7,23 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import TargetIcon from '@mui/icons-material/Adjust';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ReviewIcon from '@mui/icons-material/ChecklistRtl';
+import PurposeIcon from '@mui/icons-material/Description';
 import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import PurposeIcon from '@mui/icons-material/Description';
-import StrategyIcon from '@mui/icons-material/Shield';
-import ReviewIcon from '@mui/icons-material/ChecklistRtl';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import StrategyIcon from '@mui/icons-material/Shield';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import LinearProgress from '@mui/material/LinearProgress';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
@@ -31,7 +32,6 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import LinearProgress from '@mui/material/LinearProgress';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
@@ -179,8 +179,8 @@ const OuterSidebarContainer = styled(Box)(({ theme }) => ({
 
 const InnerSidebarContainer = styled(Box)({
   position: 'sticky',
-  top: 64, // Account for navbar
-  height: 'calc(100vh - 64px)',
+  top: 0,
+  height: '100vh',
   display: 'flex',
   flexDirection: 'column',
 });
