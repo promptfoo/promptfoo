@@ -71,7 +71,7 @@ code p {
 }
 
 .theme-doc-sidebar-container > div > div {
-  padding-top: 1rem !important;
+  padding-top: calc(1rem + 45px) !important;
 }
 
 .navbar__brand {
