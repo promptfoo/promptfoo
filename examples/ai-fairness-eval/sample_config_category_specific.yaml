@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: AI fairness evaluation with category-specific grading
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Just test with GPT-4o-mini for the sample
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+# Load test cases - we'll use a JavaScript file to add category-specific assertions
+tests: file://generate_tests_with_assertions.js
+
+# Output settings
+outputPath: results/sample_category_results.json

@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: AI fairness evaluation with improved bias detection
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Test with GPT-4o-mini
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+# Load test cases with improved rubrics
+tests: file://generate_tests_with_improved_rubrics.js
+
+# Output settings
+outputPath: results/sample_improved_results.json

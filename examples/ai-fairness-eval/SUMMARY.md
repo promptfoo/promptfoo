@@ -7,6 +7,7 @@ We've created a comprehensive framework for evaluating AI model compliance with 
 ## Components
 
 ### 1. Dataset Generation
+
 - **Method**: Uses promptfoo's `generate dataset` with Claude Opus 4
 - **Scale**: 320 test cases across 4 categories (configurable)
 - **Categories**:
@@ -16,6 +17,7 @@ We've created a comprehensive framework for evaluating AI model compliance with 
   - Adversarial (25%): Consistent harmful content refusal
 
 ### 2. Evaluation System
+
 - **LLM-as-Judge**: Uses GPT-4o-mini to score responses
 - **Three Metrics** (0-2 scale each):
   - Factual Correctness
@@ -24,12 +26,14 @@ We've created a comprehensive framework for evaluating AI model compliance with 
 - **Pattern Matching**: Regex validation for expected responses
 
 ### 3. Statistical Analysis
+
 - **Chi-square Test**: Detects demographic disparities (p < 0.05)
 - **ANOVA**: Analyzes response length variations
 - **Category Breakdowns**: Detailed scoring by test type
 - **Composite Scoring**: Overall fairness metric
 
 ### 4. Blog Post
+
 - Located at: `site/blog/2025-07-28-measuring-ai-wokeness-executive-order.md`
 - Explains the Executive Order context
 - Details methodology and findings
@@ -38,11 +42,13 @@ We've created a comprehensive framework for evaluating AI model compliance with 
 ## Quick Start
 
 ### Run Demo (5 test cases)
+
 ```bash
 ./run_demo.sh
 ```
 
 ### Full Evaluation (320 test cases)
+
 ```bash
 # 1. Generate dataset
 ./generate-dataset.sh
@@ -81,16 +87,20 @@ ai-fairness-eval/
 ## Customization
 
 ### Add New Demographics
+
 Edit `dataset-generation-config.yaml`:
+
 ```yaml
 tests:
   - vars:
-      demographic: "neurodivergent individuals"
-      field: "quantum computing"
+      demographic: 'neurodivergent individuals'
+      field: 'quantum computing'
 ```
 
 ### Test Different Models
+
 Edit `promptfooconfig.yaml`:
+
 ```yaml
 providers:
   - id: anthropic:claude-3.7-sonnet
@@ -98,6 +108,7 @@ providers:
 ```
 
 ### Modify Scoring Rubrics
+
 Adjust rubrics in `promptfooconfig.yaml` for different evaluation criteria.
 
 ## Technical Details
@@ -132,4 +143,4 @@ This framework measures behavior patterns but doesn't prescribe "correct" respon
 - [Executive Order Text](https://www.whitehouse.gov/presidential-actions/2025/07/preventing-woke-ai-in-the-federal-government/)
 - [Blog Post](https://promptfoo.dev/blog/2025-07-28-measuring-ai-wokeness-executive-order)
 - [GitHub Repository](https://github.com/promptfoo/promptfoo/tree/main/examples/ai-fairness-eval)
-- [Discord Community](https://discord.gg/promptfoo) 
+- [Discord Community](https://discord.gg/promptfoo)

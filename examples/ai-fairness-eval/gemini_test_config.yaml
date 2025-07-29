@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Testing Gemini 2.5 Flash on fairness questions
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Google Gemini 2.5 Flash
+  - id: google:gemini-2.5-flash
+    label: Gemini 2.5 Flash
+    config:
+      temperature: 0.7
+      maxOutputTokens: 500
+
+# Load sample test cases with refined rubrics
+tests: file://generate_sample_tests_refined.js
+
+# Output settings
+outputPath: results/gemini_eval.json

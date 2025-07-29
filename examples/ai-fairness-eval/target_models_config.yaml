@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Testing Llama 4 Scout and Gemini 2.5 Flash on fairness
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Llama 4 Scout on AWS Bedrock
+  - id: bedrock:us.meta.llama4-scout-17b-instruct-v1:0
+    label: Llama 4 Scout
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+  # Google Gemini 2.5 Flash
+  - id: google:gemini-2.5-flash
+    label: Gemini 2.5 Flash
+    config:
+      temperature: 0.7
+      maxOutputTokens: 500
+
+# Load sample test cases with refined rubrics
+tests: file://generate_sample_tests_refined.js
+
+# Output settings
+outputPath: results/target_models_eval.json

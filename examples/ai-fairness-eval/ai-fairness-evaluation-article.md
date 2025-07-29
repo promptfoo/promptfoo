@@ -53,12 +53,14 @@ To address potential bias in our judge model, we implemented several safeguards.
 Testing GPT-4 and Llama 2 7B revealed surprising patterns. GPT-4 achieved an overall fairness score of 0.72/1.0, while Llama 2 7B scored 0.58/1.0. Neither model met the Executive Order's strict neutrality requirements.
 
 **Category Breakdown (GPT-4):**
+
 - Representation: 0.78/1.0
-- Historical Context: 0.65/1.0  
+- Historical Context: 0.65/1.0
 - Inclusive Language: 0.81/1.0
 - Adversarial Refusal: 0.89/1.0
 
 **Category Breakdown (Llama 2 7B):**
+
 - Representation: 0.61/1.0
 - Historical Context: 0.52/1.0
 - Inclusive Language: 0.58/1.0
@@ -83,6 +85,7 @@ The most striking finding: models achieved their highest scores on adversarial p
 Our chi-square analysis (χ² = 127.3, df = 24, p < 0.001) definitively rejects the null hypothesis of demographic parity. Models don't treat all groups equally—not even close.
 
 Breaking down the disparities:
+
 - Indigenous peoples: -23% below average representation quality
 - Non-binary individuals: +31% above average (overcompensation)
 - White demographics: -18% below average
@@ -107,7 +110,7 @@ npx promptfoo generate dataset \
   --numPersonas 40 \
   --numTestCasesPerPersona 8
 
-# Run evaluation  
+# Run evaluation
 npx promptfoo eval -c promptfooconfig.yaml
 
 # Analyze results
@@ -131,6 +134,7 @@ Some vendors might create "government editions" of their models, similar to how 
 Our framework enables any organization to measure their AI's compliance with evolving political requirements. The open-source approach ensures transparency and prevents gaming of specific metrics.
 
 Key recommendations for practitioners:
+
 1. Run evaluations across multiple demographic dimensions
 2. Use statistical tests, not just average scores
 3. Document decision principles for content generation
@@ -144,6 +148,7 @@ For policymakers, our data suggests that mandating "neutrality" without defining
 The complete evaluation framework is available at [github.com/promptfoo/promptfoo/examples/ai-fairness-eval](https://github.com/promptfoo/promptfoo). We encourage researchers, companies, and policymakers to run these evaluations and share results.
 
 To contribute:
+
 1. Fork the repository
 2. Run evaluations on your models
 3. Submit pull requests with new test cases
@@ -154,4 +159,4 @@ The question isn't whether AI should be fair—it's how we define and measure fa
 
 As AI becomes critical infrastructure, these measurement tools become essential for accountability. Whether you're building models, buying them, or regulating them, you need quantifiable metrics. Our framework delivers exactly that.
 
-The Executive Order may have intended to eliminate "woke AI," but it's actually created an opportunity: the first standardized framework for measuring AI political bias. Now we just need to agree on what the scores should be. 
+The Executive Order may have intended to eliminate "woke AI," but it's actually created an opportunity: the first standardized framework for measuring AI political bias. Now we just need to agree on what the scores should be.

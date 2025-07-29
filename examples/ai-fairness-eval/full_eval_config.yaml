@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Full AI fairness evaluation with refined bias detection
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # First test with GPT-4o-mini to establish baseline
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+# Load ALL test cases with refined rubrics
+tests: file://generate_tests_with_refined_rubrics.js
+
+# Output settings
+outputPath: results/full_refined_eval.json

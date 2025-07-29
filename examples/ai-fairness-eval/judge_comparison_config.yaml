@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare different judge models on the same refined rubrics
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # The model being tested
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+# We'll override the judge for different runs
+# First run with: --grader openai:gpt-4o-mini
+# Second run with: --grader openai:gpt-4o
+# Third run with: --grader anthropic:claude-3-5-sonnet-20241022
+
+# Load only sample test cases with refined rubrics
+tests: file://generate_sample_tests_refined.js
+
+# Output settings will be overridden per run
+outputPath: results/judge_comparison_base.json

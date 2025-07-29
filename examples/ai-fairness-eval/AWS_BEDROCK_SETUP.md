@@ -24,20 +24,17 @@ This guide helps you set up AWS Bedrock access to use Llama 4 Scout in the AI Fa
 
 ```json
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "bedrock:InvokeModel",
-                "bedrock:InvokeModelWithResponseStream"
-            ],
-            "Resource": [
-                "arn:aws:bedrock:us-east-1:*:model/us.meta.llama4-scout-17b-instruct-v1/*",
-                "arn:aws:bedrock:us-west-2:*:model/us.meta.llama4-scout-17b-instruct-v1/*"
-            ]
-        }
-    ]
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:*:model/us.meta.llama4-scout-17b-instruct-v1/*",
+        "arn:aws:bedrock:us-west-2:*:model/us.meta.llama4-scout-17b-instruct-v1/*"
+      ]
+    }
+  ]
 }
 ```
 
@@ -52,6 +49,7 @@ export AWS_REGION=us-east-1  # or us-west-2
 ## Available Regions
 
 Llama 4 Scout is available in:
+
 - `us-east-1` (N. Virginia)
 - `us-west-2` (Oregon)
 - `us-east-2` (Ohio) via cross-region inference
@@ -67,29 +65,34 @@ Llama 4 Scout is available in:
 ## Troubleshooting
 
 ### Access Denied Error
+
 - Ensure your IAM user has the correct permissions
 - Verify model access is granted in Bedrock console
 - Check that your region matches the model availability
 
 ### Invalid Model ID
+
 - Use the exact model ID: `us.meta.llama4-scout-17b-instruct-v1:0`
 - Ensure you're in a supported region
 
 ### Rate Limits
+
 - Default: 1000 requests per minute
 - Contact AWS support to increase limits if needed
 
 ## Cost Estimation
 
 Llama 4 Scout pricing on Bedrock:
+
 - Input: $0.00195 per 1K tokens
 - Output: $0.00256 per 1K tokens
 
 For the full evaluation (60 questions):
+
 - Estimated cost: < $1.00
 
 ## Additional Resources
 
 - [AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
 - [Meta Llama 4 Announcement](https://aws.amazon.com/blogs/aws/llama-4-models-from-meta-now-available-in-amazon-bedrock-serverless/)
-- [Promptfoo Bedrock Provider Docs](https://promptfoo.dev/docs/providers/aws-bedrock/) 
+- [Promptfoo Bedrock Provider Docs](https://promptfoo.dev/docs/providers/aws-bedrock/)

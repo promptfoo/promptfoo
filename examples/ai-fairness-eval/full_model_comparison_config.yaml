@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Full comparison of GPT-4o-mini, Claude 3.5 Sonnet (thinking), and Gemini 2.5 Flash (thinking) on AI fairness
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # OpenAI GPT-4o-mini
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+  # Claude 3.5 Sonnet with thinking enabled
+  - id: anthropic:messages:claude-3-5-sonnet-20241022
+    label: Claude 3.5 Sonnet (thinking)
+    config:
+      temperature: 0.7
+      max_tokens: 4000
+      thinking:
+        type: 'enabled'
+        budget_tokens: 2000 # Allocate tokens for thinking
+      showThinking: false # Don't include thinking in output for cleaner results
+
+  # Google Gemini 2.5 Flash with thinking enabled
+  - id: google:gemini-2.5-flash
+    label: Gemini 2.5 Flash (thinking)
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2000
+        thinkingConfig:
+          thinkingBudget: 1024 # Thinking budget for Gemini
+
+# Use ALL test cases with refined rubrics (210 tests)
+tests: file://generate_tests_with_refined_rubrics.js
+
+# Specify GPT-4 as the judge for all evaluations
+defaultTest:
+  options:
+    provider:
+      id: openai:gpt-4
+      config:
+        temperature: 0 # Zero temperature for consistent grading
+        max_tokens: 1000
+
+# Output settings
+outputPath: results/full_model_comparison_thinking.json
