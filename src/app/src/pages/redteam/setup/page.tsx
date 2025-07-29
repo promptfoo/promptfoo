@@ -6,15 +6,17 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import AppIcon from '@mui/icons-material/Apps';
+import TargetIcon from '@mui/icons-material/Adjust';
 import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import TargetIcon from '@mui/icons-material/GpsFixed';
-import StrategyIcon from '@mui/icons-material/Psychology';
-import ReviewIcon from '@mui/icons-material/RateReview';
+import PurposeIcon from '@mui/icons-material/Description';
+import StrategyIcon from '@mui/icons-material/Shield';
+import ReviewIcon from '@mui/icons-material/ChecklistRtl';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -29,6 +31,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import LinearProgress from '@mui/material/LinearProgress';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
@@ -52,11 +55,13 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
     left: 0,
     right: 'auto',
+    width: '3px',
+    backgroundColor: theme.palette.primary.main,
   },
   width: '100%',
   backgroundColor: theme.palette.background.paper,
   '& .MuiTab-root': {
-    minHeight: '48px',
+    minHeight: '56px',
   },
   '& .MuiTabs-scrollButtons': {
     display: 'none',
@@ -72,41 +77,52 @@ const StyledTab = styled(Tab)(({ theme }) => ({
   },
   maxWidth: 'none',
   width: '100%',
-  minHeight: '48px',
-  padding: theme.spacing(1, 2),
+  minHeight: '56px',
+  padding: theme.spacing(1.5, 2),
   borderBottom: `1px solid ${theme.palette.divider}`,
   '& .MuiSvgIcon-root': {
-    marginRight: theme.spacing(1),
-    fontSize: '18px',
+    marginRight: theme.spacing(1.5),
+    fontSize: '20px',
+  },
+  '& .checkmark': {
+    marginLeft: 'auto',
+    fontSize: '20px',
+    color: theme.palette.success.main,
   },
   textTransform: 'none',
-  fontSize: '0.875rem',
+  fontSize: '0.9rem',
+  fontWeight: 500,
+  transition: 'all 0.2s ease',
+  '&:hover': {
+    backgroundColor: theme.palette.action.hover,
+  },
 }));
 
 const SidebarButtons = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
-  gap: theme.spacing(0.5),
-  padding: theme.spacing(1.5),
+  gap: theme.spacing(1),
+  padding: theme.spacing(2),
   borderTop: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
 }));
 
 const SidebarButton = styled(Button)(({ theme }) => ({
   justifyContent: 'flex-start',
-  padding: theme.spacing(1),
+  padding: theme.spacing(1.25),
   textTransform: 'none',
   color: theme.palette.text.secondary,
   fontSize: '0.875rem',
-  fontWeight: 400,
+  fontWeight: 500,
   '& .MuiSvgIcon-root': {
     marginRight: theme.spacing(1),
-    fontSize: '18px',
+    fontSize: '20px',
   },
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
     color: theme.palette.text.primary,
   },
+  transition: 'all 0.2s ease',
 }));
 
 const TabPanel = styled(Box)(({ theme }) => ({
@@ -154,9 +170,11 @@ const OuterSidebarContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   height: '100%',
-  width: '280px',
-  minWidth: '280px',
+  width: '300px',
+  minWidth: '300px',
   borderRight: `1px solid ${theme.palette.divider}`,
+  backgroundColor:
+    theme.palette.mode === 'dark' ? theme.palette.background.paper : theme.palette.grey[50],
 }));
 
 const InnerSidebarContainer = styled(Box)({
@@ -218,17 +236,16 @@ const readFileAsText = (file: File): Promise<string> => {
 
 // Update the StatusSection styling
 const StatusSection = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
+  padding: theme.spacing(2.5),
   borderBottom: `1px solid ${theme.palette.divider}`,
-  borderRight: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
-  width: '280px',
-  minWidth: '280px',
+  width: '300px',
+  minWidth: '300px',
   '& .configName': {
-    fontSize: '1rem',
-    fontWeight: 500,
+    fontSize: '1.1rem',
+    fontWeight: 600,
     color: theme.palette.text.primary,
-    marginBottom: theme.spacing(0.5),
+    marginBottom: theme.spacing(0.75),
   },
   '& .statusRow': {
     display: 'flex',
@@ -242,16 +259,37 @@ const StatusSection = styled(Box)(({ theme }) => ({
     display: 'flex',
     alignItems: 'center',
     gap: theme.spacing(0.5),
+    fontWeight: 500,
   },
   '& .saveButton': {
     minWidth: 'auto',
-    padding: theme.spacing(0.5, 1),
+    padding: theme.spacing(0.5, 1.5),
+    borderRadius: theme.shape.borderRadius * 0.75,
   },
   '& .dateText': {
     fontSize: '0.875rem',
     color: theme.palette.text.secondary,
   },
 }));
+
+// Helper function to check if a step is completed
+const isStepCompleted = (stepIndex: number, config: Config): boolean => {
+  switch (stepIndex) {
+    case 0: // Targets
+      return !!config.target?.label && !!config.target?.id;
+    case 1: // Purpose
+      return !!config.purpose || !!config.applicationDefinition?.purpose;
+    case 2: // Plugins
+      return config.plugins && config.plugins.length > 0;
+    case 3: // Strategies
+      return config.strategies && config.strategies.length > 0;
+    case 4: // Review
+      // Review is considered complete if all previous steps are complete
+      return [0, 1, 2, 3].every((i) => isStepCompleted(i, config));
+    default:
+      return false;
+  }
+};
 
 export default function RedTeamSetupPage() {
   // --- Hooks ---
@@ -607,6 +645,24 @@ export default function RedTeamSetupPage() {
                   </Typography>
                 )
               )}
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                  Setup Progress
+                </Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={[0, 1, 2, 3].filter((i) => isStepCompleted(i, config)).length * 25}
+                  sx={{
+                    mt: 1,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: (theme) => theme.palette.action.hover,
+                    '& .MuiLinearProgress-bar': {
+                      borderRadius: 3,
+                    },
+                  }}
+                />
+              </Box>
             </StatusSection>
             <TabsContainer>
               <StyledTabs
@@ -618,31 +674,81 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<TargetIcon />}
                   iconPosition="start"
-                  label="Targets"
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <span>Target</span>
+                      {isStepCompleted(0, config) ? (
+                        <CheckCircleIcon className="checkmark" />
+                      ) : (
+                        <RadioButtonUncheckedIcon className="checkmark" sx={{ opacity: 0.3 }} />
+                      )}
+                    </Box>
+                  }
                   {...a11yProps(0)}
                 />
                 <StyledTab
-                  icon={<AppIcon />}
+                  icon={<PurposeIcon />}
                   iconPosition="start"
-                  label="Usage Details"
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <span>Purpose</span>
+                      {isStepCompleted(1, config) ? (
+                        <CheckCircleIcon className="checkmark" />
+                      ) : (
+                        <RadioButtonUncheckedIcon className="checkmark" sx={{ opacity: 0.3 }} />
+                      )}
+                    </Box>
+                  }
                   {...a11yProps(1)}
                 />
                 <StyledTab
                   icon={<PluginIcon />}
                   iconPosition="start"
-                  label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <span>
+                        Plugins{config.plugins?.length ? ` (${config.plugins.length})` : ''}
+                      </span>
+                      {isStepCompleted(2, config) ? (
+                        <CheckCircleIcon className="checkmark" />
+                      ) : (
+                        <RadioButtonUncheckedIcon className="checkmark" sx={{ opacity: 0.3 }} />
+                      )}
+                    </Box>
+                  }
                   {...a11yProps(2)}
                 />
                 <StyledTab
                   icon={<StrategyIcon />}
                   iconPosition="start"
-                  label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <span>
+                        Strategies
+                        {config.strategies?.length ? ` (${config.strategies.length})` : ''}
+                      </span>
+                      {isStepCompleted(3, config) ? (
+                        <CheckCircleIcon className="checkmark" />
+                      ) : (
+                        <RadioButtonUncheckedIcon className="checkmark" sx={{ opacity: 0.3 }} />
+                      )}
+                    </Box>
+                  }
                   {...a11yProps(3)}
                 />
                 <StyledTab
                   icon={<ReviewIcon />}
                   iconPosition="start"
-                  label="Review"
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <span>Review</span>
+                      {isStepCompleted(4, config) ? (
+                        <CheckCircleIcon className="checkmark" />
+                      ) : (
+                        <RadioButtonUncheckedIcon className="checkmark" sx={{ opacity: 0.3 }} />
+                      )}
+                    </Box>
+                  }
                   {...a11yProps(4)}
                 />
               </StyledTabs>
