@@ -43,9 +43,11 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { getPluginExamples } from '../utils/pluginExamples';
 import CustomIntentSection from './CustomIntentPluginSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
+import SelectedPluginsPanel from './SelectedPluginsPanel';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -573,6 +575,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
           Plugin Configuration
         </Typography>
+
+        <SelectedPluginsPanel
+          selectedPlugins={selectedPlugins}
+          onRemovePlugin={handlePluginToggle}
+          getPluginExamples={getPluginExamples}
+        />
 
         <Box sx={{ mb: 4 }}>
           <Typography
