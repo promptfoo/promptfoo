@@ -274,6 +274,28 @@ export default function SecurityFindings({
                 <Collapse in={isExpanded}>
                   <Divider />
                   <Box sx={{ p: 2 }}>
+                    <Box
+                      sx={{
+                        mb: 3,
+                        p: 2,
+                        bgcolor: alpha(theme.palette.primary.main, 0.05),
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="overline" color="text.secondary">
+                        Scanning Results For
+                      </Typography>
+                      <Typography variant="h6" sx={{ mb: 0.5 }}>
+                        {fileName}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ fontFamily: 'monospace' }}
+                      >
+                        {file}
+                      </Typography>
+                    </Box>
                     <Stack spacing={2}>
                       {issues.map((issue, index) => (
                         <Paper
