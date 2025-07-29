@@ -1,11 +1,13 @@
-import React, { forwardRef, useImperativeHandle, useEffect, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import Box from '@mui/material/Box';
-import CustomTargetConfiguration from './CustomTargetConfiguration';
-import HttpEndpointConfiguration from './HttpEndpointConfiguration';
-import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
+import CustomTargetConfiguration from './CustomTargetConfiguration';
+import FoundationModelConfiguration from './FoundationModelConfiguration';
+import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
+
 import type { ProviderOptions } from '../../types';
 
 export interface ProviderConfigEditorRef {
@@ -127,7 +129,10 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       const errors: string[] = [];
 
       if (providerType === 'http') {
-        if (!provider.config.request && (!provider.config.url || !validateUrl(provider.config.url))) {
+        if (
+          !provider.config.request &&
+          (!provider.config.url || !validateUrl(provider.config.url))
+        ) {
           errors.push('Valid URL is required');
         }
         if (bodyError) {
@@ -136,6 +141,49 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       } else if (providerType === 'websocket') {
         if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
           errors.push('Valid WebSocket URL is required');
+        }
+      } else if (
+        [
+          'openai',
+          'anthropic',
+          'google',
+          'vertex',
+          'mistral',
+          'cohere',
+          'groq',
+          'deepseek',
+          'azure',
+          'openrouter',
+          'perplexity',
+          'cerebras',
+        ].includes(providerType || '')
+      ) {
+        // Foundation model providers validation
+        if (!provider.id || provider.id.trim() === '') {
+          errors.push('Model ID is required');
+        }
+        // Validate that temperature is within reasonable bounds if provided
+        if (
+          provider.config?.temperature !== undefined &&
+          (provider.config.temperature < 0 || provider.config.temperature > 2)
+        ) {
+          errors.push('Temperature must be between 0 and 2');
+        }
+        // Validate that max_tokens is positive if provided
+        if (provider.config?.max_tokens !== undefined && provider.config.max_tokens <= 0) {
+          errors.push('Max tokens must be greater than 0');
+        }
+        // Validate that top_p is between 0 and 1 if provided
+        if (
+          provider.config?.top_p !== undefined &&
+          (provider.config.top_p < 0 || provider.config.top_p > 1)
+        ) {
+          errors.push('Top P must be between 0 and 1');
+        }
+      } else if (['javascript', 'python', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
+        // Custom providers validation
+        if (!provider.id || provider.id.trim() === '') {
+          errors.push('Provider ID is required');
         }
       }
 
@@ -199,6 +247,85 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
           <BrowserAutomationConfiguration
             selectedTarget={provider}
             updateCustomTarget={updateCustomTarget}
+          />
+        )}
+
+        {/* Foundation model providers */}
+        {[
+          'openai',
+          'anthropic',
+          'google',
+          'vertex',
+          'mistral',
+          'cohere',
+          'groq',
+          'deepseek',
+          'azure',
+          'openrouter',
+          'perplexity',
+          'cerebras',
+        ].includes(providerType || '') && (
+          <FoundationModelConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            providerType={providerType || ''}
+          />
+        )}
+
+        {/* Cloud and enterprise providers - use custom config for now */}
+        {[
+          'bedrock',
+          'sagemaker',
+          'databricks',
+          'cloudflare-ai',
+          'fireworks',
+          'together',
+          'replicate',
+          'huggingface',
+        ].includes(providerType || '') && (
+          <CustomTargetConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            rawConfigJson={rawConfigJson}
+            setRawConfigJson={setRawConfigJson}
+            bodyError={bodyError}
+          />
+        )}
+
+        {/* Specialized providers - use custom config for now */}
+        {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'lambdalabs', 'fal', 'voyage'].includes(
+          providerType || '',
+        ) && (
+          <CustomTargetConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            rawConfigJson={rawConfigJson}
+            setRawConfigJson={setRawConfigJson}
+            bodyError={bodyError}
+          />
+        )}
+
+        {/* Local model providers - use custom config for now */}
+        {['ollama', 'vllm', 'localai', 'llamafile', 'llama.cpp', 'text-generation-webui'].includes(
+          providerType || '',
+        ) && (
+          <CustomTargetConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            rawConfigJson={rawConfigJson}
+            setRawConfigJson={setRawConfigJson}
+            bodyError={bodyError}
+          />
+        )}
+
+        {/* Custom providers */}
+        {['javascript', 'python', 'mcp', 'exec'].includes(providerType || '') && (
+          <CustomTargetConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            rawConfigJson={rawConfigJson}
+            setRawConfigJson={setRawConfigJson}
+            bodyError={bodyError}
           />
         )}
 

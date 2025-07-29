@@ -11,8 +11,8 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
-import type { ProviderOptions } from '../../types';
 
+import type { ProviderOptions } from '../../types';
 import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 
 export function defaultHttpTarget(): ProviderOptions {

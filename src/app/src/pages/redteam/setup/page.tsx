@@ -15,6 +15,7 @@ import StrategyIcon from '@mui/icons-material/Psychology';
 import ReviewIcon from '@mui/icons-material/RateReview';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
+import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -39,7 +40,8 @@ import Purpose from './components/Purpose';
 import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
-import Targets from './components/Targets';
+import TargetConfiguration from './components/Targets/TargetConfiguration';
+import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
@@ -298,7 +300,7 @@ export default function RedTeamSetupPage() {
     const hash = location.hash.replace('#', '');
     if (hash) {
       const newValue = Number.parseInt(hash, 10);
-      if (!Number.isNaN(newValue) && newValue >= 0 && newValue <= 4) {
+      if (!Number.isNaN(newValue) && newValue >= 0 && newValue <= 5) {
         setValue(newValue);
       } else {
         setValue(0);
@@ -338,7 +340,7 @@ export default function RedTeamSetupPage() {
     window.scrollTo({ top: 0 });
 
     // Track funnel progress
-    const steps = ['targets', 'purpose', 'plugins', 'strategies', 'review'];
+    const steps = ['target_type', 'target_config', 'purpose', 'plugins', 'strategies', 'review'];
     if (newValue < steps.length) {
       recordEvent('funnel', {
         type: 'redteam',
@@ -617,8 +619,14 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<TargetIcon />}
                   iconPosition="start"
-                  label="Targets"
+                  label="Target Type"
                   {...a11yProps(0)}
+                />
+                <StyledTab
+                  icon={<SettingsIcon />}
+                  iconPosition="start"
+                  label="Target Config"
+                  {...a11yProps(1)}
                 />
                 <StyledTab
                   icon={<AppIcon />}
@@ -630,19 +638,19 @@ export default function RedTeamSetupPage() {
                   icon={<PluginIcon />}
                   iconPosition="start"
                   label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
-                  {...a11yProps(2)}
+                  {...a11yProps(3)}
                 />
                 <StyledTab
                   icon={<StrategyIcon />}
                   iconPosition="start"
                   label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
-                  {...a11yProps(3)}
+                  {...a11yProps(4)}
                 />
                 <StyledTab
                   icon={<ReviewIcon />}
                   iconPosition="start"
                   label="Review"
-                  {...a11yProps(4)}
+                  {...a11yProps(5)}
                 />
               </StyledTabs>
             </TabsContainer>
@@ -679,26 +687,35 @@ export default function RedTeamSetupPage() {
         </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
-            <ErrorBoundary name="Targets Page">
-              <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
+            <ErrorBoundary name="Target Type Selection Page">
+              <TargetTypeSelection onNext={handleNext} setupModalOpen={setupModalOpen} />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
+            <ErrorBoundary name="Target Configuration Page">
+              <TargetConfiguration
+                onNext={handleNext}
+                onBack={handleBack}
+                setupModalOpen={setupModalOpen}
+              />
+            </ErrorBoundary>
+          </CustomTabPanel>
+          <CustomTabPanel value={value} index={2}>
             <ErrorBoundary name="Application Purpose Page">
               <Purpose onNext={handleNext} onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
-          <CustomTabPanel value={value} index={2}>
+          <CustomTabPanel value={value} index={3}>
             <ErrorBoundary name="Plugins Page">
               <Plugins onNext={handleNext} onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
-          <CustomTabPanel value={value} index={3}>
+          <CustomTabPanel value={value} index={4}>
             <ErrorBoundary name="Strategies Page">
               <Strategies onNext={handleNext} onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
-          <CustomTabPanel value={value} index={4}>
+          <CustomTabPanel value={value} index={5}>
             <ErrorBoundary name="Review Page">
               <Review />
             </ErrorBoundary>

@@ -8,6 +8,7 @@ import Radio from '@mui/material/Radio';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { getProviderType } from './helpers';
+
 import type { ProviderOptions } from '../../types';
 
 // Provider options grouped by category
@@ -32,17 +33,198 @@ const providerOptions = [
   {
     category: 'model',
     title: 'Foundation Models',
-    description: 'Test models directly without application context',
+    description: 'Test popular AI models and providers directly',
     options: [
+      {
+        value: 'openai',
+        label: 'OpenAI',
+        description: 'GPT models including GPT-4.1 and reasoning models',
+      },
+      {
+        value: 'anthropic',
+        label: 'Anthropic',
+        description: 'Claude models including Claude Sonnet 4',
+      },
+      {
+        value: 'google',
+        label: 'Google AI Studio',
+        description: 'Gemini models and Live API',
+      },
+      {
+        value: 'vertex',
+        label: 'Google Vertex AI',
+        description: "Google Cloud's AI platform with Gemini models",
+      },
+      {
+        value: 'azure',
+        label: 'Azure OpenAI',
+        description: 'Azure-hosted OpenAI models',
+      },
       {
         value: 'openrouter',
         label: 'OpenRouter',
         description: 'Access hundreds of top AI models through a single API',
       },
       {
-        value: 'azure',
-        label: 'Azure OpenAI',
-        description: 'Access Azure OpenAI models',
+        value: 'mistral',
+        label: 'Mistral AI',
+        description: "Mistral's language models including Magistral",
+      },
+      {
+        value: 'cohere',
+        label: 'Cohere',
+        description: "Cohere's language models",
+      },
+      {
+        value: 'groq',
+        label: 'Groq',
+        description: 'High-performance inference API',
+      },
+      {
+        value: 'perplexity',
+        label: 'Perplexity AI',
+        description: 'Search-augmented chat with citations',
+      },
+      {
+        value: 'deepseek',
+        label: 'DeepSeek',
+        description: "DeepSeek's language models including R1",
+      },
+      {
+        value: 'cerebras',
+        label: 'Cerebras',
+        description: 'High-performance inference for Llama models',
+      },
+    ],
+  },
+  {
+    category: 'cloud',
+    title: 'Cloud & Enterprise',
+    description: 'Enterprise and cloud-hosted AI services',
+    options: [
+      {
+        value: 'bedrock',
+        label: 'AWS Bedrock',
+        description: 'AWS-hosted models from various providers',
+      },
+      {
+        value: 'sagemaker',
+        label: 'Amazon SageMaker',
+        description: 'Models deployed on SageMaker endpoints',
+      },
+      {
+        value: 'databricks',
+        label: 'Databricks',
+        description: 'Databricks Foundation Model APIs',
+      },
+      {
+        value: 'cloudflare-ai',
+        label: 'Cloudflare AI',
+        description: "Cloudflare's OpenAI-compatible AI platform",
+      },
+      {
+        value: 'fireworks',
+        label: 'Fireworks AI',
+        description: 'Various hosted models with fast inference',
+      },
+      {
+        value: 'together',
+        label: 'Together AI',
+        description: 'Various hosted models with competitive pricing',
+      },
+      {
+        value: 'replicate',
+        label: 'Replicate',
+        description: 'Various hosted models including image generation',
+      },
+      {
+        value: 'huggingface',
+        label: 'Hugging Face',
+        description: 'Access thousands of models',
+      },
+    ],
+  },
+  {
+    category: 'specialized',
+    title: 'Specialized Providers',
+    description: 'Providers for specific use cases and integrations',
+    options: [
+      {
+        value: 'github',
+        label: 'GitHub Models',
+        description: "GitHub's hosted models from multiple providers",
+      },
+      {
+        value: 'xai',
+        label: 'X.AI (Grok)',
+        description: "X.AI's Grok models",
+      },
+      {
+        value: 'ai21',
+        label: 'AI21 Labs',
+        description: 'Jurassic and Jamba models',
+      },
+      {
+        value: 'aimlapi',
+        label: 'AI/ML API',
+        description: 'Access 300+ AI models with a single API',
+      },
+      {
+        value: 'hyperbolic',
+        label: 'Hyperbolic',
+        description: 'OpenAI-compatible Llama 3 provider',
+      },
+      {
+        value: 'lambdalabs',
+        label: 'Lambda Labs',
+        description: 'Lambda Labs models via Inference API',
+      },
+      {
+        value: 'fal',
+        label: 'fal.ai',
+        description: 'Image generation and specialized AI models',
+      },
+      {
+        value: 'voyage',
+        label: 'Voyage AI',
+        description: 'Specialized embedding models',
+      },
+    ],
+  },
+  {
+    category: 'local',
+    title: 'Local Models',
+    description: 'Run models locally on your infrastructure',
+    options: [
+      {
+        value: 'ollama',
+        label: 'Ollama',
+        description: 'Local model runner with easy setup',
+      },
+      {
+        value: 'vllm',
+        label: 'vLLM',
+        description: 'High-performance local inference server',
+      },
+      {
+        value: 'localai',
+        label: 'LocalAI',
+        description: 'Local OpenAI-compatible API',
+      },
+      {
+        value: 'llamafile',
+        label: 'Llamafile',
+        description: 'Single-file local model server',
+      },
+      {
+        value: 'llama.cpp',
+        label: 'llama.cpp',
+        description: 'Lightweight local model inference',
+      },
+      {
+        value: 'text-generation-webui',
+        label: 'Text Generation WebUI',
+        description: 'Gradio-based local model interface',
       },
     ],
   },
@@ -70,6 +252,16 @@ const providerOptions = [
         value: 'mcp',
         label: 'MCP Server',
         description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
+      },
+      {
+        value: 'browser',
+        label: 'Web Browser',
+        description: 'Automate web browser interactions for testing',
+      },
+      {
+        value: 'exec',
+        label: 'Shell Command',
+        description: 'Execute custom scripts and commands',
       },
     ],
   },
@@ -183,6 +375,84 @@ export default function ProviderTypeSelector({
           ],
         },
       });
+    } else if (value === 'exec') {
+      setProvider({
+        id: 'exec: python script.py',
+        label: currentLabel,
+        config: {},
+      });
+    } else if (value === 'openai') {
+      setProvider({
+        id: 'openai:gpt-4o',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'anthropic') {
+      setProvider({
+        id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'google') {
+      setProvider({
+        id: 'google:gemini-1.5-pro',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'vertex') {
+      setProvider({
+        id: 'vertex:gemini-1.5-pro',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'mistral') {
+      setProvider({
+        id: 'mistral:mistral-large-latest',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'cohere') {
+      setProvider({
+        id: 'cohere:command-r-plus',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'groq') {
+      setProvider({
+        id: 'groq:llama-3.1-70b-versatile',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'deepseek') {
+      setProvider({
+        id: 'deepseek:deepseek-chat',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'cerebras') {
+      setProvider({
+        id: 'cerebras:llama3.1-70b',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'perplexity') {
+      setProvider({
+        id: 'perplexity:llama-3.1-sonar-large-128k-online',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'bedrock') {
+      setProvider({
+        id: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'ollama') {
+      setProvider({
+        id: 'ollama:llama3.2:latest',
+        config: {},
+        label: currentLabel,
+      });
     } else if (value === 'openrouter') {
       setProvider({
         id: 'openrouter:openai/gpt-4o',
@@ -240,7 +510,6 @@ export default function ProviderTypeSelector({
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                 gap: 2,
-                height: '105px',
               }}
             >
               {group.options.map((option) => (
