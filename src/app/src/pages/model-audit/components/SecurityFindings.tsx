@@ -207,7 +207,7 @@ export default function SecurityFindings({
           </Typography>
         </Paper>
       ) : groupByFile ? (
-        <Stack spacing={2}>
+        <Stack spacing={4}>
           {Object.entries(issuesByFile).map(([file, issues]) => {
             const criticalCount = issues.filter((i) => i.severity === 'error').length;
             const warningCount = issues.filter((i) => i.severity === 'warning').length;
@@ -216,27 +216,22 @@ export default function SecurityFindings({
             const fileName = file.split('/').pop() || file;
 
             return (
-              <Paper key={file} elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
-                <Box
+              <Box key={file}>
+                {/* File Header - Always Visible */}
+                <Paper
+                  elevation={0}
                   sx={{
                     p: 2,
-                    cursor: 'pointer',
-                    bgcolor: alpha(theme.palette.action.hover, 0.02),
-                    '&:hover': {
-                      bgcolor: alpha(theme.palette.action.hover, 0.05),
-                    },
+                    mb: 2,
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
+                    border: 1,
+                    borderColor: 'primary.main',
                   }}
-                  onClick={() => toggleFileExpansion(file)}
                 >
                   <Stack direction="row" alignItems="center" spacing={2}>
-                    <IconButton size="small">
-                      {isExpanded ? <ExpandLess /> : <ExpandMore />}
-                    </IconButton>
-
-                    <FileIcon color="action" />
-
+                    <FileIcon color="primary" />
                     <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle1" fontWeight={600}>
+                      <Typography variant="h6" color="primary.main">
                         {fileName}
                       </Typography>
                       <Typography
@@ -247,7 +242,6 @@ export default function SecurityFindings({
                         {file}
                       </Typography>
                     </Box>
-
                     <Stack direction="row" spacing={1}>
                       {criticalCount > 0 && (
                         <Chip
@@ -269,82 +263,90 @@ export default function SecurityFindings({
                       )}
                     </Stack>
                   </Stack>
-                </Box>
+                </Paper>
 
-                <Collapse in={isExpanded}>
-                  <Divider />
-                  <Box sx={{ p: 2 }}>
-                    <Box
-                      sx={{
-                        mb: 3,
-                        p: 2,
-                        bgcolor: alpha(theme.palette.primary.main, 0.05),
-                        borderRadius: 1,
-                      }}
-                    >
-                      <Typography variant="overline" color="text.secondary">
-                        Scanning Results For
-                      </Typography>
-                      <Typography variant="h6" sx={{ mb: 0.5 }}>
-                        {fileName}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontFamily: 'monospace' }}
-                      >
-                        {file}
-                      </Typography>
-                    </Box>
-                    <Stack spacing={2}>
-                      {issues.map((issue, index) => (
-                        <Paper
-                          key={index}
-                          sx={{
-                            p: 3,
-                            borderLeft: 4,
-                            borderColor:
-                              issue.severity === 'error'
-                                ? 'error.main'
-                                : issue.severity === 'warning'
-                                  ? 'warning.main'
-                                  : 'info.main',
-                            bgcolor: alpha(
-                              issue.severity === 'error'
-                                ? theme.palette.error.main
-                                : issue.severity === 'warning'
-                                  ? theme.palette.warning.main
-                                  : theme.palette.info.main,
-                              0.02,
-                            ),
-                          }}
-                        >
-                          <Stack direction="row" spacing={2} alignItems="flex-start">
-                            {getSeverityIcon(issue.severity)}
-                            <Box sx={{ flexGrow: 1 }}>
-                              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-                                <Typography variant="body1" fontWeight={600}>
-                                  {issue.message}
-                                </Typography>
-                                <SeverityBadge severity={issue.severity}>
-                                  {getSeverityLabel(issue.severity)}
-                                </SeverityBadge>
-                              </Stack>
-                              {issue.details && (
-                                <Alert severity="info" sx={{ mt: 2 }}>
-                                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                                    {JSON.stringify(issue.details, null, 2)}
-                                  </pre>
-                                </Alert>
-                              )}
-                            </Box>
-                          </Stack>
-                        </Paper>
-                      ))}
+                {/* Collapsible Issues Section */}
+                <Paper elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
+                  <Box
+                    sx={{
+                      p: 2,
+                      cursor: 'pointer',
+                      bgcolor: alpha(theme.palette.action.hover, 0.02),
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.action.hover, 0.05),
+                      },
+                    }}
+                    onClick={() => toggleFileExpansion(file)}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={2}>
+                      <IconButton size="small">
+                        {isExpanded ? <ExpandLess /> : <ExpandMore />}
+                      </IconButton>
+
+                      <Typography variant="body1">{isExpanded ? 'Hide' : 'Show'} Issues</Typography>
+
+                      <Box sx={{ flexGrow: 1 }} />
                     </Stack>
                   </Box>
-                </Collapse>
-              </Paper>
+
+                  <Collapse in={isExpanded}>
+                    <Divider />
+                    <Box sx={{ p: 2 }}>
+                      <Stack spacing={2}>
+                        {issues.map((issue, index) => (
+                          <Paper
+                            key={index}
+                            sx={{
+                              p: 3,
+                              borderLeft: 4,
+                              borderColor:
+                                issue.severity === 'error'
+                                  ? 'error.main'
+                                  : issue.severity === 'warning'
+                                    ? 'warning.main'
+                                    : 'info.main',
+                              bgcolor: alpha(
+                                issue.severity === 'error'
+                                  ? theme.palette.error.main
+                                  : issue.severity === 'warning'
+                                    ? theme.palette.warning.main
+                                    : theme.palette.info.main,
+                                0.02,
+                              ),
+                            }}
+                          >
+                            <Stack direction="row" spacing={2} alignItems="flex-start">
+                              {getSeverityIcon(issue.severity)}
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Stack
+                                  direction="row"
+                                  spacing={2}
+                                  alignItems="center"
+                                  sx={{ mb: 1 }}
+                                >
+                                  <Typography variant="body1" fontWeight={600}>
+                                    {issue.message}
+                                  </Typography>
+                                  <SeverityBadge severity={issue.severity}>
+                                    {getSeverityLabel(issue.severity)}
+                                  </SeverityBadge>
+                                </Stack>
+                                {issue.details && (
+                                  <Alert severity="info" sx={{ mt: 2 }}>
+                                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                                      {JSON.stringify(issue.details, null, 2)}
+                                    </pre>
+                                  </Alert>
+                                )}
+                              </Box>
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </Box>
+                  </Collapse>
+                </Paper>
+              </Box>
             );
           })}
         </Stack>
