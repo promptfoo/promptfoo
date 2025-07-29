@@ -14,4 +14,4 @@ export const getSeverityLabel = (severity: string): string => {
  */
 export const getSeverityValue = (label: string): string => {
   return label === 'critical' ? 'error' : label;
-}; 
+};

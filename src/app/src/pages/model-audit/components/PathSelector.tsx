@@ -407,17 +407,34 @@ export default function PathSelector({
               <ListItem
                 key={index}
                 secondaryAction={
-                  <IconButton edge="end" onClick={() => onRemovePath(index)}>
-                    <DeleteIcon />
+                  <IconButton 
+                    edge="end" 
+                    aria-label={`Delete ${path.name || path.path}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemovePath(index);
+                    }}
+                    size="small"
+                    sx={{
+                      zIndex: 1,
+                      '&:hover': {
+                        backgroundColor: 'error.light',
+                        color: 'error.contrastText',
+                      }
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
                   </IconButton>
                 }
                 sx={{
+                  position: 'relative',
                   bgcolor: (theme) =>
                     theme.palette.mode === 'dark'
                       ? theme.palette.grey[800]
                       : theme.palette.grey[50],
                   borderRadius: 2,
                   mb: 1,
+                  pr: 6,
                 }}
               >
                 <ListItemIcon>

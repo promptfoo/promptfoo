@@ -24,4 +24,4 @@ describe('ModelAudit utils', () => {
       expect(getSeverityValue('debug')).toBe('debug');
     });
   });
-}); 
+});
