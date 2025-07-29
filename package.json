@@ -9,13 +9,14 @@
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "index.cjs",
-  "module": "index.mjs",
+  "main": "./index.cjs",
+  "module": "./index.mjs",
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
       "import": "./index.mjs",
-      "require": "./index.cjs"
+      "require": "./index.cjs",
+      "default": "./index.cjs"
     },
     "./package.json": "./package.json"
   },
@@ -23,7 +24,7 @@
     "src/app",
     "site"
   ],
-  "types": "dist/src/index.d.ts",
+  "types": "./dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
   "files": [
     "dist",
@@ -45,7 +46,7 @@
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:watch": "tsc --watch",
-    "build": "npm run generate-constants && tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && node scripts/build-esm-wrapper.js && shx chmod +x dist/src/main.js",
+    "build": "npm run generate-constants && tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && node scripts/build-dual-package.js && shx chmod +x dist/src/main.js",
     "postbuild": "git checkout -- src/generated-constants.ts 2>/dev/null || true",
     "citation:generate": "ts-node scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
