@@ -38,7 +38,7 @@ For a list of curated models on Docker Hub, visit the [Docker Hub Models page](h
 
 ### Hugging Face Models
 
-Docker Model Runner can pull supported models from Hugging Face. For a complete list of all supported models on Hugging Face, visit this [HF search page](https://huggingface.co/models?apps=docker-model-runner&sort=trending).
+Docker Model Runner can pull supported models from Hugging Face (i.e. models in GGUF format). For a complete list of all supported models on Hugging Face, visit this [HF search page](https://huggingface.co/models?apps=docker-model-runner&sort=trending).
 
 ```
 docker:chat:hf.co/<model_name>
