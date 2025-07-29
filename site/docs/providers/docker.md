@@ -34,7 +34,7 @@ docker:embedding:<model_name>
 docker:<model_name>
 ```
 
-For a complete list of available models on Docker Hub, visit the [Docker Hub Models page](https://hub.docker.com/u/ai).
+For a list of curated models on Docker Hub, visit the [Docker Hub Models page](https://hub.docker.com/u/ai).
 
 ### Hugging Face Models
 
