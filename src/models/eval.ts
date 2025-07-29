@@ -472,16 +472,16 @@ export default class Eval {
           }
         } else if (type === 'plugin' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
-          // Plugin ID is stored in metadata.pluginId
-          condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+          // Plugin ID is stored in test_case.metadata.pluginId
+          condition = `json_extract(test_case, '$.metadata.pluginId') = '${sanitizedValue}'`;
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
           if (sanitizedValue === 'basic') {
-            // Basic is represented by NULL in the metadata.strategyId field
-            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
+            // Basic is represented by NULL in the test_case.metadata.strategyId field
+            condition = `(json_extract(test_case, '$.metadata.strategyId') IS NULL OR json_extract(test_case, '$.metadata.strategyId') = '')`;
           } else {
-            // Strategy ID is stored in metadata.strategyId
-            condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
+            // Strategy ID is stored in test_case.metadata.strategyId
+            condition = `json_extract(test_case, '$.metadata.strategyId') = '${sanitizedValue}'`;
           }
         }
 

@@ -113,13 +113,6 @@
       "when": 1750564150910,
       "tag": "0015_zippy_wallop",
       "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "6",
-      "when": 1753819861138,
-      "tag": "0016_faithful_mandroid",
-      "breakpoints": true
     }
   ]
 }
