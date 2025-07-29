@@ -156,11 +156,11 @@ export default function ModelAudit() {
                 Model Audit
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                Scan ML models for security vulnerabilities using{' '}
-                <Link href="https://github.com/protectai/modelaudit" target="_blank">
-                  ModelAudit
+                Scan ML models for security vulnerabilities using the{' '}
+                <Link href="https://pypi.org/project/modelaudit/" target="_blank">
+                  modelaudit
                 </Link>
-                , powered by Protect AI
+                {' '}package
               </Typography>
             </Box>
             <Box sx={{ ml: 'auto' }}>
