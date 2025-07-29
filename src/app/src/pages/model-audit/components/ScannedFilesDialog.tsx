@@ -1,5 +1,5 @@
 import FolderIcon from '@mui/icons-material/Folder';
-import FileIcon from '@mui/icons-material/InsertDriveFile';
+import { InsertDriveFile as FileIcon } from '@mui/icons-material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -12,6 +12,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { getIssueFilePath } from '../utils';
 
 import type { ScanPath, ScanResult } from '../ModelAudit.types';
 
@@ -48,11 +49,8 @@ export default function ScannedFilesDialog({
               {scanResults.scannedFilesList.map((file, index) => {
                 // Count issues for this file
                 const fileIssues = scanResults.issues.filter((issue) => {
-                  const issueFile =
-                    issue.location ||
-                    issue.details?.path ||
-                    (issue.details?.files && issue.details.files[0]);
-                  return issueFile && issueFile.startsWith(file);
+                  const issueFile = getIssueFilePath(issue);
+                  return issueFile !== 'Unknown' && issueFile.startsWith(file);
                 });
                 const criticalCount = fileIssues.filter((i) => i.severity === 'error').length;
                 const warningCount = fileIssues.filter((i) => i.severity === 'warning').length;

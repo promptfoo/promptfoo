@@ -28,7 +28,7 @@ import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
-import { getSeverityLabel } from '../utils';
+import { getSeverityLabel, getIssueFilePath } from '../utils';
 
 import type { ScanResult, ScanIssue } from '../ModelAudit.types';
 
@@ -68,11 +68,7 @@ export default function SecurityFindings({
     const csvHeaders = ['Severity', 'Message', 'Location', 'Details'];
     const csvRows = scanResults.issues.map((issue) => {
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
-      const location =
-        issue.location ||
-        issue.details?.path ||
-        (issue.details?.files && issue.details.files[0]) ||
-        '';
+      const location = getIssueFilePath(issue);
       return [
         getSeverityLabel(issue.severity),
         `"${issue.message.replace(/"/g, '""')}"`,
@@ -101,12 +97,8 @@ export default function SecurityFindings({
   // Group issues by file
   const issuesByFile = filteredIssues.reduce(
     (acc, issue) => {
-      // Try multiple locations where file path might be stored
-      const file =
-        issue.location ||
-        issue.details?.path ||
-        (issue.details?.files && issue.details.files[0]) ||
-        'Unknown';
+      const file = getIssueFilePath(issue);
+      
       if (!acc[file]) {
         acc[file] = [];
       }
@@ -395,14 +387,9 @@ export default function SecurityFindings({
                       {getSeverityLabel(issue.severity)}
                     </SeverityBadge>
                   </Stack>
-                  {(issue.location ||
-                    issue.details?.path ||
-                    (issue.details?.files && issue.details.files[0])) && (
+                  {getIssueFilePath(issue) !== 'Unknown' && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Location:{' '}
-                      {issue.location ||
-                        issue.details?.path ||
-                        (issue.details?.files && issue.details.files[0])}
+                      Location: {getIssueFilePath(issue)}
                     </Typography>
                   )}
                   {issue.details && (

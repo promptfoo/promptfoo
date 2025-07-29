@@ -13,6 +13,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import ScanStatistics from './ScanStatistics';
 import SecurityFindings from './SecurityFindings';
+import { getIssueFilePath } from '../utils';
 
 import type { ScanResult } from '../ModelAudit.types';
 
@@ -45,11 +46,8 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
             {scanResults.scannedFilesList.map((file, index) => {
               // Count issues for this file
               const fileIssues = scanResults.issues.filter((issue) => {
-                const issueFile =
-                  issue.location ||
-                  issue.details?.path ||
-                  (issue.details?.files && issue.details.files[0]);
-                return issueFile && issueFile.startsWith(file);
+                const issueFile = getIssueFilePath(issue);
+                return issueFile !== 'Unknown' && issueFile.startsWith(file);
               });
               const criticalCount = fileIssues.filter((i) => i.severity === 'error').length;
               const warningCount = fileIssues.filter((i) => i.severity === 'warning').length;
