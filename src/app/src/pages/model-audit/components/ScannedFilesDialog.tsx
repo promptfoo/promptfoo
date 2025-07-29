@@ -48,7 +48,7 @@ export default function ScannedFilesDialog({
             <List sx={{ maxHeight: 400, overflow: 'auto' }}>
               {scanResults.scannedFilesList.map((file, index) => {
                 // Count issues for this file
-                const fileIssues = scanResults.issues.filter((issue) => {
+                const fileIssues = (scanResults.issues || []).filter((issue) => {
                   const issueFile = getIssueFilePath(issue);
                   return issueFile !== 'Unknown' && issueFile.startsWith(file);
                 });

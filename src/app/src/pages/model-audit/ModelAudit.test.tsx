@@ -23,7 +23,7 @@ vi.mock('./components/ResultsTab', () => ({
     onShowFilesDialog?: () => void;
   }) => (
     <div data-testid="results-tab">
-      <span>Issues found: {(scanResults as any).summary.issuesFound.total}</span>
+      <span>Issues found: {scanResults.issues.length}</span>
       {onShowFilesDialog && (
         <button data-testid="show-files-button" onClick={onShowFilesDialog}>
           Show Files
@@ -40,21 +40,20 @@ describe('ModelAudit', () => {
   const mockUseModelAuditStore = vi.mocked(useModelAuditStore);
   const mockAddRecentScan = vi.fn();
 
-  const mockScanResults = {
-    scannedFilesList: ['/path/to/model.safetensors'],
-    results: {},
-    summary: {
-      filesScanned: 1,
-      issuesFound: {
-        critical: 1,
-        high: 0,
-        medium: 0,
-        low: 0,
-        info: 0,
-        total: 1,
+  const mockScanResults: ScanResult = {
+    path: '/test/path',
+    issues: [
+      {
+        severity: 'error',
+        message: 'Critical security issue found',
+        location: '/path/to/model.safetensors',
+        timestamp: Date.now(),
       },
-    },
-    errors: [],
+    ],
+    success: true,
+    scannedFiles: 1,
+    totalFiles: 1,
+    scannedFilesList: ['/path/to/model.safetensors'],
   };
 
   beforeEach(() => {
@@ -92,8 +91,18 @@ describe('ModelAudit', () => {
     });
   });
 
-  it('should display a loading spinner and message when modelAuditInstalled is null', async () => {
-    mockCallApi.mockResolvedValue(new Response(undefined, { status: 200 }));
+  it('should display UI immediately without blocking on installation check', async () => {
+    // Delay the API response to simulate slow check
+    mockCallApi.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(
+              new Response(JSON.stringify({ installed: true, cwd: '/fake/dir' }), { status: 200 }),
+            );
+          }, 100);
+        }),
+    );
 
     render(
       <MemoryRouter>
@@ -103,14 +112,21 @@ describe('ModelAudit', () => {
       </MemoryRouter>,
     );
 
+    // UI should be visible immediately
+    expect(screen.getByText('Model Audit')).toBeInTheDocument();
+    expect(screen.getByText('Select Models')).toBeInTheDocument();
+
+    // Should show checking status in header
+    expect(screen.getByText('Checking...')).toBeInTheDocument();
+
+    // Wait for installation check to complete
     await waitFor(() => {
-      expect(screen.getByRole('progressbar')).toBeInTheDocument();
-      expect(screen.getByText('Checking ModelAudit installation...')).toBeInTheDocument();
+      expect(screen.getByText('Ready')).toBeInTheDocument();
     });
   });
 
-  describe('Installation Check', () => {
-    it('should render the InstallationCheck component when modelAuditInstalled is false', async () => {
+  describe('Installation Status', () => {
+    it('should show not installed status in header when modelaudit is not installed', async () => {
       mockCallApi.mockImplementation(async (path) => {
         if (path.endsWith('/model-audit/check-installed')) {
           return new Response(JSON.stringify({ installed: false }), { status: 200 });
@@ -127,7 +143,67 @@ describe('ModelAudit', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('ModelAudit Not Installed')).toBeInTheDocument();
+        expect(screen.getByText('Not Installed')).toBeInTheDocument();
+      });
+
+      // UI should still be functional
+      expect(screen.getByText('Model Audit')).toBeInTheDocument();
+      expect(screen.getByText('Select Models')).toBeInTheDocument();
+    });
+
+    it.skip('should show installation dialog when clicking scan with modelaudit not installed', async () => {
+      mockCallApi.mockImplementation(async (path) => {
+        if (path.endsWith('/model-audit/check-installed')) {
+          return new Response(JSON.stringify({ installed: false }), { status: 200 });
+        }
+        if (path.endsWith('/model-audit/check-path')) {
+          return new Response(
+            JSON.stringify({
+              exists: true,
+              type: 'file',
+              name: 'model.safetensors',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+      });
+
+      render(
+        <MemoryRouter>
+          <ThemeProvider theme={theme}>
+            <ModelAudit />
+          </ThemeProvider>
+        </MemoryRouter>,
+      );
+
+      // Wait for check to complete
+      await waitFor(() => {
+        expect(screen.getByText('Not Installed')).toBeInTheDocument();
+      });
+
+      // Add a path
+      const pathInput = screen.getByPlaceholderText(
+        'Examples: ./model.pkl, /path/to/models/, ../data/model.h5',
+      );
+      fireEvent.change(pathInput, { target: { value: '/test/model.safetensors' } });
+      fireEvent.click(screen.getByText('Add'));
+
+      // Give the component time to update
+      await waitFor(() => {
+        // Click scan button
+        const scanButton = screen.getByText('ModelAudit Not Installed');
+        fireEvent.click(scanButton);
+      });
+
+      // Should show installation dialog
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'ModelAudit is required to scan ML models for security vulnerabilities.',
+          ),
+        ).toBeInTheDocument();
+        expect(screen.getByText('pip install modelaudit')).toBeInTheDocument();
       });
     });
   });

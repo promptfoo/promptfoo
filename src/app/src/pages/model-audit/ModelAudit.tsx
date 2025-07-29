@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -29,9 +29,6 @@ import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
 // Cache key and duration
 const INSTALLATION_CACHE_KEY = 'modelaudit_installation_status';
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
-
-// Singleton promise for request deduplication
-let checkInstallationPromise: Promise<{ installed: boolean; cwd: string }> | null = null;
 
 interface InstallationStatus {
   checking: boolean;
@@ -68,6 +65,11 @@ export default function ModelAudit() {
   const [showFilesDialog, setShowFilesDialog] = useState(false);
   const [showInstallationDialog, setShowInstallationDialog] = useState(false);
 
+  // Ref for request deduplication
+  const checkInstallationPromiseRef = useRef<Promise<{ installed: boolean; cwd: string }> | null>(
+    null,
+  );
+
   const { addRecentScan } = useModelAuditStore();
 
   useEffect(() => {
@@ -95,10 +97,10 @@ export default function ModelAudit() {
   }, []);
 
   // Check if modelaudit is installed with deduplication
-  const checkModelAuditInstalled = async (force = false): Promise<void> => {
+  const checkModelAuditInstalled = useCallback(async (force = false): Promise<void> => {
     // If already checking and not forcing, return existing promise
-    if (checkInstallationPromise && !force) {
-      await checkInstallationPromise;
+    if (checkInstallationPromiseRef.current && !force) {
+      await checkInstallationPromiseRef.current;
       return;
     }
 
@@ -129,7 +131,7 @@ export default function ModelAudit() {
     setInstallationStatus((prev) => ({ ...prev, checking: true, error: null }));
 
     // Create deduplicated promise
-    checkInstallationPromise = callApi('/model-audit/check-installed')
+    checkInstallationPromiseRef.current = callApi('/model-audit/check-installed')
       .then(async (response) => {
         const data = await response.json();
         const timestamp = Date.now();
@@ -164,11 +166,11 @@ export default function ModelAudit() {
       })
       .finally(() => {
         // Clear the promise after completion
-        checkInstallationPromise = null;
+        checkInstallationPromiseRef.current = null;
       });
 
-    await checkInstallationPromise;
-  };
+    await checkInstallationPromiseRef.current;
+  }, []);
 
   // Check on mount and periodically in background
   useEffect(() => {
@@ -184,7 +186,7 @@ export default function ModelAudit() {
     );
 
     return () => clearInterval(interval);
-  }, []);
+  }, [checkModelAuditInstalled]);
 
   const handleAddPath = (path: ScanPath) => {
     setPaths([...paths, path]);
