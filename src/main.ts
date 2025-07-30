@@ -23,7 +23,6 @@ import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
-import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
@@ -32,7 +31,7 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
-import { checkForUpdates } from './updates';
+import { checkForUpdatesDeferred } from './updates-deferred';
 import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
 
@@ -73,9 +72,35 @@ export function addCommonOptionsRecursively(command: Command) {
 }
 
 async function main() {
-  await checkForUpdates();
-  await runDbMigrations();
+  // Analyze command to optimize startup
+  const commandArg = process.argv[2];
+  const isHelpCommand = !commandArg || ['--help', '-h', 'help'].includes(commandArg);
+  const isVersionCommand = ['--version', '-V', 'version'].includes(commandArg || '');
+  const isQuickCommand = isHelpCommand || isVersionCommand;
+  
+  // Commands that need database access
+  const needsDatabase = ['eval', 'import', 'export', 'delete', 'list', 'show', 'share', 'view'].includes(commandArg || '');
+  
+  // Commands where update check is useful (long-running primary commands)
+  const shouldCheckUpdates = ['eval', 'view', 'redteam'].includes(commandArg || '');
 
+  // 1. Update check - non-blocking for appropriate commands
+  if (shouldCheckUpdates && !isQuickCommand) {
+    // Fire and forget - don't await
+    checkForUpdatesDeferred().catch(() => {
+      // Silently ignore update check failures
+    });
+  }
+
+  // 2. Database migrations - defer or run as promise
+  let dbMigrationPromise: Promise<void> | null = null;
+  
+  if (needsDatabase && !isQuickCommand) {
+    // Start migrations but don't await yet
+    dbMigrationPromise = import('./migrate').then(m => m.runDbMigrations());
+  }
+
+  // 3. Config loading - still needed for many commands, but could be optimized further
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
   const program = new Command('promptfoo');
@@ -134,6 +159,16 @@ async function main() {
   simbaCommand(redteamBaseCommand, defaultConfig);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
+
+  // Add hook to ensure database is ready for commands that need it
+  if (dbMigrationPromise) {
+    program.hook('preAction', async (thisCommand) => {
+      const cmdName = thisCommand.name();
+      if (['eval', 'import', 'export', 'delete', 'list', 'show', 'share', 'view'].includes(cmdName)) {
+        await dbMigrationPromise;
+      }
+    });
+  }
 
   program.parse();
 }
