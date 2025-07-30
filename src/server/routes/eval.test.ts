@@ -50,7 +50,7 @@ describe('evalRouter', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ message: 'Eval updated successfully' });
       expect(updateResult).toHaveBeenCalledWith(evalId, newConfig, undefined);
-    }, 10000);
+    });
 
     it('should return 404 if id is missing', async () => {
       const response = await request(app)
@@ -58,7 +58,7 @@ describe('evalRouter', () => {
         .send({ config: { description: 'New Description' } });
 
       expect(response.status).toBe(404); // Express returns 404 for missing route params
-    }, 10000);
+    });
 
     it('should return 500 if update fails', async () => {
       const evalId = 'test-eval-id';
@@ -72,6 +72,6 @@ describe('evalRouter', () => {
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ error: 'Failed to update eval table' });
-    }, 10000);
+    });
   });
 });
