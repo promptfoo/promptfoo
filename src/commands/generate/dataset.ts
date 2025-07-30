@@ -5,26 +5,14 @@ export function generateDatasetCommand(command: Command) {
   cmd
     .description('Generate test cases')
     .option('-c, --config <path>', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .option(
-      '-i, --instructions <text>',
-      'Additional instructions to guide test case generation',
-    )
-    .option(
-      '-o, --output <path>',
-      'Path to output file',
-    )
-    .option(
-      '-w, --write',
-      'Write directly to the loaded config file',
-    )
+    .option('-i, --instructions <text>', 'Additional instructions to guide test case generation')
+    .option('-o, --output <path>', 'Path to output file')
+    .option('-w, --write', 'Write directly to the loaded config file')
     .option(
       '--numPersonas <number>',
       'Number of personas to generate. If not provided, AI will choose.',
     )
-    .option(
-      '--numTestCasesPerPersona <number>',
-      'Number of test cases per persona',
-    )
+    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona')
     .option(
       '--provider <provider>',
       'Provider to use for generating dataset (e.g., openai:chat:gpt-4)',

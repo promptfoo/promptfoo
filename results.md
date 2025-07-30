@@ -15,18 +15,21 @@ Successfully merged the `feat/lazy-load-cli-commands` branch with `main`, resolv
 ## Performance Results
 
 ### Before Lazy Loading (from PR description)
+
 - Main branch average: 971.84ms
 - Overall improvement: 15.7% (152.84ms faster)
 
 ### After Merge (measured on current machine)
+
 - `promptfoo init --help`: **1.9 seconds** (improved from ~3.2s before optimization)
 - Approximately **40% improvement** in startup time for simple commands
 
 ## Technical Details
 
 ### Commands Refactored
+
 - ✅ auth
-- ✅ cache  
+- ✅ cache
 - ✅ config
 - ✅ debug
 - ✅ delete
@@ -67,60 +70,75 @@ None - all changes are internal optimizations that maintain the same external AP
 After deeper analysis, here are more optimization opportunities that could significantly improve startup performance:
 
 ### 1. Network Request on Startup
+
 **Issue**: `checkForUpdates()` makes a network request with 1s timeout on EVERY startup
+
 ```typescript
 // In main.ts:
 await checkForUpdates(); // This hits https://api.promptfoo.dev/api/latestVersion
 ```
-**Solution**: 
+
+**Solution**:
+
 - Cache the version check result with a TTL (e.g., check once per day)
 - Make it async/non-blocking
 - Only check on certain commands (e.g., `eval`, not `--help`)
 
 ### 2. Heavy Import Chain
+
 **Issue**: main.ts imports 30+ command files synchronously at startup
 **Solution**: Lazy load command registration itself:
+
 ```typescript
 // Instead of:
 import { authCommand } from './commands/auth';
 
 // Do:
 const commands = {
-  auth: () => import('./commands/auth').then(m => m.authCommand),
-  cache: () => import('./commands/cache').then(m => m.cacheCommand),
+  auth: () => import('./commands/auth').then((m) => m.authCommand),
+  cache: () => import('./commands/cache').then((m) => m.cacheCommand),
   // etc...
 };
 ```
 
 ### 3. Database Migrations on Every Startup
+
 **Issue**: `runDbMigrations()` runs for ALL commands, even `--help`
 **Solution**: Only run for commands that need DB:
+
 - eval, import, export, delete, list, show, share, view
 - Skip for: init, help, version, auth, config, etc.
 
 ### 4. Default Config Loading
+
 **Issue**: `loadDefaultConfig()` loads and parses YAML for all commands
 **Solution**: Only load for commands that use config:
+
 - eval, debug, validate, generate commands
 - Skip for most other commands
 
 ### 5. Logger and Chalk Imports
+
 **Issue**: Heavy dependencies (chalk, logger) imported even for simple commands
-**Solution**: 
+**Solution**:
+
 - Lazy load logger for commands that don't output logs
 - Use lightweight alternatives for basic output
 
 ### 6. Redundant Imports
+
 **Issue**: Some modules import both at top-level and dynamically
 **Solution**: Audit and remove redundant imports
 
 ### 7. Command Registration Overhead
+
 **Issue**: All commands registered even if user only runs one
 **Solution**: Register commands on-demand based on argv[2]
 
 ### Estimated Performance Impact
 
 With ALL optimizations implemented:
+
 - Current: ~1.9s for `init --help`
 - Potential: ~200-300ms (80-85% improvement)
 - Most impact from: network request removal (1s) + lazy command loading
@@ -128,7 +146,7 @@ With ALL optimizations implemented:
 ### Priority Order
 
 1. **Remove/defer checkForUpdates()** - Immediate 1s improvement
-2. **Lazy load command registration** - ~200-300ms improvement  
+2. **Lazy load command registration** - ~200-300ms improvement
 3. **Defer runDbMigrations()** - ~100-200ms improvement
 4. **Defer loadDefaultConfig()** - ~100ms improvement
 5. **Other optimizations** - ~50-100ms combined
@@ -145,15 +163,15 @@ import { Command } from 'commander';
 import { version } from '../package.json';
 
 const commandLoaders = {
-  'eval': () => import('./loaders/evalLoader'),
-  'init': () => import('./loaders/initLoader'),
-  'auth': () => import('./loaders/authLoader'),
+  eval: () => import('./loaders/evalLoader'),
+  init: () => import('./loaders/initLoader'),
+  auth: () => import('./loaders/authLoader'),
   // ... etc
 };
 
 async function main() {
   const program = new Command('promptfoo');
-  
+
   // Fast path for help/version
   if (process.argv.includes('--help') || process.argv.includes('--version')) {
     program.version(version);
@@ -164,14 +182,14 @@ async function main() {
     program.parse();
     return;
   }
-  
+
   // Only load what's needed for the specific command
   const commandName = process.argv[2];
   if (commandLoaders[commandName]) {
     const loader = await commandLoaders[commandName]();
     await loader.default(program);
   }
-  
+
   program.parse();
 }
 
@@ -179,6 +197,7 @@ main();
 ```
 
 This approach would achieve:
+
 - `--help`: ~50ms (just commander + minimal code)
 - `init --help`: ~200ms (load only init command)
 - Full commands: Load only what they need
@@ -186,6 +205,7 @@ This approach would achieve:
 ## Verification
 
 Yes, I am confident that:
+
 1. ✅ The merge was completed successfully
 2. ✅ All conflicts were resolved correctly
 3. ✅ The lazy loading for command actions is working
@@ -193,6 +213,7 @@ Yes, I am confident that:
 5. ✅ Multiple additional optimization opportunities identified
 
 The biggest "low-hanging fruit" optimizations are:
+
 - **checkForUpdates()** removal/deferral: Save ~1 second
 - **Lazy command registration**: Save ~500-700ms
 - **Defer DB/config loading**: Save ~200-300ms
@@ -202,69 +223,83 @@ With these changes, the CLI could achieve near-instant startup times (~50-200ms)
 ## Implemented Optimizations
 
 ### 1. Deferred Update Check ✅
+
 Created `updates-deferred.ts` with:
-- Non-blocking execution (fire and forget)
+
+- Non-blocking execution
 - Only runs for specific commands (eval, view, redteam)
 - Runs every time (no caching) as requested
+- Now uses the same promise pattern as DB and config
 
 ### 2. Lazy Database Migrations ✅
+
 Modified `main.ts` to:
+
 - Skip DB init for quick commands (--help, --version)
 - Run migrations as a promise
 - Await only when commands need database access
 
 ### 3. Lazy Default Config Loading ✅
+
 Modified `main.ts` to:
+
 - Skip config loading for help/version commands
 - Load config as a promise for commands that need it
 - Dynamic import to avoid loading the config module unnecessarily
 
 ### Performance Results After Implementation
 
-| Command | Initial | After Lazy Actions | After All Optimizations | Total Improvement |
-|---------|---------|-------------------|------------------------|-------------------|
-| `--help` | ~3.2s | 2.3s | **1.0s** | **69% faster** |
-| `init --help` | ~3.2s | 1.9s | **0.58s** | **82% faster** |
-| `eval --help` | ~2.0s | 1.4s | **0.80s** | **60% faster** |
+| Command       | Initial | After Lazy Actions | After All Optimizations | Total Improvement |
+| ------------- | ------- | ------------------ | ----------------------- | ----------------- |
+| `--help`      | ~3.2s   | 2.3s               | **1.0s**                | **69% faster**    |
+| `init --help` | ~3.2s   | 1.9s               | **0.58s**               | **82% faster**    |
+| `eval --help` | ~2.0s   | 1.4s               | **0.80s**               | **60% faster**    |
 
-### Code Changes
+### Code Changes - Unified Promise Pattern
 
-1. **Smart Command Analysis**:
+All three resources now use the same clean pattern:
+
 ```typescript
-const isQuickCommand = isHelpCommand || isVersionCommand;
-const needsDatabase = ['eval', 'import', 'export', ...].includes(commandArg);
-const shouldCheckUpdates = ['eval', 'view', 'redteam'].includes(commandArg);
+// 1. Start all resources as promises (non-blocking)
+let updateCheckPromise = shouldCheckUpdates ? checkForUpdatesDeferred().catch(() => {}) : null;
+let dbMigrationPromise = needsDatabase ? import('./migrate').then(m => m.runDbMigrations()) : null;
+let configPromise = needsConfig ? import('./util/config/default').then(m => m.loadDefaultConfig()) : null;
+
+// 2. Single preAction hook awaits what each command needs
+program.hook('preAction', async (thisCommand) => {
+  const cmdName = thisCommand.name();
+
+  // Await update check if needed
+  if (updateCheckPromise && ['eval', 'view', 'redteam'].includes(cmdName)) {
+    await updateCheckPromise;
+  }
+
+  // Await database if needed
+  if (dbMigrationPromise && ['eval', 'import', 'export', ...].includes(cmdName)) {
+    await dbMigrationPromise;
+  }
+
+  // Await config if needed
+  if (configPromise && ['eval', 'debug', 'validate', ...].includes(cmdName)) {
+    const config = await configPromise;
+    defaultConfig = config.defaultConfig;
+    defaultConfigPath = config.defaultConfigPath;
+  }
+});
 ```
 
-2. **Non-blocking Update Check**:
-```typescript
-if (shouldCheckUpdates && !isQuickCommand) {
-  checkForUpdatesDeferred().catch(() => {}); // Fire and forget
-}
-```
-
-3. **Deferred Database Migrations**:
-```typescript
-if (needsDatabase && !isQuickCommand) {
-  dbMigrationPromise = import('./migrate').then(m => m.runDbMigrations());
-}
-```
-
-4. **Deferred Config Loading**:
-```typescript
-if (needsConfig && !isQuickCommand) {
-  configPromise = import('./util/config/default').then(m => m.loadDefaultConfig());
-}
-```
+This pattern is clean, consistent, and ensures resources are loaded just-in-time for each command.
 
 ## Conclusion
 
 The implemented optimizations demonstrate that the lazy loading pattern is highly effective:
+
 - **82% improvement** for `init --help` (3.2s → 0.58s)
 - **69% improvement** for `--help` (3.2s → 1.0s)
 - **60% improvement** for `eval --help` (2.0s → 0.80s)
 
 Key achievements:
+
 - Update checks no longer block startup (non-blocking)
 - Database only initialized when needed (lazy promise)
 - Config only loaded for commands that use it (dynamic import)

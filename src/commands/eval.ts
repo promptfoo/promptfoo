@@ -4,7 +4,11 @@ import { DEFAULT_MAX_CONCURRENCY } from '../evaluator';
 import { CommandLineOptionsSchema } from '../types';
 import type { EvaluateOptions, UnifiedConfig } from '../types';
 
-export { doEval, showRedteamProviderLabelMissingWarning, formatTokenUsage } from './eval/evalAction';
+export {
+  doEval,
+  showRedteamProviderLabelMissingWarning,
+  formatTokenUsage,
+} from './eval/evalAction';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -13,7 +17,6 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
-
 
 export function evalCommand(
   program: Command,

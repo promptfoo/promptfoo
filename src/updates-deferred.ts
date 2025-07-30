@@ -27,7 +27,7 @@ export async function checkForUpdatesDeferred(): Promise<void> {
   try {
     const latestVersion = await getLatestVersion();
     const hasUpdate = semverGt(latestVersion, VERSION);
-    
+
     if (hasUpdate) {
       showUpdateMessage(latestVersion);
     }

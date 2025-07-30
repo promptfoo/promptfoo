@@ -8,8 +8,10 @@ export function initCommand(program: Command) {
     .description('Initialize project with a promptfooconfig.yaml')
     .option('--no-interactive', 'Run in interactive mode')
     .option('--web', 'Initialize a web viewer project from the Promptfoo github repository')
-    .action(async (directory: string | undefined, cmdObj: { interactive: boolean; web: boolean }) => {
-      const { initAction } = await import('./init/initAction');
-      await initAction(directory || null, cmdObj);
-    });
+    .action(
+      async (directory: string | undefined, cmdObj: { interactive: boolean; web: boolean }) => {
+        const { initAction } = await import('./init/initAction');
+        await initAction(directory || null, cmdObj);
+      },
+    );
 }

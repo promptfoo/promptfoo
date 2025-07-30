@@ -1,5 +1,4 @@
 import type { Command } from 'commander';
-import type { UnifiedConfig } from '../types';
 
 export function exportCommand(program: Command) {
   program

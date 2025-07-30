@@ -5,10 +5,7 @@ export function generateAssertionsCommand(command: Command) {
   cmd
     .description('Generate AI-based assertions for the specified configuration')
     .option('-c, --config <path>', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .option(
-      '-o, --output <path>',
-      'Path to output file. Defaults to `<config_dir>/redteam.yaml`',
-    )
+    .option('-o, --output <path>', 'Path to output file. Defaults to `<config_dir>/redteam.yaml`')
     .option('-p, --prompts <paths...>', 'Paths to prompt files')
     .option('-r, --providers <names...>', 'Provider names to use for redteam generation')
     .option('-i, --injectVar <varname>', 'Variable name to inject user/redteam input')

@@ -40,7 +40,7 @@ export async function handlePrompt(id: string) {
                 (evl.metrics.testPassCount +
                   evl.metrics.testFailCount +
                   evl.metrics.testErrorCount)) *
-              100
+                100
             ).toFixed(2)}%`
           : '-',
       'Pass count': evl.metrics?.testPassCount || '-',
@@ -131,7 +131,7 @@ export async function handleDataset(id: string) {
                 (prompt.prompt.metrics.testPassCount +
                   prompt.prompt.metrics.testFailCount +
                   prompt.prompt.metrics.testErrorCount)) *
-              100
+                100
             ).toFixed(2)}%`
           : '-',
       'Pass count': prompt.prompt.metrics?.testPassCount || '-',
