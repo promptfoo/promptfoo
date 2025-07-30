@@ -566,13 +566,13 @@
                                               "perplexity-score",
                                               "python",
                                               "regex",
-                                              "research-rubric",
                                               "rouge-n",
                                               "similar",
                                               "starts-with",
                                               "trace-error-spans",
                                               "trace-span-count",
                                               "trace-span-duration",
+                                              "web-search",
                                               "webhook"
                                             ]
                                           },

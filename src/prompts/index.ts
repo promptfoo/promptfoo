@@ -275,30 +275,3 @@ Example JSON:
 JSON:
 `;
 
-export const RESEARCH_RUBRIC_FINAL_EVALUATION = `You are an AI grader evaluating the accuracy of an output using web search.
-
-Output to evaluate: {{output}}
-Evaluation criteria: {{rubric}}
-{% if prompt %}
-Original prompt that generated the output: {{prompt}}
-{% endif %}
-
-YOUR TASK:
-1. Identify key factual claims in the output that need verification
-2. Use web search to verify each claim (current data, facts, citations, etc.)
-3. Evaluate the overall accuracy based on your findings
-
-IMPORTANT:
-- You MUST use web search to verify factual claims
-- Check dates, numbers, names, and any specific claims
-- If output mentions citations/papers, verify they exist
-- For current information (prices, weather, news), check against live data
-
-Return a JSON object with this exact structure:
-{
-  "pass": boolean (true if output meets accuracy criteria, false otherwise),
-  "score": number (0.0 to 1.0, representing accuracy percentage),
-  "reason": "Clear explanation of what you found and why it passes/fails",
-  "verifiedClaims": ["List of claims you successfully verified"],
-  "failedClaims": ["List of claims that were incorrect or unverifiable"]
-}`;
