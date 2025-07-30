@@ -79,6 +79,7 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
+import { handleWebSearch } from './webSearch';
 import { handleIsXml } from './xml';
 
 import type {
@@ -101,6 +102,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-closedqa',
   'model-graded-factuality',
   'research-rubric',
+  'web-search',
 ]);
 
 const nunjucks = getNunjucksEngine();
@@ -317,6 +319,7 @@ export async function runAssertion({
     'research-rubric': handleResearchRubric,
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
+    'web-search': handleWebSearch,
     'starts-with': handleStartsWith,
     'trace-error-spans': handleTraceErrorSpans,
     'trace-span-count': handleTraceSpanCount,

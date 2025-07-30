@@ -1,6 +1,6 @@
 ---
 sidebar_label: When LLM-Rubric Is Not Enough
-title: "When LLM-Rubric Is Not Enough: Verifying AI Accuracy with Web Search"
+title: 'When LLM-Rubric Is Not Enough: Verifying AI Accuracy with Web Search'
 description: LLM judges can't verify facts. Learn how research-rubric uses web search to catch hallucinations, verify citations, and ensure accuracy in AI outputs.
 image: /img/blog/research-rubric/hero.png
 keywords:
@@ -64,7 +64,7 @@ The `llm-rubric` gave this response a perfect score. It was polite, specific, an
 An AI research assistant confidently cited:
 
 ```
-Bot: "According to Smith et al. (2023) in 'Neural Networks for Climate Prediction' 
+Bot: "According to Smith et al. (2023) in 'Neural Networks for Climate Prediction'
 published in Nature, the accuracy of weather forecasting has improved by 47%..."
 Reality: This paper doesn't exist. The citation was completely fabricated.
 ```
@@ -140,6 +140,7 @@ tests:
 ```
 
 The grader will:
+
 1. Extract the temperature claim (e.g., "72°F")
 2. Search for current Seattle weather
 3. Compare against live data
@@ -150,7 +151,7 @@ The grader will:
 ```yaml
 tests:
   - vars:
-      prompt: "Summarize recent AI safety research with citations"
+      prompt: 'Summarize recent AI safety research with citations'
     assert:
       - type: research-rubric
         value: |
@@ -164,6 +165,7 @@ tests:
 ## Migration Guide: From llm-rubric to research-rubric
 
 Before (can't verify facts):
+
 ```yaml
 assert:
   - type: llm-rubric
@@ -171,9 +173,10 @@ assert:
 ```
 
 After (verifies against real data):
+
 ```yaml
 assert:
-  - type: research-rubric  
+  - type: research-rubric
     value: Stock price must be within 1% of current market price
 ```
 
@@ -252,6 +255,7 @@ Yes, web search costs more:
 - **research-rubric**: ~$0.003-0.008 per evaluation
 
 But consider the cost of undetected errors:
+
 - Wrong financial advice: Potential lawsuits
 - Incorrect medical information: Health risks
 - Fake citations: Credibility loss
@@ -266,7 +270,7 @@ assert:
   - type: research-rubric
     value: Temperature must be within 5°F of actual
 
-# Bad: Vague requirement  
+# Bad: Vague requirement
 assert:
   - type: research-rubric
     value: Temperature should be accurate
@@ -285,7 +289,7 @@ assert:
   # Verify accuracy
   - type: research-rubric
     value: All facts must be verifiable
-  
+
   # Still check quality
   - type: llm-rubric
     value: Response should be helpful and well-structured
@@ -303,17 +307,20 @@ We're working on:
 ## Getting Started Today
 
 1. **Install promptfoo**:
+
    ```bash
    npm install -g promptfoo
    ```
 
 2. **Configure a web search provider**:
+
    ```yaml
    grading:
      provider: perplexity:sonar
    ```
 
 3. **Add research-rubric assertions**:
+
    ```yaml
    assert:
      - type: research-rubric
@@ -335,4 +342,4 @@ Because in production, "sounds right" isn't good enough. You need to **be right*
 
 ---
 
-*Want to ensure your AI outputs are factually accurate? [Get started with research-rubric](/docs/configuration/expected-outputs/model-graded/research-rubric) or [explore our examples](https://github.com/promptfoo/promptfoo/tree/main/examples/research-verification).* 
+_Want to ensure your AI outputs are factually accurate? [Get started with research-rubric](/docs/configuration/expected-outputs/model-graded/research-rubric) or [explore our examples](https://github.com/promptfoo/promptfoo/tree/main/examples/research-verification)._

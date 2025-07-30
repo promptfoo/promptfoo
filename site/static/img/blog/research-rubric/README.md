@@ -27,4 +27,4 @@ This directory should contain the following images for the blog post:
 - Use promptfoo brand colors where appropriate
 - Keep diagrams clean and professional
 - Ensure text is readable at various sizes
-- Consider dark mode compatibility 
+- Consider dark mode compatibility

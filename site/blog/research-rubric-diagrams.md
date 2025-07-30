@@ -1,6 +1,7 @@
 # Research-Rubric Blog Post Diagram Specifications
 
 ## Diagram 1: Architecture Flow
+
 **Type**: Flowchart/Process Diagram
 **Purpose**: Show how research-rubric verifies claims step-by-step
 
@@ -12,30 +13,33 @@ graph LR
     D --> E[Evidence Analysis]
     E --> F[Accuracy Score]
     F --> G{Pass/Fail}
-    
+
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style G fill:#9f9,stroke:#333,stroke-width:2px
 ```
 
 **Details**:
+
 - Show the flow from AI output to final pass/fail
 - Highlight the web search step as the key differentiator
 - Use colors to indicate input (pink) and output (green)
 
 ## Diagram 2: Provider Capability Matrix
+
 **Type**: Comparison Table/Matrix
 **Purpose**: Show which providers support web search capabilities
 
 | Provider         | Web Search | API Feature                     | Best For              |
 | ---------------- | ---------- | ------------------------------- | --------------------- |
-| OpenAI Responses | ✅          | `tools: [{type: 'web_search'}]` | Balanced performance  |
-| Google/Gemini    | ✅          | `tools: [{googleSearch: {}}]`   | Academic papers       |
-| Perplexity       | ✅          | Built-in (all models)           | General web search    |
-| xAI/Grok         | ✅          | `search_parameters`             | Real-time information |
-| Standard OpenAI  | ❌          | N/A                             | -                     |
-| Anthropic        | ❌          | N/A                             | -                     |
+| OpenAI Responses | ✅         | `tools: [{type: 'web_search'}]` | Balanced performance  |
+| Google/Gemini    | ✅         | `tools: [{googleSearch: {}}]`   | Academic papers       |
+| Perplexity       | ✅         | Built-in (all models)           | General web search    |
+| xAI/Grok         | ✅         | `search_parameters`             | Real-time information |
+| Standard OpenAI  | ❌         | N/A                             | -                     |
+| Anthropic        | ❌         | N/A                             | -                     |
 
 ## Diagram 3: Performance Comparison Chart
+
 **Type**: Bar Chart
 **Purpose**: Show effectiveness of research-rubric vs llm-rubric
 
@@ -54,6 +58,7 @@ research-rubric: █████████████████████
 ```
 
 ## Diagram 4: Cost vs Value Analysis
+
 **Type**: Scatter Plot or 2x2 Matrix
 **Purpose**: Show when to use each assertion type
 
@@ -74,10 +79,12 @@ Low Value  |
 ```
 
 ## Diagram 5: Real-World Example Flow
+
 **Type**: Before/After Comparison
 **Purpose**: Show concrete example of catching hallucination
 
 **Before (LLM-Rubric)**:
+
 ```
 User: "What's the weather in NYC?"
 AI: "It's 72°F and sunny"
@@ -86,6 +93,7 @@ Reality: ❄️ 28°F, snowing
 ```
 
 **After (Research-Rubric)**:
+
 ```
 User: "What's the weather in NYC?"
 AI: "It's 72°F and sunny"
@@ -97,6 +105,7 @@ Research-Rubric:
 ```
 
 ## Diagram 6: Configuration Examples
+
 **Type**: Code Comparison
 **Purpose**: Show migration from llm-rubric to research-rubric
 
@@ -106,11 +115,11 @@ assert:
   - type: llm-rubric
     value: Provide accurate weather
 
-# After  
+# After
 assert:
   - type: research-rubric
     value: Weather must be within 5°F of actual
-    
+
 grading:
   provider: perplexity:sonar
 ```
@@ -155,4 +164,4 @@ grading:
 
 1. **Twitter/X Card**: 1200x628px highlighting key stat (94% vs 12% hallucination detection)
 2. **LinkedIn Preview**: 1200x627px with professional design
-3. **Blog Thumbnail**: 600x400px for blog listing page 
+3. **Blog Thumbnail**: 600x400px for blog listing page

@@ -19,6 +19,7 @@ The `research-rubric` assertion type has been implemented with the following fea
 ## Action Items from Code Review
 
 ### Completed in this PR
+
 - ✅ Reverted accidental G-Eval prompt changes that would have broken functionality
 - ✅ Fixed provider detection to include OpenAI responses API
 - ✅ Refactored to use explicit default providers instead of runtime capability detection
@@ -26,10 +27,12 @@ The `research-rubric` assertion type has been implemented with the following fea
 - ✅ Added comprehensive integration tests for matchesResearchRubric
 
 ### Immediate Actions Required
+
 - [x] Add integration tests for matchesResearchRubric
 - [x] Update documentation to emphasize cost implications more strongly
 
 ### Follow-up Tasks
+
 - [x] Complete blog post "When LLM-Rubric Is Not Enough"
 - [ ] Monitor usage and costs in production
 - [ ] Consider adding rate limiting for expensive operations

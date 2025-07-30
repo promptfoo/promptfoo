@@ -75,11 +75,7 @@ describe('matchesResearchRubric', () => {
         provider: perplexityProvider,
       };
 
-      const result = await matchesResearchRubric(
-        'Verify this claim',
-        'The sky is blue',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this claim', 'The sky is blue', grading);
 
       expect(result.pass).toBe(true);
       expect(result.metadata?.hasWebSearch).toBe(true);
@@ -203,11 +199,7 @@ describe('matchesResearchRubric', () => {
 
       const grading: GradingConfig = {};
 
-      const result = await matchesResearchRubric(
-        'Verify this',
-        'Test output',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this', 'Test output', grading);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith('openai:responses:gpt-4o', {
         options: {
@@ -247,11 +239,7 @@ describe('matchesResearchRubric', () => {
 
       const grading: GradingConfig = {};
 
-      const result = await matchesResearchRubric(
-        'Verify this',
-        'Test output',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this', 'Test output', grading);
 
       expect(mockLoadApiProvider).toHaveBeenCalledTimes(3);
       expect(result.score).toBe(0.8);
@@ -273,9 +261,7 @@ describe('matchesResearchRubric', () => {
 
       const grading: GradingConfig = {};
 
-      await expect(
-        matchesResearchRubric('Verify this', 'Test output', grading),
-      ).rejects.toThrow(
+      await expect(matchesResearchRubric('Verify this', 'Test output', grading)).rejects.toThrow(
         'research-rubric requires a grading provider with web search capabilities',
       );
     });
@@ -388,7 +374,7 @@ describe('matchesResearchRubric', () => {
     it('should include prompt in evaluation when provided', async () => {
       const provider = createMockProvider();
       (provider.id as jest.Mock).mockReturnValue('perplexity:sonar');
-      
+
       let capturedPrompt = '';
       (provider.callApi as jest.Mock).mockImplementation(async (prompt: string) => {
         capturedPrompt = prompt;
@@ -436,11 +422,7 @@ describe('matchesResearchRubric', () => {
         provider,
       };
 
-      const result = await matchesResearchRubric(
-        'Verify this',
-        'Test output',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this', 'Test output', grading);
 
       expect(result).toEqual({
         pass: false,
@@ -463,11 +445,7 @@ describe('matchesResearchRubric', () => {
         provider,
       };
 
-      const result = await matchesResearchRubric(
-        'Verify this',
-        'Test output',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this', 'Test output', grading);
 
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
@@ -486,20 +464,14 @@ describe('matchesResearchRubric', () => {
         provider,
       };
 
-      const result = await matchesResearchRubric(
-        'Verify this',
-        'Test output',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this', 'Test output', grading);
 
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
     });
 
     it('should throw error when no grading config provided', async () => {
-      await expect(
-        matchesResearchRubric('Verify this', 'Test output'),
-      ).rejects.toThrow(
+      await expect(matchesResearchRubric('Verify this', 'Test output')).rejects.toThrow(
         'Cannot grade output without grading config',
       );
     });
@@ -508,7 +480,7 @@ describe('matchesResearchRubric', () => {
   describe('Remote Grading', () => {
     it('should use remote grading when enabled and no rubric prompt override', async () => {
       (cliState as any).config = { redteam: {} };
-      
+
       const { shouldGenerateRemote } = jest.requireMock('../../src/redteam/remoteGeneration');
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
@@ -542,7 +514,7 @@ describe('matchesResearchRubric', () => {
 
     it('should not use remote grading when rubric prompt is overridden', async () => {
       (cliState as any).config = { redteam: {} };
-      
+
       const { shouldGenerateRemote } = jest.requireMock('../../src/redteam/remoteGeneration');
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
@@ -559,11 +531,7 @@ describe('matchesResearchRubric', () => {
         provider,
       };
 
-      await matchesResearchRubric(
-        'Verify facts',
-        'Test output',
-        grading,
-      );
+      await matchesResearchRubric('Verify facts', 'Test output', grading);
 
       expect(mockDoRemoteGrading).not.toHaveBeenCalled();
       expect(provider.callApi).toHaveBeenCalled();
@@ -593,11 +561,7 @@ describe('matchesResearchRubric', () => {
 
       const grading: GradingConfig = {};
 
-      const result = await matchesResearchRubric(
-        'Verify this',
-        'Test output',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this', 'Test output', grading);
 
       expect(result.metadata?.gradingProvider).toBe('google:gemini-2.0-flash');
       expect(mockLoadApiProvider).not.toHaveBeenCalled();
@@ -625,13 +589,9 @@ describe('matchesResearchRubric', () => {
 
       const grading: GradingConfig = {};
 
-      const result = await matchesResearchRubric(
-        'Verify this',
-        'Test output',
-        grading,
-      );
+      const result = await matchesResearchRubric('Verify this', 'Test output', grading);
 
       expect(result.reason).toBe('LLM rubric provider used');
     });
   });
-}); 
+});

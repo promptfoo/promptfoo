@@ -328,10 +328,11 @@ tests:
 
 :::warning
 Web search API calls are significantly more expensive than regular completions:
+
 - Each research-rubric assertion may perform multiple searches
 - Costs can be 5-10x higher than standard assertions
 - Use caching (`--cache`) to avoid redundant searches
-:::
+  :::
 
 ### Best Practices
 

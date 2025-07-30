@@ -22,6 +22,7 @@ import {
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
+import { hasWebSearchCapability } from './providers/webSearchUtils';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
@@ -613,47 +614,13 @@ export async function matchesResearchRubric(
   }
 
   const defaultProviders = await getDefaultProviders();
-  
+
   // Get the grading provider - this needs web search capabilities
   let gradingProvider =
     grading.provider ||
     defaultProviders.researchProvider ||
     defaultProviders.llmRubricProvider ||
     defaultProviders.gradingProvider;
-
-  // Helper function to check if a provider has web search capabilities
-  const hasWebSearchCapability = (p: ApiProvider | null | undefined): boolean => {
-    if (!p) return false;
-    const id = p.id();
-    
-    // Perplexity has built-in web search
-    if (id.includes('perplexity')) {
-      return true;
-    }
-    
-    // Check for Google/Gemini with search tools
-    if (
-      (id.includes('google') || id.includes('gemini') || id.includes('vertex')) && 
-      p.config?.tools?.some((t: any) => t.googleSearch !== undefined)
-    ) {
-      return true;
-    }
-    
-    // Check for xAI with search parameters
-    if (id.includes('xai') && p.config?.search_parameters?.mode === 'on') {
-      return true;
-    }
-    
-    // Check for OpenAI responses API with web_search tool
-    if (
-      id.includes('openai:responses') && 
-      p.config?.tools?.some((t: any) => t.type === 'web_search')
-    ) {
-      return true;
-    }
-    
-    return false;
-  };
 
   // Check if current provider has web search, if not try to load one
   if (!hasWebSearchCapability(gradingProvider)) {
@@ -662,9 +629,9 @@ export async function matchesResearchRubric(
       // Try OpenAI responses API first (as mentioned in error message)
       async () => {
         try {
-          return await loadApiProvider('openai:responses:gpt-4o', {
+          return await loadApiProvider('openai:responses:o4-mini', {
             options: {
-              config: { tools: [{ type: 'web_search' }] },
+              config: { tools: [{ type: 'web_search_preview' }] },
             },
           });
         } catch {
@@ -682,7 +649,7 @@ export async function matchesResearchRubric(
       // Google/Gemini with search tools
       async () => {
         try {
-          return await loadApiProvider('google:gemini-2.0-flash', {
+          return await loadApiProvider('google:gemini-2.5-flash', {
             options: {
               config: { tools: [{ googleSearch: {} }] },
             },
@@ -693,7 +660,7 @@ export async function matchesResearchRubric(
       },
       async () => {
         try {
-          return await loadApiProvider('vertex:gemini-2.0-flash', {
+          return await loadApiProvider('vertex:gemini-2.5-flash', {
             options: {
               config: { tools: [{ googleSearch: {} }] },
             },
@@ -1528,6 +1495,171 @@ interface ModerationMatchOptions {
   userPrompt: string;
   assistantResponse: string;
   categories?: string[];
+}
+
+export async function matchesWebSearch(
+  query: string,
+  llmOutput: string,
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+  assertion?: Assertion | null,
+  provider?: ApiProvider | null,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  // Web search assertion is similar to research-rubric but focused on real-time search
+  // Use the same infrastructure but with a different prompt
+  const defaultProviders = await getDefaultProviders();
+
+  // Get a provider with web search capabilities
+  let searchProvider =
+    grading.provider ||
+    defaultProviders.researchProvider ||
+    defaultProviders.llmRubricProvider ||
+    defaultProviders.gradingProvider;
+
+  // Check if current provider has web search, if not try to load one
+  if (!hasWebSearchCapability(searchProvider)) {
+    // Try to load a provider with web search capabilities
+    const webSearchProviders = [
+      // Try Anthropic first (built-in web search)
+      async () => {
+        try {
+          return await loadApiProvider('anthropic:messages:claude-sonnet-4');
+        } catch {
+          return null;
+        }
+      },
+      // Try OpenAI responses API
+      async () => {
+        try {
+          return await loadApiProvider('openai:responses:o4-mini', {
+            options: {
+              config: { tools: [{ type: 'web_search_preview' }] },
+            },
+          });
+        } catch {
+          return null;
+        }
+      },
+      // Try Perplexity (has built-in web search)
+      async () => {
+        try {
+          return await loadApiProvider('perplexity:sonar');
+        } catch {
+          return null;
+        }
+      },
+      // Google/Gemini with search tools
+      async () => {
+        try {
+          return await loadApiProvider('google:gemini-2.5-flash', {
+            options: {
+              config: { tools: [{ googleSearch: {} }] },
+            },
+          });
+        } catch {
+          return null;
+        }
+      },
+    ];
+
+    for (const getProvider of webSearchProviders) {
+      const p = await getProvider();
+      if (p) {
+        searchProvider = p;
+        logger.info(`Using ${p.id()} as web search provider`);
+        break;
+      }
+    }
+  }
+
+  // Ensure we have a provider with web search capabilities
+  if (!searchProvider || !hasWebSearchCapability(searchProvider)) {
+    throw new Error(
+      'web-search assertion requires a grading provider with web search capabilities. ' +
+        'Use --grader with a web search provider (e.g., anthropic:messages:claude-sonnet-4, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider',
+    );
+  }
+
+  // Create a web search prompt
+  const searchPrompt = `You are evaluating whether the given output is accurate based on current information from the web.
+
+Search Query: "${query}"
+
+Output to Verify:
+${llmOutput}
+
+Instructions:
+1. Use web search to find current, up-to-date information about the search query
+2. Compare the output against the current information you find
+3. Verify any factual claims, dates, prices, or other time-sensitive information
+4. Check if the output contains outdated or incorrect information
+
+Return your evaluation as a JSON object with:
+- "pass": true if the output is accurate and up-to-date, false otherwise
+- "score": 0-1 representing accuracy (1 = fully accurate, 0 = completely inaccurate)
+- "reason": Detailed explanation of what you found and why you gave this score
+- "searchResults": Summary of key information found via web search`;
+
+  // Get the evaluation from the search provider
+  const resp = await searchProvider.callApi(searchPrompt);
+
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Web search failed: ${resp.error || 'No output'}`,
+      tokensUsed: resp.tokenUsage,
+      assertion,
+    };
+  }
+
+  // Parse the response
+  try {
+    const result = extractFirstJsonObject(String(resp.output)) as {
+      pass?: boolean;
+      score?: number;
+      reason?: string;
+      searchResults?: any;
+    };
+
+    // Apply threshold if specified
+    let pass = result.pass ?? false;
+    const score = typeof result.score === 'number' ? result.score : pass ? 1 : 0;
+
+    if (assertion?.threshold !== undefined) {
+      pass = pass && score >= assertion.threshold;
+    }
+
+    return {
+      pass,
+      score,
+      reason: result.reason || 'No reason provided',
+      tokensUsed: resp.tokenUsage,
+      assertion,
+      metadata: {
+        searchResults: result.searchResults || [],
+        searchProvider: searchProvider.id(),
+      },
+    };
+  } catch {
+    // Try to parse as a simple pass/fail
+    const outputLower = String(resp.output).toLowerCase();
+    const pass = outputLower.includes('"pass":true') || outputLower.includes('"pass": true');
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: resp.output as string,
+      tokensUsed: resp.tokenUsage,
+      assertion,
+    };
+  }
 }
 
 export async function matchesModeration(

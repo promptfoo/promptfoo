@@ -8,10 +8,11 @@ The `research-rubric` assertion type evaluates outputs by using web search to ve
 
 :::warning Cost Implications
 Research-rubric assertions use web search APIs which are **significantly more expensive** than regular LLM calls:
+
 - Each assertion makes multiple web searches to verify claims
 - Costs can be 5-10x higher than standard `llm-rubric` assertions
 - Consider using caching and limiting test frequency to control costs
-:::
+  :::
 
 ## How it works
 
@@ -190,21 +191,25 @@ tests:
 ## Cost Optimization Strategies
 
 :::tip Controlling Costs
+
 1. **Use caching**: Enable caching to avoid repeated web searches
+
    ```bash
    npx promptfoo eval --cache
    ```
 
 2. **Limit test frequency**: Run research tests less frequently than regular tests
+
    ```yaml
    # In CI/CD, run research tests only on main branch or releases
    ```
 
 3. **Use cheaper models for development**:
+
    ```yaml
    # Development
    provider: perplexity:sonar
-   
+
    # Production/Critical Tests
    provider: perplexity:sonar-pro
    ```
@@ -213,11 +218,11 @@ tests:
    ```yaml
    # Better - specific claim
    value: "Stock price must be within $5 of current AAPL price"
-   
+
    # Worse - vague requirement
    value: "Information about Apple stock should be accurate"
    ```
-:::
+   :::
 
 ## Output Format
 
