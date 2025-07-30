@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "promptfoo": "^0.116.7",
+    "promptfoo": "^0.117.4",
     "jks-js": "^1.1.4"
   },
   "keywords": [
