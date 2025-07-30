@@ -102,10 +102,10 @@ async function main() {
   // Default values for config
   let defaultConfig: any = {};
   let defaultConfigPath: string | undefined;
-  
-  // For non-help commands, wait for config before registering commands
+
+  // For non-help commands, wait for config and database before registering commands
   if (!isQuickCommand) {
-    const config = await configPromise;
+    const [config] = await Promise.all([configPromise, dbMigrationPromise]);
     defaultConfig = config.defaultConfig;
     defaultConfigPath = config.defaultConfigPath;
   }
@@ -153,8 +153,8 @@ async function main() {
   // Add hook to await remaining resources before command execution
   program.hook('preAction', async () => {
     if (!isQuickCommand) {
-      // Await remaining resources (DB and update check)
-      await Promise.all([dbMigrationPromise, updateCheckPromise]);
+      // Await update check for non-quick commands
+      await updateCheckPromise;
     }
   });
 

@@ -15,22 +15,27 @@ Successfully merged main branch into `feat/lazy-load-cli-commands` branch, resol
 ## Performance Optimizations Implemented
 
 ### 1. Deferred Update Checking
+
 - Created `updates-deferred.ts` for non-blocking update checks
 - Update check runs as a promise immediately but doesn't block startup
 - No caching per user request - runs every time
 
 ### 2. Deferred Database Migrations
+
 - Database migrations run as a promise for all commands
 - Only awaited in preAction hook when actually needed
 - Significantly reduces startup time for help commands
 
 ### 3. Deferred Default Config Loading
+
 - Default config loading runs as a promise
 - For quick commands (help, version), config is loaded in parallel with command registration
 - For other commands, config is awaited before command registration to ensure proper configuration
 
 ### 4. Unified Promise Pattern
+
 All three deferred resources follow the same pattern:
+
 ```typescript
 // Start all resources as promises immediately (non-blocking)
 const updateCheckPromise = checkForUpdatesDeferred().catch(() => {
@@ -44,12 +49,12 @@ const configPromise = import('./util/config/default').then((m) => m.loadDefaultC
 
 ### Command Performance Improvements
 
-| Command | Before | After | Improvement |
-|---------|---------|---------|-------------|
-| `promptfoo --help` | 1.90s | 0.36s | **81% faster** |
-| `promptfoo init --help` | 1.89s | 0.37s | **80% faster** |
-| `promptfoo eval --help` | 1.91s | 0.77s | **60% faster** |
-| `promptfoo --version` | 1.88s | 0.34s | **82% faster** |
+| Command                 | Before | After | Improvement    |
+| ----------------------- | ------ | ----- | -------------- |
+| `promptfoo --help`      | 1.90s  | 0.36s | **81% faster** |
+| `promptfoo init --help` | 1.89s  | 0.37s | **80% faster** |
+| `promptfoo eval --help` | 1.91s  | 0.77s | **60% faster** |
+| `promptfoo --version`   | 1.88s  | 0.34s | **82% faster** |
 
 ### Key Optimizations Impact
 

@@ -20,13 +20,13 @@ describe('modelScanCommand', () => {
     modelScanCommand(program);
 
     await expect(program.parseAsync(['node', 'test', 'scan-model'])).rejects.toThrow(
-      "error: missing required argument 'modelPaths'"
+      "error: missing required argument 'modelPaths'",
     );
   });
 
   it('should accept model paths and call modelScanAction', async () => {
     const { modelScanAction } = require('../../src/commands/modelScan/modelScanAction');
-    
+
     modelScanCommand(program);
     await program.parseAsync(['node', 'test', 'scan-model', 'model1.py', 'model2.py']);
 
@@ -37,13 +37,13 @@ describe('modelScanCommand', () => {
         timeout: '600',
         maxFileSize: '1000000',
         maxTotalSize: '5000000',
-      })
+      }),
     );
   });
 
   it('should pass options to modelScanAction', async () => {
     const { modelScanAction } = require('../../src/commands/modelScan/modelScanAction');
-    
+
     modelScanCommand(program);
     await program.parseAsync([
       'node',
@@ -66,13 +66,13 @@ describe('modelScanCommand', () => {
         output: 'results.json',
         verbose: true,
         timeout: '300',
-      })
+      }),
     );
   });
 
   it('should register the command with correct name and description', () => {
     modelScanCommand(program);
-    
+
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     expect(command).toBeDefined();
     expect(command?.description()).toBe('Scan model files for security risks');

@@ -22,8 +22,10 @@ export function showCommand(program: Command) {
     .action(async (id: string | undefined) => {
       const { handleEval } = await import('./show/showAction');
       const Eval = (await import('../models/eval')).default;
-      
-      if (!id) {
+
+      if (id) {
+        await handleEval(id);
+      } else {
         const latestEval = await Eval.latest();
         if (latestEval) {
           await handleEval(latestEval.id);
@@ -32,8 +34,6 @@ export function showCommand(program: Command) {
           logger.error('No eval found');
           process.exitCode = 1;
         }
-      } else {
-        await handleEval(id);
       }
     });
 

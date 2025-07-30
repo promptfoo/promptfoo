@@ -236,6 +236,17 @@ ${chalk.green(`${runCommand} -j 1`)}`),
         }
       }
 
+      // Check if running under redteam command and no config specified
+      if (!validatedOpts.config && command.parent?.name() === 'redteam') {
+        // Look for redteam.yaml in current directory
+        const fs = await import('fs');
+        const path = await import('path');
+        const redteamPath = path.join(process.cwd(), 'redteam.yaml');
+        if (fs.existsSync(redteamPath)) {
+          validatedOpts.config = [redteamPath];
+        }
+      }
+
       doEval(validatedOpts as any, defaultConfig, defaultConfigPath, evaluateOptions);
     });
 
