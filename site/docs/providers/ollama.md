@@ -58,43 +58,11 @@ providers:
       num_predict: 1024
 ```
 
-## Using defaultTest with Ollama
+## Using Ollama as a Local Grading Provider
 
-### Text models with assertions
+### Using Ollama for Model-Graded Assertions
 
-You can use `defaultTest` to apply common assertions across all test cases. This is particularly useful when evaluating model behavior:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - ollama:chat:llama3.2
-  - ollama:chat:phi4
-
-defaultTest:
-  assert:
-    # Ensure responses are helpful
-    - type: not-icontains
-      value: 'I cannot'
-    - type: not-icontains
-      value: "I'm unable to"
-
-    # Check for quality
-    - type: llm-rubric
-      value: 'The response is clear, accurate, and directly addresses the question'
-
-    # Ensure appropriate length
-    - type: javascript
-      value: 'output.length > 50 && output.length < 1000'
-
-tests:
-  - vars:
-      question: 'What is machine learning?'
-  - vars:
-      question: 'Explain quantum computing'
-```
-
-### Using Text and Embedding Providers for Different Assertion Types
-
-When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Ollama models for each type using the **provider type map** pattern:
+Ollama can be used as a local grading provider for assertions that require language model evaluation. When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Ollama models for each type:
 
 ```yaml title="promptfooconfig.yaml"
 defaultTest:
@@ -130,9 +98,9 @@ tests:
         threshold: 0.85
 ```
 
-### Embedding models with similarity assertions
+### Using Ollama Embedding Models for Similarity Assertions
 
-Ollama's embedding models can be used with the `similar` assertion to check semantic similarity:
+Ollama's embedding models can be used with the `similar` assertion to check semantic similarity between outputs and expected values:
 
 ```yaml title="promptfooconfig.yaml"
 providers:

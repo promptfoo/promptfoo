@@ -18,10 +18,10 @@ View the final example code [here](https://github.com/promptfoo/promptfoo/tree/m
 
 This guide assumes you have installed both promptfoo and Ollama.
 
-Run this on the command line to download the Llama2 base model:
+Run this on the command line to download the models:
 
 ```sh
-ollama pull llama2
+ollama pull llama3.3
 ollama pull llama2-uncensored
 ```
 
@@ -141,7 +141,7 @@ Let's set up a few assertions to automatically assess the output for correctness
 defaultTest:
   assert:
     - type: icontains
-      value: don't know
+      value: "don't know"
     - type: not-icontains
       value: AI language model
     - type: not-icontains

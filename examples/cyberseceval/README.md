@@ -30,6 +30,32 @@ providers:
 
 Run all tests:
 
+```bash
+npx promptfoo eval
 ```
 
+Run a sample of tests:
+
+```bash
+npx promptfoo eval --filter-sample 30
 ```
+
+View results:
+
+```bash
+npx promptfoo view
+```
+
+## Configuration
+
+The example includes:
+
+- `promptfooconfig.yaml`: Main configuration file
+- `prompt.json`: System prompt for the model
+- `prompt_injection.json`: CyberSecEval test cases
+
+## Learn More
+
+- [CyberSecEval Documentation](https://meta-llama.github.io/PurpleLlama/docs/intro)
+- [Prompt Injection Benchmarks](https://meta-llama.github.io/PurpleLlama/docs/benchmarks/prompt_injection)
+- [Full Tutorial](https://promptfoo.dev/blog/cyberseceval)
