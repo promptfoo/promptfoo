@@ -33,7 +33,6 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import { checkForUpdatesDeferred } from './updates-deferred';
 import { setupEnv } from './util';
-import { loadDefaultConfig } from './util/config/default';
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -74,8 +73,10 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   // Analyze command to optimize startup
   const commandArg = process.argv[2];
-  const isHelpCommand = !commandArg || ['--help', '-h', 'help'].includes(commandArg);
-  const isVersionCommand = ['--version', '-V', 'version'].includes(commandArg || '');
+  const hasHelpFlag = process.argv.includes('--help') || process.argv.includes('-h');
+  const hasVersionFlag = process.argv.includes('--version') || process.argv.includes('-V');
+  const isHelpCommand = !commandArg || commandArg === 'help' || hasHelpFlag;
+  const isVersionCommand = commandArg === 'version' || hasVersionFlag;
   const isQuickCommand = isHelpCommand || isVersionCommand;
   
   // Commands that need database access
@@ -100,8 +101,18 @@ async function main() {
     dbMigrationPromise = import('./migrate').then(m => m.runDbMigrations());
   }
 
-  // 3. Config loading - still needed for many commands, but could be optimized further
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  // 3. Config loading - defer until needed
+  let configPromise: Promise<{ defaultConfig: any; defaultConfigPath: string | undefined }> | null = null;
+  let defaultConfig: any = {};
+  let defaultConfigPath: string | undefined;
+  
+  // Start loading config for commands that need it (non-blocking)
+  const needsConfig = ['eval', 'debug', 'validate', 'generate', 'redteam'].includes(commandArg || '');
+  
+  if (needsConfig && !isQuickCommand) {
+    // Start loading but don't await
+    configPromise = import('./util/config/default').then(m => m.loadDefaultConfig());
+  }
 
   const program = new Command('promptfoo');
   program
@@ -113,6 +124,13 @@ async function main() {
       program.help();
       process.exitCode = 1;
     });
+
+  // If we need config, await it before registering commands
+  if (configPromise) {
+    const config = await configPromise;
+    defaultConfig = config.defaultConfig;
+    defaultConfigPath = config.defaultConfigPath;
+  }
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
@@ -141,8 +159,16 @@ async function main() {
   generateAssertionsCommand(generateCommand);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
-    await loadDefaultConfig(undefined, 'redteam');
+  // Load redteam config only if needed
+  let redteamConfig = defaultConfig;
+  let redteamConfigPath = defaultConfigPath;
+  
+  if (commandArg === 'redteam' && !isQuickCommand) {
+    const { loadDefaultConfig } = await import('./util/config/default');
+    const config = await loadDefaultConfig(undefined, 'redteam');
+    redteamConfig = config.defaultConfig ?? defaultConfig;
+    redteamConfigPath = config.defaultConfigPath ?? defaultConfigPath;
+  }
 
   redteamInitCommand(redteamBaseCommand);
   evalCommand(
