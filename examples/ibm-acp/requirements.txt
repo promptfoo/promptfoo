@@ -1,23 +1,7 @@
-# Core ACP system
-acp-sdk>=1.0.0,<2.0.0
-
-# FastAPI for backend server
-fastapi>=0.110.0,<1.0.0
-
-# Uvicorn as ASGI server (with standard extras)
-uvicorn[standard]>=0.29.0,<1.0.0
-
-# Gradio for UI interface
-gradio>=4.26.0,<5.0.0
-
-# OpenAI API client (latest stable, compatible with recent OpenAI changes)
-openai>=1.30.1,<2.0.0
-
-# Promptfoo for LLM evaluations (you’re using 0.117.1, lock close to this)
-promptfoo>=0.117.1,<0.118.0
-
-# Reportlab for PDF generation
-reportlab>=4.1.0,<5.0.0
-
-# PyPDF2 for PDF parsing/merging
-pypdf2>=3.0.1,<4.0.0
+acp-sdk==1.0.1
+fastapi==0.116.1
+uvicorn==0.35.0
+openai==1.91.0
+gradio==4.28.3
+reportlab==4.1.0
+requests==2.32.4
