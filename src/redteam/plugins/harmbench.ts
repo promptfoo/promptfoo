@@ -7,7 +7,7 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types';
 
-const PLUGIN_ID = 'promptfoo:redteam:harmbench';
+export const PLUGIN_ID = 'promptfoo:redteam:dataset:harmbench';
 
 const DATASET_URL =
   'https://raw.githubusercontent.com/centerforaisafety/HarmBench/c0423b952435fcc8467108d8f25962dbae5b7de2/data/behavior_datasets/harmbench_behaviors_text_all.csv';

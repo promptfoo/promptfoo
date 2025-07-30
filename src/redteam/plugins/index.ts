@@ -10,13 +10,15 @@ import {
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
-} from '../constants';
+  type HarmPlugin,
+} from '../constants/plugins';
 import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
+import { normalizePluginName } from '../normalization';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
@@ -49,7 +51,6 @@ import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
-import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;
@@ -143,7 +144,8 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
-  createPluginFactory(BeavertailsPlugin, 'beavertails'),
+  createPluginFactory(AegisPlugin, 'dataset:aegis'),
+  createPluginFactory(BeavertailsPlugin, 'dataset:beavertails'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {
@@ -165,23 +167,22 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
-  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
+  createPluginFactory(CyberSecEvalPlugin, 'dataset:cyberseceval'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
-  createPluginFactory(DoNotAnswerPlugin, 'donotanswer'),
+  createPluginFactory(DoNotAnswerPlugin, 'dataset:donotanswer'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
-  createPluginFactory(XSTestPlugin, 'xstest'),
+  createPluginFactory(XSTestPlugin, 'dataset:xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
-  createPluginFactory(HarmbenchPlugin, 'harmbench'),
-  createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
-  createPluginFactory(AegisPlugin, 'aegis'),
+  createPluginFactory(HarmbenchPlugin, 'dataset:harmbench'),
+  createPluginFactory(ToxicChatPlugin, 'dataset:toxic-chat'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
-  createPluginFactory(PlinyPlugin, 'pliny'),
+  createPluginFactory(PlinyPlugin, 'dataset:pliny'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
@@ -190,7 +191,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
-  createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
+  createPluginFactory(UnsafeBenchPlugin, 'dataset:unsafebench'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
@@ -348,3 +349,4 @@ export const Plugins: PluginFactory[] = [
   ...biasPlugins,
   ...remotePlugins,
 ];
+export { normalizePluginName };

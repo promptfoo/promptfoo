@@ -5,7 +5,7 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 
-const PLUGIN_ID = 'promptfoo:redteam:aegis';
+export const PLUGIN_ID = 'promptfoo:redteam:dataset:aegis';
 export const DATASET_PATH =
   'huggingface://datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0?split=train';
 

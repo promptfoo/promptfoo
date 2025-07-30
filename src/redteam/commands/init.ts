@@ -19,16 +19,9 @@ import telemetry, { type EventProperties } from '../../telemetry';
 import { isRunningUnderNpx, setupEnv } from '../../util';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import {
-  ADDITIONAL_STRATEGIES,
-  ALL_PLUGINS,
-  DEFAULT_PLUGINS,
-  DEFAULT_STRATEGIES,
-  HARM_PLUGINS,
-  type Plugin,
-  type Strategy,
-  subCategoryDescriptions,
-} from '../constants';
+import { subCategoryDescriptions } from '../constants/metadata';
+import { ALL_PLUGINS, DEFAULT_PLUGINS, HARM_PLUGINS, type Plugin } from '../constants/plugins';
+import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES, type Strategy } from '../constants/strategies';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 

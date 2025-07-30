@@ -4,12 +4,14 @@ import {
   ADDITIONAL_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
+  DATASET_PLUGINS,
   HARM_PLUGINS,
+  LEGACY_DATASET_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
-} from '../../../src/redteam/constants';
-import { Plugins } from '../../../src/redteam/plugins';
+} from '../../../src/redteam/constants/plugins';
+import { normalizePluginName, Plugins } from '../../../src/redteam/plugins';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
 
@@ -369,17 +371,22 @@ describe('Plugins', () => {
         ...Object.keys(HARM_PLUGINS),
         ...PII_PLUGINS,
         ...ADDITIONAL_PLUGINS,
+        ...DATASET_PLUGINS,
       ];
 
       // Check that each expected plugin is registered
+      const missingPlugins: string[] = [];
       expectedPlugins.forEach((pluginKey) => {
         const plugin = Plugins.find((p) => p.key === pluginKey);
-        expect(plugin).toBeDefined();
+        if (!plugin) {
+          missingPlugins.push(pluginKey);
+        }
       });
 
-      // Check the actual count matches the expected count
-      // Note: We don't expect exact equality because some plugins like collections may not be in the expected list
-      expect(Plugins.length).toBeGreaterThanOrEqual(expectedPlugins.length);
+      expect(missingPlugins).toEqual([]);
+
+      // Note: We don't check exact count because some plugins (like intent, policy) are registered
+      // but not included in the expected list above
     });
 
     it('should have unique plugin keys', () => {
@@ -394,6 +401,50 @@ describe('Plugins', () => {
         const matchingPlugins = Plugins.filter((p) => p.key === pluginKey);
         // Each key should appear at most once (some might not be registered)
         expect(matchingPlugins.length).toBeLessThanOrEqual(1);
+      });
+    });
+
+    it('should register dataset plugins with dataset: prefix', () => {
+      DATASET_PLUGINS.forEach((pluginKey) => {
+        const plugin = Plugins.find((p) => p.key === pluginKey);
+        expect(plugin).toBeDefined();
+        expect(pluginKey).toMatch(/^dataset:/);
+      });
+    });
+  });
+
+  describe('normalizePluginName', () => {
+    it('should normalize legacy dataset plugin names to new format', () => {
+      expect(normalizePluginName('beavertails')).toBe('dataset:beavertails');
+      expect(normalizePluginName('cyberseceval')).toBe('dataset:cyberseceval');
+      expect(normalizePluginName('donotanswer')).toBe('dataset:donotanswer');
+      expect(normalizePluginName('harmbench')).toBe('dataset:harmbench');
+      expect(normalizePluginName('pliny')).toBe('dataset:pliny');
+      expect(normalizePluginName('toxic-chat')).toBe('dataset:toxic-chat');
+      expect(normalizePluginName('unsafebench')).toBe('dataset:unsafebench');
+      expect(normalizePluginName('xstest')).toBe('dataset:xstest');
+      expect(normalizePluginName('aegis')).toBe('dataset:aegis');
+    });
+
+    it('should not modify non-dataset plugin names', () => {
+      expect(normalizePluginName('contracts')).toBe('contracts');
+      expect(normalizePluginName('excessive-agency')).toBe('excessive-agency');
+      expect(normalizePluginName('harmful:privacy')).toBe('harmful:privacy');
+      expect(normalizePluginName('pii:direct')).toBe('pii:direct');
+    });
+
+    it('should not modify already-prefixed dataset plugin names', () => {
+      expect(normalizePluginName('dataset:beavertails')).toBe('dataset:beavertails');
+      expect(normalizePluginName('dataset:pliny')).toBe('dataset:pliny');
+    });
+  });
+
+  describe('backwards compatibility', () => {
+    it('should find dataset plugins using legacy names', () => {
+      LEGACY_DATASET_PLUGINS.forEach((legacyName) => {
+        const normalizedName = normalizePluginName(legacyName);
+        const plugin = Plugins.find((p) => p.key === normalizedName);
+        expect(plugin).toBeDefined();
       });
     });
   });

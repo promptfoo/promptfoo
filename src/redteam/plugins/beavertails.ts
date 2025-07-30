@@ -5,7 +5,7 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 
-const PLUGIN_ID = 'promptfoo:redteam:beavertails';
+export const PLUGIN_ID = 'promptfoo:redteam:dataset:beavertails';
 
 const DATASETS = [
   // 'huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation',

@@ -27,15 +27,14 @@ import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
+import type { Severity } from '../constants/metadata';
 import {
-  ADDITIONAL_STRATEGIES,
-  DEFAULT_STRATEGIES,
-  type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   REDTEAM_MODEL,
-  type Severity,
-} from '../constants';
+  type Plugin,
+} from '../constants/plugins';
+import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../constants/strategies';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';

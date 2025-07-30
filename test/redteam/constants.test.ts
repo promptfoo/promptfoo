@@ -1,39 +1,44 @@
 import {
-  ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES,
-  AGENTIC_EXEMPT_PLUGINS,
-  AGENTIC_PLUGINS,
-  ALL_PLUGINS,
-  ALL_STRATEGIES,
-  BASE_PLUGINS,
-  COLLECTIONS,
-  CONFIG_REQUIRED_PLUGINS,
   categoryAliases,
   categoryDescriptions,
-  DATASET_EXEMPT_PLUGINS,
-  DATASET_PLUGINS,
-  DEFAULT_NUM_TESTS_PER_PLUGIN,
-  DEFAULT_PLUGINS,
   displayNameOverrides,
-  HARM_PLUGINS,
-  LLAMA_GUARD_ENABLED_CATEGORIES,
-  LLAMA_GUARD_REPLICATE_PROVIDER,
-  PII_PLUGINS,
   pluginDescriptions,
-  REDTEAM_MODEL,
-  REDTEAM_PROVIDER_HARM_PLUGINS,
   riskCategories,
   riskCategorySeverityMap,
   Severity,
-  STRATEGY_COLLECTION_MAPPINGS,
-  STRATEGY_COLLECTIONS,
-  STRATEGY_EXEMPT_PLUGINS,
   severityDisplayNames,
   strategyDescriptions,
   strategyDisplayNames,
   subCategoryDescriptions,
+} from '../../src/redteam/constants/metadata';
+import {
+  ADDITIONAL_PLUGINS,
+  AGENTIC_EXEMPT_PLUGINS,
+  AGENTIC_PLUGINS,
+  ALL_PLUGINS,
+  BASE_PLUGINS,
+  COLLECTIONS,
+  CONFIG_REQUIRED_PLUGINS,
+  DATASET_EXEMPT_PLUGINS,
+  DATASET_PLUGINS,
+  DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS,
+  HARM_PLUGINS,
+  LEGACY_DATASET_PLUGINS,
+  LLAMA_GUARD_ENABLED_CATEGORIES,
+  LLAMA_GUARD_REPLICATE_PROVIDER,
+  PII_PLUGINS,
+  REDTEAM_MODEL,
+  REDTEAM_PROVIDER_HARM_PLUGINS,
+  STRATEGY_EXEMPT_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
-} from '../../src/redteam/constants';
+} from '../../src/redteam/constants/plugins';
+import {
+  ADDITIONAL_STRATEGIES,
+  ALL_STRATEGIES,
+  STRATEGY_COLLECTION_MAPPINGS,
+  STRATEGY_COLLECTIONS,
+} from '../../src/redteam/constants/strategies';
 
 describe('constants', () => {
   it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {
@@ -123,6 +128,8 @@ describe('constants', () => {
           ...ADDITIONAL_PLUGINS,
           ...CONFIG_REQUIRED_PLUGINS,
           ...AGENTIC_PLUGINS,
+          ...DATASET_PLUGINS,
+          ...LEGACY_DATASET_PLUGINS,
         ]),
       ].sort(),
     );
@@ -130,15 +137,15 @@ describe('constants', () => {
 
   it('DATASET_PLUGINS should contain expected plugins', () => {
     const expectedPlugins = [
-      'beavertails',
-      'cyberseceval',
-      'donotanswer',
-      'harmbench',
-      'toxic-chat',
-      'aegis',
-      'pliny',
-      'unsafebench',
-      'xstest',
+      'dataset:aegis',
+      'dataset:beavertails',
+      'dataset:cyberseceval',
+      'dataset:donotanswer',
+      'dataset:harmbench',
+      'dataset:toxic-chat',
+      'dataset:pliny',
+      'dataset:unsafebench',
+      'dataset:xstest',
     ];
 
     expect(DATASET_PLUGINS).toEqual(expectedPlugins);
@@ -154,15 +161,15 @@ describe('constants', () => {
   });
 
   it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['dataset:pliny', 'dataset:unsafebench']);
   });
 
   it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
     const expectedPlugins = [
       'system-prompt-override',
       'agentic:memory-poisoning',
-      'pliny',
-      'unsafebench',
+      'dataset:pliny',
+      'dataset:unsafebench',
     ];
 
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
