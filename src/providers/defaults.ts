@@ -126,7 +126,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
-      webSearchProvider: anthropicProviders.gradingProvider, // Anthropic has built-in web search
+      webSearchProvider: anthropicProviders.gradingProvider, // Anthropic Claude has built-in web search (May 2025)
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&

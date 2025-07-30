@@ -1,0 +1,39 @@
+# Example: Web Search Assertion
+# This example demonstrates how to use the web-search assertion type
+# to verify current information from the web
+
+prompts:
+  - "What is the current stock price of Apple (AAPL)?"
+  - "Who is the current CEO of {{company}}?"
+  - "What is the weather like in {{city}} today?"
+
+providers:
+  # Anthropic - claimed to have built-in web search
+  - anthropic:messages:claude-sonnet-4
+  
+  # OpenAI with web search tool
+  - id: openai:responses:o4-mini
+    config:
+      tools:
+        - type: web_search_preview
+  
+  # Perplexity with built-in search
+  - perplexity:sonar
+
+tests:
+  - vars:
+      company: "Microsoft"
+    assert:
+      - type: web-search
+        value: "Satya Nadella CEO Microsoft"
+  
+  - vars:
+      city: "San Francisco"
+    assert:
+      - type: web-search
+        value: "San Francisco weather temperature today"
+  
+  - assert:
+      - type: web-search
+        value: "Apple AAPL stock price current"
+        threshold: 0.8

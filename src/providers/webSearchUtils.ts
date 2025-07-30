@@ -40,7 +40,8 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
   }
 
   // Anthropic has built-in web search capabilities
-  // No tool configuration needed - web search is automatically available
+  // According to their May 2025 release notes, web search is automatically available
+  // for Claude models without explicit tool configuration
   if (id.includes('anthropic')) {
     return true;
   }
