@@ -15,8 +15,10 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
+  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
+  MEDICAL_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
@@ -145,11 +147,13 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
   return config;
 }
 
-const categories = {
+export const categories = {
+  bias: BIAS_PLUGINS,
+  financial: FINANCIAL_PLUGINS,
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
-  bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
+  medical: MEDICAL_PLUGINS,
 } as const;
 
 /**
