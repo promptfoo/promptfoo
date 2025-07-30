@@ -203,9 +203,9 @@ With these changes, the CLI could achieve near-instant startup times (~50-200ms)
 
 ### 1. Deferred Update Check ✅
 Created `updates-deferred.ts` with:
-- Caching mechanism (24-hour TTL)
-- Non-blocking execution
+- Non-blocking execution (fire and forget)
 - Only runs for specific commands (eval, view, redteam)
+- Runs every time (no caching) as requested
 
 ### 2. Lazy Database Migrations ✅
 Modified `main.ts` to:

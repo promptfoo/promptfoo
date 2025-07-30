@@ -86,7 +86,7 @@ async function main() {
 
   // 1. Update check - non-blocking for appropriate commands
   if (shouldCheckUpdates && !isQuickCommand) {
-    // Fire and forget - don't await
+    // Fire and forget - don't await, runs every time
     checkForUpdatesDeferred().catch(() => {
       // Silently ignore update check failures
     });
