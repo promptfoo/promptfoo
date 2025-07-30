@@ -19,7 +19,7 @@ import {
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 

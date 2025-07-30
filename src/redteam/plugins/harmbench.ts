@@ -3,7 +3,7 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch';
-import { RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types';
 

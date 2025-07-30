@@ -21,7 +21,7 @@ import telemetry from '../../src/telemetry';
 import { fetchWithTimeout } from '../../src/util/fetch';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 

@@ -417,7 +417,7 @@ describe('Telemetry', () => {
       jest.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
+      jest.doMock('../src/util/fetch', () => ({
         fetchWithTimeout: jest.fn().mockRejectedValue(mockError),
       }));
 
@@ -475,11 +475,11 @@ describe('Telemetry', () => {
       jest.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
+      jest.doMock('../src/util/fetch', () => ({
         fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
       }));
 
-      const { fetchWithTimeout } = await import('../src/fetch');
+      const { fetchWithTimeout } = await import('../src/util/fetch');
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
