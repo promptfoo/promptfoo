@@ -297,8 +297,8 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getModelPath(): string {
-    // If model already includes imagen prefix, use it as is
-    if (this.modelName.includes('imagen')) {
+    // If model already starts with 'imagen-' prefix, use it as is
+    if (this.modelName.startsWith('imagen-')) {
       return this.modelName;
     }
     // Otherwise prepend imagen- prefix
@@ -315,7 +315,9 @@ export class GoogleImageProvider implements ApiProvider {
       'imagen-3.0-generate-001': 0.04,
       'imagen-3.0-fast-generate-001': 0.02,
     };
-    return costMap[this.modelName] || 0.04; // Default cost
+    // Use the normalized model path for cost lookup
+    const modelPath = this.getModelPath();
+    return costMap[modelPath] || 0.04; // Default cost
   }
 
   private async withRetry<T>(operation: () => Promise<T>, operationName: string): Promise<T> {

@@ -154,12 +154,52 @@ describe('GoogleImageProvider', () => {
     expect(provider3.id()).toBe('google:image:3.0-generate-001');
   });
 
+  it('should handle model path prefixing correctly', async () => {
+    const testCases = [
+      { input: 'imagen-3.0-generate-001', expected: 'imagen-3.0-generate-001' },
+      { input: '3.0-generate-001', expected: 'imagen-3.0-generate-001' },
+      { input: 'custom-imagen-model', expected: 'imagen-custom-imagen-model' }, // Should be prefixed
+      { input: 'imagen-4.0-ultra', expected: 'imagen-4.0-ultra' },
+    ];
+
+    for (const { input, expected } of testCases) {
+      const provider = new GoogleImageProvider(input, {
+        config: {
+          projectId: 'test-project',  // Ensure Vertex AI is used
+        },
+      });
+      
+      // Mock the API response to extract the model path from the request
+      const mockClient = {
+        request: jest.fn().mockResolvedValue({
+          data: {
+            predictions: [{ bytesBase64Encoded: 'test', mimeType: 'image/png' }],
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient,
+        projectId: 'test-project',
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining(`/models/${expected}:predict`),
+        }),
+      );
+    }
+  });
+
   it('should return correct cost for different models', async () => {
     // Test costs through actual API responses
     const testCases = [
       { model: 'imagen-4.0-ultra-generate-preview-06-06', expectedCost: 0.06 },
       { model: 'imagen-4.0-generate-preview-06-06', expectedCost: 0.04 },
       { model: 'imagen-4.0-fast-generate-preview-06-06', expectedCost: 0.02 },
+      { model: '3.0-generate-001', expectedCost: 0.04 }, // Without prefix
       { model: 'unknown-model', expectedCost: 0.04 }, // Default cost
     ];
 
