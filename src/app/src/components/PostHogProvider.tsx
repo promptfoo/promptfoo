@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { useUserStore } from '@app/stores/userStore';
 import posthog from 'posthog-js';
@@ -72,10 +72,13 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
     }
   }, []);
 
-  const value: PostHogContextType = {
-    posthog: isInitialized ? posthog : null,
-    isInitialized,
-  };
+  const value: PostHogContextType = useMemo(
+    () => ({
+      posthog: isInitialized ? posthog : null,
+      isInitialized,
+    }),
+    [isInitialized],
+  );
 
   if (DISABLE_TELEMETRY === 'true') {
     return children;

@@ -1,144 +1,93 @@
 ---
-title: 'Catch Promptfoo at Black Hat 2025 & DEF CON 33: Live LLM Hacks, Free Swag, Pool Party'
-description: 'Watch Promptfoo catch LLM exploits live at Black Hat USA and DEF CON 33. Booth 4712, Arsenal Labs demos, CEO deep-dive, and a pool-side open bar.'
+title: 'Join Promptfoo at Hacker Summer Camp 2025'
+description: 'Promptfoo will be attending the AI Summit, Black Hat, and DEF CON. We would love to meet you.'
 image: /img/blog/hacker-summer-camp-hero.webp
-imageAlt: 'Neon desert skyline with Promptfoo red panda mascot'
 keywords:
   [
     promptfoo,
-    LLM security,
-    prompt injection,
+    DEF CON,
+    Black Hat,
+    AI security,
     red teaming,
-    Black Hat 2025,
-    DEF CON 33,
-    Arsenal Labs,
-    enterprise AI,
+    LLM evaluation,
+    prompt engineering,
+    AI agents,
+    enterprise security,
+    compliance,
+    information security,
+    conferences,
   ]
-date: 2025-07-25
-authors: ['vanessa']
+date: 2025-07-24
+authors: [vanessa]
 tags: [company-update, conferences, defcon, blackhat]
 ---
 
-Promptfoo is heading to hacker summer camp. Catch us at Black Hat USA and DEF CON 33 for live LLM hack sessions, technical deep-dives, and a pool-side meetup.
+# Join Promptfoo at Hacker Summer Camp 2025
+
+Black Hat + DEF CON USA 2025 will be here before we know it, and we would love to meet you.
 
 <!-- truncate -->
 
-## Black Hat AI Summit: Tuesday, August 5
+## Meet Us at the AI Summit
 
-See us auto-red-team GPT-4.1 in under 30 seconds and learn how Fortune 500 teams eliminate LLM vulnerabilities before production.
+This one-day summit before Black Hat is the leading forum for discussing AI innovation. Meet us at the summit to learn how Fortune 500 companies automatically catch LLM vulnerabilities during development before they reach production environments.
 
-- **When**: Tuesday, August 5, 2025, 9:00 AM - 5:00 PM
-- **Where**: Mandalay Bay Convention Center, Las Vegas
-- **Highlights**: Live vulnerability discovery across 15+ attack vectors
+- **Location**: Mandalay Bay Convention Center, Las Vegas
+- **Dates**: Tuesday, August 5, 2025, 9:00 AM - 5:00 PM
 
-## Black Hat Business Hall: August 6-7
+## Meet Us at the Black Hat Business Hall
 
-Stop by booth **4712** in the AI Zone Pavilion. We'll run hands-on demos every 30 minutes, showing how [our open-source scanner](https://github.com/promptfoo/promptfoo) finds issues manual testing misses.
+We'll be in the Black Hat Business Hall on August 6th and 7th. You can also attend our CEO's talk on Wednesday, August 6th at 1:30 PM on the AI Stage, where Ian will showcase how leading enterprises are using Promptfoo to ship LLMs faster and more securely.
 
-### CEO Talk: Breaking and Fixing LLMs at Scale
+- **Location**: Mandalay Bay Convention Center, Las Vegas
+- **Booth**: AI Zone Pavilion, Booth #4712
+- **Dates**: Wednesday, August 6th and Thursday, August 7th
 
-CEO **Ian Webster** will showcase how leading enterprises use Promptfoo to ship LLMs faster and more securely, including a live breach and patch demo.
-
-- **When**: Wednesday, August 6, 1:30 PM
-- **Where**: AI Stage, Business Hall
-
-### Reserve a Demo Slot
+Want a deeper-dive demo? You can also book a 30-minute demo slot to see Promptfoo in action and learn how the platform can accelerate your AI security strategy.
 
 <iframe
   src="https://cal.com/team/promptfoo/promptfoo-at-blackhat?embed=true"
   width="100%"
   height="600px"
-  frameborder="0"
-  title="Book a Black Hat demo with Promptfoo"
-  loading="lazy"
-></iframe>
-<noscript>
-  <a href="https://cal.com/team/promptfoo/promptfoo-at-blackhat">Book your demo on Cal.com</a>
-</noscript>
+  frameBorder="0"
+  title="Book a meeting with Promptfoo"
+/>
 
-## Arsenal Labs: Watch Us Break Things
+## Try the Tool at Arsenal Labs
 
-Our researchers will run the attacks that keep CISOs awake:
+Watch our security researchers perform demonstrations of prompt injection, jailbreaking, and data exfiltration attacks. See how Promptfoo automatically detects and prevents these threats across GPT, Claude, Gemini, Llama, and other popular models.
 
-- Practical prompt injection
-- Modern jailbreak chains
-- Stealth data exfiltration
-- Cross-model fuzzing on GPT-4.1, Claude 4, Llama 4
+- **Location**: Mandalay Bay Convention Center, Las Vegas
+- **Booth**: Business Hall, Arsenal Lab Station 1
+- **Dates**: Wednesday, August 6th, 2:30 - 6:00 PM and Thursday, August 7th, 10:00 AM - 1:00 PM
 
-**Schedule**
+## Meet Us at the DEF CON Exhibitor Booth
 
-| Day       | Time               | Location                         |
-| --------- | ------------------ | -------------------------------- |
-| Wed Aug 6 | 2:30 PM - 6:00 PM  | Business Hall, Arsenal Station 1 |
-| Thu Aug 7 | 10:00 AM - 1:00 PM | Business Hall, Arsenal Station 1 |
+We'll be at DEF CON all weekend. Come by our booth to meet the team and maybe even get a t-shirt.
 
-Bring your nastiest prompts. We'll test them live.
+- **Location**: Las Vegas Convention Center
+- **Dates**: August 8 - 10, 2025
 
-## DEF CON 33 Expo: August 8-10
+## Have a Drink On Us at the Promptfoo Community Party
 
-Find the booth with a red panda mascot and the best security swag. Meet the team and maybe even get a t-shirt!
-
-- Live demos of [agent security testing](/blog/agent-security)
-- Limited-run "My LLM Got Pwned at DEF CON" shirts
-- Stickers that make your laptop _feel_ 73% safer
-
-## Promptfoo Pool-Side Party
-
-Open bar, lightning talks, great networking. RSVP early, space is limited.
+We're throwing an open bar [party](https://promptfoo.dev/events/defcon-2025) at the Star Wars-themed Millennium FANDOM BAR for our Promptfoo community members. Space is limited. RSVP now to secure your spot at the AI security party of DEF CON.
 
 <iframe
   src="https://lu.ma/embed/event/evt-68XHWgtMjY47tWT/simple"
   width="100%"
   height="525"
-  frameborder="0"
+  frameBorder="0"
   allow="fullscreen; payment"
-  title="RSVP for Promptfoo DEF CON party"
-  loading="lazy"
-></iframe>
-<noscript>
-  <a href="https://lu.ma/promptfoo-defcon-party">RSVP on Luma</a>
-</noscript>
+  aria-hidden="false"
+  tabIndex="0"
+/>
 
-## Join the Team
+## Explore Career Opportunities
 
-Promptfoo powers security workflows for **125,000 developers** and counting. Help us defend the next million.
+We're also expanding the team! If you're looking for a new role as an AI red teamer, deployment engineer, or software engineer, we would love to talk with you.
 
-- **AI Red Team Engineer**: Break LLMs all day (legally)
-- **Security Engineer**: Ship tools that harden AI deployments
-- **Developer Advocate**: Teach the world to hack responsibly
+[View open positions on our careers page →](https://promptfoo.dev/careers)
 
-<div id="ashby_embed"></div>
-<script src="https://jobs.ashbyhq.com/promptfoo/embed" async></script>
-<noscript>
-  <a href="https://jobs.ashbyhq.com/promptfoo">View all open positions</a>
-</noscript>
+## See You There
 
-## FAQ
-
-<details>
-<summary><strong>What is Promptfoo?</strong></summary>
-
-Promptfoo is an open-source LLM security scanner that finds prompt-level vulnerabilities before they reach users. Think Burp Suite for AI prompts, with enterprise integrations.
-
-</details>
-
-<details>
-<summary><strong>Where can I find you at Black Hat?</strong></summary>
-
-Booth 4712, AI Zone Pavilion, Mandalay Bay. Look for the red panda.
-
-</details>
-
-<details>
-<summary><strong>Do demos cost anything?</strong></summary>
-
-No. Just bring your toughest prompts and questions.
-
-</details>
-
-<details>
-<summary><strong>What should I bring to the booth?</strong></summary>
-
-Curiosity, challenging prompts, and an open mind about AI risk.
-
-</details>
+Hacker Summer Camp is the ultimate playground for security professionals, and we're ready to bring the heat. Stop by and meet the team shaping the future of AI security. See you in Vegas!
