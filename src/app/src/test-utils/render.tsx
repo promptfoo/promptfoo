@@ -10,7 +10,7 @@ export function render(ui: React.ReactElement, options?: Omit<RenderOptions, 'wr
 // Render with theme wrapper
 export function renderWithTheme(ui: React.ReactElement) {
   const theme = createTheme({ palette: { mode: 'light' } });
-  return rtlRender(<ThemeProvider theme={theme}>{ui as any}</ThemeProvider>);
+  return rtlRender(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
 }
 
 // Re-export everything

@@ -136,7 +136,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
                   marginRight: tokens.spacing.margin.tiny,
                 }}
               >
-                {React.isValidElement(icon) ? icon : icon}
+                {icon}
               </Box>
             ) : null}
             <Typography

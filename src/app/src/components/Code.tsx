@@ -16,7 +16,7 @@ export default function Code({ children }: { children: React.ReactNode }) {
         fontSize: '0.875rem',
       }}
     >
-      {children as any}
+      {children}
     </Box>
   );
 }

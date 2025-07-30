@@ -49,7 +49,7 @@ const renderPageShell = (initialPath = '/', children: React.ReactElement | null 
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/" element={<PageShell />}>
-          {children && <Route index element={children as any} />}
+          {children && <Route index element={children} />}
         </Route>
       </Routes>
     </MemoryRouter>,

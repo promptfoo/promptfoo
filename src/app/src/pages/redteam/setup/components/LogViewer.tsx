@@ -26,8 +26,8 @@ export function LogViewer({ logs }: LogViewerProps) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = React.useState(true);
   const [showScrollButton, setShowScrollButton] = React.useState(false);
-  const logsContainerRef = useRef<HTMLDivElement>(null!);
-  const fullscreenLogsContainerRef = useRef<HTMLDivElement>(null!);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const fullscreenLogsContainerRef = useRef<HTMLDivElement>(null);
   const previousScrollPositionRef = useRef<{ main: number; fullscreen: number }>({
     main: 0,
     fullscreen: 0,
@@ -202,7 +202,7 @@ export function LogViewer({ logs }: LogViewerProps) {
               bottom: 16,
               zIndex: 1,
             }}
-            onClick={() => scrollToBottom(logsContainerRef as React.RefObject<HTMLDivElement>)}
+            onClick={() => scrollToBottom(logsContainerRef)}
           >
             <KeyboardDoubleArrowDownIcon />
           </Fab>
@@ -248,9 +248,7 @@ export function LogViewer({ logs }: LogViewerProps) {
                 bottom: 16,
                 zIndex: 1,
               }}
-              onClick={() =>
-                scrollToBottom(fullscreenLogsContainerRef as React.RefObject<HTMLDivElement>)
-              }
+              onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
             >
               <KeyboardDoubleArrowDownIcon />
             </Fab>
