@@ -184,25 +184,30 @@ export default function PathSelector({
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      // Handle multiple files
-      const filePaths = Array.from(files).map((file) => {
-        // For folder selection, extract unique folder paths
-        if (file.webkitRelativePath) {
-          const parts = file.webkitRelativePath.split('/');
-          return parts.slice(0, -1).join('/') + '/';
-        }
-        return file.name;
-      });
+      // Check if this is a folder selection by looking for webkitRelativePath
+      const isFolder = files[0].webkitRelativePath !== '';
 
-      // Get unique paths
-      const uniquePaths = [...new Set(filePaths)];
+      if (isFolder) {
+        // For folder selection, extract only the root folder that was selected
+        const rootFolder = files[0].webkitRelativePath.split('/')[0];
+        const folderPath = rootFolder + '/';
 
-      // Add each unique path
-      uniquePaths.forEach((path) => {
-        if (!paths.some((p) => p.path === path)) {
-          handleAddPath(path);
+        // Only add if not already in the list
+        if (!paths.some((p) => p.path === folderPath)) {
+          handleAddPath(folderPath);
         }
-      });
+      } else {
+        // For file selection, handle multiple files
+        const filePaths = Array.from(files).map((file) => file.name);
+        const uniquePaths = [...new Set(filePaths)];
+
+        // Add each unique file
+        uniquePaths.forEach((path) => {
+          if (!paths.some((p) => p.path === path)) {
+            handleAddPath(path);
+          }
+        });
+      }
     }
 
     // Reset the input
