@@ -2,7 +2,8 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { pluginDescriptions } from './constants/metadata';
-import { DATASET_PLUGINS } from './constants/strategies';
+import { DATASET_PLUGINS } from './constants/plugins';
+import { normalizePluginName } from './normalization';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
 
 /**
@@ -225,8 +226,9 @@ export async function extractGoalFromPrompt(
   // Skip goal extraction for dataset plugins since they use static datasets with pre-defined goals
   if (pluginId) {
     const shortPluginId = getShortPluginId(pluginId);
-    if (DATASET_PLUGINS.includes(shortPluginId as any)) {
-      logger.debug(`Skipping goal extraction for dataset plugin: ${shortPluginId}`);
+    const normalizedPluginId = normalizePluginName(shortPluginId);
+    if (DATASET_PLUGINS.includes(normalizedPluginId as any)) {
+      logger.debug(`Skipping goal extraction for dataset plugin: ${normalizedPluginId}`);
       return null;
     }
   }

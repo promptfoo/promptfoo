@@ -98,7 +98,7 @@ describe('XSTest Plugin', () => {
 
     it('should have correct plugin ID', () => {
       const plugin = new XSTestPlugin(mockProvider, 'test', 'input');
-      expect(plugin.id).toBe('promptfoo:redteam:xstest');
+      expect(plugin.id).toBe('promptfoo:redteam:dataset:xstest');
     });
 
     it('should generate assertions for a prompt', () => {

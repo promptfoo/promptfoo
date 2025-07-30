@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
-import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../../../src/redteam/constants/plugins';
+import {
+  ADDITIONAL_STRATEGIES,
+  DEFAULT_STRATEGIES,
+} from '../../../src/redteam/constants/strategies';
 
 describe('Strategy IDs', () => {
   const findStrategyIdAssignments = (fileContent: string): string[] => {

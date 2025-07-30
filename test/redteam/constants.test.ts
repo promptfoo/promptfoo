@@ -20,8 +20,6 @@ import {
   BASE_PLUGINS,
   COLLECTIONS,
   CONFIG_REQUIRED_PLUGINS,
-  categoryAliases,
-  categoryDescriptions,
   DATASET_EXEMPT_PLUGINS,
   DATASET_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
@@ -31,21 +29,18 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
   PII_PLUGINS,
-  pluginDescriptions,
   REDTEAM_MODEL,
   REDTEAM_PROVIDER_HARM_PLUGINS,
-  riskCategories,
-  riskCategorySeverityMap,
-  Severity,
-  STRATEGY_COLLECTION_MAPPINGS,
-  STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
-  severityDisplayNames,
-  strategyDescriptions,
-  strategyDisplayNames,
-  subCategoryDescriptions,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants/plugins';
+import {
+  ADDITIONAL_STRATEGIES,
+  ALL_STRATEGIES,
+  DEFAULT_STRATEGIES,
+  STRATEGY_COLLECTION_MAPPINGS,
+  STRATEGY_COLLECTIONS,
+} from '../../src/redteam/constants/strategies';
 
 describe('constants', () => {
   it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {

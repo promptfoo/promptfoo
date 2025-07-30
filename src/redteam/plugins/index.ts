@@ -20,6 +20,7 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
+import { normalizePluginName } from '../normalization';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
@@ -52,17 +53,6 @@ import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
-
-/**
- * Normalizes plugin names to handle backwards compatibility with dataset plugins.
- * Converts legacy dataset plugin names (e.g., 'beavertails') to new format (e.g., 'dataset:beavertails')
- */
-export function normalizePluginName(pluginName: string): string {
-  if (LEGACY_DATASET_PLUGINS.includes(pluginName as LegacyDatasetPlugin)) {
-    return `dataset:${pluginName}`;
-  }
-  return pluginName;
-}
 
 export interface PluginFactory {
   key: string;
@@ -361,3 +351,4 @@ export const Plugins: PluginFactory[] = [
   ...biasPlugins,
   ...remotePlugins,
 ];
+export { normalizePluginName };

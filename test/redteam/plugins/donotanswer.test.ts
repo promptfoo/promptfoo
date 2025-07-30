@@ -46,7 +46,7 @@ describe('DoNotAnswerPlugin', () => {
 
   describe('DoNotAnswerPlugin class', () => {
     it('should have correct plugin ID', () => {
-      expect(plugin.id).toBe('promptfoo:redteam:donotanswer');
+      expect(plugin.id).toBe('promptfoo:redteam:dataset:donotanswer');
     });
 
     it('should set canGenerateRemote to false', () => {

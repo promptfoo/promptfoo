@@ -1,3 +1,4 @@
+import { DATASET_PLUGIN_ALIASES } from '../../src/redteam/constants/frameworks';
 import {
   type BasePlugin,
   COLLECTIONS,
@@ -6,9 +7,9 @@ import {
   PII_PLUGINS,
   type PIIPlugin,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from '../../src/redteam/constants/plugins';
+import { ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES } from '../../src/redteam/constants/strategies';
 import {
   RedteamConfigSchema,
   RedteamGenerateOptionsSchema,
