@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.117.3",
+  "version": "0.117.4",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -70,7 +70,8 @@
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "mcp": "node dist/src/main.js mcp"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",

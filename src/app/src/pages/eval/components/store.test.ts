@@ -27,6 +27,22 @@ const baseMetrics: Omit<PromptMetrics, 'namedScores'> = {
   namedScoresCount: {},
 };
 
+// Helper function to compute available metrics (mimics the store's computeAvailableMetrics)
+function computeAvailableMetrics(table: EvaluateTable | null): string[] {
+  if (!table || !table.head?.prompts) {
+    return [];
+  }
+
+  const metrics = new Set<string>();
+  table.head.prompts.forEach((prompt) => {
+    if (prompt.metrics?.namedScores) {
+      Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
+    }
+  });
+
+  return Array.from(metrics).sort();
+}
+
 describe('useTableStore', () => {
   beforeEach(() => {
     act(() => {
@@ -40,6 +56,8 @@ describe('useTableStore', () => {
           options: {
             metric: [],
             metadata: [],
+            plugin: [],
+            strategy: [],
           },
         },
       });
@@ -278,7 +296,19 @@ describe('useTableStore', () => {
       };
 
       act(() => {
-        useTableStore.getState().setTable(mockTable);
+        useTableStore.setState({
+          table: mockTable,
+          filters: {
+            values: {},
+            appliedCount: 0,
+            options: {
+              metric: computeAvailableMetrics(mockTable),
+              metadata: [],
+              plugin: [],
+              strategy: [],
+            },
+          },
+        });
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
@@ -314,7 +344,19 @@ describe('useTableStore', () => {
       };
 
       act(() => {
-        useTableStore.getState().setTable(mockTable);
+        useTableStore.setState({
+          table: mockTable,
+          filters: {
+            values: {},
+            appliedCount: 0,
+            options: {
+              metric: computeAvailableMetrics(mockTable),
+              metadata: [],
+              plugin: [],
+              strategy: [],
+            },
+          },
+        });
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
@@ -364,7 +406,19 @@ describe('useTableStore', () => {
       };
 
       act(() => {
-        useTableStore.getState().setTable(mockTable);
+        useTableStore.setState({
+          table: mockTable,
+          filters: {
+            values: {},
+            appliedCount: 0,
+            options: {
+              metric: computeAvailableMetrics(mockTable),
+              metadata: [],
+              plugin: [],
+              strategy: [],
+            },
+          },
+        });
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
@@ -396,7 +450,19 @@ describe('useTableStore', () => {
       };
 
       act(() => {
-        useTableStore.getState().setTable(mockTable);
+        useTableStore.setState({
+          table: mockTable,
+          filters: {
+            values: {},
+            appliedCount: 0,
+            options: {
+              metric: computeAvailableMetrics(mockTable),
+              metadata: [],
+              plugin: [],
+              strategy: [],
+            },
+          },
+        });
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
@@ -423,7 +489,19 @@ describe('useTableStore', () => {
       };
 
       act(() => {
-        useTableStore.getState().setTable(mockTable);
+        useTableStore.setState({
+          table: mockTable,
+          filters: {
+            values: {},
+            appliedCount: 0,
+            options: {
+              metric: computeAvailableMetrics(mockTable),
+              metadata: [],
+              plugin: [],
+              strategy: [],
+            },
+          },
+        });
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
