@@ -52,7 +52,11 @@ export class GoogleImageProvider implements ApiProvider {
     this.env = options.env;
 
     // Determine whether to use Vertex AI or Google AI Studio
-    this.useVertexApi = !!(this.config.projectId || getEnvString('GOOGLE_PROJECT_ID', this.env));
+    this.useVertexApi = !!(
+      this.config.projectId ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_PROJECT_ID
+    );
   }
 
   id(): string {
@@ -85,9 +89,13 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private async callVertexApi(prompt: string, apiKey: string): Promise<ProviderResponse> {
-    const projectId = this.config.projectId || getEnvString('GOOGLE_PROJECT_ID', this.env);
+    const projectId =
+      this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
     const location =
-      this.config.region || getEnvString('GOOGLE_LOCATION', this.env) || 'us-central1';
+      this.config.region ||
+      getEnvString('GOOGLE_LOCATION') ||
+      this.env?.GOOGLE_LOCATION ||
+      'us-central1';
 
     if (!projectId) {
       return {
@@ -194,7 +202,7 @@ export class GoogleImageProvider implements ApiProvider {
       for (const prediction of data.predictions) {
         // Handle the actual Vertex AI response structure
         const imageData = prediction.image || prediction;
-        const base64Image = imageData.bytesBase64Encoded || imageData.bytesBase64Encoded;
+        const base64Image = imageData.bytesBase64Encoded;
         const mimeType = imageData.mimeType || 'image/png';
 
         if (base64Image) {
@@ -242,7 +250,9 @@ export class GoogleImageProvider implements ApiProvider {
       personGeneration: this.config.personGeneration || 'allow_adult',
       safetyFilterLevel: this.config.safetyFilterLevel || 'block_medium_and_above',
       addWatermark: this.config.addWatermark !== false,
-      ...(this.config.seed !== undefined && { seed: this.config.seed }),
+      // Only include seed if watermark is disabled, as they're incompatible
+      ...(this.config.seed !== undefined &&
+        this.config.addWatermark === false && { seed: this.config.seed }),
     };
 
     logger.debug(`Calling Google AI Studio Image API: ${JSON.stringify(body)}`);
@@ -315,14 +325,21 @@ export class GoogleImageProvider implements ApiProvider {
     return (
       this.config.apiKey ||
       getEnvString('GOOGLE_API_KEY') ||
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-      (this.env as any)?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      getEnvString('GEMINI_API_KEY')
+      this.env?.GOOGLE_API_KEY ||
+      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
+      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
+      getEnvString('GEMINI_API_KEY') ||
+      this.env?.GEMINI_API_KEY
     );
   }
 
   private getApiHost(): string {
-    return this.config.apiHost || getEnvString('GOOGLE_API_HOST', this.env) || DEFAULT_API_HOST;
+    return (
+      this.config.apiHost ||
+      getEnvString('GOOGLE_API_HOST') ||
+      this.env?.GOOGLE_API_HOST ||
+      DEFAULT_API_HOST
+    );
   }
 
   private getModelPath(): string {
