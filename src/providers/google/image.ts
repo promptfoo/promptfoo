@@ -12,8 +12,8 @@ interface GoogleImageOptions {
   env?: EnvOverrides;
 }
 
-// Vertex AI request format
-interface VertexImageGenerationRequest {
+// Both Google AI Studio and Vertex AI use the same request format
+interface ImageGenerationRequest {
   instances: Array<{
     prompt: string;
   }>;
@@ -53,18 +53,28 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    // Imagen models are only available through Vertex AI
+    // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
       this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
 
-    if (!projectId) {
-      return {
-        error:
-          'Imagen models require Google Cloud Project ID. Set GOOGLE_PROJECT_ID environment variable or provide projectId in config.',
-      };
+    if (projectId) {
+      // Use Vertex AI if project ID is available
+      return this.callVertexApi(prompt);
     }
 
-    return this.callVertexApi(prompt);
+    // Otherwise, try Google AI Studio with API key
+    const apiKey = this.getApiKey();
+    if (apiKey) {
+      return this.callGeminiApi(prompt);
+    }
+
+    // If neither is available, provide helpful error
+    return {
+      error:
+        'Imagen models require either:\n' +
+        '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable\n' +
+        '2. Vertex AI: Set GOOGLE_PROJECT_ID environment variable or provide projectId in config, and run "gcloud auth application-default login"',
+    };
   }
 
   private async callVertexApi(prompt: string): Promise<ProviderResponse> {
@@ -89,7 +99,7 @@ export class GoogleImageProvider implements ApiProvider {
     logger.debug(`Vertex AI Image API endpoint: ${endpoint}`);
     logger.debug(`Project ID: ${projectId}, Location: ${location}, Model: ${modelPath}`);
 
-    const body: VertexImageGenerationRequest = {
+    const body: ImageGenerationRequest = {
       instances: [
         {
           prompt: prompt.trim(),
@@ -207,6 +217,127 @@ export class GoogleImageProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
+  }
+
+  private async callGeminiApi(prompt: string): Promise<ProviderResponse> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return {
+        error: 'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
+      };
+    }
+
+    const modelPath = this.getModelPath();
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelPath}:predict`;
+
+    logger.debug(`Google AI Studio Image API endpoint: ${endpoint}`);
+
+    const body: ImageGenerationRequest = {
+      instances: [
+        {
+          prompt: prompt.trim(),
+        },
+      ],
+      parameters: {
+        sampleCount: this.config.n || 1,
+        aspectRatio: this.config.aspectRatio || '1:1',
+        personGeneration: this.config.personGeneration || 'allow_all',
+        // Google AI Studio only supports 'block_low_and_above' for safetySetting
+        safetySetting: 'block_low_and_above',
+        // Google AI Studio doesn't support addWatermark parameter
+        // Only include seed if configured
+        ...(this.config.seed !== undefined && { seed: this.config.seed }),
+      },
+    };
+
+    logger.debug(`Making request to ${endpoint} with API key`);
+
+    try {
+      const response = await fetchWithCache(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+            ...(this.config.headers || {}),
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+      );
+
+      const data = response.data;
+      logger.debug(
+        `Response status: ${response.status}, data: ${JSON.stringify(data).substring(0, 200)}...`,
+      );
+
+      if (!data || typeof data !== 'object') {
+        return {
+          error: 'Invalid response from Google AI Studio',
+        };
+      }
+
+      if (data.error) {
+        return {
+          error: `Google AI Studio error: ${data.error.message || JSON.stringify(data.error)}`,
+        };
+      }
+
+      if (!data.predictions || data.predictions.length === 0) {
+        return {
+          error: 'No images generated',
+        };
+      }
+
+      const imageOutputs = [];
+      let totalCost = 0;
+
+      // Get cost per image from model prices
+      const costPerImage = this.getCost();
+
+      for (const prediction of data.predictions) {
+        // Handle the response structure
+        const imageData = prediction.image || prediction;
+        const base64Image = imageData.bytesBase64Encoded;
+        const mimeType = imageData.mimeType || 'image/png';
+
+        if (base64Image) {
+          // Return as markdown image with data URL
+          imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
+          totalCost += costPerImage;
+        }
+      }
+
+      if (imageOutputs.length === 0) {
+        return {
+          error: 'No valid images generated',
+        };
+      }
+
+      return {
+        output: imageOutputs.join('\n\n'),
+        cached: response.cached,
+        cost: totalCost,
+      };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+  }
+
+  private getApiKey(): string | undefined {
+    return (
+      this.config.apiKey ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
+      getEnvString('GEMINI_API_KEY') ||
+      this.env?.GOOGLE_API_KEY ||
+      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
+      this.env?.GEMINI_API_KEY
+    );
   }
 
   private getModelPath(): string {

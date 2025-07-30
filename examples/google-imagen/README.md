@@ -10,12 +10,28 @@ npx promptfoo@latest init --example google-imagen
 
 ## Prerequisites
 
+You can use Imagen models through either Google AI Studio or Vertex AI:
+
+### Option 1: Google AI Studio (Quick Start, Limited Features)
+- Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
+- **Supports**: Imagen 4 models only
+- **Limitations**: No `seed` or `addWatermark` parameters
+
+### Option 2: Vertex AI (Full Features)
 - Google Cloud project with billing enabled
 - Vertex AI API enabled
 - Authentication via `gcloud auth application-default login`
+- **Supports**: All Imagen models and all parameters
 
 ## Setup
 
+### For Google AI Studio:
+```bash
+# Set your API key
+export GOOGLE_API_KEY=your-api-key
+```
+
+### For Vertex AI:
 ```bash
 # Enable Vertex AI API
 gcloud services enable aiplatform.googleapis.com
@@ -29,7 +45,8 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ## Environment Variables
 
-- `GOOGLE_PROJECT_ID` - Your Google Cloud project ID
+- `GOOGLE_API_KEY` - Google AI Studio API key (Option 1)
+- `GOOGLE_PROJECT_ID` - Your Google Cloud project ID (Option 2)
 
 ## Available Models
 
@@ -46,9 +63,16 @@ npx promptfoo@latest eval
 
 ## Notes
 
-- **Imagen models are only available through Vertex AI** (Google AI Studio/Gemini API is not supported)
-- Vertex AI requires authentication via `gcloud auth application-default login` (API keys are not supported)
-- You must provide a Google Cloud project ID either via:
-  - `GOOGLE_PROJECT_ID` environment variable
-  - `projectId` in the provider config
-- Seed and watermark parameters are mutually exclusive
+- Imagen models are available through both **Google AI Studio** and **Vertex AI**
+- **Google AI Studio**:
+  - Uses API key authentication (quick start)
+  - Only supports Imagen 4 models (4.0 preview models)
+  - Limited parameter support (no `seed` or `addWatermark`)
+- **Vertex AI**:
+  - Requires authentication via `gcloud auth application-default login`
+  - Supports all Imagen models (both 3.0 and 4.0)
+  - Full parameter support including `seed` and `addWatermark`
+  - You must provide a Google Cloud project ID either via:
+    - `GOOGLE_PROJECT_ID` environment variable
+    - `projectId` in the provider config
+- Seed and watermark parameters are mutually exclusive (Vertex AI only)
