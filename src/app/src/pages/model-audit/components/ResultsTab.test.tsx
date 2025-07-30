@@ -57,25 +57,23 @@ describe('ResultsTab', () => {
 
     expect(ScanStatistics).toHaveBeenCalledTimes(1);
     expect(ScanStatistics).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         scanResults: mockScanResults,
         selectedSeverity: null,
         onSeverityClick: expect.any(Function),
         onFilesClick: mockOnShowFilesDialog,
-      },
-      {},
+      }),
     );
 
     expect(SecurityFindings).toHaveBeenCalledTimes(1);
     expect(SecurityFindings).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         scanResults: mockScanResults,
         selectedSeverity: null,
         onSeverityChange: expect.any(Function),
         showRawOutput: false,
         onToggleRawOutput: expect.any(Function),
-      },
-      {},
+      }),
     );
   });
 
@@ -108,7 +106,6 @@ describe('ResultsTab', () => {
         showRawOutput: false,
         onToggleRawOutput: expect.any(Function),
       }),
-      {},
     );
   });
 
@@ -141,7 +138,6 @@ describe('ResultsTab', () => {
         showRawOutput: true,
         onToggleRawOutput: expect.any(Function),
       }),
-      {},
     );
   });
 
@@ -212,7 +208,6 @@ describe('ResultsTab', () => {
         onSeverityClick: expect.any(Function),
         onFilesClick: mockOnShowFilesDialog,
       }),
-      {},
     );
 
     originalMock.mockReset();
