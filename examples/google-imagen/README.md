@@ -30,8 +30,14 @@ You can use Imagen models through either Google AI Studio or Vertex AI:
 ### For Google AI Studio:
 
 ```bash
-# Set your API key
+# Set your API key (Unix/Linux/macOS)
 export GOOGLE_API_KEY=your-api-key
+
+# For Windows Command Prompt:
+# set GOOGLE_API_KEY=your-api-key
+
+# For Windows PowerShell:
+# $env:GOOGLE_API_KEY="your-api-key"
 ```
 
 ### For Vertex AI:
@@ -43,8 +49,14 @@ gcloud services enable aiplatform.googleapis.com
 # Authenticate
 gcloud auth application-default login
 
-# Set project ID
+# Set project ID (Unix/Linux/macOS)
 export GOOGLE_PROJECT_ID=your-project-id
+
+# For Windows Command Prompt:
+# set GOOGLE_PROJECT_ID=your-project-id
+
+# For Windows PowerShell:
+# $env:GOOGLE_PROJECT_ID="your-project-id"
 ```
 
 ## Environment Variables

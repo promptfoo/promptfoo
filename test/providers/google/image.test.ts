@@ -5,13 +5,14 @@ jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('child_process', () => ({
-  execSync: jest.fn(),
+jest.mock('../../../src/providers/google/util', () => ({
+  getGoogleClient: jest.fn(),
 }));
 
 describe('GoogleImageProvider', () => {
   const mockFetchWithCache = fetchWithCache as jest.Mock;
-  const mockExecSync = require('child_process').execSync as jest.Mock;
+  const mockGetGoogleClient = require('../../../src/providers/google/util')
+    .getGoogleClient as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -85,40 +86,41 @@ describe('GoogleImageProvider', () => {
         },
       });
 
-      mockExecSync.mockReturnValue('test-oauth-token\n');
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          predictions: [
-            {
-              image: {
-                mimeType: 'image/png',
-                bytesBase64Encoded: 'base64data',
+      const mockClient = {
+        request: jest.fn().mockResolvedValue({
+          data: {
+            predictions: [
+              {
+                image: {
+                  mimeType: 'image/png',
+                  bytesBase64Encoded: 'base64data',
+                },
               },
-            },
-          ],
-        },
-        cached: false,
+            ],
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient,
+        projectId: 'test-project',
       });
 
       const result = await provider.callApi('Test prompt');
 
-      expect(mockExecSync).toHaveBeenCalledWith(
-        'gcloud auth application-default print-access-token',
-        expect.objectContaining({
-          encoding: 'utf-8',
-        }),
-      );
+      expect(mockGetGoogleClient).toHaveBeenCalled();
 
-      expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('aiplatform.googleapis.com'),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-oauth-token',
-          }),
+      expect(mockClient.request).toHaveBeenCalledWith({
+        url: expect.stringContaining('aiplatform.googleapis.com'),
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
         }),
-        300000,
-        'json',
-      );
+        data: expect.objectContaining({
+          instances: [{ prompt: 'Test prompt' }],
+        }),
+        timeout: 300000,
+      });
 
       expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
     });
@@ -130,42 +132,50 @@ describe('GoogleImageProvider', () => {
         },
       });
 
-      mockExecSync.mockImplementation(() => {
-        throw new Error('gcloud not found');
-      });
+      mockGetGoogleClient.mockRejectedValue(new Error('Google auth library not found'));
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('Failed to get OAuth token');
-      expect(result.error).toContain('gcloud not found');
+      expect(result.error).toContain('Failed to call Vertex AI');
+      expect(result.error).toContain('Google auth library not found');
     });
   });
 
   it('should support different model name formats', () => {
     const provider1 = new GoogleImageProvider('imagen-3.0-generate-001');
-    expect(provider1['getModelPath']()).toBe('imagen-3.0-generate-001');
+    expect(provider1.id()).toBe('google:image:imagen-3.0-generate-001');
 
-    // When model name already includes 'imagen', it should be returned as-is
+    // When model name already includes 'imagen', it should be preserved
     const provider2 = new GoogleImageProvider('gemini/imagen-3.0-generate-001');
-    expect(provider2['getModelPath']()).toBe('gemini/imagen-3.0-generate-001');
+    expect(provider2.id()).toBe('google:image:gemini/imagen-3.0-generate-001');
 
-    // When model name doesn't include 'imagen', it should be prefixed
+    // When model name doesn't include 'imagen', ID still includes full model name
     const provider3 = new GoogleImageProvider('3.0-generate-001');
-    expect(provider3['getModelPath']()).toBe('imagen-3.0-generate-001');
+    expect(provider3.id()).toBe('google:image:3.0-generate-001');
   });
 
-  it('should return correct cost for different models', () => {
-    const provider1 = new GoogleImageProvider('imagen-4.0-ultra-generate-preview-06-06');
-    expect(provider1['getCost']()).toBe(0.06);
+  it('should return correct cost for different models', async () => {
+    // Test costs through actual API responses
+    const testCases = [
+      { model: 'imagen-4.0-ultra-generate-preview-06-06', expectedCost: 0.06 },
+      { model: 'imagen-4.0-generate-preview-06-06', expectedCost: 0.04 },
+      { model: 'imagen-4.0-fast-generate-preview-06-06', expectedCost: 0.02 },
+      { model: 'unknown-model', expectedCost: 0.04 }, // Default cost
+    ];
 
-    const provider2 = new GoogleImageProvider('imagen-4.0-generate-preview-06-06');
-    expect(provider2['getCost']()).toBe(0.04);
+    for (const { model, expectedCost } of testCases) {
+      const provider = new GoogleImageProvider(model);
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
+        },
+        cached: false,
+      });
 
-    const provider3 = new GoogleImageProvider('imagen-4.0-fast-generate-preview-06-06');
-    expect(provider3['getCost']()).toBe(0.02);
-
-    const provider4 = new GoogleImageProvider('unknown-model');
-    expect(provider4['getCost']()).toBe(0.04); // Default cost
+      const result = await provider.callApi('Test prompt');
+      expect(result.cost).toBe(expectedCost);
+    }
   });
 
   describe('Google AI Studio', () => {
@@ -249,7 +259,7 @@ describe('GoogleImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toBe('Google AI Studio error: Invalid request');
+      expect(result.error).toBe('Invalid request');
     });
 
     it('should handle missing API key for Google AI Studio', async () => {
