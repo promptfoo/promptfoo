@@ -10,9 +10,33 @@ vi.mock('../../../store/providersStore', () => ({
   })),
 }));
 
+vi.mock('../../../schemas/providerSchemas', () => ({
+  getProviderSchema: vi.fn((providerId: string) => {
+    if (providerId.startsWith('openai:')) {
+      return {
+        fields: [
+          {
+            name: 'temperature',
+            type: 'number',
+            label: 'Temperature',
+            description: 'Controls randomness (0-2)',
+            defaultValue: 0.7,
+            validation: {
+              min: 0,
+              max: 2,
+            },
+          },
+        ],
+      };
+    }
+    return null;
+  }),
+  validateProviderConfig: vi.fn(() => ({ valid: true, errors: [] })),
+}));
+
 const mockProviders = [
-  { id: 'provider1', config: { temperature: 0.5 } },
-  { id: 'provider2', config: { temperature: 0.75 } },
+  { id: 'openai:gpt-4', config: { temperature: 0.5 } },
+  { id: 'anthropic:claude-3', config: { temperature: 0.75 } },
 ];
 
 const mockOnChange = vi.fn();
@@ -42,9 +66,9 @@ describe('ProviderSelector', () => {
     fireEvent.keyDown(screen.getByPlaceholderText('Select LLM providers'), { key: 'Enter' });
 
     expect(mockOnChange).toHaveBeenCalledWith([
-      { id: 'provider1', config: { temperature: 0.5 } },
-      { id: 'provider2', config: { temperature: 0.75 } },
-      { id: 'provider1' }, // This is the selected provider without config
+      { id: 'openai:gpt-4', config: { temperature: 0.5 } },
+      { id: 'anthropic:claude-3', config: { temperature: 0.75 } },
+      { id: 'openai:gpt-4' }, // This is the selected provider without config
     ]);
   });
 
