@@ -1,8 +1,7 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 
 import { callApi } from '@app/utils/api';
 import {
-  ArrowDropDown as ArrowDropDownIcon,
   Clear as ClearIcon,
   Cloud as CloudIcon,
   CloudUpload as CloudUploadIcon,
@@ -20,19 +19,11 @@ import Alert from '@mui/material/Alert';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import ButtonGroup from '@mui/material/ButtonGroup';
 import Chip from '@mui/material/Chip';
-import ClickAwayListener from '@mui/material/ClickAwayListener';
 import Grid from '@mui/material/Grid';
-import Grow from '@mui/material/Grow';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import MenuItem from '@mui/material/MenuItem';
-import MenuList from '@mui/material/MenuList';
 import Paper from '@mui/material/Paper';
-import Popper from '@mui/material/Popper';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
@@ -51,24 +42,8 @@ interface PathSelectorProps {
   currentWorkingDir?: string;
 }
 
-// Extend HTMLInputElement to support webkitdirectory attribute
-declare module 'react' {
-  interface InputHTMLAttributes<T> extends React.HTMLAttributes<T> {
-    webkitdirectory?: string;
-    directory?: string;
-  }
-}
-
-// Extend File interface to include webkitRelativePath
-declare global {
-  interface File {
-    readonly webkitRelativePath: string;
-  }
-
-  interface DataTransferItem {
-    webkitGetAsEntry(): FileSystemEntry | null;
-  }
-}
+// File input functionality removed to avoid browser security warnings
+// Using drag-drop and manual path input instead
 
 const SUPPORTED_FILE_EXTENSIONS = [
   '.pkl',
@@ -105,12 +80,9 @@ export default function PathSelector({
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [browseMenuOpen, setBrowseMenuOpen] = useState(false);
   const { recentScans, clearRecentScans } = useModelAuditStore();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
-  const browseButtonRef = useRef<HTMLDivElement>(null);
+  // Removed file input refs - using only drag-drop and manual input
 
   const handleAddPath = async (input: string) => {
     const trimmedPath = input.trim();
@@ -181,38 +153,8 @@ export default function PathSelector({
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      // Check if this is a folder selection by looking for webkitRelativePath
-      const isFolder = files[0].webkitRelativePath !== '';
-
-      if (isFolder) {
-        // For folder selection, extract only the root folder that was selected
-        const rootFolder = files[0].webkitRelativePath.split('/')[0];
-        const folderPath = rootFolder + '/';
-
-        // Only add if not already in the list
-        if (!paths.some((p) => p.path === folderPath)) {
-          handleAddPath(folderPath);
-        }
-      } else {
-        // For file selection, handle multiple files
-        const filePaths = Array.from(files).map((file) => file.name);
-        const uniquePaths = [...new Set(filePaths)];
-
-        // Add each unique file
-        uniquePaths.forEach((path) => {
-          if (!paths.some((p) => p.path === path)) {
-            handleAddPath(path);
-          }
-        });
-      }
-    }
-
-    // Reset the input
-    event.target.value = '';
-  };
+  // File selection removed - using only drag-drop and manual path input
+  // This avoids browser security warnings about "uploading" files
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -299,23 +241,6 @@ export default function PathSelector({
 
   return (
     <Box>
-      <input
-        ref={fileInputRef}
-        type="file"
-        style={{ display: 'none' }}
-        onChange={handleFileSelect}
-        accept={SUPPORTED_FILE_EXTENSIONS.join(',')}
-        multiple
-      />
-      <input
-        ref={folderInputRef}
-        type="file"
-        style={{ display: 'none' }}
-        onChange={handleFileSelect}
-        webkitdirectory=""
-        directory=""
-        multiple
-      />
 
       <Tabs
         value={activeTab}
@@ -410,10 +335,10 @@ export default function PathSelector({
               }}
             />
             <Typography variant="body1" gutterBottom sx={{ fontWeight: 500 }}>
-              Drop files or folders here
+              Drop files or folders here to add their paths
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              or use the controls below
+              or type the path manually below
             </Typography>
 
             {/* Supported file types */}
@@ -479,74 +404,6 @@ export default function PathSelector({
                   ),
                 }}
               />
-
-              {/* Browse Button with Dropdown */}
-              <ButtonGroup
-                variant="contained"
-                ref={browseButtonRef}
-                sx={{
-                  flexShrink: 0,
-                  height: '56px', // Match TextField height
-                  alignSelf: 'flex-start',
-                }}
-              >
-                <Button
-                  startIcon={<FolderOpenIcon />}
-                  onClick={() => fileInputRef.current?.click()}
-                  sx={{ height: '100%' }}
-                >
-                  Browse
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => setBrowseMenuOpen(!browseMenuOpen)}
-                  sx={{ height: '100%', minWidth: '40px' }}
-                >
-                  <ArrowDropDownIcon />
-                </Button>
-              </ButtonGroup>
-
-              <Popper
-                open={browseMenuOpen}
-                anchorEl={browseButtonRef.current}
-                transition
-                disablePortal
-                placement="bottom-end"
-                sx={{ zIndex: 1300 }}
-              >
-                {({ TransitionProps }) => (
-                  <Grow {...TransitionProps}>
-                    <Paper elevation={8}>
-                      <ClickAwayListener onClickAway={() => setBrowseMenuOpen(false)}>
-                        <MenuList>
-                          <MenuItem
-                            onClick={() => {
-                              fileInputRef.current?.click();
-                              setBrowseMenuOpen(false);
-                            }}
-                          >
-                            <ListItemIcon>
-                              <FileIcon fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText>Select Files</ListItemText>
-                          </MenuItem>
-                          <MenuItem
-                            onClick={() => {
-                              folderInputRef.current?.click();
-                              setBrowseMenuOpen(false);
-                            }}
-                          >
-                            <ListItemIcon>
-                              <FolderIcon fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText>Select Folder</ListItemText>
-                          </MenuItem>
-                        </MenuList>
-                      </ClickAwayListener>
-                    </Paper>
-                  </Grow>
-                )}
-              </Popper>
             </Stack>
           </Box>
 
