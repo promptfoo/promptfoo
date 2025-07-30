@@ -280,7 +280,7 @@ Then, enable 'Render markdown' under Table Settings.
 
 ## Web Search Support
 
-The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `web-search` assertion type. This allows models to search the web for current information and verify facts.
+The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `search-rubric` assertion type. This allows models to search the web for current information and verify facts.
 
 ### Enabling Web Search
 
@@ -296,7 +296,7 @@ providers:
 
 ### Using Web Search Assertions
 
-The `web-search` assertion type uses web search to quickly verify current information:
+The `search-rubric` assertion type uses web search to quickly verify current information:
 
 - Real-time data (weather, stock prices, news)
 - Current events and statistics
@@ -320,7 +320,7 @@ tests:
   - vars:
       city: New York
     assert:
-      - type: web-search
+      - type: search-rubric
         value: Current temperature in New York City
 ```
 
@@ -330,7 +330,7 @@ tests:
 Web search is included in the OpenAI Responses API pricing:
 
 - No additional cost beyond standard API usage
-- Each web-search assertion may perform one or more searches
+- Each search-rubric assertion may perform one or more searches
 - Use caching (`--cache`) to avoid redundant searches during development
   :::
 
@@ -341,7 +341,7 @@ Web search is included in the OpenAI Responses API pricing:
 3. **Use appropriate models**: o4-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
 
-For more details on using web-search assertions, see the [Web-Search documentation](/docs/configuration/expected-outputs/model-graded/web-search).
+For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).
 
 ## Using tools and functions
 
