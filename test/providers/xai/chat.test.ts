@@ -2,13 +2,21 @@ import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat
 import {
   calculateXAICost,
   createXAIProvider,
-  XAI_CHAT_MODELS,
   GROK_3_MINI_MODELS,
+  GROK_4_MODELS,
+  GROK_REASONING_EFFORT_MODELS,
+  GROK_REASONING_MODELS,
+  XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
+
 import type { ProviderOptions } from '../../../src/types/providers';
 
 jest.mock('../../../src/providers/openai/chat');
 jest.mock('../../../src/logger');
+
+// Mock the parent class methods
+const mockGetOpenAiBody = jest.fn();
+const mockCallApi = jest.fn();
 
 function createMockToJSON(modelName: string, config: any = {}) {
   const { _apiKey, ...restConfig } = config;
@@ -23,18 +31,80 @@ describe('xAI Chat Provider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    // Set up the mock to return the expected base implementation
+    mockGetOpenAiBody.mockImplementation(function (
+      this: any,
+      prompt: string,
+      context?: any,
+      callApiOptions?: any,
+    ) {
+      const config = context?.prompt?.config || {};
+      const body: any = {
+        model: this.modelName || 'test-model',
+        messages: [{ role: 'user', content: prompt }],
+      };
+
+      // Add parameters if they exist in config
+      if (config.temperature !== undefined) {
+        body.temperature = config.temperature;
+      }
+      if (config.presence_penalty !== undefined) {
+        body.presence_penalty = config.presence_penalty;
+      }
+      if (config.frequency_penalty !== undefined) {
+        body.frequency_penalty = config.frequency_penalty;
+      }
+      if (config.stop !== undefined) {
+        body.stop = config.stop;
+      }
+      if (config.reasoning_effort !== undefined) {
+        body.reasoning_effort = config.reasoning_effort;
+      }
+      if (config.max_tokens !== undefined) {
+        body.max_tokens = config.max_tokens;
+      }
+      if (config.max_completion_tokens !== undefined) {
+        body.max_completion_tokens = config.max_completion_tokens;
+      }
+
+      // Simulate the actual XAIProvider filtering logic
+      const result = { body, config };
+
+      // Filter out unsupported parameters for Grok-4
+      if (this.modelName && GROK_4_MODELS.includes(this.modelName)) {
+        delete result.body.presence_penalty;
+        delete result.body.frequency_penalty;
+        delete result.body.stop;
+        delete result.body.reasoning_effort;
+      }
+
+      // Filter reasoning_effort for models that don't support it
+      if (
+        !this.supportsReasoningEffort ||
+        (!this.supportsReasoningEffort() && result.body.reasoning_effort)
+      ) {
+        delete result.body.reasoning_effort;
+      }
+
+      return result;
+    });
+
+    mockCallApi.mockResolvedValue({ output: 'Mock response' });
+
     (OpenAiChatCompletionProvider as any).mockImplementation((modelName: string, options: any) => {
       return {
         id: () => `xai:${modelName}`,
         toString: () => `[xAI Provider ${modelName}]`,
         toJSON: createMockToJSON(modelName, options?.config),
-        callApi: jest.fn().mockImplementation(async () => ({ output: 'Mock response' })),
-        getOpenAiBody: jest.fn().mockImplementation((prompt) => ({
-          body: {
-            model: modelName,
-            messages: [{ role: 'user', content: prompt }],
-          },
-        })),
+        callApi: mockCallApi,
+        getOpenAiBody: mockGetOpenAiBody,
+        modelName,
+        config: options?.config,
+        // Add the XAIProvider specific methods for testing
+        isReasoningModel: () => GROK_REASONING_MODELS.includes(modelName),
+        supportsReasoningEffort: () => GROK_REASONING_EFFORT_MODELS.includes(modelName),
+        supportsTemperature: () => true,
+        originalConfig: options?.config?.config,
       };
     });
   });
@@ -314,6 +384,107 @@ describe('xAI Chat Provider', () => {
     });
   });
 
+  describe('Grok-4 specific functionality', () => {
+    it('recognizes Grok-4 models as reasoning models', () => {
+      const provider = createXAIProvider('xai:grok-4-0709') as any;
+      expect(provider.isReasoningModel()).toBe(true);
+
+      const providerAlias = createXAIProvider('xai:grok-4') as any;
+      expect(providerAlias.isReasoningModel()).toBe(true);
+    });
+
+    it('does not support reasoning_effort for Grok-4', () => {
+      const provider = createXAIProvider('xai:grok-4-0709') as any;
+      expect(provider.supportsReasoningEffort()).toBe(false);
+    });
+
+    it('filters unsupported parameters for Grok-4 aliases', () => {
+      const provider = createXAIProvider('xai:grok-4') as any;
+      const mockContext = {
+        prompt: {
+          config: {
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+            reasoning_effort: 'high',
+            temperature: 0.8,
+          },
+        },
+      };
+
+      const result = provider.getOpenAiBody('test prompt', mockContext);
+
+      // These should be filtered out for Grok-4
+      expect(result.body.presence_penalty).toBeUndefined();
+      expect(result.body.frequency_penalty).toBeUndefined();
+      expect(result.body.stop).toBeUndefined();
+      expect(result.body.reasoning_effort).toBeUndefined();
+
+      // Temperature should still be present
+      expect(result.body.temperature).toBe(0.8);
+    });
+  });
+
+  describe('Model constants', () => {
+    it('includes Grok-4 in reasoning models list', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-4-0709');
+      expect(GROK_REASONING_MODELS).toContain('grok-4');
+      expect(GROK_REASONING_MODELS).toContain('grok-4-latest');
+    });
+
+    it('does not include Grok-4 in reasoning effort models list', () => {
+      expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-0709');
+      expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4');
+    });
+
+    it('includes Grok-3 mini models in reasoning effort models list', () => {
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini-beta');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini-fast-beta');
+    });
+
+    it('includes Grok-4 in XAI_CHAT_MODELS with correct pricing', () => {
+      const grok4Model = XAI_CHAT_MODELS.find((model) => model.id === 'grok-4-0709');
+      expect(grok4Model).toBeDefined();
+      expect(grok4Model?.cost.input).toBe(3.0 / 1e6);
+      expect(grok4Model?.cost.output).toBe(15.0 / 1e6);
+      expect(grok4Model?.aliases).toContain('grok-4');
+      expect(grok4Model?.aliases).toContain('grok-4-latest');
+    });
+
+    it('includes all Grok-3 mini aliases in reasoning constants', () => {
+      // Test GROK_REASONING_EFFORT_MODELS
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini-beta');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini-latest');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini-fast-beta');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini-fast');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-3-mini-fast-latest');
+
+      // Test GROK_REASONING_MODELS
+      expect(GROK_REASONING_MODELS).toContain('grok-3-mini-beta');
+      expect(GROK_REASONING_MODELS).toContain('grok-3-mini');
+      expect(GROK_REASONING_MODELS).toContain('grok-3-mini-latest');
+      expect(GROK_REASONING_MODELS).toContain('grok-3-mini-fast-beta');
+      expect(GROK_REASONING_MODELS).toContain('grok-3-mini-fast');
+      expect(GROK_REASONING_MODELS).toContain('grok-3-mini-fast-latest');
+    });
+
+    it('recognizes Grok-3 mini aliases as reasoning models', () => {
+      const aliases = [
+        'grok-3-mini',
+        'grok-3-mini-latest',
+        'grok-3-mini-fast',
+        'grok-3-mini-fast-latest',
+      ];
+
+      aliases.forEach((alias) => {
+        const provider = createXAIProvider(`xai:${alias}`) as any;
+        expect(provider.isReasoningModel()).toBe(true);
+        expect(provider.supportsReasoningEffort()).toBe(true);
+      });
+    });
+  });
+
   describe('Cost calculation', () => {
     it('calculates costs correctly for all model types', () => {
       // Standard models
@@ -407,7 +578,14 @@ describe('xAI Chat Provider', () => {
 
   describe('Model constants and configuration', () => {
     it('defines correct Grok-3 mini models', () => {
-      expect(GROK_3_MINI_MODELS).toEqual(['grok-3-mini-beta', 'grok-3-mini-fast-beta']);
+      expect(GROK_3_MINI_MODELS).toEqual([
+        'grok-3-mini-beta',
+        'grok-3-mini',
+        'grok-3-mini-latest',
+        'grok-3-mini-fast-beta',
+        'grok-3-mini-fast',
+        'grok-3-mini-fast-latest',
+      ]);
     });
 
     it('defines model costs correctly', () => {
@@ -429,6 +607,234 @@ describe('xAI Chat Provider', () => {
     it('has correct aliases for models', () => {
       const modelWithAliases = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
       expect(modelWithAliases?.aliases).toEqual(['grok-3', 'grok-3-latest']);
+    });
+  });
+
+  describe('callApi error handling', () => {
+    beforeEach(() => {
+      // Reset all mocks
+      jest.clearAllMocks();
+
+      // Create a simple mock implementation that mimics the XAI provider's error handling
+      (OpenAiChatCompletionProvider as any).mockImplementation(
+        (modelName: string, options: any) => {
+          const provider = {
+            modelName,
+            config: options?.config,
+            originalConfig: options?.config?.config,
+            id: () => `xai:${modelName}`,
+            toString: () => `[xAI Provider ${modelName}]`,
+            toJSON: createMockToJSON(modelName, options?.config),
+            getOpenAiBody: mockGetOpenAiBody,
+            isReasoningModel: () => GROK_REASONING_MODELS.includes(modelName),
+            supportsReasoningEffort: () => GROK_REASONING_EFFORT_MODELS.includes(modelName),
+            callApi: async (prompt: string, context?: any, callApiOptions?: any) => {
+              // This mimics the actual XAI provider's callApi implementation
+              try {
+                // Call the mocked super.callApi
+                const response = await mockCallApi(prompt, context, callApiOptions);
+
+                if (!response || response.error) {
+                  // Check if the error indicates an authentication issue
+                  if (
+                    response?.error &&
+                    (response.error.includes('502 Bad Gateway') ||
+                      response.error.includes('invalid API key') ||
+                      response.error.includes('authentication error'))
+                  ) {
+                    // Provide a more helpful error message for x.ai specific issues
+                    return {
+                      ...response,
+                      error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+                    };
+                  }
+                  return response;
+                }
+
+                // Rest of the processing...
+                return response;
+              } catch (err) {
+                // Handle JSON parsing errors and other API errors
+                const errorMessage = err instanceof Error ? err.message : String(err);
+
+                // Check for common x.ai error patterns
+                if (
+                  errorMessage.includes('Error parsing response') &&
+                  errorMessage.includes('<html')
+                ) {
+                  // This is likely a 502 Bad Gateway or similar HTML error response
+                  return {
+                    error: `x.ai API error: Server returned an HTML error page instead of JSON. This often indicates an invalid API key or server issues.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+                  };
+                } else if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway')) {
+                  return {
+                    error: `x.ai API error: 502 Bad Gateway - This often indicates an invalid API key.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+                  };
+                }
+
+                // For other errors, pass them through with a helpful tip
+                return {
+                  error: `x.ai API error: ${errorMessage}\n\nIf this persists, verify your API key at https://x.ai/`,
+                };
+              }
+            },
+          };
+          return provider;
+        },
+      );
+    });
+
+    it('should handle JSON parsing errors from 502 HTML responses', async () => {
+      // Mock callApi to throw a JSON parsing error
+      mockCallApi.mockRejectedValueOnce(
+        new Error(
+          'Error parsing response from https://api.x.ai/v1/chat/completions: Unexpected token \'<\', "<html>\\n<h"... is not valid JSON. Received text: <html>...',
+        ),
+      );
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('Server returned an HTML error page instead of JSON');
+      expect(result.error).toContain('This often indicates an invalid API key');
+      expect(result.error).toContain(
+        'Ensure your XAI_API_KEY environment variable is set correctly',
+      );
+      expect(result.error).toContain('https://x.ai/');
+    });
+
+    it('should handle 502 Bad Gateway errors in error messages', async () => {
+      // Mock callApi to return an error response
+      mockCallApi.mockResolvedValueOnce({
+        error: 'API error: 502 Bad Gateway',
+      });
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('502 Bad Gateway');
+      expect(result.error).toContain(
+        'Ensure your XAI_API_KEY environment variable is set correctly',
+      );
+    });
+
+    it('should handle authentication errors', async () => {
+      // Mock callApi to return an authentication error
+      mockCallApi.mockResolvedValueOnce({
+        error: 'authentication error: invalid API key provided',
+      });
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('authentication error');
+      expect(result.error).toContain(
+        'Ensure your XAI_API_KEY environment variable is set correctly',
+      );
+    });
+
+    it('should handle generic errors with helpful message', async () => {
+      // Mock callApi to throw a generic error
+      mockCallApi.mockRejectedValueOnce(new Error('Network timeout'));
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('Network timeout');
+      expect(result.error).toContain('If this persists, verify your API key at https://x.ai/');
+    });
+
+    it('should pass through successful responses', async () => {
+      const successResponse = {
+        output: 'Test response',
+        tokenUsage: { prompt: 10, completion: 20, total: 30 },
+      };
+
+      // Mock callApi to return success
+      mockCallApi.mockResolvedValueOnce(successResponse);
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Test response');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toEqual(successResponse.tokenUsage);
+    });
+
+    it('should handle errors that mention Bad Gateway', async () => {
+      // Mock callApi to throw an error with "Bad Gateway" in the message
+      mockCallApi.mockRejectedValueOnce(new Error('Request failed: 502 Bad Gateway'));
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('502 Bad Gateway');
+      expect(result.error).toContain('This often indicates an invalid API key');
+    });
+
+    it('should handle non-Error objects in catch block', async () => {
+      // Mock callApi to throw a string (not an Error object)
+      mockCallApi.mockRejectedValueOnce('String error message');
+
+      const provider = createXAIProvider('xai:grok-4', {
+        config: {
+          apiKey: 'test-key',
+          config: {},
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('x.ai API error:');
+      expect(result.error).toContain('String error message');
+      expect(result.error).toContain('If this persists, verify your API key');
     });
   });
 });

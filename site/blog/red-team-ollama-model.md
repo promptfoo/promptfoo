@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2024-11-23
 authors: [ian]
+tags: [technical-guide, red-teaming]
 ---
 
 # How to Red Team an Ollama Model

@@ -1,4 +1,5 @@
 import React from 'react';
+
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -7,10 +8,10 @@ import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
+import type { ProviderOptions } from '@promptfoo/types';
 
 const defaultProviders: ProviderOptions[] = (
   [] as (ProviderOptions & { id: string; label?: string })[]
@@ -403,18 +404,6 @@ const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
-    {
-      id: 'vertex:gemini-2.5-pro-exp-03-25',
-      label: 'Vertex: Gemini 2.5 Pro (Exp)',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
     {
       id: 'vertex:gemini-2.5-pro',
       label: 'Vertex: Gemini 2.5 Pro',

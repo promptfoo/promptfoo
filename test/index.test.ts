@@ -5,7 +5,8 @@ import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
 import * as providers from '../src/providers';
-import { writeOutput, writeMultipleOutputs } from '../src/util';
+import { writeMultipleOutputs, writeOutput } from '../src/util';
+import * as fileUtils from '../src/util/file';
 
 jest.mock('../src/cache');
 jest.mock('../src/database', () => ({
@@ -17,7 +18,36 @@ jest.mock('../src/evaluator', () => {
   const originalModule = jest.requireActual('../src/evaluator');
   return {
     ...originalModule,
-    evaluate: jest.fn().mockResolvedValue({ results: [] }),
+    evaluate: jest.fn().mockImplementation(async (testSuite) => {
+      // Return a mock evaluation result that includes the test cases
+      const results = (testSuite.tests || []).map((test: any, idx: number) => {
+        // Merge defaultTest with test case
+        const mergedTest = { ...testSuite.defaultTest, ...test };
+        if (testSuite.defaultTest?.assert && test.assert) {
+          mergedTest.assert = [...(testSuite.defaultTest.assert || []), ...(test.assert || [])];
+        }
+        if (testSuite.defaultTest?.vars && test.vars) {
+          mergedTest.vars = { ...testSuite.defaultTest.vars, ...test.vars };
+        }
+
+        return {
+          testCase: mergedTest,
+          test: mergedTest,
+          vars: mergedTest.vars || {},
+          promptIdx: 0,
+          testIdx: idx,
+          success: true,
+          score: 1,
+          latencyMs: 100,
+          namedScores: {},
+          failureReason: 0,
+        };
+      });
+      return {
+        results,
+        toEvaluateSummary: async () => ({ results }),
+      };
+    }),
   };
 });
 jest.mock('../src/migrate');
@@ -38,6 +68,7 @@ jest.mock('../src/providers', () => {
 });
 jest.mock('../src/telemetry');
 jest.mock('../src/util');
+jest.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -76,7 +107,6 @@ describe('index.ts exports', () => {
     'TestGeneratorConfigSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
-    'TokenUsageSchema',
     'UnifiedConfigSchema',
     'VarsSchema',
   ];
@@ -108,11 +138,14 @@ describe('index.ts exports', () => {
       },
       Extractors: {
         extractEntities: expect.any(Function),
+        extractMcpToolsInfo: expect.any(Function),
         extractSystemPurpose: expect.any(Function),
       },
       Graders: expect.any(Object),
       Plugins: expect.any(Object),
       Strategies: expect.any(Object),
+      generate: expect.any(Function),
+      run: expect.any(Function),
     });
   });
 
@@ -792,5 +825,130 @@ describe('evaluate function', () => {
         );
       });
     });
+  });
+});
+
+describe('evaluate with external defaultTest', () => {
+  let loadApiProvidersSpy: jest.SpyInstance;
+  let loadApiProviderSpy: jest.SpyInstance;
+  let maybeLoadFromExternalFileSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Set up spies for provider functions
+    loadApiProvidersSpy = jest.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
+    loadApiProviderSpy = jest.spyOn(providers, 'loadApiProvider').mockResolvedValue({
+      id: () => 'mock-provider',
+      callApi: jest.fn(),
+    });
+
+    maybeLoadFromExternalFileSpy = jest.mocked(fileUtils.maybeLoadFromExternalFile);
+  });
+
+  afterEach(() => {
+    loadApiProvidersSpy.mockRestore();
+    loadApiProviderSpy.mockRestore();
+  });
+
+  it('should load defaultTest from external file when using file:// syntax', async () => {
+    const externalDefaultTest = {
+      assert: [{ type: 'equals' as const, value: 'test' }],
+      vars: { foo: 'bar' },
+      options: { provider: 'openai:gpt-4' },
+    };
+
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+    maybeLoadFromExternalFileSpy.mockResolvedValueOnce(externalDefaultTest);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: 'file://path/to/defaultTest.yaml',
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(fileUtils.maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      'file://path/to/defaultTest.yaml',
+    );
+    const result = summary.results[0] as any;
+    expect(result.testCase.assert).toEqual(externalDefaultTest.assert);
+  });
+
+  it('should handle inline defaultTest objects', async () => {
+    const inlineDefaultTest = {
+      assert: [{ type: 'contains' as const, value: 'inline' }],
+      vars: { inline: true },
+    };
+
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: inlineDefaultTest,
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    const result = summary.results[0] as any;
+    expect(result.test.assert).toEqual(inlineDefaultTest.assert);
+    expect(result.test.vars).toMatchObject(inlineDefaultTest.vars);
+  });
+
+  it('should handle missing external defaultTest file gracefully', async () => {
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: 'file://nonexistent.yaml',
+    };
+
+    maybeLoadFromExternalFileSpy.mockRejectedValueOnce(
+      new Error('File does not exist: /Users/mdangelo/projects/pf-codium/nonexistent.yaml'),
+    );
+
+    await expect(evaluate(testSuite, {})).rejects.toThrow('File does not exist');
+  });
+
+  it('should not load external file when defaultTest is not a file:// string', async () => {
+    const mockApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+    const testSuite = {
+      providers: ['mock-provider'],
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
+      tests: [{ vars: { test: 'value' } }],
+      defaultTest: undefined,
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(fileUtils.maybeLoadFromExternalFile).not.toHaveBeenCalled();
+    expect(summary.results).toHaveLength(1);
   });
 });

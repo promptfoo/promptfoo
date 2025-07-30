@@ -1,5 +1,7 @@
 import path from 'path';
+
 import { providerMap } from '../../src/providers/registry';
+
 import type { LoadApiProviderContext } from '../../src/types';
 import type { ProviderOptions } from '../../src/types/providers';
 
@@ -165,6 +167,7 @@ describe('Provider Registry', () => {
         'promptfoo:redteam:iterative',
         'promptfoo:redteam:iterative:image',
         'promptfoo:redteam:iterative:tree',
+        'promptfoo:redteam:mischievous-user',
         'promptfoo:redteam:pandamonium',
       ];
 

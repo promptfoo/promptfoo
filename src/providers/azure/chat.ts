@@ -1,9 +1,9 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -11,6 +11,8 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
+
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
@@ -53,7 +55,30 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     };
 
     // Parse chat prompt
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+    // Inject system prompt if configured
+    if (config.systemPrompt) {
+      // Check if there's already a system message
+      const existingSystemMessageIndex = messages.findIndex((msg: any) => msg.role === 'system');
+
+      if (existingSystemMessageIndex >= 0) {
+        // Replace existing system message
+        messages[existingSystemMessageIndex] = {
+          role: 'system',
+          content: config.systemPrompt,
+        };
+      } else {
+        // Prepend new system message
+        messages = [
+          {
+            role: 'system',
+            content: config.systemPrompt,
+          },
+          ...messages,
+        ];
+      }
+    }
 
     // Response format with variable rendering
     const responseFormat = config.response_format
@@ -140,6 +165,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     let data;
     let cached = false;
+    let httpStatus: number;
     try {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
@@ -170,6 +196,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
+      httpStatus = status;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -189,81 +216,73 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response (status ${httpStatus}): ${JSON.stringify(data)}`);
+
+    // Inputs and outputs can be flagged by content filters.
+    // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
+    let flaggedInput = false;
+    let flaggedOutput = false;
+    let output = '';
+    let logProbs: any;
+    let finishReason: string;
+
     try {
       if (data.error) {
-        if (data.error.code === 'content_filter' && data.error.status === 400) {
+        // Was the input prompt deemed inappropriate?
+        if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
+          flaggedInput = true;
+          output = data.error.message;
+          finishReason = FINISH_REASON_MAP.content_filter;
+        } else {
           return {
-            output: data.error.message,
-            guardrails: {
-              flagged: true,
-              flaggedInput: true,
-              flaggedOutput: false,
-            },
+            error: `API response error: ${data.error.code} ${data.error.message}`,
           };
         }
-        return {
-          error: `API response error: ${data.error.code} ${data.error.message}`,
-        };
-      }
-      const hasDataSources = !!config.dataSources;
-      const choice = hasDataSources
-        ? data.choices.find(
-            (choice: { message: { role: string; content: string } }) =>
-              choice.message.role === 'assistant',
-          )
-        : data.choices[0];
+      } else {
+        const hasDataSources = !!config.dataSources;
+        const choice = hasDataSources
+          ? data.choices.find(
+              (choice: { message: { role: string; content: string } }) =>
+                choice.message.role === 'assistant',
+            )
+          : data.choices[0];
 
-      const message = choice?.message;
+        const message = choice?.message;
 
-      // Handle structured output
-      let output = message.content;
+        // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
+        // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
+        finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
-      if (output == null) {
-        if (choice.finish_reason === 'content_filter') {
-          output =
-            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
+        // Handle structured output
+        output = message?.content;
+
+        // Check for errors indicating that the content filters did not run on the completion.
+        if (choice.content_filter_results && choice.content_filter_results.error) {
+          const { code, message } = choice.content_filter_results.error;
+          logger.warn(
+            `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
+          );
         } else {
+          // Was the completion filtered?
+          flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
+        }
+
+        if (output == null) {
           // Restore tool_calls and function_call handling
           output = message.tool_calls ?? message.function_call;
+        } else if (
+          config.response_format?.type === 'json_schema' ||
+          config.response_format?.type === 'json_object'
+        ) {
+          try {
+            output = JSON.parse(output);
+          } catch (err) {
+            logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+          }
         }
-      } else if (
-        config.response_format?.type === 'json_schema' ||
-        config.response_format?.type === 'json_object'
-      ) {
-        try {
-          output = JSON.parse(output);
-        } catch (err) {
-          logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
-        }
-      }
 
-      const logProbs = data.choices[0].logprobs?.content?.map(
-        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-      );
-
-      const contentFilterResults = data.choices[0]?.content_filter_results;
-      const promptFilterResults = data.prompt_filter_results;
-
-      const guardrailsTriggered = !!(
-        (contentFilterResults && Object.keys(contentFilterResults).length > 0) ||
-        (promptFilterResults && promptFilterResults.length > 0)
-      );
-
-      const flaggedInput =
-        promptFilterResults?.some((result: any) =>
-          Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
-        ) ?? false;
-
-      const flaggedOutput = Object.values(contentFilterResults || {}).some(
-        (filter: any) => filter.filtered,
-      );
-
-      if (flaggedOutput) {
-        logger.warn(
-          `Azure model ${this.deploymentName} output was flagged by content filter: ${JSON.stringify(
-            contentFilterResults,
-          )}`,
+        logProbs = data.choices[0].logprobs?.content?.map(
+          (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
         );
       }
 
@@ -289,21 +308,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             },
         cached,
         logProbs,
+        finishReason,
         cost: calculateAzureCost(
           this.deploymentName,
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
-        ...(guardrailsTriggered
-          ? {
-              guardrails: {
-                flaggedInput,
-                flaggedOutput,
-                flagged: flaggedInput || flaggedOutput,
-              },
-            }
-          : {}),
+        guardrails: {
+          flagged: flaggedInput || flaggedOutput,
+          flaggedInput,
+          flaggedOutput,
+        },
       };
     } catch (err) {
       return {

@@ -1,14 +1,15 @@
 import WebSocket, { type ClientOptions } from 'ws';
 import logger from '../logger';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
+import { getNunjucksEngine } from '../util/templates';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
-import { getNunjucksEngine } from '../util/templates';
 
 const nunjucks = getNunjucksEngine();
 

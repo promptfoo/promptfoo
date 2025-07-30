@@ -1,6 +1,7 @@
 import { CustomPlugin, loadCustomPluginDefinition } from '../../../src/redteam/plugins/custom';
-import type { ApiProvider } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
+
+import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/util/file', () => ({
   maybeLoadFromExternalFile: jest.fn(),

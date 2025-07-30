@@ -74,7 +74,7 @@ export interface ProviderOptions {
   };
 }
 
-export interface BrowserStep {
+interface BrowserStep {
   action: 'navigate' | 'click' | 'type' | 'extract' | 'screenshot' | 'wait' | 'waitForNewChildren';
   args?: {
     url?: string;
@@ -89,25 +89,6 @@ export interface BrowserStep {
     optional?: boolean;
   };
   name?: string;
-}
-
-export interface UpdateConfigFunction {
-  (section: keyof Config, value: any): void;
-}
-
-export interface RedTeamConfigHook {
-  config: Config;
-  updateConfig: UpdateConfigFunction;
-  resetConfig: () => void;
-}
-
-export interface ComponentProps {
-  config: Config;
-  updateConfig: UpdateConfigFunction;
-}
-
-export interface YamlPreviewProps {
-  config: Config;
 }
 
 export interface LocalPluginConfig {

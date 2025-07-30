@@ -1,5 +1,6 @@
-import type { ProviderOptions } from '../types';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+
+import type { ProviderOptions } from '../types';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {

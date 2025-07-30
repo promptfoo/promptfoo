@@ -24,11 +24,6 @@ jest.mock('../../../src/util/cloud', () => ({
   getConfigFromCloud: jest.fn(),
 }));
 
-// Add logger mock
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-}));
-
 describe('redteamRunCommand', () => {
   let program: Command;
   let originalExitCode: number | undefined;

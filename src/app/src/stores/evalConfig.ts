@@ -1,126 +1,64 @@
-import type {
-  DerivedMetric,
-  EnvOverrides,
-  EvaluateOptions,
-  EvaluateTestSuiteWithEvaluateOptions,
-  ProviderOptions,
-  TestCase,
-  UnifiedConfig,
-  Scenario,
-} from '@promptfoo/types';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export interface State {
-  env: EnvOverrides;
-  testCases: TestCase[];
-  description: string;
-  providers: ProviderOptions[];
-  prompts: any[];
-  defaultTest: TestCase;
-  derivedMetrics: DerivedMetric[];
-  evaluateOptions: EvaluateOptions;
-  scenarios: Scenario[];
-  extensions: string[];
-  setEnv: (env: EnvOverrides) => void;
-  setTestCases: (testCases: TestCase[]) => void;
-  setDescription: (description: string) => void;
-  setProviders: (providers: ProviderOptions[]) => void;
-  setPrompts: (prompts: any[]) => void;
-  setDefaultTest: (testCase: TestCase) => void;
-  setDerivedMetrics: (derivedMetrics: DerivedMetric[]) => void;
-  setEvaluateOptions: (options: EvaluateOptions) => void;
-  setScenarios: (scenarios: Scenario[]) => void;
-  setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
+import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types';
+
+export interface EvalConfigState {
+  config: Partial<UnifiedConfig>;
+  /** Replace the entire config */
+  setConfig: (config: Partial<UnifiedConfig>) => void;
+  /** Merge updates into the existing config */
+  updateConfig: (updates: Partial<UnifiedConfig>) => void;
+  /** Reset config to defaults */
+  reset: () => void;
+  /** Get the test suite in the expected format */
   getTestSuite: () => EvaluateTestSuiteWithEvaluateOptions;
-  setExtensions: (extensions: string[]) => void;
 }
 
-export const useStore = create<State>()(
+export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
+  description: '',
+  providers: [],
+  prompts: [],
+  tests: [],
+  defaultTest: {},
+  derivedMetrics: [],
+  env: {},
+  evaluateOptions: {},
+  scenarios: [],
+  extensions: [],
+};
+
+export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
-      env: {},
-      testCases: [],
-      description: '',
-      providers: [],
-      prompts: [],
-      extensions: [],
-      defaultTest: {},
-      derivedMetrics: [],
-      evaluateOptions: {},
-      scenarios: [],
-      setEnv: (env) => set({ env }),
-      setTestCases: (testCases) => set({ testCases }),
-      setDescription: (description) => set({ description }),
-      setProviders: (providers) => set({ providers }),
-      setPrompts: (prompts) => set({ prompts }),
-      setDefaultTest: (testCase) => set({ defaultTest: testCase }),
-      setDerivedMetrics: (derivedMetrics) => set({ derivedMetrics }),
-      setEvaluateOptions: (options) => set({ evaluateOptions: options }),
-      setScenarios: (scenarios) => set({ scenarios }),
-      setExtensions: (extensions) => set({ extensions }),
-      setStateFromConfig: (config: Partial<UnifiedConfig>) => {
-        const updates: Partial<State> = {};
-        if (config.description) {
-          updates.description = config.description || '';
-        }
-        if (config.tests) {
-          updates.testCases = config.tests as TestCase[];
-        }
-        if (config.providers) {
-          updates.providers = config.providers as ProviderOptions[];
-        }
-        if (config.prompts) {
-          if (typeof config.prompts === 'string') {
-            updates.prompts = [config.prompts];
-          } else if (Array.isArray(config.prompts)) {
-            updates.prompts = config.prompts;
-          } else {
-            console.warn('Invalid prompts config', config.prompts);
-          }
-        }
-        if (config.defaultTest) {
-          updates.defaultTest = config.defaultTest;
-        }
-        if (config.derivedMetrics) {
-          updates.derivedMetrics = config.derivedMetrics;
-        }
-        if (config.evaluateOptions) {
-          updates.evaluateOptions = config.evaluateOptions;
-        }
-        if (config.scenarios) {
-          updates.scenarios = config.scenarios as Scenario[];
-        }
-        if (config.extensions) {
-          updates.extensions = config.extensions;
-        }
-        set(updates);
-      },
+      config: { ...DEFAULT_CONFIG },
+
+      setConfig: (config) => set({ config }),
+
+      updateConfig: (updates) =>
+        set((state) => ({
+          config: { ...state.config, ...updates },
+        })),
+
+      reset: () => set({ config: { ...DEFAULT_CONFIG } }),
+
       getTestSuite: () => {
-        const {
-          description,
-          env,
-          extensions,
-          prompts,
-          providers,
-          scenarios,
-          testCases,
-          evaluateOptions,
-          defaultTest,
-          derivedMetrics,
-        } = get();
+        const { config } = get();
+
+        // Transform config to match the expected EvaluateTestSuiteWithEvaluateOptions format
+        // Note: The 'tests' field in UnifiedConfig maps to 'testCases' in the old store
         return {
-          description,
-          env,
-          extensions,
-          prompts,
-          providers,
-          scenarios,
-          tests: testCases,
-          evaluateOptions,
-          defaultTest,
-          derivedMetrics,
-        };
+          description: config.description,
+          env: config.env,
+          extensions: config.extensions,
+          prompts: config.prompts,
+          providers: config.providers,
+          scenarios: config.scenarios,
+          tests: config.tests || [], // This is what was 'testCases' before
+          evaluateOptions: config.evaluateOptions,
+          defaultTest: config.defaultTest,
+          derivedMetrics: config.derivedMetrics,
+        } as EvaluateTestSuiteWithEvaluateOptions;
       },
     }),
     {

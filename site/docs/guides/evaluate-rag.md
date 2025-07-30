@@ -212,7 +212,7 @@ def get_var(var_name, prompt, other_vars):
 The `load_context.py` script defines two functions:
 
 - `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
-- `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
+  - `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
 
 ### Run the eval
 
@@ -336,3 +336,69 @@ tests:
 By following this approach and setting up tests on [assertions & metrics](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
 
 See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.
+
+### Context evaluation approaches
+
+There are two ways to provide context for RAG evaluation:
+
+#### Context variables approach
+
+Use this when you have separate context data or want explicit control over what context is used:
+
+```yaml
+tests:
+  - vars:
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
+    assert:
+      - type: context-faithfulness
+        threshold: 0.8
+      - type: context-relevance
+        threshold: 0.7
+      - type: context-recall
+        value: 'Expected information to verify'
+        threshold: 0.8
+```
+
+#### Response extraction approach
+
+Use this when your RAG system returns context alongside the generated response:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context'
+    threshold: 0.8
+  - type: context-relevance
+    contextTransform: 'output.context'
+    threshold: 0.7
+  - type: context-recall
+    contextTransform: 'output.context'
+    value: 'Expected information to verify'
+    threshold: 0.8
+```
+
+For complex response structures, you can use JavaScript expressions:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
+  - type: context-relevance
+    contextTransform: 'output.sources.filter(s => s.relevance > 0.7).map(s => s.text).join("\n\n")'
+```
+
+#### Common patterns
+
+```yaml
+# Extract from array of objects
+contextTransform: 'output.documents.map(d => d.content).join("\n")'
+
+# Handle missing data with fallback
+contextTransform: 'output.context || output.retrieved_content || "No context"'
+
+# Extract from nested metadata (e.g., AWS Bedrock Knowledge Base)
+contextTransform: 'output.citations?.[0]?.content?.text || ""'
+```
+
+For more examples, see the [AWS Bedrock Knowledge Base documentation](../providers/aws-bedrock.md#context-evaluation-with-contexttransform) and [context assertion reference](../configuration/expected-outputs/model-graded/context-faithfulness.md).

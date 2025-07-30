@@ -4,7 +4,7 @@ import { startServer } from '../../../src/server/server';
 import telemetry from '../../../src/telemetry';
 import { setupEnv } from '../../../src/util';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
-import { checkServerRunning, openBrowser, BrowserBehavior } from '../../../src/util/server';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
 
 jest.mock('../../../src/server/server');
 jest.mock('../../../src/telemetry');

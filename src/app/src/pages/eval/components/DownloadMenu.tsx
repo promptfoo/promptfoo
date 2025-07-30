@@ -1,4 +1,5 @@
 import React from 'react';
+
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -13,8 +14,8 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import useTheme from '@mui/material/styles/useTheme';
+import Typography from '@mui/material/Typography';
 import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { getHumanRating } from '@promptfoo/util/humanRatingHelpers';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
@@ -442,7 +443,9 @@ function DownloadMenu() {
                 color="secondary"
                 fullWidth
                 disabled={
-                  !table || table.body.every((row) => row.outputs.every((output) => output?.pass))
+                  !table ||
+                  !table.body ||
+                  table.body.every((row) => row.outputs.every((output) => output?.pass))
                 }
               >
                 Download Failed Tests Config
