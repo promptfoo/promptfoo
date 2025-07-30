@@ -45,20 +45,6 @@ interface PathSelectorProps {
 // File input functionality removed to avoid browser security warnings
 // Using drag-drop and manual path input instead
 
-const SUPPORTED_FILE_EXTENSIONS = [
-  '.pkl',
-  '.safetensors',
-  '.bin',
-  '.h5',
-  '.onnx',
-  '.pt',
-  '.pth',
-  '.ckpt',
-  '.keras',
-  '.tflite',
-  '.pb',
-];
-
 const SUPPORTED_FILE_TYPES = {
   PyTorch: ['.pt', '.pth', '.bin'],
   TensorFlow: ['.pb', '.h5', '.keras', '.tflite'],
@@ -241,7 +227,6 @@ export default function PathSelector({
 
   return (
     <Box>
-
       <Tabs
         value={activeTab}
         onChange={(_, newValue) => setActiveTab(newValue)}
