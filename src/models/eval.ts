@@ -18,7 +18,7 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import { categories as pluginCategories } from '../redteam';
+import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -474,7 +474,7 @@ export default class Eval {
         } else if (type === 'plugin' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
           // Is the value a category? e.g. `harmful` or `bias`
-          const isCategory = Object.keys(pluginCategories).includes(sanitizedValue);
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
 
           // Plugin ID is stored in metadata.pluginId
           if (isCategory) {

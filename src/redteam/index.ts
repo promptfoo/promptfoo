@@ -147,13 +147,11 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
   return config;
 }
 
-export const categories = {
-  bias: BIAS_PLUGINS,
-  financial: FINANCIAL_PLUGINS,
+const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
+  bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
-  medical: MEDICAL_PLUGINS,
 } as const;
 
 /**

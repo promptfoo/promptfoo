@@ -329,3 +329,11 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...AGENTIC_PLUGINS,
   ]),
 ].sort() as Plugin[];
+
+export const PLUGIN_CATEGORIES = {
+  bias: BIAS_PLUGINS,
+  financial: FINANCIAL_PLUGINS,
+  harmful: Object.keys(HARM_PLUGINS),
+  pii: PII_PLUGINS,
+  medical: MEDICAL_PLUGINS,
+} as const;
