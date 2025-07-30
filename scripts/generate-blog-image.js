@@ -133,7 +133,9 @@ if (!process.argv.includes('--mcp-server')) {
 
   // Validate size parameter for gpt-image-1
   if (options.size !== 'auto' && !VALID_SIZES.includes(options.size)) {
-    console.error(`Invalid size: ${options.size}. Valid sizes are: ${VALID_SIZES.join(', ')}, auto`);
+    console.error(
+      `Invalid size: ${options.size}. Valid sizes are: ${VALID_SIZES.join(', ')}, auto`,
+    );
     process.exit(1);
   }
 }
@@ -351,32 +353,34 @@ if (process.argv.includes('--mcp-server')) {
   // Dynamic imports for MCP server mode
   Promise.all([
     import('@modelcontextprotocol/sdk/server/index.js'),
-    import('@modelcontextprotocol/sdk/server/stdio.js')
-  ]).then(([{ Server }, { StdioServerTransport }]) => {
-    // Create MCP server
-    const server = new Server(
-      {
-        name: 'blog-image-generator',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {
-          tools: {},
+    import('@modelcontextprotocol/sdk/server/stdio.js'),
+  ])
+    .then(([{ Server }, { StdioServerTransport }]) => {
+      // Create MCP server
+      const server = new Server(
+        {
+          name: 'blog-image-generator',
+          version: '1.0.0',
         },
-      },
-    );
+        {
+          capabilities: {
+            tools: {},
+          },
+        },
+      );
 
-    // Define the blog image generation tool
-    const tools = [
-      {
-        name: 'generate_blog_image',
-        description: 'Generate or edit blog images using OpenAI gpt-image-1 API following Promptfoo style guide',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            prompt: {
-              type: 'string',
-              description: `Image generation/editing prompt (required).
+      // Define the blog image generation tool
+      const tools = [
+        {
+          name: 'generate_blog_image',
+          description:
+            'Generate or edit blog images using OpenAI gpt-image-1 API following Promptfoo style guide',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              prompt: {
+                type: 'string',
+                description: `Image generation/editing prompt (required).
 
 Example prompt for a system cards blog post:
 "Create a professional hero image for a blog post about LLM System Cards and AI Safety Documentation.
@@ -390,57 +394,57 @@ The image should feature:
 - The red panda should look intelligent and focused, perhaps wearing glasses or holding a magnifying glass
 - Overall mood: trustworthy, technical, but friendly
 Style: Modern tech illustration, clean lines, professional but approachable, suitable for a security-focused blog post"`,
+              },
+              filename: {
+                type: 'string',
+                description: `Output filename (default: ${DEFAULT_OPTIONS.filename})`,
+                default: DEFAULT_OPTIONS.filename,
+              },
+              inputImage: {
+                type: 'string',
+                description: 'Input image path for editing (optional)',
+              },
+              size: {
+                type: 'string',
+                description: 'Image size',
+                enum: [...VALID_SIZES, 'auto'],
+                default: DEFAULT_OPTIONS.size,
+              },
+              quality: {
+                type: 'string',
+                description: 'Image quality',
+                enum: VALID_QUALITY,
+                default: DEFAULT_OPTIONS.quality,
+              },
+              format: {
+                type: 'string',
+                description: 'Output format',
+                enum: VALID_FORMATS,
+                default: DEFAULT_OPTIONS.format,
+              },
+              numberOfImages: {
+                type: 'integer',
+                description: 'Number of images to generate',
+                minimum: 1,
+                maximum: 10,
+                default: DEFAULT_OPTIONS.n,
+              },
             },
-            filename: {
-              type: 'string',
-              description: `Output filename (default: ${DEFAULT_OPTIONS.filename})`,
-              default: DEFAULT_OPTIONS.filename,
-            },
-            inputImage: {
-              type: 'string',
-              description: 'Input image path for editing (optional)',
-            },
-            size: {
-              type: 'string',
-              description: 'Image size',
-              enum: [...VALID_SIZES, 'auto'],
-              default: DEFAULT_OPTIONS.size,
-            },
-            quality: {
-              type: 'string',
-              description: 'Image quality',
-              enum: VALID_QUALITY,
-              default: DEFAULT_OPTIONS.quality,
-            },
-            format: {
-              type: 'string',
-              description: 'Output format',
-              enum: VALID_FORMATS,
-              default: DEFAULT_OPTIONS.format,
-            },
-            numberOfImages: {
-              type: 'integer',
-              description: 'Number of images to generate',
-              minimum: 1,
-              maximum: 10,
-              default: DEFAULT_OPTIONS.n,
-            },
+            required: ['prompt'],
           },
-          required: ['prompt'],
         },
-      },
-      {
-        name: 'get_style_guide',
-        description: 'Get the Promptfoo blog image style guide and example prompts',
-        inputSchema: {
-          type: 'object',
-          properties: {},
+        {
+          name: 'get_style_guide',
+          description: 'Get the Promptfoo blog image style guide and example prompts',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
         },
-      },
-    ];
+      ];
 
-    // Style guide content
-    const styleGuide = `# Promptfoo Blog Image Style Guide
+      // Style guide content
+      const styleGuide = `# Promptfoo Blog Image Style Guide
 
 ## Brand Colors
 - Deep purples
@@ -472,102 +476,105 @@ Style: Modern tech illustration, clean lines, professional but approachable, sui
  - Overall mood: trustworthy, technical, but friendly
  Style: Modern tech illustration, clean lines, professional but approachable, suitable for a security-focused blog post`;
 
-    // Handle tool listing
-    server.setRequestHandler('tools/list', async () => {
-      return { tools };
-    });
+      // Handle tool listing
+      server.setRequestHandler('tools/list', async () => {
+        return { tools };
+      });
 
-    // Handle tool calls
-    server.setRequestHandler('tools/call', async (request) => {
-      const { name, arguments: args } = request.params;
+      // Handle tool calls
+      server.setRequestHandler('tools/call', async (request) => {
+        const { name, arguments: args } = request.params;
 
-      try {
-        let result;
+        try {
+          let result;
 
-        switch (name) {
-          case 'generate_blog_image': {
-                         // Set up options from MCP arguments
-             Object.assign(options, {
-               prompt: args.prompt,
-               filename: args.filename || DEFAULT_OPTIONS.filename,
-               inputImage: args.inputImage,
-               size: args.size || DEFAULT_OPTIONS.size,
-               quality: args.quality || DEFAULT_OPTIONS.quality,
-               format: args.format || DEFAULT_OPTIONS.format,
-               n: args.numberOfImages || DEFAULT_OPTIONS.n,
-             });
+          switch (name) {
+            case 'generate_blog_image': {
+              // Set up options from MCP arguments
+              Object.assign(options, {
+                prompt: args.prompt,
+                filename: args.filename || DEFAULT_OPTIONS.filename,
+                inputImage: args.inputImage,
+                size: args.size || DEFAULT_OPTIONS.size,
+                quality: args.quality || DEFAULT_OPTIONS.quality,
+                format: args.format || DEFAULT_OPTIONS.format,
+                n: args.numberOfImages || DEFAULT_OPTIONS.n,
+              });
 
-             // Update filename extension based on format
-             if (!options.filename.includes('.')) {
-               options.filename += `.${options.format}`;
-             }
+              // Update filename extension based on format
+              if (!options.filename.includes('.')) {
+                options.filename += `.${options.format}`;
+              }
 
-             // Validate parameters
-             if (!options.prompt) {
-               throw new Error('Prompt is required');
-             }
+              // Validate parameters
+              if (!options.prompt) {
+                throw new Error('Prompt is required');
+              }
 
-             if (options.filename.includes('..') || options.filename.startsWith('/')) {
-               throw new Error('Invalid filename: Path traversal or absolute paths not allowed');
-             }
+              if (options.filename.includes('..') || options.filename.startsWith('/')) {
+                throw new Error('Invalid filename: Path traversal or absolute paths not allowed');
+              }
 
-             if (options.size !== 'auto' && !VALID_SIZES.includes(options.size)) {
-               throw new Error(`Invalid size: ${options.size}. Valid sizes are: ${VALID_SIZES.join(', ')}, auto`);
-             }
+              if (options.size !== 'auto' && !VALID_SIZES.includes(options.size)) {
+                throw new Error(
+                  `Invalid size: ${options.size}. Valid sizes are: ${VALID_SIZES.join(', ')}, auto`,
+                );
+              }
 
-            // Run the main image generation function
-            await main();
-            
-            result = `Image generation completed. Check the output directory for: ${options.filename}`;
-            break;
+              // Run the main image generation function
+              await main();
+
+              result = `Image generation completed. Check the output directory for: ${options.filename}`;
+              break;
+            }
+
+            case 'get_style_guide': {
+              result = styleGuide;
+              break;
+            }
+
+            default:
+              throw new Error(`Unknown tool: ${name}`);
           }
 
-          case 'get_style_guide': {
-            result = styleGuide;
-            break;
-          }
-
-          default:
-            throw new Error(`Unknown tool: ${name}`);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: String(result),
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
         }
+      });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: String(result),
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+      // Start the MCP server
+      async function startMcpServer() {
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        console.error('Blog Image Generator MCP Server running...');
       }
-    });
 
-    // Start the MCP server
-    async function startMcpServer() {
-      const transport = new StdioServerTransport();
-      await server.connect(transport);
-      console.error('Blog Image Generator MCP Server running...');
-    }
-
-    startMcpServer().catch((error) => {
-      console.error('MCP Server error:', error);
+      startMcpServer().catch((error) => {
+        console.error('MCP Server error:', error);
+        process.exit(1);
+      });
+    })
+    .catch((error) => {
+      console.error('Failed to load MCP dependencies:', error);
+      console.error('Make sure to install: npm install @modelcontextprotocol/sdk');
       process.exit(1);
     });
-  }).catch((error) => {
-    console.error('Failed to load MCP dependencies:', error);
-    console.error('Make sure to install: npm install @modelcontextprotocol/sdk');
-    process.exit(1);
-  });
 } else {
   // Normal CLI mode
   main();

@@ -29,4 +29,4 @@ console.log('Server methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(
 // Actually connect and see what happens
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error('Test MCP Server running...'); 
+console.error('Test MCP Server running...');

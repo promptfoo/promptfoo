@@ -11,6 +11,7 @@ node scripts/generate-blog-image.js --mcp-server
 ## Installing MCP Dependencies
 
 If running in MCP mode for the first time:
+
 ```bash
 npm install @modelcontextprotocol/sdk
 ```
@@ -38,4 +39,4 @@ Add to your Cursor MCP configuration:
 1. `generate_blog_image` - Generate or edit blog images
 2. `get_style_guide` - Get the Promptfoo style guide
 
-The script runs in standard CLI mode by default, and only activates MCP server mode when the `--mcp-server` flag is provided. 
+The script runs in standard CLI mode by default, and only activates MCP server mode when the `--mcp-server` flag is provided.
