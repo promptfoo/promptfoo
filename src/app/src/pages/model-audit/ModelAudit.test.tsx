@@ -112,7 +112,7 @@ describe('ModelAudit', () => {
     vi.clearAllMocks();
     mockCheckInstallation.mockResolvedValue(undefined);
     mockUseModelAuditStore.mockReturnValue(getDefaultStoreState());
-    
+
     // Mock successful API responses
     mockCallApi.mockImplementation(async (path: string) => {
       if (path.includes('/model-audit/scan')) {
