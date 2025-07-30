@@ -1,6 +1,10 @@
 import type { Command } from 'commander';
 
-export function generateDatasetCommand(command: Command) {
+export function generateDatasetCommand(
+  command: Command,
+  defaultConfig: any,
+  defaultConfigPath?: string,
+) {
   const cmd = command.command('dataset');
   cmd
     .description('Generate test cases')
@@ -19,7 +23,11 @@ export function generateDatasetCommand(command: Command) {
     )
     .action(async (options: any) => {
       const { doGenerateDataset } = await import('./actions/datasetAction');
-      await doGenerateDataset(options);
+      await doGenerateDataset({
+        ...options,
+        defaultConfig: defaultConfig || {},
+        defaultConfigPath,
+      });
     })
     .addHelpText(
       'after',

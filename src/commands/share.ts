@@ -14,12 +14,12 @@ export function shareCommand(program: Command) {
       '--env-path <path>',
       'Path to the environment directory or file (usually .env, .env.local, or .env.production)',
     )
+    .option('--show-auth', 'Show authentication instructions', false)
     .action(async function (
-      this: any,
       evalId: string | undefined,
-      cmdObj: { yes: boolean; envPath?: string },
+      cmdObj: { yes: boolean; envPath?: string; showAuth?: boolean },
     ) {
       const { shareAction } = await import('./share/shareAction');
-      await shareAction(evalId, { ...cmdObj, showAuth: true, ...this });
+      await shareAction(evalId, { ...cmdObj, showAuth: cmdObj.showAuth || false } as any);
     });
 }

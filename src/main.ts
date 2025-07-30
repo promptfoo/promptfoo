@@ -115,11 +115,11 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
-  validateCommand(program);
+  validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
-  generateDatasetCommand(generateCommand);
-  generateAssertionsCommand(generateCommand);
+  generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   // Red team commands use default config initially
@@ -165,6 +165,6 @@ async function main() {
 if (require.main === module) {
   (async () => {
     await checkNodeVersion();
-    main();
+    await main();
   })();
 }

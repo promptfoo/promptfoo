@@ -49,10 +49,27 @@ ${fromError(configParse.error).message}`,
 }
 
 export async function validateAction(
-  opts: ValidateOptions,
-  defaultConfig: Partial<UnifiedConfig>,
-  defaultConfigPath: string | undefined,
+  filePath: string | undefined,
+  cmdObj: { config?: string },
+  defaultConfig: any,
+  defaultConfigPath?: string,
 ): Promise<void> {
-  telemetry.record('command_used', { name: 'validate' });
-  await doValidate(opts, defaultConfig, defaultConfigPath);
+  telemetry.record('command_used', {
+    name: 'validate',
+  });
+
+  // Build config array from filePath and/or --config option
+  const configPaths: string[] = [];
+  if (filePath) {
+    configPaths.push(filePath);
+  }
+  if (cmdObj.config) {
+    configPaths.push(cmdObj.config);
+  }
+
+  await doValidate(
+    { config: configPaths.length > 0 ? configPaths : undefined },
+    defaultConfig || {},
+    defaultConfigPath,
+  );
 }
