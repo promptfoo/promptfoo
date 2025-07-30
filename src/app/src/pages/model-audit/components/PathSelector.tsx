@@ -54,6 +54,14 @@ const SUPPORTED_FILE_TYPES = {
   Checkpoint: ['.ckpt'],
 };
 
+// Helper function to extract name from path, handling trailing slashes
+const extractNameFromPath = (path: string): string => {
+  // Remove trailing slash if present
+  const normalizedPath = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
+  const parts = normalizedPath.split('/');
+  return parts[parts.length - 1] || normalizedPath;
+};
+
 export default function PathSelector({
   paths,
   onAddPath,
@@ -103,7 +111,7 @@ export default function PathSelector({
         onAddPath({
           path: trimmedPath,
           type: data.type,
-          name: data.name || trimmedPath.split('/').pop() || trimmedPath,
+          name: data.name || extractNameFromPath(trimmedPath),
         });
         setPathInput('');
       } else {
@@ -112,11 +120,10 @@ export default function PathSelector({
 
         // Make a best guess based on the input
         const isDirectory = trimmedPath.endsWith('/');
-        const name = trimmedPath.split('/').pop() || trimmedPath;
         onAddPath({
           path: trimmedPath,
           type: isDirectory ? 'directory' : 'file',
-          name: isDirectory ? name.slice(0, -1) : name,
+          name: extractNameFromPath(trimmedPath),
         });
         setPathInput('');
         setTimeout(() => setError(null), 5000);
@@ -126,11 +133,10 @@ export default function PathSelector({
 
       // Add the path anyway with a best guess
       const isDirectory = trimmedPath.endsWith('/');
-      const name = trimmedPath.split('/').pop() || trimmedPath;
       onAddPath({
         path: trimmedPath,
         type: isDirectory ? 'directory' : 'file',
-        name: isDirectory ? name.slice(0, -1) : name,
+        name: extractNameFromPath(trimmedPath),
       });
       setPathInput('');
       setTimeout(() => setError(null), 5000);
@@ -671,7 +677,7 @@ export default function PathSelector({
 
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {path.name || path.path.split('/').pop() || path.path}
+                        {path.name || extractNameFromPath(path.path)}
                       </Typography>
                       <Stack direction="row" spacing={1} alignItems="center">
                         <Typography variant="caption" color="text.secondary">

@@ -141,7 +141,7 @@ describe('PathSelector', () => {
         expect(onAddPath).toHaveBeenCalledWith({
           path: pathToAdd,
           type: 'directory',
-          name: '/path/to/nonexistent/directory', // Name without trailing slash
+          name: 'directory', // Extracted directory name from path
         });
       });
 
