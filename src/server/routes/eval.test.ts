@@ -30,17 +30,8 @@ describe('evalRouter', () => {
         otherField: 'value',
       };
 
-      const mockEval = {
-        id: evalId,
-        config: { description: 'Old Description' },
-        save: jest.fn(),
-      };
-
-      (Eval.findById as jest.Mock).mockResolvedValue(mockEval);
-      (updateResult as jest.Mock).mockImplementation((id, config) => {
-        // updateResult is synchronous in the actual implementation
-        return;
-      });
+      // Mock updateResult to resolve immediately
+      (updateResult as jest.Mock).mockResolvedValue(undefined);
 
       const response = await request(app).patch(`/api/eval/${evalId}`).send({ config: newConfig });
 
