@@ -250,7 +250,7 @@ assert:
 
 See the [documentation](/docs/configuration/expected-outputs/model-graded/web-search) for complete examples and provider configurations.
 
-<script type="application/ld+json">
+<script type="application/ld+json" dangerouslySetInnerHTML={{__html: `
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
@@ -263,4 +263,4 @@ See the [documentation](/docs/configuration/expected-outputs/model-graded/web-se
   "keywords": "LLM testing, web search, fact checking, real-time verification",
   "description": "Promptfoo now supports web search in assertions, allowing you to verify time-sensitive information like stock prices and weather during testing."
 }
-</script>
+`}} />
