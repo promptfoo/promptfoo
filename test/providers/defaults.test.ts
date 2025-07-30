@@ -24,7 +24,6 @@ jest.mock('../../src/logger', () => ({
 // Mock Azure-related modules to prevent authentication errors
 jest.mock('../../src/providers/azure', () => ({
   AzureModerationProvider: class MockAzureModerationProvider {
-    constructor() {}
     initialize() {
       return Promise.resolve(this);
     }

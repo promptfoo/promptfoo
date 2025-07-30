@@ -22,7 +22,7 @@ export const DefaultSynthesizeProvider = new MistralChatCompletionProvider('mist
  */
 export const MistralProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using Mistral default providers');
-  
+
   return {
     datasetGenerationProvider: DefaultGradingProvider,
     embeddingProvider: DefaultEmbeddingProvider,
