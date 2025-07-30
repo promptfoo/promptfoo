@@ -214,6 +214,14 @@ export const MEDICAL_PLUGINS = [
   'medical:sycophancy',
 ] as const;
 
+export const FINANCIAL_PLUGINS = [
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
@@ -321,3 +329,11 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...AGENTIC_PLUGINS,
   ]),
 ].sort() as Plugin[];
+
+export const PLUGIN_CATEGORIES = {
+  bias: BIAS_PLUGINS,
+  financial: FINANCIAL_PLUGINS,
+  harmful: Object.keys(HARM_PLUGINS),
+  pii: PII_PLUGINS,
+  medical: MEDICAL_PLUGINS,
+} as const;

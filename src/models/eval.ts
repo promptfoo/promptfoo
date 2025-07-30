@@ -18,6 +18,7 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
+import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -472,8 +473,15 @@ export default class Eval {
           }
         } else if (type === 'plugin' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
+          // Is the value a category? e.g. `harmful` or `bias`
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
+
           // Plugin ID is stored in metadata.pluginId
-          condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+          if (isCategory) {
+            condition = `json_extract(metadata, '$.pluginId') LIKE '${sanitizedValue}:%'`;
+          } else {
+            condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+          }
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
           if (sanitizedValue === 'basic') {
