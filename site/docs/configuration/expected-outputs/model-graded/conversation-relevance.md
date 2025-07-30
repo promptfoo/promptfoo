@@ -73,11 +73,18 @@ assert:
 
 ### Basic single-turn evaluation
 
+When evaluating a single turn, the assertion uses the prompt and output from the test case:
+
 ```yaml
+prompts:
+  - 'Explain {{topic}}'
+
+providers:
+  - openai:gpt-4
+
 tests:
   - vars:
-      prompt: 'What is machine learning?'
-      output: 'Machine learning is a type of artificial intelligence that enables computers to learn from data.'
+      topic: 'machine learning'
     assert:
       - type: conversation-relevance
         threshold: 0.8
@@ -174,4 +181,3 @@ defaultTest:
 ## Citation
 
 This implementation is adapted from [DeepEval's Conversation Relevancy metric](https://docs.confident-ai.com/docs/metrics-conversation-relevancy).
-

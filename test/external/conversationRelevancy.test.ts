@@ -22,9 +22,11 @@ describe('ConversationRelevancyTemplate', () => {
         { role: 'user' as const, content: 'What is the weather?' },
         { role: 'assistant' as const, content: 'It is sunny today.' },
       ];
-      
+
       const prompt = ConversationRelevancyTemplate.generateVerdicts(messages);
-      expect(prompt).toContain('generate a JSON object to indicate whether the LAST `assistant` message is relevant');
+      expect(prompt).toContain(
+        'generate a JSON object to indicate whether the LAST `assistant` message is relevant',
+      );
       expect(prompt).toContain(JSON.stringify(messages, null, 2));
     });
   });
@@ -36,7 +38,7 @@ describe('ConversationRelevancyTemplate', () => {
         'Response about weather was not related to math question',
         'Assistant talked about food when asked about programming',
       ];
-      
+
       const prompt = ConversationRelevancyTemplate.generateReason(score, irrelevancies);
       expect(prompt).toContain(`Relevancy Score:\n${score}`);
       expect(prompt).toContain(JSON.stringify(irrelevancies, null, 2));
@@ -74,10 +76,12 @@ describe('matchesConversationRelevance with template', () => {
     ];
 
     await matchesConversationRelevance(messages, 0.5);
-    
+
     const callArg = mockProvider.callApi.mock.calls[0][0];
     // Should contain the template structure
-    expect(callArg).toContain('generate a JSON object to indicate whether the LAST `assistant` message is relevant');
+    expect(callArg).toContain(
+      'generate a JSON object to indicate whether the LAST `assistant` message is relevant',
+    );
     expect(callArg).toContain('"role": "user"');
     expect(callArg).toContain('"role": "assistant"');
   });
@@ -96,16 +100,19 @@ describe('handleConversationRelevance with reason generation', () => {
           // This is the reason generation call
           return {
             output: JSON.stringify({
-              reason: 'The score is 0.6 because 2 out of 5 responses were irrelevant to the conversation context.',
+              reason:
+                'The score is 0.6 because 2 out of 5 responses were irrelevant to the conversation context.',
             }),
             tokenUsage: { total: 20, prompt: 10, completion: 10, cached: 0 },
           };
         } else {
-          // Verdict calls - return mix of yes/no
+          // Verdict calls - with 5 windows and windowSize 3, we evaluate positions 1-5
+          // Make positions 3 and 5 irrelevant (2 out of 5)
+          const isIrrelevant = callCount === 3 || callCount === 5;
           return {
             output: JSON.stringify({
-              verdict: callCount % 3 === 0 ? 'no' : 'yes',
-              ...(callCount % 3 === 0 && {
+              verdict: isIrrelevant ? 'no' : 'yes',
+              ...(isIrrelevant && {
                 reason: `Response ${callCount} was irrelevant`,
               }),
             }),
@@ -125,10 +132,13 @@ describe('handleConversationRelevance with reason generation', () => {
       synthesizeProvider: mockProvider,
     });
 
-    const conversation = Array(5).fill(null).map((_, i) => ({
-      input: `Question ${i}`,
-      output: `Answer ${i}`,
-    }));
+    const conversation = [
+      { input: 'Question 1', output: 'Answer 1' },
+      { input: 'Question 2', output: 'Answer 2' },
+      { input: 'Question 3', output: 'Answer 3' },
+      { input: 'Question 4', output: 'Answer 4' },
+      { input: 'Question 5', output: 'Answer 5' },
+    ];
 
     const params: AssertionParams = {
       baseType: 'conversation-relevance' as const,
@@ -156,9 +166,11 @@ describe('handleConversationRelevance with reason generation', () => {
     };
 
     const result = await handleConversationRelevance(params);
-    
+
     // Should have generated a comprehensive reason
-    expect(result.reason).toContain('The score is 0.6 because 2 out of 5 responses were irrelevant');
+    expect(result.reason).toContain(
+      'The score is 0.6 because 2 out of 5 responses were irrelevant',
+    );
     expect(result.tokensUsed).toBeDefined();
     expect(result.tokensUsed!.total).toBeGreaterThan(0);
   });

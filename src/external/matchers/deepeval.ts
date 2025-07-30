@@ -55,14 +55,20 @@ export async function matchesConversationRelevance(
   }
 
   // Generate verdict using the template
-  const defaultRubricPrompt = ConversationRelevancyTemplate.generateVerdicts(messageRoles);
-  const rubricPrompt = grading?.rubricPrompt || defaultRubricPrompt;
+  const rubricPrompt = grading?.rubricPrompt;
 
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    messages: renderedMessages,
-    ...(vars || {}),
-  });
+  let promptText: string;
+  if (rubricPrompt) {
+    // Use custom rubric prompt with nunjucks rendering
+    invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+    promptText = nunjucks.renderString(rubricPrompt, {
+      messages: renderedMessages,
+      ...(vars || {}),
+    });
+  } else {
+    // Use the template which already includes the messages
+    promptText = ConversationRelevancyTemplate.generateVerdicts(messageRoles);
+  }
 
   const resp = await textProvider.callApi(promptText);
   if (resp.error || !resp.output) {

@@ -1,6 +1,6 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import type { AssertionParams, GradingResult, TokenUsage } from '../../types';
+import type { AssertionParams, GradingResult } from '../../types';
 import invariant from '../../util/invariant';
 import { matchesConversationRelevance } from '../matchers/deepeval';
 import type { Message } from '../matchers/deepeval';
@@ -8,6 +8,7 @@ import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancy
 import { getAndCheckProvider } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
 import { extractJsonObjects } from '../../util/json';
+import { createEmptyTokenUsage, accumulateTokenUsage } from '../../util/tokenUsageUtils';
 
 const DEFAULT_WINDOW_SIZE = 5;
 
@@ -38,12 +39,12 @@ export const handleConversationRelevance = async ({
   let relevantCount = 0;
   let totalWindows = 0;
   const irrelevancies: string[] = [];
-  const tokensUsed: TokenUsage = { total: 0, prompt: 0, completion: 0 };
+  const tokensUsed = createEmptyTokenUsage();
 
-  // Process each possible window
-  const windowCount = Math.max(1, messages.length - windowSize + 1);
-  for (let i = 0; i < windowCount; i++) {
-    const windowMessages = messages.slice(i, Math.min(i + windowSize, messages.length));
+  // Process each possible window using DeepEval's approach
+  // DeepEval creates a window for each message position, with varying sizes
+  for (let i = 0; i < messages.length; i++) {
+    const windowMessages = messages.slice(Math.max(0, i - windowSize + 1), i + 1);
     const result = await matchesConversationRelevance(
       windowMessages,
       1.0, // Use 1.0 threshold for individual windows
@@ -62,9 +63,7 @@ export const handleConversationRelevance = async ({
 
     // Accumulate token usage
     if (result.tokensUsed) {
-      tokensUsed.total += result.tokensUsed.total || 0;
-      tokensUsed.prompt += result.tokensUsed.prompt || 0;
-      tokensUsed.completion += result.tokensUsed.completion || 0;
+      accumulateTokenUsage(tokensUsed, result.tokensUsed);
     }
 
     totalWindows++;
@@ -104,9 +103,7 @@ export const handleConversationRelevance = async ({
 
       // Add token usage from reason generation
       if (resp.tokenUsage) {
-        tokensUsed.total += resp.tokenUsage.total || 0;
-        tokensUsed.prompt += resp.tokenUsage.prompt || 0;
-        tokensUsed.completion += resp.tokenUsage.completion || 0;
+        accumulateTokenUsage(tokensUsed, resp.tokenUsage);
       }
     } else {
       reason = `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
