@@ -4,13 +4,8 @@ import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-m
 import {
   Alert,
   Box,
-  Button,
   CircularProgress,
   Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Fade,
   Link,
   Paper,
@@ -41,7 +36,6 @@ export default function ModelAudit() {
     installationStatus,
     activeTab,
     showFilesDialog,
-    showInstallationDialog,
     showOptionsDialog,
 
     // Actions
@@ -54,7 +48,6 @@ export default function ModelAudit() {
     checkInstallation,
     setActiveTab,
     setShowFilesDialog,
-    setShowInstallationDialog,
     setShowOptionsDialog,
     addRecentScan,
   } = useModelAuditStore();
@@ -80,23 +73,6 @@ export default function ModelAudit() {
   }, [checkInstallation]);
 
   const handleScan = async () => {
-    // Check installation status before scanning
-    if (installationStatus.installed === false) {
-      setShowInstallationDialog(true);
-      return;
-    }
-
-    // If installation status is unknown or checking, wait for it
-    if (installationStatus.installed === null || installationStatus.checking) {
-      await checkInstallation();
-      // Check again after the promise resolves
-      const state = useModelAuditStore.getState();
-      if (state.installationStatus.installed === false) {
-        setShowInstallationDialog(true);
-        return;
-      }
-    }
-
     setIsScanning(true);
     setError(null);
 
@@ -180,16 +156,13 @@ export default function ModelAudit() {
                   </Stack>
                 </Tooltip>
               ) : installationStatus.installed === false ? (
-                <Tooltip title="ModelAudit is not installed. Click to learn more.">
-                  <Button
-                    size="small"
-                    startIcon={<ErrorIcon sx={{ fontSize: 16 }} />}
-                    color="error"
-                    onClick={() => setShowInstallationDialog(true)}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Not Installed
-                  </Button>
+                <Tooltip title="ModelAudit is not installed">
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                    <Typography variant="body2" color="error.main">
+                      Not Installed
+                    </Typography>
+                  </Stack>
                 </Tooltip>
               ) : null}
             </Box>
@@ -254,46 +227,6 @@ export default function ModelAudit() {
             paths={paths}
           />
         )}
-
-        <Dialog
-          open={showInstallationDialog}
-          onClose={() => setShowInstallationDialog(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>
-            <Stack direction="row" alignItems="center" spacing={2}>
-              <ErrorIcon color="error" />
-              <Typography variant="h6">ModelAudit Not Installed</Typography>
-            </Stack>
-          </DialogTitle>
-          <DialogContent>
-            <Typography variant="body1" paragraph>
-              ModelAudit is required to scan ML models for security vulnerabilities.
-            </Typography>
-            <Paper sx={{ p: 2, bgcolor: 'action.hover', mb: 2 }}>
-              <Typography variant="body2" fontFamily="monospace">
-                pip install modelaudit
-              </Typography>
-            </Paper>
-            <Typography variant="body2" color="text.secondary">
-              After installation, click the refresh button to verify.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => checkInstallation()} disabled={installationStatus.checking}>
-              {installationStatus.checking ? 'Checking...' : 'Refresh Status'}
-            </Button>
-            <Button
-              variant="contained"
-              href="https://www.promptfoo.dev/docs/model-audit/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View Documentation
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Container>
     </Box>
   );

@@ -38,7 +38,6 @@ interface ModelAuditState {
   // UI state
   activeTab: number;
   showFilesDialog: boolean;
-  showInstallationDialog: boolean;
   showOptionsDialog: boolean;
 
   // Actions - Recent scans
@@ -64,7 +63,6 @@ interface ModelAuditState {
   // Actions - UI state
   setActiveTab: (tab: number) => void;
   setShowFilesDialog: (show: boolean) => void;
-  setShowInstallationDialog: (show: boolean) => void;
   setShowOptionsDialog: (show: boolean) => void;
 
   // Computed
@@ -102,7 +100,6 @@ export const useModelAuditStore = create<ModelAuditState>()(
       },
       activeTab: 0,
       showFilesDialog: false,
-      showInstallationDialog: false,
       showOptionsDialog: false,
 
       // Actions - Recent scans
@@ -228,7 +225,6 @@ export const useModelAuditStore = create<ModelAuditState>()(
       // Actions - UI state
       setActiveTab: (activeTab) => set({ activeTab }),
       setShowFilesDialog: (showFilesDialog) => set({ showFilesDialog }),
-      setShowInstallationDialog: (showInstallationDialog) => set({ showInstallationDialog }),
       setShowOptionsDialog: (showOptionsDialog) => set({ showOptionsDialog }),
 
       // Computed
