@@ -3,7 +3,6 @@ import {
   categoryDescriptions,
   displayNameOverrides,
   pluginDescriptions,
-  PLUGIN_PRESET_DESCRIPTIONS,
   riskCategories,
   riskCategorySeverityMap,
   Severity,
@@ -37,7 +36,6 @@ import {
 import {
   ADDITIONAL_STRATEGIES,
   ALL_STRATEGIES,
-  DEFAULT_STRATEGIES,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
 } from '../../src/redteam/constants/strategies';
