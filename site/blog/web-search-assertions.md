@@ -22,20 +22,20 @@ We're releasing web-search assertions that verify time-sensitive information dur
 
 ## How It Works
 
-The web-search assertion verifies LLM outputs against current web data:
+The web-search assertion works like llm-rubric but with web search capabilities:
 
 ```yaml
 assert:
   - type: web-search
-    value: 'AAPL stock price today'
+    value: 'Provides accurate AAPL stock price within 2% of current market value'
 ```
 
-When your LLM outputs a response about Apple's stock price, the assertion:
+When evaluating, the assertion:
 
-1. Extracts the claim from the output
-2. Searches for current information
-3. Compares the output to live data
-4. Returns pass/fail based on accuracy
+1. Uses your rubric to understand what to verify
+2. Searches the web if current information is needed
+3. Grades the output based on the rubric criteria
+4. Returns pass/fail with a score from 0.0 to 1.0
 
 ## Example
 
@@ -46,10 +46,17 @@ providers:
   - openai:gpt-4o-mini
 
 tests:
-  - prompt: "What's the current stock price of Apple?"
+  - prompt: "What's the current stock price of {{company}}?"
     assert:
       - type: web-search
-        value: 'AAPL stock price current'
+        value: |
+          States the current {{ticker}} stock price that:
+          1. Is within 3% of actual market price
+          2. Includes currency (USD)
+          3. Mentions if market is currently open or closed
+    vars:
+      company: Apple
+      ticker: AAPL
 ```
 
 If the model responds with outdated price information from its training data, the test will fail.
@@ -93,7 +100,11 @@ Web search requires a provider with search capabilities. All major providers now
 # Verify real-time market data
 assert:
   - type: web-search
-    value: 'S&P 500 current value within 1% of live quote'
+    value: |
+      Provides S&P 500 index value that:
+      - Is within 1% of current market value
+      - Includes point change from previous close
+      - States whether markets are open or closed
 ```
 
 ### Legal Tech
@@ -102,7 +113,11 @@ assert:
 # Confirm case citations exist
 assert:
   - type: web-search
-    value: 'Miranda v. Arizona 384 U.S. 436 (1966)'
+    value: |
+      Correctly cites Miranda v. Arizona including:
+      - Accurate case citation (384 U.S. 436)
+      - Correct year (1966)
+      - Key holding about right to remain silent
 ```
 
 ### Healthcare
@@ -111,7 +126,7 @@ assert:
 # Validate FDA approvals
 assert:
   - type: web-search
-    value: 'Leqembi FDA approval date January 2023'
+    value: 'States correct FDA approval date for Leqembi (should be January 2023) and its approved use'
 ```
 
 ## Configuration
@@ -137,7 +152,11 @@ tests:
   - prompt: "What's the weather in Tokyo?"
     assert:
       - type: web-search
-        value: 'Tokyo weather temperature current'
+        value: |
+          Describes current Tokyo weather with:
+          - Temperature in Celsius or Fahrenheit
+          - Current conditions (sunny, rainy, cloudy, etc.)
+          - Any active weather warnings if applicable
 ```
 
 ### Auto-Detection
@@ -193,25 +212,25 @@ providers:
 
 ## Best Practices
 
-**Use specific search queries:**
+**Write clear rubrics like llm-rubric:**
 
 ```yaml
-# Good - specific and verifiable
+# Good - specific criteria
 - type: web-search
-  value: 'Microsoft CEO Satya Nadella'
+  value: 'Names Satya Nadella as the current CEO of Microsoft'
 
 # Too vague
 - type: web-search
-  value: 'tech company leadership'
+  value: 'talks about tech leadership'
 ```
 
 **Set appropriate thresholds:**
 
 ```yaml
-# Allow some flexibility for volatile data
+# Allow flexibility for volatile data
 - type: web-search
-  value: 'Bitcoin price USD'
-  threshold: 0.8
+  value: 'Provides Bitcoin price in USD within 10% of current market value'
+  threshold: 0.8 # 80% score required
 ```
 
 **Cache during development:**

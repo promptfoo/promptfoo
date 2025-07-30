@@ -30,15 +30,18 @@ tests:
       company: 'Microsoft'
     assert:
       - type: web-search
-        value: 'Satya Nadella CEO Microsoft'
+        value: 'Names the current CEO of {{company}} correctly'
 
   - vars:
       city: 'San Francisco'
     assert:
       - type: web-search
-        value: 'San Francisco weather temperature today'
+        value: |
+          Provides current weather for {{city}} including:
+          - Temperature with units (F or C)
+          - General conditions (sunny, cloudy, rainy, etc.)
 
   - assert:
       - type: web-search
-        value: 'Apple AAPL stock price current'
+        value: 'States the current Apple (AAPL) stock price within 5% accuracy'
         threshold: 0.8

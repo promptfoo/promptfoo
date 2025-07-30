@@ -22,6 +22,7 @@ import {
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
+import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
@@ -1287,7 +1288,7 @@ interface ModerationMatchOptions {
 }
 
 export async function matchesWebSearch(
-  query: string,
+  rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
@@ -1300,8 +1301,7 @@ export async function matchesWebSearch(
     );
   }
 
-  // Web search assertion is similar to research-rubric but focused on real-time search
-  // Use the same infrastructure but with a different prompt
+  // Web search assertion is like llm-rubric but with web search capabilities
   const defaultProviders = await getDefaultProviders();
 
   // Get a provider with web search capabilities
@@ -1329,30 +1329,16 @@ export async function matchesWebSearch(
     );
   }
 
-  // Create a web search prompt
-  const searchPrompt = `You are evaluating whether the given output is accurate based on current information from the web.
-
-Search Query: "${query}"
-
-Output to Verify:
-${llmOutput}
-
-Instructions:
-1. Use web search to find current, up-to-date information about the search query
-2. Compare the output against the current information you find
-3. Verify any factual claims, dates, prices, or other time-sensitive information
-4. Check if the output contains outdated or incorrect information
-
-Return your evaluation as a JSON object with:
-- "pass": true if the output is accurate and up-to-date, false otherwise
-- "score": 0-1 representing accuracy (1 = fully accurate, 0 = completely inaccurate)
-- "reason": Detailed explanation of what you found and why you gave this score
-- "searchResults": Summary of key information found via web search
-
-Return ONLY the JSON object, no other text.`;
+  // Load the web search rubric prompt
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_WEB_SEARCH_PROMPT);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    output: tryParse(llmOutput),
+    rubric,
+    ...(vars || {}),
+  });
 
   // Get the evaluation from the search provider
-  const resp = await searchProvider.callApi(searchPrompt);
+  const resp = await searchProvider.callApi(prompt);
 
   if (resp.error || !resp.output) {
     return {

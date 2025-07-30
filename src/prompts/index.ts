@@ -27,6 +27,7 @@ import type {
 } from '../types';
 
 export * from './grading';
+export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.

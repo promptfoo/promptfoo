@@ -4,41 +4,57 @@ sidebar_label: Web Search
 
 # Web-Search
 
-The `web-search` assertion type evaluates outputs by searching for current information on the web and verifying the accuracy of the response. It's designed for quick, real-time fact verification.
+The `web-search` assertion type is like `llm-rubric` but with web search capabilities. It evaluates outputs according to a rubric while having the ability to search for current information when needed.
 
 ## How it works
 
-1. You provide a search query as the expected value
-2. The grading provider searches the web for current information
-3. The output is evaluated against the search results
-4. Returns pass/fail based on accuracy and relevance
+1. You provide a rubric that describes what the output should contain
+2. The grading provider evaluates the output against the rubric
+3. If the rubric requires current information, the provider searches the web
+4. Returns pass/fail with a score from 0.0 to 1.0
 
 ## Basic Usage
 
 ```yaml
 assert:
   - type: web-search
-    value: 'current price of Bitcoin in USD'
+    value: 'Provides accurate current Bitcoin price within 5% of market value'
 ```
 
-## With Custom Prompt
+## Comparing to LLM-Rubric
+
+The `web-search` assertion behaves exactly like `llm-rubric`, but automatically uses a provider with web search capabilities:
+
+```yaml
+# These are equivalent:
+assert:
+  # Using llm-rubric with a web-search capable provider
+  - type: llm-rubric
+    value: 'Contains current stock price for Apple (AAPL) within $5'
+    provider: openai:responses:o4-mini # Must configure web search tool
+
+  # Using web-search (automatically selects a web-search provider)
+  - type: web-search
+    value: 'Contains current stock price for Apple (AAPL) within $5'
+```
+
+## Using Variables in the Rubric
+
+Like `llm-rubric`, you can use test variables:
 
 ```yaml
 prompts:
-  - 'What is the current weather in San Francisco?'
+  - 'What is the current weather in {{city}}?'
 
 assert:
   - type: web-search
-    value: 'current weather San Francisco temperature humidity'
-```
+    value: 'Provides current temperature in {{city}} with units (F or C)'
 
-## Advanced Usage
-
-```yaml
-assert:
-  - type: web-search
-    value: 'latest Claude AI model release date features'
-    threshold: 0.8 # Require 80% accuracy score
+tests:
+  - vars:
+      city: San Francisco
+  - vars:
+      city: Tokyo
 ```
 
 ## Grading Providers
@@ -118,18 +134,23 @@ prompts:
 
 assert:
   - type: web-search
-    value: 'Super Bowl 2025 winner'
+    value: 'Names the correct winner of the most recent Super Bowl with the final score'
 ```
 
 ### 2. Real-time Price Checking
 
 ```yaml
 prompts:
-  - "What's the current stock price of Apple?"
+  - "What's the current stock price of {{ticker}}?"
 
 assert:
   - type: web-search
-    value: 'AAPL stock price today'
+    value: |
+      Provides accurate stock price for {{ticker}} that:
+      1. Is within 2% of current market price
+      2. Includes currency (USD)
+      3. Mentions if market is open or closed
+    threshold: 0.8
 ```
 
 ### 3. Weather Information
@@ -140,7 +161,11 @@ prompts:
 
 assert:
   - type: web-search
-    value: 'Tokyo weather forecast temperature'
+    value: |
+      Describes current Tokyo weather including:
+      - Temperature (with units)
+      - General conditions (sunny, rainy, etc.)
+      - Humidity or precipitation if relevant
 ```
 
 ### 4. Latest Software Versions
@@ -151,7 +176,7 @@ prompts:
 
 assert:
   - type: web-search
-    value: 'Node.js latest stable version'
+    value: 'States the correct latest LTS version of Node.js (not experimental or nightly)'
 ```
 
 ## Cost Considerations
@@ -164,12 +189,24 @@ Web search assertions have the following cost implications:
 - **OpenAI**: web_search_preview tool included in standard API pricing
 - **xAI Grok**: Built-in search, standard API pricing applies
 
+## Threshold Support
+
+Like `llm-rubric`, the `web-search` assertion supports thresholds:
+
+```yaml
+assert:
+  - type: web-search
+    value: 'Contains accurate information about current US inflation rate'
+    threshold: 0.9 # Requires 90% accuracy for economic data
+```
+
 ## Best Practices
 
-1. **Use specific search queries**: More specific queries yield better verification results
-2. **Consider caching**: Enable caching to avoid repeated searches during development
-3. **Choose the right provider**: Perplexity for built-in search, Anthropic for comprehensive search with citations
-4. **Set appropriate thresholds**: Use lower thresholds (0.7-0.8) for general information, higher (0.9+) for critical facts
+1. **Write clear rubrics**: Be specific about what information you expect
+2. **Use thresholds appropriately**: Higher thresholds for factual accuracy, lower for general correctness
+3. **Include acceptable ranges**: For volatile data like prices, specify acceptable accuracy (e.g., "within 5%")
+4. **Enable caching**: Use `promptfoo eval --cache` during development to avoid repeated searches
+5. **Test variable substitution**: Ensure your rubrics work with different variable values
 
 ## Troubleshooting
 
